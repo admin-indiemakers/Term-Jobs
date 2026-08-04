@@ -1,0 +1,52 @@
+{
+  "scenarios": [
+    {
+      "name": "covered_stack_django_backend",
+      "profile": {
+        "name": "Acme Corp",
+        "industry": "Fintech",
+        "location": "Bangalore",
+        "tech_stack": ["Python", "Django", "Postgres", "React"]
+      },
+      "intent": {
+        "title": "Backend Engineer",
+        "description": "Build APIs on Django with Postgres. 5+ years experience, senior level.",
+        "tech_stack_hint": ["Python", "Django", "Postgres"]
+      },
+      "answers": [],
+      "expected": {
+        "title": "Backend Engineer",
+        "must_have_skills": ["python", "django", "postgresql"],
+        "seniority": "Senior",
+        "location": "Bangalore"
+      }
+    },
+    {
+      "name": "uncovered_stack_go_kubernetes",
+      "profile": {
+        "name": "Acme Corp",
+        "industry": "Fintech",
+        "location": "Bangalore",
+        "tech_stack": ["Python", "Django", "Postgres"]
+      },
+      "intent": {
+        "title": "Platform Engineer",
+        "description": "Kubernetes platform work with Go services.",
+        "tech_stack_hint": ["Go", "Kubernetes"]
+      },
+      "answers": [
+        "Go, Kubernetes, Terraform",
+        "Senior",
+        "6+ years",
+        "Remote",
+        "30 LPA"
+      ],
+      "expected": {
+        "title": "Platform Engineer",
+        "must_have_skills": ["go", "kubernetes"],
+        "seniority": "Senior",
+        "location": "Remote"
+      }
+    }
+  ]
+}
