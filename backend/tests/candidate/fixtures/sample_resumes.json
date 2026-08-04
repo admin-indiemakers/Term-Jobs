@@ -1,0 +1,20 @@
+{
+  "perfect_match": {
+    "name": "Rahul Sharma",
+    "email": "rahul.sharma@example.com",
+    "phone": "+919876543210",
+    "resume_text": "Senior Backend Engineer with 5 years experience in Python, FastAPI, PostgreSQL, Docker, and LangGraph."
+  },
+  "underqualified": {
+    "name": "Amit Kumar",
+    "email": "amit.kumar@example.com",
+    "phone": "+919123456789",
+    "resume_text": "Junior Frontend Developer with 1 year experience in HTML, CSS, JavaScript, and React."
+  },
+  "duplicate_applicant": {
+    "name": "Rahul S.",
+    "email": "rahul.sharma@example.com",
+    "phone": "+919876543210",
+    "resume_text": "Senior Backend Engineer with Python and FastAPI experience."
+  }
+}

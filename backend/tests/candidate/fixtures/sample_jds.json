@@ -1,0 +1,11 @@
+{
+  "req_python_dev": {
+    "requisition_id": "req_python_dev",
+    "title": "Senior Backend Engineer - Python",
+    "must_have_skills": ["Python", "FastAPI", "PostgreSQL", "Docker"],
+    "nice_to_have_skills": ["LangGraph", "Redis"],
+    "seniority": "Senior",
+    "location": "Remote (India)",
+    "rate_band": "15000-20000 INR/day"
+  }
+}

@@ -1,0 +1,3 @@
+"""
+Candidate module tests init.
+"""
