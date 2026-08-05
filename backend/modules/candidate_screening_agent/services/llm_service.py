@@ -3,8 +3,7 @@ import json
 import re
 import urllib.error
 import urllib.request
-from typing import Any
-
+from typing import Any, Dict, List, Optional
 from services.email_service import extract_candidate_email
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -22,8 +21,8 @@ def generate_resume_fingerprint(candidate_name: str, resume_text: str) -> str:
 def check_duplicate_submission(
     candidate_name: str,
     resume_text: str,
-    existing_submissions: list[dict[str, Any]] | None = None
-) -> dict[str, Any]:
+    existing_submissions: Optional[List[Dict[str, Any]]] = None
+) -> Dict[str, Any]:
     """Check if the candidate or resume content has already been submitted for this requisition."""
     if not existing_submissions:
         return {"is_duplicate": False, "duplicate_reason": None}
@@ -50,7 +49,7 @@ def check_duplicate_submission(
     return {"is_duplicate": False, "duplicate_reason": None}
 
 
-def extract_candidate_name(resume_text: str, default_filename: str | None = None) -> str:
+def extract_candidate_name(resume_text: str, default_filename: Optional[str] = None) -> str:
     """Extract candidate name from resume text or filename."""
     lines = [line.strip() for line in resume_text.splitlines() if line.strip()]
     if lines:
@@ -71,7 +70,7 @@ def query_ollama_ai(
     resume_text: str,
     model: str = DEFAULT_OLLAMA_MODEL,
     timeout_seconds: int = 5
-) -> dict[str, Any] | None:
+) -> Optional[Dict[str, Any]]:
     """Query local Ollama instance for deep AI analysis and verification of candidate fit."""
     prompt = f"""You are an expert HR Screening AI. Evaluate the following candidate resume against the Job Description.
 
@@ -120,10 +119,10 @@ Respond strictly in valid JSON format with the following keys:
 def screen_candidate(
     jd: str,
     resume_text: str,
-    filename: str | None = None,
-    existing_submissions: list[dict[str, Any]] | None = None,
+    filename: Optional[str] = None,
+    existing_submissions: Optional[List[Dict[str, Any]]] = None,
     ollama_model: str = DEFAULT_OLLAMA_MODEL
-) -> dict[str, Any]:
+) -> Dict[str, Any]:
     """Analyze candidate resume against JD using Ollama deep AI + Local NLP cross-verification engine."""
     name = extract_candidate_name(resume_text, filename)
     email = extract_candidate_email(resume_text)

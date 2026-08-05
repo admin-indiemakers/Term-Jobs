@@ -195,7 +195,7 @@
             margin-bottom: 8px;
         }
 
-        select {
+        select, input[type="text"] {
             width: 100%;
             background: rgba(15, 23, 42, 0.8);
             border: 1px solid rgba(99, 102, 241, 0.4);
@@ -285,6 +285,19 @@
         .btn-submit:hover {
             transform: translateY(-2px);
             filter: brightness(1.1);
+        }
+
+        .badge-vendor {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(6, 182, 212, 0.15);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            color: #67e8f9;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
         }
 
         .badge-engine {
@@ -605,7 +618,7 @@
     <div class="container">
         <div class="hero">
             <h1>Find Your Best Candidate with AI</h1>
-            <p>Connected to PostgreSQL DB + Gmail SMTP for instant automated candidate email notifications.</p>
+            <p>Vendor Screening Intake & Shortlisted Candidate Storage directly in PostgreSQL (<code>candidate_submissions</code> table).</p>
         </div>
 
         <form id="screeningForm" onsubmit="handleFormSubmit(event)">
@@ -620,6 +633,13 @@
                         </div>
                     </div>
                     <div class="form-group">
+                        <label for="vendorSelect"><i class="fa-solid fa-building-user" style="color: var(--accent-cyan);"></i> Select Vendor Recruiter Account</label>
+                        <select id="vendorSelect">
+                            <option value="Vendor A">Vendor A (TechRecruit Solutions)</option>
+                            <option value="Vendor B">Vendor B (Global Talents Ltd)</option>
+                            <option value="Vendor C">Vendor C (Apex Staffing Services)</option>
+                        </select>
+
                         <label for="reqSelect"><i class="fa-solid fa-network-wired" style="color: var(--accent-cyan);"></i> Select JD from Remote PostgreSQL Database</label>
                         <select id="reqSelect" onchange="handleRequisitionSelect()">
                             <option value="">-- Loading Requisitions from Database... --</option>
@@ -664,8 +684,8 @@
 
             <div class="leaderboard-card">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                    <h3 style="font-size: 1.25rem; font-weight: 800;"><i class="fa-solid fa-user-check" style="color: var(--accent-green);"></i> Hiring Manager Approval Queue</h3>
-                    <span style="font-size: 0.85rem; color: var(--text-muted);">State Machine: <strong>Submitted &rarr; Screened &rarr; Shortlisted</strong></span>
+                    <h3 style="font-size: 1.25rem; font-weight: 800;"><i class="fa-solid fa-user-check" style="color: var(--accent-green);"></i> Vendor HR Approval Queue (Saves to Postgres)</h3>
+                    <span style="font-size: 0.85rem; color: var(--text-muted);">State Machine: <strong>Submitted &rarr; Screened &rarr; Shortlisted (Saved in DB)</strong></span>
                 </div>
                 <div id="leaderboardRows">
                     <!-- Dynamically populated -->
@@ -758,8 +778,9 @@
 
         async function runDemoTest() {
             setLoading(true);
+            const vendorName = document.getElementById('vendorSelect').value;
             try {
-                const response = await fetch('/api/test-screen', { method: 'POST' });
+                const response = await fetch(`/api/test-screen?vendor_name=${encodeURIComponent(vendorName)}`, { method: 'POST' });
                 const data = await response.json();
                 if (data.status === 'success') {
                     displayResults(data.analysis);
@@ -777,6 +798,8 @@
         async function handleFormSubmit(e) {
             e.preventDefault();
             const jd = document.getElementById('jdText').value.trim();
+            const requisitionId = document.getElementById('reqSelect').value;
+            const vendorName = document.getElementById('vendorSelect').value;
 
             if (!jd) {
                 alert('Please select or enter a Job Description');
@@ -790,6 +813,8 @@
 
             const formData = new FormData();
             formData.append('jd', jd);
+            if (requisitionId) formData.append('requisition_id', requisitionId);
+            formData.append('vendor_name', vendorName);
             selectedFiles.forEach(file => formData.append('files', file));
 
             setLoading(true);
@@ -814,11 +839,12 @@
         }
 
         async function approveCandidate(submissionId, action) {
+            const vendorName = document.getElementById('vendorSelect').value;
             try {
                 const response = await fetch('/api/approve-candidate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ submission_id: submissionId, action: action })
+                    body: JSON.stringify({ submission_id: submissionId, action: action, vendor_name: vendorName })
                 });
                 const data = await response.json();
                 if (data.status === 'success') {
@@ -836,11 +862,11 @@
                         emailBadge.innerHTML = `<i class="fa-solid fa-paper-plane" style="color: #34d399;"></i> ${emailMsg}`;
                     }
 
-                    alert(`State updated to ${data.candidate.status}.\nGmail Notification: ${data.email_notification.message || data.email_notification.error || data.email_notification.reason}`);
+                    alert(`Candidate state updated in PostgreSQL to ${data.candidate.status}!\nVendor: ${data.candidate.vendor_name || vendorName}\nGmail Notification: ${data.email_notification.message || data.email_notification.error || data.email_notification.reason}`);
                 }
             } catch (err) {
                 console.error(err);
-                alert('Failed to update candidate state');
+                alert('Failed to update candidate state in database');
             }
         }
 
@@ -882,6 +908,7 @@
                         <div class="winner-info">
                             <h2>${best.candidate_name}</h2>
                             <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                <span class="badge-vendor"><i class="fa-solid fa-building-user"></i> ${best.vendor_name || 'Vendor A'}</span>
                                 <span class="badge-engine"><i class="fa-solid fa-microchip"></i> ${best.engine_info || 'Cross-Verification Engine'}</span>
                                 <span class="tag-recommendation ${recommendationClass}">${best.recommendation}</span>
                             </div>
@@ -920,13 +947,14 @@
                             <div>
                                 <div style="display: flex; align-items: center; gap: 10px;">
                                     <div style="font-weight: 700; font-size: 1.05rem;">${cand.candidate_name}</div>
+                                    <span class="badge-vendor"><i class="fa-solid fa-building-user"></i> ${cand.vendor_name || 'Vendor A'}</span>
                                     ${cand.is_duplicate ? `<span class="badge-duplicate"><i class="fa-solid fa-triangle-exclamation"></i> Duplicate Submission</span>` : ''}
                                 </div>
                                 <div style="font-size: 0.82rem; color: var(--text-muted);">
                                     <i class="fa-solid fa-envelope"></i> ${cand.candidate_email || 'No email in resume'} &bull; ${cand.filename}
                                 </div>
                                 <div style="font-size: 0.78rem; color: #a7f3d0; margin-top: 2px;" id="email-status-${cand.submission_id}">
-                                    <i class="fa-solid fa-paper-plane"></i> Email Status: ${cand.email_notification_status || 'Pending Human Action'}
+                                    <i class="fa-solid fa-paper-plane"></i> Email Status: ${cand.email_notification_status || 'Pending Action'}
                                 </div>
                                 ${cand.duplicate_reason ? `<div style="font-size: 0.78rem; color: #fbbf24; margin-top: 2px;">${cand.duplicate_reason}</div>` : ''}
                             </div>
