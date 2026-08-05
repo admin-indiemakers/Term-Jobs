@@ -78,7 +78,7 @@ START
 ## 6. LLM client
 
 - `llm/base.py` — `LLMClient` interface (`chat`, `generate_text`, `generate_structured`).
-- `llm/ollama.py` — talks to the offline server via OpenAI-compatible `/v1/chat/completions`. `OLLAMA_BASE_URL` (default `http://192.168.29.78:11434`). Returns parsed JSON; strict validation lives in the agent's guardrail loop.
+- `llm/ollama.py` — talks to the offline server via OpenAI-compatible `/v1/chat/completions`. `OLLAMA_BASE_URL` (default `http://localhost:11434`, model `qwen3:1.7b`). Returns parsed JSON; strict validation lives in the agent's guardrail loop.
 - `llm/mock.py` — deterministic `MockLLM` for offline tests/CI that reuses the same heuristics/dictionaries.
 
 ## 7. Events
@@ -140,13 +140,38 @@ DATABASE_URL=postgresql://localhost/termejobs uv run alembic upgrade head
 - Golden-fixture eval: every scenario in `tests/fixtures/golden_roles.json` must satisfy its expected role (skills, seniority, location) — the promised CI gate for prompt/model changes.
 - Event emission at each lifecycle point.
 
+### Running the FastAPI test server
+
+`backend/main.py` exposes the module over HTTP for end-to-end testing. Interactive docs are at `http://localhost:8000/docs`.
+
+```bash
+cd backend
+uv run uvicorn main:app --reload --port 8000
+```
+
+Environment:
+- `LLM_PROVIDER=ollama` (default, offline LLM) or `LLM_PROVIDER=mock` (deterministic, offline tests). 
+- `DATABASE_URL` — Postgres by default; use `sqlite:///requisition.db` for a zero-setup run.
+
+Typical flow:
+```bash
+POST /company-profiles        {"name":"Acme","tech_stack":["Python","Django"]}
+POST /requisitions            {"company_profile_id": "<id>", "title":"Backend Engineer", "tech_stack_hint":["Python"]}
+POST /requisitions/{id}/start   -> approval (covered) or intake_question (uncovered)
+POST /requisitions/{id}/answer  {"answer":"..."}       # repeat if intake_question
+POST /requisitions/{id}/approve {"reviewer":"mgr"}     # optionally {"edited_role":{...}}
+POST /requisitions/{id}/publish {"by":"mgr"}
+POST /requisitions/{id}/close
+GET  /requisitions/{id}
+```
+
 ## 11. Config (`.env.example`)
 
 | Key | Default | Notes |
 |---|---|---|
 | `DATABASE_URL` | `postgresql://localhost/termejobs` | Alembic + engine |
-| `OLLAMA_BASE_URL` | `http://192.168.29.78:11434` | Offline LLM server |
-| `OLLAMA_DEFAULT_MODEL` | `llama3.2:3b` | Fallback for all tiers |
+| `OLLAMA_BASE_URL` | `http://localhost:11434` | Offline LLM server |
+| `OLLAMA_DEFAULT_MODEL` | `qwen3:1.7b` | Fallback for all tiers |
 | `MODEL_TIERS` | JSON dict small/mid/large | 3-tier routing |
 | `MAX_INTAKE_TURNS` | `8` | Intake budget gate |
 | `MAX_TOOL_CALLS` | `5` | Structured-gen retry budget |

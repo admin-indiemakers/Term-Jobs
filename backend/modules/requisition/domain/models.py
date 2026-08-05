@@ -43,11 +43,13 @@ class Requisition(Base):
     title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     intent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     intake_answers: Mapped[list] = mapped_column(JSON, default=list)
+    pending_question: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # agent output (candidate, awaiting human approval)
     structured_role: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     generated_jd_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
     coverage_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    refinement_log: Mapped[list] = mapped_column(JSON, default=list)
 
     # approval
     approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)

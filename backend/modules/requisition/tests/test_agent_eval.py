@@ -77,8 +77,10 @@ def test_eval_live_ollama(scenario, session_factory, company_profile):
 def _ollama_reachable() -> bool:
     import httpx
 
+    from modules.shared.config import settings
+
     try:
-        httpx.get("http://192.168.29.78:11434/api/tags", timeout=3)
+        httpx.get(f"{settings.ollama_base_url}/api/tags", timeout=3)
         return True
     except Exception:  # noqa: BLE001 - any transport error means unreachable
         return False

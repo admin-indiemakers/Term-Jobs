@@ -97,6 +97,23 @@ class RequisitionService:
         self._record_review(requisition_id, reviewer, "approved")
         return state, interrupt_value
 
+    def refine(self, requisition_id: str, instruction: str) -> tuple[dict, Any]:
+        """Send edit feedback for the generated JD.
+
+        The agent incorporates the instruction, re-generates the role + JD and
+        returns to the approval checkpoint with the updated output.
+        """
+        instruction = instruction.strip()
+        if not instruction:
+            raise ValueError("refinement instruction cannot be empty")
+        with self.session_factory() as session:
+            req = session.get(models.Requisition, requisition_id)
+            if req.status != RequisitionStatus.STRUCTURING.value:
+                raise ValueError(
+                    f"refinement requires a generated JD awaiting approval; status is {req.status}"
+                )
+        return self._step(requisition_id, resume={"instruction": instruction})
+
     def reject(self, requisition_id: str, reviewer: str | None = None) -> tuple[dict, Any]:
         state, interrupt_value = self._step(requisition_id, resume={"decision": "rejected"})
         self._record_review(requisition_id, reviewer, "rejected")
@@ -125,19 +142,65 @@ class RequisitionService:
         events.emit_requisition_closed(requisition_id)
         return req
 
+    def reset(self, requisition_id: str) -> models.Requisition:
+        """Reset a requisition to Draft, clearing agent artifacts.
+
+        Drops the cached agent too so the in-memory checkpointer forgets the
+        thread and a fresh ``start_intake`` re-runs coverage + generation.
+        """
+        with self.session_factory() as session:
+            req = session.get(models.Requisition, requisition_id)
+            if req.status != RequisitionStatus.DRAFT.value:
+                sm = StateMachine(RequisitionStatus(req.status))
+                sm.transition(RequisitionStatus.DRAFT)
+                req.status = sm.status.value
+            req.intake_answers = []
+            req.structured_role = None
+            req.generated_jd_markdown = None
+            req.coverage_result = None
+            req.refinement_log = []
+            req.pending_question = None
+            session.commit()
+            session.refresh(req)
+        self._agent = None
+        return req
+
+    def delete(self, requisition_id: str) -> None:
+        """Permanently delete a requisition and its decision records."""
+        with self.session_factory() as session:
+            session.query(models.DecisionRecord).filter_by(
+                requisition_id=requisition_id
+            ).delete(synchronize_session=False)
+            req = session.get(models.Requisition, requisition_id)
+            if req is None:
+                raise ValueError(f"requisition {requisition_id} not found")
+            session.delete(req)
+            session.commit()
+        self._agent = None
+
     # --- internals ---
 
     def _step(self, requisition_id: str, resume: Any = None) -> tuple[dict, Any]:
         state, interrupt_value = self.agent.run(requisition_id, resume=resume)
-        self._persist_state(requisition_id, state)
+        self._persist_state(requisition_id, state, interrupt_value)
         return state, interrupt_value
 
-    def _persist_state(self, requisition_id: str, state: dict) -> None:
+    def _persist_state(self, requisition_id: str, state: dict, interrupt_value: Any = None) -> None:
         with self.session_factory() as session:
             req = session.get(models.Requisition, requisition_id)
             req.intake_answers = state.get("answers") or req.intake_answers
             if state.get("status"):
                 req.status = state["status"]
+            # The pending intake question is the string interrupt; approval is a dict.
+            if state.get("status") == RequisitionStatus.INTAKE.value and isinstance(interrupt_value, str):
+                req.pending_question = interrupt_value
+            else:
+                req.pending_question = None
+            if state.get("covered") is not None:
+                req.coverage_result = {
+                    "covered": bool(state["covered"]),
+                    "missing_skills": state.get("missing_skills") or [],
+                }
             if state.get("structured_role"):
                 req.structured_role = state["structured_role"]
             if state.get("jd_markdown"):

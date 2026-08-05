@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TermJobs — JD Agent Console</title>
+<style>
+  :root {
+    --bg: #0f172a; --panel: #1e293b; --panel2: #0b1220; --line: #334155;
+    --text: #e2e8f0; --muted: #94a3b8; --accent: #38bdf8; --accent2: #6366f1;
+    --ok: #22c55e; --warn: #f59e0b; --bad: #ef4444; --chip-bg: #334155;
+    --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 22px; background: var(--panel2); border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 16px; margin: 0; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; }
+  .dot.on { background: var(--ok); }
+  .dot.off { background: var(--bad); }
+  .pill { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 2px 8px; border-radius: 999px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; display: grid; gap: 18px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  input, textarea, select {
+    width: 100%; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+  }
+  textarea { min-height: 60px; resize: vertical; font-family: var(--mono); }
+  button {
+    background: var(--accent); color: #06222f; border: 0; border-radius: 8px;
+    padding: 9px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.1); }
+  button:disabled { opacity: .35; cursor: not-allowed; filter: none; }
+  button.ghost { background: var(--chip-bg); color: var(--text); }
+  button.danger { background: var(--bad); color: #fff; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .chip {
+    display: inline-block; font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    background: var(--chip-bg); color: var(--text); border: 1px solid var(--line);
+  }
+  .status { font-weight: 700; letter-spacing: .04em; }
+  .status.Draft { color: var(--muted); }
+  .status.Intake { color: var(--warn); }
+  .status.Structuring { color: var(--accent); }
+  .status.PendingApproval { color: var(--accent2); }
+  .status.Published { color: var(--ok); }
+  .status.Closed { color: var(--muted); }
+  .list-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; cursor: pointer;
+  }
+  .list-item:hover { border-color: var(--accent); }
+  .list-item.sel { border-color: var(--accent); background: rgba(56,189,248,.08); }
+  .muted { color: var(--muted); font-size: 12px; }
+  .stack { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+  .banner {
+    display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 10px;
+    border: 1px solid var(--line); background: rgba(99,102,241,.10); margin-bottom: 12px;
+  }
+  .banner .co-name { font-size: 16px; font-weight: 700; }
+  pre, code { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+  pre { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 6px 0; max-height: 320px; overflow: auto; }
+  .qa {
+    border: 1px solid var(--warn); background: rgba(245,158,11,.08);
+    border-radius: 10px; padding: 14px; margin-top: 10px;
+  }
+  .approval {
+    border: 1px solid var(--ok); background: rgba(34,197,94,.06);
+    border-radius: 10px; padding: 14px; margin-top: 10px;
+  }
+  .msg { padding: 10px 12px; border-radius: 8px; margin: 8px 0; font-size: 13px; }
+  .msg.err { background: rgba(239,68,68,.12); border: 1px solid var(--bad); color: #fca5a5; }
+  .msg.ok { background: rgba(34,197,94,.10); border: 1px solid var(--ok); color: #86efac; }
+  .flash { position: fixed; top: 14px; right: 14px; max-width: 380px; z-index: 50; }
+  .hidden { display: none !important; }
+  details { margin-top: 12px; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>TermJobs — JD Agent Console</h1>
+  <span id="statusDot" class="dot"></span>
+  <span class="muted" id="apiStatus">checking backend…</span>
+  <span class="pill" id="provider">provider: —</span>
+</header>
+
+<main>
+  <div id="flash" class="flash"></div>
+
+  <div class="grid">
+    <!-- 1. Company -->
+    <section class="card">
+      <h2>1 · Company</h2>
+      <form id="companyForm">
+        <div class="row">
+          <div style="flex:1"><label>Name *</label><input id="coName" required placeholder="TechNova Solutions"></div>
+          <div style="flex:1"><label>Location</label><input id="coLoc" placeholder="Kochi, Kerala"></div>
+        </div>
+        <div class="row">
+          <div style="flex:1"><label>Industry</label><input id="coInd" placeholder="Software"></div>
+          <div style="flex:1"><label>Size</label><input id="coSize" placeholder="50-100 employees"></div>
+        </div>
+        <label>Tech stack (comma separated)</label>
+        <input id="coStack" placeholder="Python, FastAPI, React, PostgreSQL">
+        <label>Notes</label>
+        <textarea id="coNotes" placeholder="optional"></textarea>
+        <div style="margin-top:10px"><button type="submit">Create company</button></div>
+      </form>
+      <div style="margin-top:14px">
+        <div class="muted">Registered companies</div>
+        <div id="companyList"></div>
+      </div>
+    </section>
+
+    <!-- 2. Requisition -->
+    <section class="card">
+      <h2>2 · Requisition</h2>
+      <label>Company to hire for *</label>
+      <select id="reqCompany"></select>
+      <div class="row">
+        <div style="flex:1"><label>Role title *</label><input id="reqTitle" placeholder="Flutter Developer"></div>
+        <div style="flex:1"><label>Stack hint (comma separated)</label><input id="reqStack" placeholder="flutter, python, supabase"></div>
+      </div>
+      <label>Direct prompt <span class="muted">(optional — skip form filling, describe the role in one paragraph)</span></label>
+      <textarea id="reqPrompt" placeholder="e.g. Flutter developer with 3 yrs exp, 8-12 LPA budget, kozhikode or remote, Supabase backend…"></textarea>
+      <label>Role description</label>
+      <textarea id="reqDesc" placeholder="what you're hiring for, requirements, experience…"></textarea>
+      <label>Created by</label>
+      <input id="reqBy" placeholder="optional">
+      <div style="margin-top:10px"><button type="submit" id="reqSubmit">Create requisition</button></div>
+      <div style="margin-top:14px">
+        <div class="row">
+          <div class="muted">Existing requisitions</div>
+          <select id="reqFilter" style="width:auto;margin-left:auto">
+            <option value="">All statuses</option>
+            <option>Draft</option>
+            <option>Intake</option>
+            <option>Structuring</option>
+            <option>PendingApproval</option>
+            <option>Published</option>
+            <option>Closed</option>
+          </select>
+        </div>
+        <div id="reqCounts" class="row" style="margin-top:6px"></div>
+        <div id="reqList"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 3. Agent flow -->
+  <section class="card" id="flowCard">
+    <h2>3 · Agent flow</h2>
+    <div id="flowEmpty" class="muted">Select a requisition on the left to drive the agent here.</div>
+
+    <div id="flowBody" class="hidden">
+      <!-- company context banner -->
+      <div class="banner" id="companyBanner"></div>
+
+      <div class="row">
+        <span class="muted">Status:</span>
+        <span class="status" id="reqStatus">—</span>
+        <span class="muted" id="reqId"></span>
+      </div>
+
+      <!-- coverage -->
+      <div id="coverageBox"></div>
+
+      <!-- intent summary -->
+      <div class="row" style="margin-top:10px">
+        <span class="chip">title: <span id="itTitle">—</span></span>
+        <span class="chip">stack hint: <span id="itStack">—</span></span>
+      </div>
+
+      <!-- agent response / pending action -->
+      <div id="agentBox"></div>
+
+      <!-- lifecycle buttons -->
+      <div class="btns">
+        <button id="btnStart">▶ Start agent</button>
+        <button id="btnApprove" class="ghost">✓ Approve</button>
+        <button id="btnReject" class="danger">✕ Reject</button>
+        <button id="btnPublish" class="ghost">↑ Publish</button>
+        <button id="btnClose" class="ghost">⛌ Close</button>
+        <button id="btnReset" class="ghost">↺ Reset (re-run)</button>
+        <button id="btnDelete" class="ghost" style="margin-left:auto">🗑 Delete</button>
+      </div>
+
+      <!-- artifacts -->
+      <details id="jdDetails">
+        <summary>Generated JD (markdown)</summary>
+        <pre id="jdMarkdown">—</pre>
+      </details>
+      <details>
+        <summary>Structured role (JSON)</summary>
+        <pre id="jdRole">—</pre>
+      </details>
+      <details>
+        <summary>Full record</summary>
+        <pre id="fullRecord">—</pre>
+      </details>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const API = "http://127.0.0.1:8000";
+let companies = [];
+let requisitions = [];
+let current = null;            // selected requisition detail
+let currentId = null;
+
+const $ = (id) => document.getElementById(id);
+
+function flash(text, type = "ok") {
+  const el = document.createElement("div");
+  el.className = "msg " + (type === "ok" ? "ok" : "err");
+  el.textContent = text;
+  $("flash").appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+async function api(method, path, body) {
+  const opts = { method, headers: { "Content-Type": "application/json" } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  let resp;
+  try {
+    resp = await fetch(API + path, opts);
+  } catch (e) {
+    flash("Backend unreachable at " + API + " — is uvicorn running?", "err");
+    throw e;
+  }
+  const text = await resp.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+  if (!resp.ok) {
+    const msg = data && data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : resp.status + " " + resp.statusText;
+    flash(method + " " + path + " → " + msg, "err");
+    throw new Error(msg);
+  }
+  return data;
+}
+
+const split = (s) => s.split(",").map(t => t.trim()).filter(Boolean);
+
+function statusClass(s) { return s || "Draft"; }
+
+/* ---------- companies ---------- */
+function renderCompanies() {
+  const box = $("companyList");
+  box.innerHTML = "";
+  if (!companies.length) { box.innerHTML = '<div class="muted">none yet</div>'; return; }
+  companies.forEach(c => {
+    const d = document.createElement("div");
+    d.className = "list-item";
+    d.innerHTML = `<div><b>${esc(c.name)}</b><div class="muted">${esc(c.location || "")} · ${esc(c.industry || "")}</div>
+      <div class="stack">${(c.tech_stack || []).map(s => `<span class="chip">${esc(s)}</span>`).join("")}</div></div>`;
+    box.appendChild(d);
+  });
+}
+
+function renderReqCompanySelect() {
+  const sel = $("reqCompany");
+  sel.innerHTML = companies.map(c =>
+    `<option value="${c.id}">${esc(c.name)}${c.location ? " — " + esc(c.location) : ""}</option>`
+  ).join("");
+}
+
+/* ---------- requisitions ---------- */
+function renderRequisitions() {
+  const box = $("reqList");
+  const filter = $("reqFilter").value;
+  // status counts
+  const counts = {};
+  requisitions.forEach(r => { counts[r.status] = (counts[r.status] || 0) + 1; });
+  $("reqCounts").innerHTML = ["Draft","Intake","Structuring","PendingApproval","Published","Closed"]
+    .filter(s => counts[s]).map(s => `<span class="chip">${s}: ${counts[s]}</span>`).join("");
+
+  const shown = filter ? requisitions.filter(r => r.status === filter) : requisitions;
+  box.innerHTML = "";
+  if (!shown.length) { box.innerHTML = '<div class="muted">none yet</div>'; return; }
+  shown.forEach(r => {
+    const d = document.createElement("div");
+    d.className = "list-item" + (r.id === currentId ? " sel" : "");
+    d.innerHTML = `<div><b>${esc(r.title || "(no title)")}</b>
+        <div class="muted">${esc(r.company_name || "no company")} · <span class="status ${statusClass(r.status)}">${esc(r.status)}</span></div></div>`;
+    d.onclick = () => selectRequisition(r.id);
+    box.appendChild(d);
+  });
+}
+
+async function selectRequisition(id) {
+  currentId = id;
+  const data = await api("GET", "/requisitions/" + id);
+  current = data;
+  renderRequisitions();
+  renderFlow();
+}
+
+/* ---------- agent flow ---------- */
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderCompanyBanner() {
+  const c = current.company;
+  if (!c) { $("companyBanner").innerHTML = '<span class="muted">No company linked to this requisition.</span>'; return; }
+  $("companyBanner").innerHTML = `
+    <div style="background:var(--accent2);color:#fff;width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px">${esc((c.name||"?").charAt(0).toUpperCase())}</div>
+    <div style="flex:1">
+      <div class="co-name">${esc(c.name)}</div>
+      <div class="muted">${esc(c.location || "—")}${c.industry ? " · " + esc(c.industry) : ""}</div>
+      <div class="stack">${(c.tech_stack || []).map(s => `<span class="chip">${esc(s)}</span>`).join("")}</div>
+    </div>
+    <div class="muted" style="text-align:right">hiring for<br><b>${esc(current.title || "(no title)")}</b></div>`;
+}
+
+function renderCoverage() {
+  const cov = current.coverage_result;
+  const box = $("coverageBox");
+  box.innerHTML = "";
+  if (!cov) { box.innerHTML = '<div class="muted">coverage not run yet — hit Start agent.</div>'; return; }
+  if (cov.covered) {
+    box.innerHTML = '<div class="msg ok">✓ Required stack is covered by the company profile — no intake questions.</div>';
+  } else {
+    const missing = (cov.missing_skills || []).map(s => `<span class="chip">${esc(s)}</span>`).join("");
+    box.innerHTML = `<div class="msg err">Uncovered skills: <span class="stack" style="display:inline-flex">${missing || '<span class="chip">—</span>'}</span> — agent will ask about them.</div>`;
+  }
+}
+
+function renderAgentBox() {
+  const box = $("agentBox");
+  box.innerHTML = "";
+  const st = current.status;
+
+  if (st === "Intake") {
+    if (!current.pending_question) {
+      box.innerHTML = '<div class="msg err">Agent is mid-intake but no question is pending. Use ↺ Reset and Start again.</div>';
+      return;
+    }
+    box.innerHTML = `
+      <div class="qa">
+        <div class="muted">Agent asks (${(current.intake_answers || []).length + 1} of up to 8)</div>
+        <div style="font-size:15px;margin:6px 0">${esc(current.pending_question)}</div>
+        <input id="answerInput" placeholder="type your answer…" autofocus>
+        <div style="margin-top:8px"><button id="btnAnswer">Send answer</button></div>
+      </div>`;
+    $("btnAnswer").onclick = () => {
+      const v = $("answerInput").value.trim();
+      if (!v) { flash("Answer is empty", "err"); return; }
+      answer(v);
+    };
+    return;
+  }
+
+  if (st === "Structuring") {
+    const history = (current.refinement_log || []).map(e =>
+      `<div class="row" style="margin-top:4px"><span class="chip">you:</span><span>${esc(e.instruction)}</span></div>`
+    ).join("");
+    box.innerHTML = `
+      <div class="approval">
+        <b>✓ Agent produced a JD — review it, chat back for edits, or Approve/Reject.</b>
+        ${current.structured_role ? `<div style="margin-top:8px"><div class="muted">Structured role</div><pre>${esc(JSON.stringify(current.structured_role, null, 2))}</pre></div>` : ""}
+        ${current.generated_jd_markdown ? `<div style="margin-top:8px"><div class="muted">Generated JD</div><pre>${esc(current.generated_jd_markdown)}</pre></div>` : ""}
+        <div style="margin-top:12px;border-top:1px solid var(--line);padding-top:10px">
+          <div class="muted">Chat back — tell the agent what to add or change (e.g. "add a section about code reviews")</div>
+          ${history ? `<div style="margin-top:6px"><div class="muted">Edit history</div>${history}</div>` : ""}
+          <textarea id="refineInput" style="margin-top:6px" placeholder="e.g. add responsibilities around mentoring junior developers"></textarea>
+          <div style="margin-top:8px"><button id="btnRefine">Send edit to agent</button></div>
+        </div>
+      </div>`;
+    $("btnRefine").onclick = () => {
+      const v = $("refineInput").value.trim();
+      if (!v) { flash("Edit instruction is empty", "err"); return; }
+      refine(v);
+    };
+    return;
+  }
+
+  if (st === "PendingApproval") {
+    box.innerHTML = '<div class="msg ok">✓ JD approved — hit <b>↑ Publish</b> to make it live, or ↺ Reset to re-run.</div>';
+    return;
+  }
+
+  if (st === "Published") {
+    box.innerHTML = '<div class="msg ok">🚀 JD is live. Use <b>⛌ Close</b> once the position is filled.</div>';
+    return;
+  }
+
+  if (st === "Closed") {
+    box.innerHTML = '<div class="msg">This invite is closed.</div>';
+    return;
+  }
+
+  box.innerHTML = '<div class="muted">No pending agent action. Click <b>Start agent</b> to begin.</div>';
+}
+
+function renderArtifacts() {
+  $("jdMarkdown").textContent = current.generated_jd_markdown || "—";
+  $("jdRole").textContent = current.structured_role ? JSON.stringify(current.structured_role, null, 2) : "—";
+  $("fullRecord").textContent = JSON.stringify(current, null, 2);
+  $("jdDetails").style.display = current.generated_jd_markdown ? "" : "none";
+}
+
+function renderFlow() {
+  if (!current) return;
+  $("flowEmpty").classList.add("hidden");
+  $("flowBody").classList.remove("hidden");
+  const st = current.status;
+  $("reqStatus").textContent = st;
+  $("reqStatus").className = "status " + statusClass(st);
+  $("reqId").textContent = current.id;
+  $("itTitle").textContent = current.title || "—";
+  $("itStack").textContent = (current.intent && current.intent.tech_stack_hint) ? current.intent.tech_stack_hint.join(", ") : "—";
+  renderCompanyBanner();
+  renderCoverage();
+  renderAgentBox();
+  renderArtifacts();
+
+  // action buttons enabled per status
+  $("btnStart").disabled = !(st === "Draft");
+  $("btnApprove").disabled = !(st === "Structuring" || st === "PendingApproval");
+  $("btnReject").disabled = !(st === "Structuring" || st === "PendingApproval");
+  $("btnPublish").disabled = st !== "PendingApproval";
+  $("btnClose").disabled = st !== "Published";
+  $("btnReset").disabled = !(st === "Draft" || st === "Intake" || st === "Structuring" || st === "PendingApproval");
+  $("btnDelete").disabled = false; // deletable in any state
+}
+
+async function afterAction() {
+  const data = await api("GET", "/requisitions/" + currentId);
+  current = data;
+  renderFlow();
+}
+
+let busy = false;
+function setBusy(b) {
+  busy = b;
+  ["btnStart","btnApprove","btnReject","btnPublish","btnClose","btnReset","btnDelete","btnRefine","btnAnswer"]
+    .forEach(id => { const el = $(id); if (el) el.disabled = b; });
+  const box = $("agentBox");
+  if (!box) return;
+  if (b && !$("busyMsg")) {
+    box.insertAdjacentHTML("afterbegin",
+      '<div class="msg" id="busyMsg">⏳ Agent thinking — with the local model this can take ~30s. Please wait…</div>');
+  } else if (!b) {
+    const m = $("busyMsg"); if (m) m.remove();
+  }
+}
+
+async function answer(v) {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/answer`, { answer: v });
+    await afterAction();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function startFlow() {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/start`);
+    await afterAction();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function approve() {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/approve`, { reviewer: "ui" });
+    await afterAction();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function refine(v) {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/refine`, { instruction: v });
+    await afterAction();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function reject() {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/reject`, { reviewer: "ui" });
+    await afterAction();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function publish() {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/publish`, { by: "ui" });
+    await refreshAll();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function closeReq() {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/close`);
+    await refreshAll();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function resetReq() {
+  try {
+    setBusy(true);
+    await api("POST", `/requisitions/${currentId}/reset`);
+      await refreshAll();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+async function deleteReq() {
+  const title = (current && current.title) || currentId;
+  if (!confirm(`Delete requisition "${title}" permanently? This cannot be undone.`)) return;
+  try {
+    setBusy(true);
+    await api("DELETE", `/requisitions/${currentId}`);
+    currentId = null;
+    current = null;
+    flash("Requisition deleted");
+    await refreshAll();
+    renderFlow();
+  } catch {}
+  finally { setBusy(false); }
+}
+
+/* ---------- refresh ---------- */
+async function refreshCompanies() {
+  companies = await api("GET", "/company-profiles");
+  renderCompanies();
+  renderReqCompanySelect();
+}
+
+async function refreshRequisitions() {
+  requisitions = await api("GET", "/requisitions");
+  renderRequisitions();
+}
+
+async function refreshAll() {
+  await refreshCompanies();
+  await refreshRequisitions();
+  if (currentId) {
+    const data = await api("GET", "/requisitions/" + currentId);
+    current = data;
+    renderFlow();
+  }
+}
+
+/* ---------- events ---------- */
+$("companyForm").onsubmit = async (e) => {
+  e.preventDefault();
+  const body = {
+    name: $("coName").value.trim(),
+    location: $("coLoc").value.trim(),
+    industry: $("coInd").value.trim(),
+    size: $("coSize").value.trim(),
+    tech_stack: split($("coStack").value),
+    notes: $("coNotes").value.trim(),
+  };
+  try {
+    await api("POST", "/company-profiles", body);
+    flash("Company created");
+    e.target.reset();
+    await refreshCompanies();
+  } catch {}
+};
+
+$("reqSubmit").onclick = async () => {
+  const cid = $("reqCompany").value;
+  if (!cid) { flash("Create/select a company first", "err"); return; }
+  const prompt = $("reqPrompt").value.trim();
+  const body = {
+    company_profile_id: cid,
+    title: $("reqTitle").value.trim(),
+    description: $("reqDesc").value.trim(),
+    tech_stack_hint: split($("reqStack").value),
+    created_by: $("reqBy").value.trim() || null,
+  };
+  if (prompt) {
+    // Direct-prompt mode: the whole role lives in one paragraph.
+    body.prompt = prompt;
+    if (!body.title) body.title = prompt.split(/[,.\n]/)[0].trim().slice(0, 60) || "New role";
+  }
+  if (!body.title) { flash("Role title or direct prompt is required", "err"); return; }
+  try {
+    await api("POST", "/requisitions", body);
+    flash(prompt ? "Requisition created — agent will generate directly from prompt" : "Requisition created");
+    $("reqTitle").value = ""; $("reqDesc").value = ""; $("reqStack").value = "";
+    $("reqPrompt").value = ""; $("reqBy").value = "";
+    await refreshAll();
+  } catch {}
+};
+
+$("btnStart").onclick = startFlow;
+$("btnApprove").onclick = approve;
+$("btnReject").onclick = reject;
+$("btnPublish").onclick = publish;
+$("btnClose").onclick = closeReq;
+$("btnReset").onclick = resetReq;
+$("btnDelete").onclick = deleteReq;
+$("reqFilter").onchange = () => renderRequisitions();
+
+/* ---------- boot ---------- */
+async function boot() {
+  const dot = $("statusDot"), txt = $("apiStatus");
+  try {
+    const h = await api("GET", "/health");
+    dot.className = "dot on";
+    txt.textContent = "backend online";
+    $("provider").textContent = "provider: " + h.llm_provider;
+    await refreshAll();
+  } catch {
+    dot.className = "dot off";
+    txt.textContent = "backend offline — start uvicorn, then reload";
+  }
+}
+boot();
+</script>
+</body>
+</html>

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from ..domain.schemas import Seniority, StructuredRole
 from ..enrichment.heuristics import (
+    parse_contract_duration,
     parse_location,
     parse_rate_band,
     parse_seniority,
@@ -66,6 +67,13 @@ class MockLLM:
 
     def generate_text(self, prompt: str) -> str:
         title = _title_from_prompt(prompt, "Software Engineer")
+        if "refining an existing" in prompt.lower():
+            return (
+                f"# {title} (refined)\n\n"
+                "We are looking for an experienced engineer to join our team. "
+                "You will own features end-to-end and collaborate across teams. "
+                "Apply if you are excited to build reliable, scalable systems.\n"
+            )
         return (
             f"# {title}\n\n"
             "We are looking for an experienced engineer to join our team. "
@@ -93,6 +101,12 @@ class MockLLM:
         location = o.get("location") or parse_location(answers_section) or parse_location(text) or ""
         rate_band = o.get("rate_band") or parse_rate_band(answers_section) or parse_rate_band(text)
         years = o.get("years") or parse_years(answers_section) or parse_years(text)
+        contract_duration = (
+            o.get("contract_duration")
+            or parse_contract_duration(answers_section)
+            or parse_contract_duration(text)
+            or ""
+        )
         skills = o.get("must_have_skills") or canonicalize_skills(
             _extract_skills(text) or ["python"]
         )
@@ -110,6 +124,7 @@ class MockLLM:
             seniority=seniority,
             location=location,
             rate_band=rate_band,
+            contract_duration=contract_duration,
             confidence=float(o.get("confidence", 0.95)),
             notes="; ".join(notes),
         ).model_dump()
