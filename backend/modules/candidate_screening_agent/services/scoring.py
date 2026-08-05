@@ -1,12 +1,13 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from services.llm_service import screen_candidate
 
 
 def rank_candidates(
     jd: str,
-    candidates: List[Dict[str, str]],
-    existing_submissions: Optional[List[Dict[str, Any]]] = None
-) -> Dict[str, Any]:
+    candidates: list[dict[str, str]],
+    existing_submissions: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Screen multiple candidates against a JD, flag duplicates, and rank them to find the best match.
 
     Args:

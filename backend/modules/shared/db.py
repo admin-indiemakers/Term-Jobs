@@ -24,6 +24,8 @@ def get_session():
 def init_db():
     """Create tables from metadata. Used for tests and quick local runs;
     production schema changes flow through Alembic."""
+    import modules.identity.domain.models
     import modules.requisition.domain.models  # noqa: F401  (register models)
+    import modules.candidate.domain.models  # noqa: F401  (register models)
 
     Base.metadata.create_all(bind=engine)

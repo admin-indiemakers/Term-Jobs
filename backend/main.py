@@ -29,6 +29,12 @@ from modules.shared.db import get_session, init_db
 
 app = FastAPI(title="Term Jobs — Requisition API", version="0.1.0")
 
+from modules.identity.router import router as auth_router
+app.include_router(auth_router)
+
+from modules.candidate.router import router as candidate_router
+app.include_router(candidate_router)
+
 # Single-file browser UI (index.html) is served from the backend and can also
 # be opened via file:// — allow cross-origin fetches either way.
 app.add_middleware(
@@ -100,6 +106,7 @@ class ApproveByIn(BaseModel):
 def _company_dict(prof: models.CompanyProfile) -> dict:
     return {
         "id": prof.id,
+        "tenant_id": prof.tenant_id,
         "name": prof.name,
         "industry": prof.industry,
         "location": prof.location,

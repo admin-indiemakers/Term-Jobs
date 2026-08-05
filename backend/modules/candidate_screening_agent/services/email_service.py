@@ -3,13 +3,13 @@ import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Any, Dict, Optional
+from typing import Any
 
 GMAIL_SENDER_EMAIL = os.getenv("GMAIL_SENDER_EMAIL", "ashk68799@gmail.com")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "ivxvrrrgkjhcahda")
 
 
-def extract_candidate_email(resume_text: str) -> Optional[str]:
+def extract_candidate_email(resume_text: str) -> str | None:
     """Extract candidate email address from resume text using regex."""
     email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
     match = re.search(email_pattern, resume_text)
@@ -24,7 +24,7 @@ def send_email_via_gmail(
     html_content: str,
     sender_email: str = GMAIL_SENDER_EMAIL,
     app_password: str = GMAIL_APP_PASSWORD
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Send an email to any recipient using Gmail SMTP."""
     if not to_email:
         return {"status": "skipped", "reason": "No candidate email provided"}
@@ -51,15 +51,15 @@ def send_email_via_gmail(
         }
     except Exception as e:
         print(f"Error sending email via Gmail SMTP: {e}")
-        return {"status": "failed", "error": f"Gmail SMTP error: {str(e)}"}
+        return {"status": "failed", "error": f"Gmail SMTP error: {e!s}"}
 
 
 def send_shortlist_notification(
     candidate_name: str,
     candidate_email: str,
     job_title: str = "Position",
-    notes: Optional[str] = None
-) -> Dict[str, Any]:
+    notes: str | None = None
+) -> dict[str, Any]:
     """Send shortlisting email notification to candidate."""
     subject = f"Congratulations! You have been shortlisted for {job_title}"
     
@@ -81,8 +81,8 @@ def send_rejection_notification(
     candidate_name: str,
     candidate_email: str,
     job_title: str = "Position",
-    notes: Optional[str] = None
-) -> Dict[str, Any]:
+    notes: str | None = None
+) -> dict[str, Any]:
     """Send candidate rejection email notification."""
     subject = f"Update regarding your application for {job_title}"
     

@@ -9,6 +9,8 @@ from modules.shared.db import Base
 
 # Import models so metadata is populated.
 import modules.requisition.domain.models  # noqa: F401
+import modules.identity.domain.models  # noqa: F401
+import modules.candidate.domain.models  # noqa: F401
 
 config = context.config
 if config.config_file_name is not None:

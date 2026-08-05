@@ -1,6 +1,7 @@
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import psycopg2
 
 DEFAULT_DB_URL = "postgresql://termjobs_remote:d391bc9337f16d2a5a54e4b1@192.168.29.120:5432/termejobs"
@@ -12,7 +13,7 @@ def get_db_connection():
     return psycopg2.connect(db_url)
 
 
-def fetch_published_requisitions() -> List[Dict[str, Any]]:
+def fetch_published_requisitions() -> list[dict[str, Any]]:
     """Fetch all published requisitions from PostgreSQL database."""
     try:
         conn = get_db_connection()
@@ -57,7 +58,7 @@ def fetch_published_requisitions() -> List[Dict[str, Any]]:
         return []
 
 
-def fetch_requisition_by_id(req_id: str) -> Optional[Dict[str, Any]]:
+def fetch_requisition_by_id(req_id: str) -> dict[str, Any] | None:
     """Fetch a specific requisition by ID from PostgreSQL."""
     try:
         conn = get_db_connection()

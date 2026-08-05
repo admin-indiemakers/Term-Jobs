@@ -1,9 +1,9 @@
 import os
+
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-
 from routers.screening import router as screening_router
 
 app = FastAPI(

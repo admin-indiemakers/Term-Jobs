@@ -1,13 +1,13 @@
 import os
 import shutil
 import uuid
-from typing import List, Optional
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
+from services.db_service import fetch_published_requisitions, fetch_requisition_by_id
+from services.email_service import send_rejection_notification, send_shortlist_notification
 from services.pdf_parser import extract_text_from_pdf
 from services.scoring import rank_candidates
-from services.db_service import fetch_published_requisitions, fetch_requisition_by_id
-from services.email_service import send_shortlist_notification, send_rejection_notification
 
 router = APIRouter()
 
@@ -15,13 +15,13 @@ UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # In-memory candidate database & Approval Queue store
-CANDIDATE_STORE: List[dict] = []
+CANDIDATE_STORE: list[dict] = []
 
 
 class ApprovalRequest(BaseModel):
     submission_id: str
     action: str  # "shortlist" or "reject"
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 @router.get("/requisitions")
@@ -50,7 +50,7 @@ async def get_db_requisition_detail(req_id: str):
 @router.post("/screen-resumes")
 async def screen_multiple_candidates(
     jd: str = Form(...),
-    files: List[UploadFile] = File(...)
+    files: list[UploadFile] = File(...)
 ):
     """Screen multiple uploaded resume PDFs against a Job Description, rank them, and store in Approval Queue."""
     if not files:
