@@ -12,7 +12,7 @@ CANONICAL_SKILLS = {
     "python", "java", "javascript", "typescript", "kotlin", "swift", "ruby",
     "go", "golang", "rust", "c#", "c++", "php", "scala", "groovy", "r", "sql",
     "react", "react native", "angular", "vue.js", "svelte", "next.js", "node.js",
-    "express", "django", "flask", "fastapi", "spring boot", "laravel", "rails",
+    "flutter", "supabase", "express", "django", "flask", "fastapi", "spring boot", "laravel", "rails",
     "graphql", "rest api", "grpc", "kafka", "redis", "mongodb", "postgresql",
     "mysql", "cassandra", "elasticsearch", "docker", "kubernetes", "terraform",
     "ansible", "aws", "gcp", "azure", "ci/cd", "jenkins", "gitlab ci", "github actions",
@@ -25,6 +25,11 @@ CANONICAL_SKILLS = {
 
 _FUZZY_THRESHOLD = 82
 
+# Leetspeak/typoglycemia normalisation so 'superbas3e', 'j4va' etc. still
+# match their canonical skill. Applied only as a matching probe; the original
+# token is kept when nothing matches.
+_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "8": "b", "@": "a"})
+
 
 def canonicalize_skill(token: str) -> str:
     """Return the canonical form of a skill, or a cleaned fallback."""
@@ -33,15 +38,29 @@ def canonicalize_skill(token: str) -> str:
         return token
     if token in CANONICAL_SKILLS:
         return token
+    # Leetspeak probe: 'superbas3e' -> 'superbasee' -> fuzzy-matches 'supabase'.
+    probe = token.translate(_LEET)
+    leet = probe != token
+    if leet:
+        if probe in CANONICAL_SKILLS:
+            return probe
+        token = probe
     # Prefix / containment: 'postgres' -> 'postgresql', 'js' -> 'javascript'
     candidates = [s for s in CANONICAL_SKILLS if s.startswith(token) or token.startswith(s)]
     if candidates:
         best = max(candidates, key=len)
         if len(best) >= 3 and (best.startswith(token) or token.startswith(best)):
             return best
-    # Fuzzy fallback for short hand-typed variants
+    # Fuzzy fallback for short hand-typed variants. Leetspeak is a strong
+    # signal of user intent, so those tokens may match at a lower score.
+    threshold = 75 if leet else _FUZZY_THRESHOLD
     match = process.extractOne(token, list(CANONICAL_SKILLS), scorer=fuzz.WRatio)
-    if match and match[1] >= _FUZZY_THRESHOLD and len(token) >= 3:
+    if (
+        match
+        and match[1] >= threshold
+        and len(token) >= 3
+        and (len(match[0]) >= 3 or len(token) <= 3)
+    ):
         return match[0]
     return token
 

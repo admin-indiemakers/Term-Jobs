@@ -9,17 +9,18 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://localhost/termejobs"
 
     # Ollama (offline LLM)
-    ollama_base_url: str = "http://192.168.29.78:11434"
-    ollama_default_model: str = "llama3.2:3b"
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_default_model: str = "qwen3:1.7b"
     model_tiers: dict[str, str] = {
-        "small": "llama3.2:3b",
-        "mid": "llama3.2:3b",
-        "large": "llama3.2:3b",
+        "small": "qwen3:1.7b",
+        "mid": "qwen3:1.7b",
+        "large": "qwen3:1.7b",
     }
 
     # Agent guardrails
     max_intake_turns: int = 8
     max_tool_calls: int = 5
+    max_refinements: int = 5
     confidence_threshold: float = 0.7
 
 

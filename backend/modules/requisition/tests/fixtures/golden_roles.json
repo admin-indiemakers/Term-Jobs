@@ -39,7 +39,8 @@
         "Senior",
         "6+ years",
         "Remote",
-        "30 LPA"
+        "30 LPA",
+        "6 months"
       ],
       "expected": {
         "title": "Platform Engineer",

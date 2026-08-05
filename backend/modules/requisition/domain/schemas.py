@@ -37,10 +37,16 @@ class CompanyProfile(BaseModel):
 
 
 class RoleIntent(BaseModel):
-    """What the hiring manager asked for when starting a hire."""
+    """What the hiring manager asked for when starting a hire.
+
+    ``prompt`` is the free-form "direct prompt" mode: when set, the agent
+    parses the whole role from this single paragraph instead of running the
+    one-question-at-a-time intake conversation.
+    """
     title: str
     description: str = ""
     tech_stack_hint: list[str] = Field(default_factory=list)
+    prompt: str = ""
 
 
 class StructuredRole(BaseModel):
@@ -50,6 +56,7 @@ class StructuredRole(BaseModel):
     seniority: Seniority
     location: str = ""
     rate_band: tuple[int, int] | None = None  # (min, max) INR per annum
+    contract_duration: str = ""  # e.g. "6 months", "1 year", "Permanent"
     confidence: float = Field(ge=0.0, le=1.0, default=0.0)
     notes: str = ""
 

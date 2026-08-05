@@ -11,6 +11,7 @@ Graph (each intake turn and the approval checkpoint is a persisted graph pause):
 The checkpointer (MemorySaver for tests, PostgresSaver in prod) persists graph
 state across the pauses, matching the MVP's "graph pause persisted to Postgres".
 """
+import re
 from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
@@ -57,6 +58,20 @@ class AgentState(TypedDict, total=False):
     jd_markdown: str
     guardrail_status: str
     decision_record_id: str
+    refine_instruction: str
+    refine_turns: int
+
+
+def _ensure_contract_section(jd: str, contract_duration: str) -> str:
+    """Guarantee the JD always states the contract duration (mandatory section)."""
+    if re.search(r"contract duration|contract period|engagement", jd, re.IGNORECASE):
+        return jd
+    value = contract_duration.strip() or "To be confirmed"
+    return jd.rstrip() + f"\n\n## Contract duration / engagement\n\n{value}\n"
+
+
+def _jd_sections(contract_duration: str) -> str:
+    return prompts.JD_SECTIONS.format(contract_duration=contract_duration or "To be confirmed")
 
 
 def _sanitize_role(raw: dict) -> None:
@@ -111,6 +126,8 @@ def _compute_gaps(parsed: dict) -> list[str]:
         gaps.append("location")
     if parsed.get("rate_band") is None:
         gaps.append("rate")
+    if not parsed.get("contract_duration"):
+        gaps.append("contract")
     return [g for g in prompts.GAP_ORDER if g in gaps]
 
 
@@ -121,13 +138,34 @@ def _parse_answer(value: str, question_id: str) -> dict:
         parsed["skills"] = skills.skills_in_text(value) or [value.strip().lower()]
     elif question_id == "seniority" and extracted["seniority"]:
         parsed["seniority"] = extracted["seniority"].value
-    elif question_id == "years" and extracted["years"] is not None:
-        parsed["years"] = extracted["years"]
+    elif question_id == "years":
+        years = extracted["years"]
+        # A bare number in the years question ("3") still means 3 years.
+        bare = value.strip()
+        if years is None and bare.isdigit() and len(bare) <= 2:
+            years = int(bare)
+        if years is not None:
+            parsed["years"] = years
     elif question_id == "location" and extracted["location"]:
         parsed["location"] = extracted["location"]
     elif question_id == "rate" and extracted["rate_band"]:
         parsed["rate_band"] = extracted["rate_band"]
+    elif question_id == "contract" and extracted["contract_duration"]:
+        parsed["contract_duration"] = extracted["contract_duration"]
     return parsed
+
+
+def _parse_prompt(prompt: str) -> dict:
+    """Direct-prompt mode: fill parsed fields from one free-form paragraph."""
+    extracted = heuristics.extract_from_text(prompt)
+    return {
+        "skills": skills.skills_in_text(prompt),
+        "seniority": extracted["seniority"].value if extracted["seniority"] else None,
+        "years": extracted["years"],
+        "location": extracted["location"],
+        "rate_band": extracted["rate_band"],
+        "contract_duration": extracted["contract_duration"],
+    }
 
 
 def build_graph(llm: LLMClient, session_factory, checkpointer=None):
@@ -148,6 +186,8 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
         return {"covered": covered, "missing_skills": missing}
 
     def _route_after_coverage(state: AgentState) -> str:
+        if (state["intent"].get("prompt") or "").strip():
+            return "generate"  # direct-prompt mode: no intake Q&A, generate now
         if state["covered"]:
             return "generate"
         return "intake_loop"
@@ -186,6 +226,47 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
     def generate(state: AgentState) -> AgentState:
         profile = schemas.CompanyProfile.model_validate(state["profile"])
         intent = schemas.RoleIntent.model_validate(state["intent"])
+        calls = state["tool_calls"]
+
+        instruction = (state.get("refine_instruction") or "").strip()
+        if instruction:
+            # Refinement loop: apply the manager's edit request to the current
+            # role + JD, then come back to the approval checkpoint.
+            refine_turns = state.get("refine_turns", 0)
+            guardrails.enforce_budget(refine_turns + 1, calls, turns_label="refinement")
+            role = schemas.StructuredRole.model_validate(state["structured_role"])
+            current_jd = state.get("jd_markdown") or ""
+
+            role_prompt = prompts.ROLE_REFINE_PROMPT.format(
+                profile=profile.model_dump_json(),
+                role=role.model_dump_json(),
+                instruction=instruction,
+            )
+            raw = llm.generate_structured(role_prompt, schemas.StructuredRole)
+            _sanitize_role(raw)
+            role = guardrails.validate_role(raw)
+            role.must_have_skills = skills.canonicalize_skills(role.must_have_skills)
+            role.nice_to_have_skills = skills.canonicalize_skills(role.nice_to_have_skills)
+
+            jd_prompt = prompts.JD_REFINE_PROMPT.format(
+                profile=profile.model_dump_json(),
+                jd=current_jd,
+                role=role.model_dump_json(),
+                instruction=instruction,
+                sections=_jd_sections(role.contract_duration),
+            )
+            jd_markdown = _ensure_contract_section(
+                llm.generate_text(jd_prompt), role.contract_duration
+            )
+
+            return {
+                "structured_role": role.model_dump(),
+                "jd_markdown": jd_markdown,
+                "tool_calls": calls,
+                "refine_turns": refine_turns + 1,
+                "status": schemas.RequisitionStatus.STRUCTURING.value,
+            }
+
         answers = "\n".join(f"- {a['value']}" for a in state["answers"])
 
         role_prompt = prompts.ROLE_EXTRACTION_PROMPT.format(
@@ -216,13 +297,18 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             role.location = state["parsed"]["location"]
         if role.rate_band is None and state["parsed"].get("rate_band"):
             role.rate_band = state["parsed"]["rate_band"]
+        if not role.contract_duration and state["parsed"].get("contract_duration"):
+            role.contract_duration = state["parsed"]["contract_duration"]
 
         jd_prompt = prompts.JD_GENERATION_PROMPT.format(
             profile=profile.model_dump_json(),
             intent=intent.model_dump_json(),
             role=role.model_dump_json(),
+            sections=_jd_sections(role.contract_duration),
         )
-        jd_markdown = llm.generate_text(jd_prompt)
+        jd_markdown = _ensure_contract_section(
+            llm.generate_text(jd_prompt), role.contract_duration
+        )
 
         return {
             "structured_role": role.model_dump(),
@@ -251,6 +337,14 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
                 "covered": state["covered"],
                 "missing_skills": state["missing_skills"],
             }
+            if state.get("refine_instruction"):
+                req.refinement_log = (req.refinement_log or []) + [
+                    {
+                        "instruction": state["refine_instruction"],
+                        "structured_role": state["structured_role"],
+                        "jd_markdown": state["jd_markdown"],
+                    }
+                ]
             record = models.DecisionRecord(
                 requisition_id=state["requisition_id"],
                 agent_name="job_requirement_agent",
@@ -279,6 +373,12 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
                 "jd_markdown": state["jd_markdown"],
             }
         )
+        # Refinement request: loop back to generate with the manager's feedback.
+        if isinstance(decision, dict) and isinstance(decision.get("instruction"), str):
+            return Command(
+                goto="generate",
+                update={"refine_instruction": decision["instruction"].strip()},
+            )
         status = schemas.RequisitionStatus.DRAFT.value  # default: revisit
         if isinstance(decision, dict) and decision.get("decision"):
             if decision["decision"] == "approved":
@@ -356,6 +456,13 @@ class JobRequirementAgent:
             "intake_turns": 0,
             "tool_calls": 0,
         }
+        # Direct-prompt mode: the whole role is described in one paragraph, so
+        # parse everything up front and skip the intake conversation.
+        prompt = (intent.get("prompt") or "").strip()
+        if prompt:
+            initial["answers"] = [{"question_id": "prompt", "value": prompt}]
+            initial["parsed"] = _parse_prompt(prompt)
+            initial["status"] = schemas.RequisitionStatus.STRUCTURING.value
         config = self._config(requisition_id)
         result = self.graph.stream(
             Command(resume=resume) if resume is not None else dict(initial),
