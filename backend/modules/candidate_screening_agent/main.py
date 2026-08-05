@@ -20,11 +20,21 @@ if os.path.exists(static_dir):
 
 @app.get("/", include_in_schema=False)
 def serve_ui():
-    """Serve the modern web UI interface."""
+    """Serve the Vendor Candidate Screening UI."""
     index_path = os.path.join(static_dir, "index.html")
     if os.path.exists(index_path):
         return FileResponse(index_path)
     return {"message": "Candidate Screening Agent API is running"}
+
+
+@app.get("/company-x", include_in_schema=False)
+@app.get("/portal", include_in_schema=False)
+def serve_company_x_portal():
+    """Serve the Company X Enterprise HR Dashboard Portal."""
+    portal_path = os.path.join(static_dir, "company_x_dashboard.html")
+    if os.path.exists(portal_path):
+        return FileResponse(portal_path)
+    return {"message": "Company X Portal HTML missing"}
 
 
 def custom_openapi():
@@ -36,7 +46,6 @@ def custom_openapi():
         description=app.description,
         routes=app.routes,
     )
-    # Patch OpenAPI schema for Swagger UI file uploads on array of UploadFile
     for schema in openapi_schema.get("components", {}).get("schemas", {}).values():
         if isinstance(schema, dict) and "properties" in schema:
             for prop in schema["properties"].values():

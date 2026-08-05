@@ -6,7 +6,13 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from services.pdf_parser import extract_text_from_pdf
 from services.scoring import rank_candidates
-from services.db_service import fetch_published_requisitions, fetch_requisition_by_id
+from services.db_service import (
+    fetch_published_requisitions, 
+    fetch_requisition_by_id,
+    save_candidate_submission,
+    update_candidate_status_in_db,
+    fetch_candidates_from_db
+)
 from services.email_service import send_shortlist_notification, send_rejection_notification
 
 router = APIRouter()
@@ -14,7 +20,7 @@ router = APIRouter()
 UPLOAD_FOLDER = "uploads"
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# In-memory candidate database & Approval Queue store
+# In-memory candidate cache for active screening session
 CANDIDATE_STORE: List[dict] = []
 
 
@@ -22,6 +28,7 @@ class ApprovalRequest(BaseModel):
     submission_id: str
     action: str  # "shortlist" or "reject"
     notes: Optional[str] = None
+    vendor_name: Optional[str] = "Vendor A"
 
 
 @router.get("/requisitions")
@@ -47,12 +54,25 @@ async def get_db_requisition_detail(req_id: str):
     }
 
 
+@router.get("/candidates/shortlisted")
+async def get_shortlisted_vendor_candidates(requisition_id: Optional[str] = None):
+    """Fetch ONLY shortlisted candidates from all vendors stored in PostgreSQL, ranked by match score."""
+    candidates = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")
+    return {
+        "status": "success",
+        "count": len(candidates),
+        "shortlisted_candidates": candidates
+    }
+
+
 @router.post("/screen-resumes")
 async def screen_multiple_candidates(
     jd: str = Form(...),
+    requisition_id: Optional[str] = Form(None),
+    vendor_name: Optional[str] = Form("Vendor A"),
     files: List[UploadFile] = File(...)
 ):
-    """Screen multiple uploaded resume PDFs against a Job Description, rank them, and store in Approval Queue."""
+    """Screen multiple uploaded resume PDFs against a Job Description and rank them in memory for Vendor HR review."""
     if not files:
         raise HTTPException(status_code=400, detail="No files provided")
 
@@ -76,110 +96,122 @@ async def screen_multiple_candidates(
     if not candidates_data:
         raise HTTPException(status_code=400, detail="No valid files processed")
 
+    # Load existing shortlisted submissions from DB for duplicate checking
+    existing_db = fetch_candidates_from_db(requisition_id=requisition_id)
+    combined_existing = existing_db + CANDIDATE_STORE
+
     ranking_results = rank_candidates(
         jd=jd,
         candidates=candidates_data,
-        existing_submissions=CANDIDATE_STORE
+        existing_submissions=combined_existing
     )
 
     for cand in ranking_results["ranked_candidates"]:
         submission_id = str(uuid.uuid4())[:8]
-        cand_record = {
-            "submission_id": submission_id,
-            "job_description_snippet": jd[:100] + "...",
-            "candidate_name": cand["candidate_name"],
-            "candidate_email": cand.get("candidate_email"),
-            "filename": cand["filename"],
-            "fingerprint": cand["fingerprint"],
-            "status": "Screened",
-            "match_score": cand["match_score"],
-            "recommendation": cand["recommendation"],
-            "is_duplicate": cand["is_duplicate"],
-            "duplicate_reason": cand["duplicate_reason"],
-            "matched_skills": cand["matched_skills"],
-            "missing_skills": cand["missing_skills"],
-            "summary": cand["summary"],
-            "details": cand["details"],
-            "engine_info": cand.get("engine_info", "Cross-Verification Engine"),
-            "rank": cand["rank"],
-            "email_notification_status": "Pending Human Action"
-        }
-        CANDIDATE_STORE.append(cand_record)
         cand["submission_id"] = submission_id
+        cand["requisition_id"] = requisition_id
+        cand["vendor_name"] = vendor_name or "Vendor A"
+        cand["status"] = "Screened"
+        cand["email_notification_status"] = "Pending HR Shortlist"
+        CANDIDATE_STORE.append(cand)
 
     return {
         "status": "success",
+        "vendor_name": vendor_name or "Vendor A",
         "analysis": ranking_results
     }
 
 
 @router.get("/approval-queue")
-async def get_approval_queue():
-    """Retrieve candidates queued for Hiring Manager review (State Machine: Screened -> Shortlisted / Rejected)."""
-    pending = [c for c in CANDIDATE_STORE if c["status"] == "Screened"]
-    shortlisted = [c for c in CANDIDATE_STORE if c["status"] == "Shortlisted"]
-    rejected = [c for c in CANDIDATE_STORE if c["status"] == "Rejected"]
+async def get_approval_queue(requisition_id: Optional[str] = None):
+    """Retrieve candidates queued for Vendor HR review."""
+    pending = [c for c in CANDIDATE_STORE if c.get("status") == "Screened"]
+    
+    # Fetch shortlisted candidates from PostgreSQL
+    db_shortlisted = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")
 
     return {
         "status": "success",
         "total_queued": len(pending),
-        "total_shortlisted": len(shortlisted),
-        "total_rejected": len(rejected),
+        "total_shortlisted": len(db_shortlisted),
         "approval_queue": pending,
-        "shortlisted_candidates": shortlisted,
-        "rejected_candidates": rejected,
+        "shortlisted_candidates": db_shortlisted,
     }
 
 
 @router.post("/approve-candidate")
 async def approve_candidate(req: ApprovalRequest):
-    """Transition candidate status in State Machine and automatically trigger Resend email notification."""
+    """Transition candidate status: ONLY save to PostgreSQL when Vendor HR approves & Shortlists a candidate."""
     action = req.action.lower()
     if action not in ["shortlist", "reject"]:
         raise HTTPException(status_code=400, detail="Invalid action. Must be 'shortlist' or 'reject'")
 
-    for cand in CANDIDATE_STORE:
-        if cand["submission_id"] == req.submission_id:
-            old_status = cand["status"]
-            new_status = "Shortlisted" if action == "shortlist" else "Rejected"
-            cand["status"] = new_status
-            cand["hiring_manager_notes"] = req.notes or ""
+    # Search candidate in memory screening cache
+    target_cand = next((c for c in CANDIDATE_STORE if c.get("submission_id") == req.submission_id), None)
 
-            # Trigger automated email via Resend
-            email_result = {"status": "skipped", "reason": "No email found in resume"}
-            candidate_email = cand.get("candidate_email")
-            
-            if candidate_email:
-                if action == "shortlist":
-                    email_result = send_shortlist_notification(
-                        candidate_name=cand["candidate_name"],
-                        candidate_email=candidate_email,
-                        job_title="Software Position",
-                        notes=req.notes
-                    )
-                else:
-                    email_result = send_rejection_notification(
-                        candidate_name=cand["candidate_name"],
-                        candidate_email=candidate_email,
-                        job_title="Software Position",
-                        notes=req.notes
-                    )
+    if not target_cand:
+        # Search in DB
+        db_candidates = fetch_candidates_from_db()
+        target_cand = next((c for c in db_candidates if c["submission_id"] == req.submission_id), None)
 
-            cand["email_notification_status"] = email_result.get("message") or email_result.get("error") or email_result.get("reason")
+    if not target_cand:
+        raise HTTPException(status_code=404, detail=f"Submission ID '{req.submission_id}' not found")
 
-            return {
-                "status": "success",
-                "message": f"Candidate state updated from {old_status} -> {new_status}",
-                "email_notification": email_result,
-                "candidate": cand
-            }
+    old_status = target_cand.get("status", "Screened")
+    
+    if action == "shortlist":
+        new_status = "Shortlisted"
+        target_cand["status"] = new_status
+        target_cand["vendor_name"] = req.vendor_name or target_cand.get("vendor_name", "Vendor A")
+        target_cand["hiring_manager_notes"] = req.notes or ""
 
-    raise HTTPException(status_code=404, detail=f"Submission ID '{req.submission_id}' not found")
+        # ONLY SAVE TO POSTGRESQL WHEN SHORTLISTED BY VENDOR HR
+        save_candidate_submission(target_cand, requisition_id=target_cand.get("requisition_id"), vendor_name=target_cand["vendor_name"])
+        update_candidate_status_in_db(req.submission_id, "Shortlisted", req.notes)
+
+        # Send Gmail notification
+        email_result = {"status": "skipped", "reason": "No email found in resume"}
+        if target_cand.get("candidate_email"):
+            email_result = send_shortlist_notification(
+                candidate_name=target_cand["candidate_name"],
+                candidate_email=target_cand["candidate_email"],
+                job_title="DevOps Position",
+                notes=req.notes
+            )
+        target_cand["email_notification_status"] = email_result.get("message") or email_result.get("error") or email_result.get("reason")
+        
+        return {
+            "status": "success",
+            "message": f"Candidate successfully SHORTLISTED & SAVED TO POSTGRESQL! State: {old_status} -> {new_status}",
+            "email_notification": email_result,
+            "candidate": target_cand
+        }
+    else:
+        new_status = "Rejected"
+        target_cand["status"] = new_status
+
+        # Send rejection email notification
+        email_result = {"status": "skipped", "reason": "No email found in resume"}
+        if target_cand.get("candidate_email"):
+            email_result = send_rejection_notification(
+                candidate_name=target_cand["candidate_name"],
+                candidate_email=target_cand["candidate_email"],
+                job_title="DevOps Position",
+                notes=req.notes
+            )
+        target_cand["email_notification_status"] = email_result.get("message") or email_result.get("error") or email_result.get("reason")
+
+        return {
+            "status": "success",
+            "message": f"Candidate REJECTED. State: {old_status} -> {new_status} (Not saved in PostgreSQL)",
+            "email_notification": email_result,
+            "candidate": target_cand
+        }
 
 
 @router.post("/test-screen")
-async def test_screen():
-    """Test endpoint with sample JD and fake candidate resumes including candidate email addresses."""
+async def test_screen(vendor_name: str = "Vendor A"):
+    """Test endpoint for vendor screening without initial DB persistence."""
     jd = """
     Senior Python & FastAPI Developer
     
@@ -217,48 +249,32 @@ async def test_screen():
     Skills: Python, Flask, SQLite.
     """
 
-    candidate_4_text = candidate_1_text
-
     candidates_data = [
         {"filename": "mohammed_hashil_resume.pdf", "extracted_text": candidate_1_text},
         {"filename": "jane_smith_resume.pdf", "extracted_text": candidate_2_text},
         {"filename": "alex_johnson_resume.pdf", "extracted_text": candidate_3_text},
-        {"filename": "mohammed_hashil_duplicate.pdf", "extracted_text": candidate_4_text},
     ]
+
+    existing_db = fetch_candidates_from_db()
+    combined_existing = existing_db + CANDIDATE_STORE
 
     ranking_results = rank_candidates(
         jd=jd,
         candidates=candidates_data,
-        existing_submissions=CANDIDATE_STORE
+        existing_submissions=combined_existing
     )
 
     for cand in ranking_results["ranked_candidates"]:
         submission_id = str(uuid.uuid4())[:8]
-        cand_record = {
-            "submission_id": submission_id,
-            "job_description_snippet": jd[:100] + "...",
-            "candidate_name": cand["candidate_name"],
-            "candidate_email": cand.get("candidate_email"),
-            "filename": cand["filename"],
-            "fingerprint": cand["fingerprint"],
-            "status": "Screened",
-            "match_score": cand["match_score"],
-            "recommendation": cand["recommendation"],
-            "is_duplicate": cand["is_duplicate"],
-            "duplicate_reason": cand["duplicate_reason"],
-            "matched_skills": cand["matched_skills"],
-            "missing_skills": cand["missing_skills"],
-            "summary": cand["summary"],
-            "details": cand["details"],
-            "engine_info": cand.get("engine_info", "Cross-Verification Engine"),
-            "rank": cand["rank"],
-            "email_notification_status": "Pending Human Action"
-        }
-        CANDIDATE_STORE.append(cand_record)
         cand["submission_id"] = submission_id
+        cand["vendor_name"] = vendor_name
+        cand["status"] = "Screened"
+        cand["email_notification_status"] = "Pending HR Shortlist"
+        CANDIDATE_STORE.append(cand)
 
     return {
         "status": "success",
+        "vendor_name": vendor_name,
         "job_description": jd.strip(),
         "analysis": ranking_results
     }
