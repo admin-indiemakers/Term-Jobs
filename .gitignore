@@ -32,22 +32,28 @@ venv.bak/
 
 # Pytest / Testing
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 .coverage
 .coverage.*
 htmlcov/
-.pytest_cache/
 nosetests.xml
 coverage.xml
 *.cover
-*.py,cover
 .hypothesis/
 
 # Environment Variables & Secrets
 .env
 .env.local
 .env.*.local
+.env.production
 *.pem
 *.key
+
+# Databases / local data
+*.sqlite
+*.sqlite3
+*.db
 
 # IDE & Editors
 .vscode/
@@ -70,3 +76,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Tooling
+.uv/
