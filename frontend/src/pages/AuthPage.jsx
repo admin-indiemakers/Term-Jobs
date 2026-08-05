@@ -57,7 +57,7 @@ export default function AuthPage() {
           tech_stack: techStackArray,
           notes: formData.notes,
         });
-        setSuccessMsg('Registration successful. Workspace initialized.');
+        setSuccessMsg(`Registration successful as ${activeRole}. Workspace initialized.`);
       } else {
         await login(formData.email, formData.password);
         setSuccessMsg('Session authenticated. Welcome back.');
@@ -93,6 +93,7 @@ export default function AuthPage() {
             {['Hiring Manager', 'Recruiter', 'Admin'].map((role) => (
               <button
                 key={role}
+                type="button"
                 className={`role-tab ${activeRole === role ? 'active' : ''}`}
                 onClick={() => setActiveRole(role)}
               >
@@ -111,15 +112,15 @@ export default function AuthPage() {
                   <input type="text" name="name" required value={formData.name} onChange={handleInputChange} className="auth-input" placeholder="e.g. Rahul Sharma" />
                 </div>
                 <div>
-                  <label className="form-label">Company Name</label>
-                  <input type="text" name="company_name" required value={formData.company_name} onChange={handleInputChange} className="auth-input" placeholder="e.g. Acme Systems" />
+                  <label className="form-label">{activeRole === 'Recruiter' ? 'Agency / Consultancy Name' : 'Company Name'}</label>
+                  <input type="text" name="company_name" required value={formData.company_name} onChange={handleInputChange} className="auth-input" placeholder={activeRole === 'Recruiter' ? 'e.g. Vendor A / Apex Staffing' : 'e.g. Acme Systems'} />
                 </div>
               </div>
 
               <div className="form-row">
                 <div>
                   <label className="form-label">Industry</label>
-                  <input type="text" name="industry" value={formData.industry} onChange={handleInputChange} className="auth-input" placeholder="e.g. Fintech, SaaS" />
+                  <input type="text" name="industry" value={formData.industry} onChange={handleInputChange} className="auth-input" placeholder="e.g. Fintech, Staffing, SaaS" />
                 </div>
                 <div>
                   <label className="form-label">Company Size</label>
@@ -133,13 +134,13 @@ export default function AuthPage() {
               </div>
 
               <div>
-                <label className="form-label">Primary Tech Stack (Comma-separated)</label>
+                <label className="form-label">Primary Tech Stack Focus (Comma-separated)</label>
                 <input type="text" name="tech_stack_input" value={formData.tech_stack_input} onChange={handleInputChange} className="auth-input" placeholder="Python, FastAPI, Postgres, Docker, React" />
               </div>
 
               <div>
-                <label className="form-label">Company Overview & Vision</label>
-                <textarea name="notes" rows="2" value={formData.notes} onChange={handleInputChange} className="auth-input" placeholder="Describe enterprise engineering priorities..." style={{ resize: 'none', fontFamily: 'inherit' }} />
+                <label className="form-label">{activeRole === 'Recruiter' ? 'Recruitment Agency Overview' : 'Company Overview & Vision'}</label>
+                <textarea name="notes" rows="2" value={formData.notes} onChange={handleInputChange} className="auth-input" placeholder={activeRole === 'Recruiter' ? 'Describe your talent acquisition agency focus...' : 'Describe enterprise engineering priorities...'} style={{ resize: 'none', fontFamily: 'inherit' }} />
               </div>
             </>
           )}
@@ -158,13 +159,13 @@ export default function AuthPage() {
           {successMsg && <div className="alert alert-success">{successMsg}</div>}
 
           <button type="submit" className="glow-btn auth-submit" disabled={loading}>
-            {loading ? 'Processing...' : isRegister ? 'Initialize Enterprise Account' : 'Sign In to Workspace'}
+            {loading ? 'Processing...' : isRegister ? `Initialize ${activeRole} Account` : 'Sign In to Workspace'}
           </button>
         </form>
 
         <div className="auth-switch">
           {isRegister ? 'Already registered?' : 'Need an enterprise workspace?'}{' '}
-          <button onClick={toggleMode} className="auth-switch-link">
+          <button type="button" onClick={toggleMode} className="auth-switch-link">
             {isRegister ? 'Sign in here' : 'Register workspace'}
           </button>
         </div>
