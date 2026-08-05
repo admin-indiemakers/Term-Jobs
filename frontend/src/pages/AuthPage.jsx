@@ -10,7 +10,6 @@ export default function AuthPage() {
   const [isRegister, setIsRegister] = useState(false);
   const [activeRole, setActiveRole] = useState('Hiring Manager');
 
-  // Specific initial states for Hiring Manager vs Recruiter
   const [formData, setFormData] = useState({
     email: '',
     name: '',
@@ -29,30 +28,36 @@ export default function AuthPage() {
 
   if (user) return <Navigate to="/" replace />;
 
+  const isRecruiter = activeRole === 'Recruiter';
+
   const handleRoleTabChange = (role) => {
     setActiveRole(role);
     setError('');
 
-    // Customize defaults dynamically based on role context
     if (role === 'Recruiter') {
-      setFormData((prev) => ({
-        ...prev,
-        company_name: prev.company_name || '',
-        industry: 'IT Staffing & Talent Acquisition',
+      setFormData({
+        email: '',
+        name: '',
+        password: '',
+        company_name: '',
+        industry: 'IT Staffing & Recruitment',
         size: '10-50 recruiters',
         location: 'Bangalore',
-        tech_stack_input: 'Python, DevOps, React, Cloud & Data',
-        notes: 'Recruitment consultancy specializing in top-vetted tech talent.',
-      }));
+        tech_stack_input: 'Python, DevOps, React, AI & Cloud',
+        notes: 'Recruitment consultancy agency specializing in top-vetted tech talent.',
+      });
     } else {
-      setFormData((prev) => ({
-        ...prev,
+      setFormData({
+        email: '',
+        name: '',
+        password: '',
+        company_name: '',
         industry: 'Fintech',
         size: '51-200 employees',
         location: 'Bangalore',
         tech_stack_input: 'Python, FastAPI, PostgreSQL, Docker, React',
         notes: 'Enterprise platform for automated recruitment.',
-      }));
+      });
     }
   };
 
@@ -106,8 +111,6 @@ export default function AuthPage() {
     setSuccessMsg('');
   };
 
-  const isRecruiter = activeRole === 'Recruiter';
-
   return (
     <div className="auth-page">
       <div className="matrix-grid"></div>
@@ -141,57 +144,135 @@ export default function AuthPage() {
               <div className="form-row">
                 <div>
                   <label className="form-label">Full Name</label>
-                  <input type="text" name="name" required value={formData.name} onChange={handleInputChange} className="auth-input" placeholder="e.g. Rahul Sharma" />
+                  <input
+                    type="text"
+                    name="name"
+                    required
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className="auth-input"
+                    placeholder="e.g. Rahul Sharma"
+                  />
                 </div>
                 <div>
-                  <label className="form-label">{isRecruiter ? 'Recruitment Agency Name' : 'Company Name'}</label>
-                  <input type="text" name="company_name" required value={formData.company_name} onChange={handleInputChange} className="auth-input" placeholder={isRecruiter ? 'e.g. Apex Staffing / Vendor A' : 'e.g. Acme Systems'} />
+                  <label className="form-label">
+                    {isRecruiter ? 'Recruitment Agency Name' : 'Company Name'}
+                  </label>
+                  <input
+                    type="text"
+                    name="company_name"
+                    required
+                    value={formData.company_name}
+                    onChange={handleInputChange}
+                    className="auth-input"
+                    placeholder={isRecruiter ? 'e.g. Vendor A / Apex Staffing' : 'e.g. Acme Systems'}
+                  />
                 </div>
               </div>
 
               <div className="form-row">
                 <div>
-                  <label className="form-label">{isRecruiter ? 'Staffing Specialization' : 'Industry'}</label>
-                  <input type="text" name="industry" value={formData.industry} onChange={handleInputChange} className="auth-input" placeholder={isRecruiter ? 'e.g. Tech & IT Staffing' : 'e.g. Fintech, SaaS'} />
+                  <label className="form-label">
+                    {isRecruiter ? 'Staffing Specialization' : 'Industry'}
+                  </label>
+                  <input
+                    type="text"
+                    name="industry"
+                    value={formData.industry}
+                    onChange={handleInputChange}
+                    className="auth-input"
+                    placeholder={isRecruiter ? 'e.g. Tech & IT Staffing' : 'e.g. Fintech, SaaS'}
+                  />
                 </div>
                 <div>
-                  <label className="form-label">{isRecruiter ? 'Agency Team Size' : 'Company Size'}</label>
-                  <input type="text" name="size" value={formData.size} onChange={handleInputChange} className="auth-input" placeholder={isRecruiter ? 'e.g. 10-50 recruiters' : 'e.g. 51-200 employees'} />
+                  <label className="form-label">
+                    {isRecruiter ? 'Agency Team Size' : 'Company Size'}
+                  </label>
+                  <input
+                    type="text"
+                    name="size"
+                    value={formData.size}
+                    onChange={handleInputChange}
+                    className="auth-input"
+                    placeholder={isRecruiter ? 'e.g. 10-50 recruiters' : 'e.g. 51-200 employees'}
+                  />
                 </div>
               </div>
 
               <div>
                 <label className="form-label">Location</label>
-                <input type="text" name="location" value={formData.location} onChange={handleInputChange} className="auth-input" placeholder="e.g. Bangalore, Remote" />
+                <input
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleInputChange}
+                  className="auth-input"
+                  placeholder="e.g. Bangalore, Remote"
+                />
               </div>
 
               <div>
-                <label className="form-label">{isRecruiter ? 'Primary Candidate Skill Pool Focus' : 'Primary Tech Stack (Comma-separated)'}</label>
-                <input type="text" name="tech_stack_input" value={formData.tech_stack_input} onChange={handleInputChange} className="auth-input" placeholder={isRecruiter ? 'Python, DevOps, React, Fullstack' : 'Python, FastAPI, Postgres, Docker, React'} />
+                <label className="form-label">
+                  {isRecruiter ? 'Primary Candidate Skill Pool Focus' : 'Primary Tech Stack (Comma-separated)'}
+                </label>
+                <input
+                  type="text"
+                  name="tech_stack_input"
+                  value={formData.tech_stack_input}
+                  onChange={handleInputChange}
+                  className="auth-input"
+                  placeholder={isRecruiter ? 'Python, DevOps, React, AI' : 'Python, FastAPI, Postgres, Docker, React'}
+                />
               </div>
 
               <div>
-                <label className="form-label">{isRecruiter ? 'Agency Profile & Overview' : 'Company Overview & Vision'}</label>
-                <textarea name="notes" rows="2" value={formData.notes} onChange={handleInputChange} className="auth-input" placeholder={isRecruiter ? 'Describe your talent acquisition agency focus...' : 'Describe enterprise engineering priorities...'} style={{ resize: 'none', fontFamily: 'inherit' }} />
+                <label className="form-label">
+                  {isRecruiter ? 'Agency Profile & Overview' : 'Company Overview & Vision'}
+                </label>
+                <textarea
+                  name="notes"
+                  rows="2"
+                  value={formData.notes}
+                  onChange={handleInputChange}
+                  className="auth-input"
+                  placeholder={isRecruiter ? 'Describe your talent acquisition agency focus...' : 'Describe enterprise engineering priorities...'}
+                  style={{ resize: 'none', fontFamily: 'inherit' }}
+                />
               </div>
             </>
           )}
 
           <div>
             <label className="form-label">Email Address</label>
-            <input type="email" name="email" required value={formData.email} onChange={handleInputChange} className="auth-input" placeholder="name@company.com" />
+            <input
+              type="email"
+              name="email"
+              required
+              value={formData.email}
+              onChange={handleInputChange}
+              className="auth-input"
+              placeholder="name@company.com"
+            />
           </div>
 
           <div>
             <label className="form-label">Password</label>
-            <input type="password" name="password" required value={formData.password} onChange={handleInputChange} className="auth-input" placeholder="••••••••" />
+            <input
+              type="password"
+              name="password"
+              required
+              value={formData.password}
+              onChange={handleInputChange}
+              className="auth-input"
+              placeholder="••••••••"
+            />
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}
           {successMsg && <div className="alert alert-success">{successMsg}</div>}
 
           <button type="submit" className="glow-btn auth-submit" disabled={loading}>
-            {loading ? 'Processing...' : isRegister ? `Initialize ${activeRole} Account` : 'Sign In to Workspace'}
+            {loading ? 'Processing...' : isRegister ? (isRecruiter ? 'Initialize Recruiter Agency Account' : 'Initialize Enterprise Account') : 'Sign In to Workspace'}
           </button>
         </form>
 
