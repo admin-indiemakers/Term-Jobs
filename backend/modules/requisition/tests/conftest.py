@@ -2,7 +2,7 @@
 
 Tests run against an in-memory MongoDB mock (mongomock) and a deterministic
 MockLLM, so the whole suite is offline. Integration against MongoDB Atlas +
-Ollama is covered by @pytest.mark.ollama tests and the golden eval harness.
+Groq is covered by @pytest.mark.groq tests and the golden eval harness.
 """
 import mongomock
 import pytest

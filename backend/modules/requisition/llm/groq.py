@@ -1,13 +1,12 @@
-"""Ollama-backed LLM client.
+"""Groq-backed LLM client.
 
-Talks to the offline Ollama server via its OpenAI-compatible endpoint, so any
-model that exposes /v1/chat/completions works. Three-tier routing picks a
-model per stage; all tiers fall back to the configured default model when the
-server only has one model installed.
+Talks to Groq's OpenAI-compatible endpoint, so any model served there works.
+Three-tier routing picks a model per stage; all tiers fall back to the
+configured default model when only one is set.
 
 generate_structured returns parsed JSON *without* full schema validation — the
-agent's guardrail loop owns validation + sanitization so small-model quirks
-(e.g. a single-value rate_band) don't crash generation outright.
+agent's guardrail loop owns validation + sanitization so model quirks don't
+crash generation outright.
 """
 import json
 
@@ -32,20 +31,27 @@ class _Schema(BaseModel):
     pass
 
 
-class OllamaClient(LLMClient):
-    def __init__(self, base_url: str | None = None, default_model: str | None = None) -> None:
-        self.base_url = (base_url or settings.ollama_base_url).rstrip("/")
-        self.default_model = default_model or settings.ollama_default_model
+class GroqClient(LLMClient):
+    def __init__(self, api_key: str | None = None, base_url: str | None = None, default_model: str | None = None) -> None:
+        self.api_key = api_key or settings.groq_api_key
+        self.base_url = (base_url or settings.groq_base_url).rstrip("/")
+        self.default_model = default_model or settings.groq_default_model
 
     @property
     def _chat_url(self) -> str:
-        return f"{self.base_url}/v1/chat/completions"
+        return f"{self.base_url}/chat/completions"
 
     def _resolve_model(self, tier: str) -> str:
         return settings.model_tiers.get(tier) or self.default_model
 
+    def _headers(self) -> dict[str, str]:
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
     def _post(self, payload: dict) -> dict:
-        resp = httpx.post(self._chat_url, json=payload, timeout=120.0)
+        resp = httpx.post(self._chat_url, json=payload, headers=self._headers(), timeout=120.0)
         resp.raise_for_status()
         return resp.json()
 
