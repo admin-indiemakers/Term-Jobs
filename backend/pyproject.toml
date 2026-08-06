@@ -7,7 +7,6 @@ dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",
     "langgraph>=0.2.30",
-    "langchain-ollama>=0.2.0",
     "rapidfuzz>=3.9.0",
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
@@ -31,7 +30,7 @@ dev = [
 testpaths = ["modules/requisition/tests", "modules/identity/tests"]
 pythonpath = ["."]
 markers = [
-    "ollama: tests that require a reachable Ollama server",
+    "groq: tests that require a Groq API key",
 ]
 
 [tool.ruff]

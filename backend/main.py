@@ -1,4 +1,22 @@
-import json
+"""FastAPI app exposing the requisition module for end-to-end testing.
+
+Run:
+    uv run uvicorn main:app --reload --port 8000
+
+Configuration via environment (see .env.example):
+    DATABASE_URL  - defaults to Postgres; use sqlite:///requisition.db for a
+                    zero-setup run.
+    LLM_PROVIDER  - "groq" (default, cloud LLM) or "mock" (offline tests).
+
+Quick test (company -> requisition -> approve -> publish):
+    curl -X POST localhost:8000/company-profiles -H 'content-type: application/json' \
+         -d '{"name":"Acme","location":"Bangalore","tech_stack":["Python","Django","Postgres"]}'
+    # then POST /requisitions with the returned profile id
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
@@ -26,8 +44,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(identity_router)
-app.include_router(candidate_router)
+
+# --- LLM provider selection -------------------------------------------------
+def _build_service():
+    from modules.requisition.llm.groq import GroqClient
+    from modules.requisition.llm.mock import MockLLM
+    from modules.requisition.services.requisition_service import RequisitionService
+
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
+    llm = GroqClient() if provider == "groq" else MockLLM()
+    return RequisitionService(llm=llm, session_factory=get_session)
 
 
 # --- helpers -----------------------------------------------------------------
@@ -270,16 +296,5 @@ def delete_requisition(requisition_id: str) -> None:
 
 # --- health check ------------------------------------------------------------
 @app.get("/health")
-def health_check() -> dict:
-    return {
-        "status": "ok",
-        "llm_provider": settings.llm_provider,
-        "default_model": settings.ollama_default_model,
-        "mongodb_url": settings.mongodb_url,
-    }
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+def health() -> dict:
+    return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq")}

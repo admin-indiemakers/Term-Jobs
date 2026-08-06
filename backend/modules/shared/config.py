@@ -9,13 +9,14 @@ class Settings(BaseSettings):
     mongodb_url: str = "mongodb://localhost:27017/termjobs"
     mongo_db_name: str = "termjobs"
 
-    # Ollama (offline LLM)
-    ollama_base_url: str = "http://localhost:11434"
-    ollama_default_model: str = "qwen3:1.7b"
+    # Groq (cloud LLM)
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_default_model: str = "llama-3.3-70b-versatile"
     model_tiers: dict[str, str] = {
-        "small": "qwen3:1.7b",
-        "mid": "qwen3:1.7b",
-        "large": "qwen3:1.7b",
+        "small": "llama-3.3-70b-versatile",
+        "mid": "llama-3.3-70b-versatile",
+        "large": "llama-3.3-70b-versatile",
     }
 
     # Agent guardrails
