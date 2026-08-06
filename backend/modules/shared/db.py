@@ -1,31 +1,253 @@
-"""SQLAlchemy engine, session factory and declarative base.
+"""PyMongo-backed persistence layer with a SQLAlchemy-like API.
 
-Uses a synchronous engine for MVP simplicity. Swap for an async engine when
-the API layer lands.
+Models are plain classes mapping to MongoDB collections. ``Session`` mirrors
+the subset of the SQLAlchemy Session API used across the app
+(get/query/add/commit/refresh/flush/delete) so service/router code stays
+unchanged while documents live in MongoDB Atlas.
 """
-from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+import uuid
+from datetime import UTC, datetime
+from typing import ClassVar, Self
+
+from pymongo import ASCENDING, DESCENDING, MongoClient
 
 from .config import settings
 
 
-class Base(DeclarativeBase):
-    pass
+def _uuid() -> str:
+    return str(uuid.uuid4())
 
 
-engine = create_engine(settings.database_url, echo=False, future=True)
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
-def get_session():
-    return SessionLocal()
+client = MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=15000)
+db = client[settings.mongo_db_name]
 
 
-def init_db():
-    """Create tables from metadata. Used for tests and quick local runs;
-    production schema changes flow through Alembic."""
-    import modules.identity.domain.models
-    import modules.requisition.domain.models  # noqa: F401  (register models)
-    import modules.candidate.domain.models  # noqa: F401  (register models)
+class Criterion:
+    """A filter expression produced by ``Model.column == value``."""
 
-    Base.metadata.create_all(bind=engine)
+    __slots__ = ("name", "op", "value")
+
+    def __init__(self, name: str, op: str, value) -> None:
+        self.name = name
+        self.op = op
+        self.value = value
+
+
+class Sort:
+    """A sort key produced by ``Model.column.asc()/desc()``."""
+
+    __slots__ = ("direction", "name")
+
+    def __init__(self, name: str, direction: int) -> None:
+        self.name = name
+        self.direction = direction
+
+    def asc(self) -> "Sort":
+        self.direction = ASCENDING
+        return self
+
+    def desc(self) -> "Sort":
+        self.direction = DESCENDING
+        return self
+
+    def nulls_last(self) -> "Sort":
+        return self
+
+    def nulls_first(self) -> "Sort":
+        return self
+
+    def __iter__(self):
+        return iter((self.name, self.direction))
+
+
+class Column:
+    """Class-level descriptor supporting filter/sort expression building."""
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    def __eq__(self, other) -> Criterion:
+        return Criterion(self.name, "$eq", other)
+
+    def __ne__(self, other) -> Criterion:
+        return Criterion(self.name, "$ne", other)
+
+    def asc(self) -> Sort:
+        return Sort(self.name, ASCENDING)
+
+    def desc(self) -> Sort:
+        return Sort(self.name, DESCENDING)
+
+
+class Model:
+    """Base class for Mongo-backed models."""
+
+    __tablename__: str = ""
+    _fields: ClassVar[dict[str, object]] = {}  # name -> default factory (callable) or static value
+
+    def __init__(self, **kwargs) -> None:
+        for name, default in self._fields.items():
+            value = default() if callable(default) else default
+            setattr(self, name, value)
+        for name, value in kwargs.items():
+            setattr(self, name, value)
+
+    @classmethod
+    def from_doc(cls, doc: dict):
+        obj = cls()
+        for name, value in doc.items():
+            if name != "_id":
+                setattr(obj, name, value)
+        return obj
+
+    def to_doc(self) -> dict:
+        return dict(self.__dict__)
+
+
+class Query:
+    def __init__(self, session: "Session", model: type[Model]) -> None:
+        self._session = session
+        self._model = model
+        self._filters: dict = {}
+        self._sorts: list = []
+        self._limit: int | None = None
+
+    def _coll(self):
+        return self._session._db[self._model.__tablename__]
+
+    def filter(self, *criteria, **kwargs) -> "Query":
+        for c in criteria:
+            if isinstance(c, Criterion):
+                self._filters[c.name] = (
+                    {"$ne": c.value} if c.op == "$ne" else c.value
+                )
+            elif isinstance(c, dict):
+                self._filters.update(c)
+        for name, value in kwargs.items():
+            self._filters[name] = value
+        return self
+
+    def filter_by(self, **kwargs) -> "Query":
+        return self.filter(**kwargs)
+
+    def order_by(self, *sorts) -> "Query":
+        for s in sorts:
+            if isinstance(s, Sort):
+                self._sorts.append(tuple(s))
+            else:
+                self._sorts.append(s)
+        return self
+
+    def limit(self, n: int) -> "Query":
+        self._limit = n
+        return self
+
+    def first(self):
+        doc = self._coll().find_one(self._filters, sort=self._sorts or None)
+        if doc is None:
+            return None
+        obj = self._model.from_doc(doc)
+        self._session._track(obj)
+        return obj
+
+    def all(self) -> list[Model]:
+        cursor = self._coll().find(self._filters)
+        if self._sorts:
+            cursor = cursor.sort(self._sorts)
+        if self._limit:
+            cursor = cursor.limit(self._limit)
+        rows = [self._model.from_doc(d) for d in cursor]
+        for row in rows:
+            self._session._track(row)
+        return rows
+
+    def count(self) -> int:
+        return self._coll().count_documents(self._filters)
+
+    def delete(self, synchronize_session=False) -> int:
+        result = self._coll().delete_many(self._filters)
+        return result.deleted_count
+
+
+class Session:
+    def __init__(self, database=None) -> None:
+        self._db = database or db
+        self._tracked: list[Model] = []
+        self._pending: list[Model] = []
+        self._deleted: list[Model] = []
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        return False
+
+    def _coll(self, model: type[Model]):
+        return self._db[model.__tablename__]
+
+    def _track(self, obj: Model) -> None:
+        if obj not in self._tracked:
+            self._tracked.append(obj)
+
+    def get(self, model: type[Model], doc_id: str):
+        doc = self._coll(model).find_one({"id": doc_id})
+        if doc is None:
+            return None
+        obj = model.from_doc(doc)
+        self._track(obj)
+        return obj
+
+    def query(self, model: type[Model]) -> Query:
+        return Query(self, model)
+
+    def add(self, obj: Model) -> None:
+        self._pending.append(obj)
+        self._track(obj)
+
+    def flush(self) -> None:
+        for obj in self._pending:
+            self._coll(type(obj)).insert_one(obj.to_doc())
+        self._pending = []
+
+    def commit(self) -> None:
+        self.flush()
+        for obj in self._tracked:
+            self._coll(type(obj)).replace_one(
+                {"id": obj.id}, obj.to_doc(), upsert=True
+            )
+        for obj in self._deleted:
+            self._coll(type(obj)).delete_one({"id": obj.id})
+        self._tracked = []
+        self._deleted = []
+
+    def refresh(self, obj: Model) -> None:
+        doc = self._coll(type(obj)).find_one({"id": obj.id})
+        if doc:
+            for name, value in doc.items():
+                if name != "_id":
+                    setattr(obj, name, value)
+
+    def delete(self, obj: Model) -> None:
+        self._deleted.append(obj)
+
+
+def get_session() -> Session:
+    return Session()
+
+
+def init_db() -> None:
+    """Create indexes. Idempotent — safe to call on every start."""
+    db["users"].create_index("email", unique=True)
+    db["users"].create_index("tenant_id")
+    db["tenants"].create_index("name")
+    db["company_profiles"].create_index("tenant_id")
+    db["requisitions"].create_index("tenant_id")
+    db["requisitions"].create_index("company_profile_id")
+    db["decision_records"].create_index("requisition_id")
+    db["candidate_submissions"].create_index("requisition_id")

@@ -5,8 +5,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Dict, Optional
 
-GMAIL_SENDER_EMAIL = os.getenv("GMAIL_SENDER_EMAIL", "ashk68799@gmail.com")
-GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "ivxvrrrgkjhcahda")
+GMAIL_SENDER_EMAIL = os.getenv("GMAIL_SENDER_EMAIL", "")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD", "")
 
 
 def extract_candidate_email(resume_text: str) -> Optional[str]:
@@ -28,6 +28,9 @@ def send_email_via_gmail(
     """Send an email to any recipient using Gmail SMTP."""
     if not to_email:
         return {"status": "skipped", "reason": "No candidate email provided"}
+
+    if not sender_email or not app_password:
+        return {"status": "skipped", "reason": "Gmail credentials not configured (GMAIL_SENDER_EMAIL / GMAIL_APP_PASSWORD)"}
 
     clean_password = app_password.replace(" ", "")
 
