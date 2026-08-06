@@ -20,6 +20,7 @@ export default function RecruiterDashboard() {
   }, []);
 
   const formatJdText = (r) => {
+    if (!r) return '';
     if (r.jd_text) return r.jd_text;
     if (r.generated_jd_markdown) {
       if (typeof r.generated_jd_markdown === 'string') return r.generated_jd_markdown;
@@ -37,7 +38,6 @@ export default function RecruiterDashboard() {
     let list = [];
 
     try {
-      // 1. Try Candidate Screening Agent API
       const data = await request('/api/requisitions');
       if (data && data.requisitions && data.requisitions.length > 0) {
         list = data.requisitions;
@@ -45,12 +45,11 @@ export default function RecruiterDashboard() {
         list = data;
       }
     } catch {
-      console.warn('API /api/requisitions failed, trying /requisitions...');
+      console.warn('API /api/requisitions unavailable, trying /requisitions...');
     }
 
     if (list.length === 0) {
       try {
-        // 2. Try Core Backend Requisition API
         const raw = await request('/requisitions');
         if (Array.isArray(raw) && raw.length > 0) {
           list = raw;
@@ -164,12 +163,12 @@ export default function RecruiterDashboard() {
       <div className="page-header" style={{ marginBottom: '24px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-            <h1 className="page-title" style={{ color: '#0f172a', fontWeight: 800 }}>Recruiter Consultancy Dashboard</h1>
-            <span style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#0284c7', border: '1px solid rgba(56, 189, 248, 0.4)', padding: '4px 12px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 700 }}>
+            <h1 className="page-title">Recruiter Consultancy Dashboard</h1>
+            <span className="status-badge status-published">
               Consultancy Partner
             </span>
           </div>
-          <p className="page-subtitle" style={{ color: '#475569' }}>
+          <p className="page-subtitle">
             Logged in as <strong>{user?.name}</strong> ({user?.email}) &bull; Agency: <strong>{user?.tenant_name || 'Vendor Agency'}</strong>
           </p>
         </div>
@@ -178,35 +177,36 @@ export default function RecruiterDashboard() {
       {/* Main Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
         {/* Published Requisitions Card */}
-        <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>🏢</span> Select Published Requisition (Client Company X)
+        <div className="glass-panel">
+          <h2 className="card-title">
+            🏢 Select Published Requisition (Client Company X)
           </h2>
 
           {dbLoading ? (
-            <p style={{ color: '#64748b' }}>Loading active requisitions from PostgreSQL database...</p>
+            <p className="muted">Loading active requisitions from PostgreSQL database...</p>
           ) : (
             <>
-              <label style={{ display: 'block', fontSize: '0.88rem', color: '#1e293b', marginBottom: '8px', fontWeight: 700 }}>
+              <label className="form-label">
                 Select Active Job Position ({requisitions.length} Available)
               </label>
               <select
                 value={selectedReqId}
                 onChange={handleReqSelect}
-                style={{ width: '100%', padding: '12px', background: '#f8fafc', border: '2px solid #cbd5e1', borderRadius: '10px', color: '#0f172a', fontSize: '0.95rem', fontWeight: 700, marginBottom: '16px', cursor: 'pointer' }}
+                className="auth-input"
+                style={{ marginBottom: '16px', cursor: 'pointer' }}
               >
                 {requisitions.length === 0 ? (
                   <option value="">-- No Requisitions in Database --</option>
                 ) : (
                   requisitions.map((r) => (
                     <option key={r.id} value={r.id}>
-                      [{r.status || 'Active'}] {r.title || 'Untitled Role'} (ID: {String(r.id).substring(0, 8)}...)
+                      [{r.status || 'Active'}] {r.title || 'Untitled Role'}
                     </option>
                   ))
                 )}
               </select>
 
-              <label style={{ display: 'block', fontSize: '0.88rem', color: '#1e293b', marginBottom: '8px', fontWeight: 700 }}>
+              <label className="form-label">
                 Job Description & Tech Requirements
               </label>
               <textarea
@@ -214,20 +214,21 @@ export default function RecruiterDashboard() {
                 onChange={(e) => setJdText(e.target.value)}
                 placeholder="Select a requisition above or paste job requirements here..."
                 rows={7}
-                style={{ width: '100%', padding: '12px', background: '#f8fafc', border: '2px solid #cbd5e1', borderRadius: '10px', color: '#0f172a', fontSize: '0.92rem', fontWeight: 500, resize: 'vertical' }}
+                className="auth-input"
+                style={{ resize: 'vertical' }}
               />
             </>
           )}
         </div>
 
         {/* Upload Resumes & Screen Card */}
-        <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span>📄</span> Candidate Resume Upload & Intake
+        <div className="glass-panel">
+          <h2 className="card-title">
+            📄 Candidate Resume Upload & Intake
           </h2>
 
           <form onSubmit={handleScreenSubmit}>
-            <label style={{ display: 'block', fontSize: '0.88rem', color: '#1e293b', marginBottom: '8px', fontWeight: 700 }}>
+            <label className="form-label">
               Upload Candidate Resume PDF(s)
             </label>
             <input
@@ -235,13 +236,14 @@ export default function RecruiterDashboard() {
               accept=".pdf"
               multiple
               onChange={handleFileChange}
-              style={{ width: '100%', padding: '12px', background: '#f8fafc', border: '2px dashed #6366f1', borderRadius: '10px', color: '#0f172a', fontWeight: 600, marginBottom: '16px', cursor: 'pointer' }}
+              className="auth-input"
+              style={{ marginBottom: '16px', cursor: 'pointer' }}
             />
 
             {files.length > 0 && (
               <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                 {files.map((f, i) => (
-                  <span key={i} style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', color: '#4f46e5', padding: '4px 12px', borderRadius: '16px', fontSize: '0.8rem', fontWeight: 700 }}>
+                  <span key={i} className="status-badge status-intake">
                     📄 {f.name}
                   </span>
                 ))}
@@ -254,7 +256,7 @@ export default function RecruiterDashboard() {
               type="submit"
               disabled={loading}
               className="glow-btn"
-              style={{ width: '100%', padding: '14px', borderRadius: '12px', fontWeight: 700, fontSize: '1rem', background: 'linear-gradient(135deg, #6366f1, #38bdf8)', color: '#fff', border: 'none', cursor: 'pointer' }}
+              style={{ width: '100%', padding: '14px', borderRadius: '10px', fontSize: '1rem' }}
             >
               {loading ? 'AI Screening in Progress...' : '⚡ Screen & Match Candidate Resumes'}
             </button>
@@ -264,39 +266,40 @@ export default function RecruiterDashboard() {
 
       {/* Screening Results Spotlight */}
       {screeningResult && (
-        <div style={{ background: '#ffffff', border: '2px solid #6366f1', padding: '28px', borderRadius: '20px', marginBottom: '32px', boxShadow: '0 8px 24px rgba(99, 102, 241, 0.12)' }}>
-          <h2 style={{ fontSize: '1.3rem', fontWeight: 800, marginBottom: '20px', color: '#4f46e5' }}>
+        <div className="glass-panel" style={{ marginBottom: '32px', border: '2px solid #2563eb' }}>
+          <h2 className="card-title" style={{ fontSize: '1.25rem', color: '#1d4ed8' }}>
             🎯 AI Candidate Match Leaderboard
           </h2>
 
           {screeningResult.ranked_candidates.map((cand, idx) => (
             <div
               key={idx}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f8fafc', borderRadius: '12px', marginBottom: '12px', border: '1px solid #cbd5e1' }}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f8fafc', borderRadius: '10px', marginBottom: '12px', border: '1px solid #e2e8f0' }}
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
                     #{cand.rank} {cand.candidate_name}
                   </span>
-                  <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '2px 8px', borderRadius: '8px', fontSize: '0.75rem', fontWeight: 700 }}>
+                  <span className="status-badge status-published">
                     {cand.recommendation}
                   </span>
                 </div>
-                <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px' }}>
+                <div className="muted" style={{ marginTop: '4px' }}>
                   Email: {cand.candidate_email || 'No email extracted'} &bull; File: {cand.filename}
                 </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0284c7' }}>{cand.match_score}%</div>
-                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>Match Score</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#2563eb' }}>{cand.match_score}%</div>
+                  <div className="muted">Match Score</div>
                 </div>
 
                 <button
                   onClick={() => handleShortlistCandidate(cand.submission_id)}
-                  style={{ background: 'linear-gradient(135deg, #10b981, #059669)', color: '#fff', border: 'none', padding: '10px 18px', borderRadius: '10px', fontWeight: 700, cursor: 'pointer' }}
+                  className="glow-btn"
+                  style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '10px 18px' }}
                 >
                   ✓ Submit to Company X HR
                 </button>
@@ -307,26 +310,26 @@ export default function RecruiterDashboard() {
       )}
 
       {/* Already Shortlisted Submissions in PostgreSQL */}
-      <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', padding: '24px', borderRadius: '16px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}>
-        <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '16px', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span>🏆</span> Shortlisted Submissions Sent to Company X HR ({shortlistedList.length})
+      <div className="glass-panel">
+        <h2 className="card-title">
+          🏆 Shortlisted Submissions Sent to Company X HR ({shortlistedList.length})
         </h2>
 
         {shortlistedList.length === 0 ? (
-          <p style={{ color: '#64748b' }}>No candidates submitted yet.</p>
+          <p className="muted">No candidates submitted yet.</p>
         ) : (
           <div>
             {shortlistedList.map((c, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #cbd5e1' }}>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
                 <div>
                   <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{c.candidate_name}</strong>
-                  <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
+                  <div className="muted">
                     Agency: <strong>{c.vendor_name || 'Vendor Partner'}</strong> &bull; Email: {c.candidate_email}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <span style={{ color: '#0284c7', fontWeight: 800, fontSize: '1.05rem' }}>{c.match_score}%</span>
-                  <span style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#059669', border: '1px solid rgba(16, 185, 129, 0.3)', padding: '4px 10px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 700 }}>
+                  <span style={{ color: '#2563eb', fontWeight: 800, fontSize: '1.05rem' }}>{c.match_score}%</span>
+                  <span className="status-badge status-published">
                     Shortlisted in Postgres
                   </span>
                 </div>
