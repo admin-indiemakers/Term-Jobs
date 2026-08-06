@@ -1,4 +1,12 @@
-export const API_BASE_URL = 'http://localhost:8000';
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    return `http://${hostname}:8000`;
+  }
+  return 'http://localhost:8000';
+};
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export class ApiError extends Error {
   constructor(message, status) {
