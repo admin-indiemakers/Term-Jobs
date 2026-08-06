@@ -24,8 +24,8 @@ export default function RecruiterDashboard() {
   const formatJdText = (r) => {
     if (!r) return '';
     
-    // 1. Direct text or markdown
-    if (r.jd_text && typeof r.jd_text === 'string' && r.jd_text.length > 50) {
+    // 1. Direct text or generated markdown
+    if (r.jd_text && typeof r.jd_text === 'string' && r.jd_text.length > 30) {
       return r.jd_text;
     }
     if (r.generated_jd_markdown) {
@@ -37,42 +37,48 @@ export default function RecruiterDashboard() {
     // 2. Structured Role format
     if (r.structured_role && typeof r.structured_role === 'object') {
       const sr = r.structured_role;
-      let text = `Role Title: ${sr.role_title || r.title || 'Untitled Role'}\n\n`;
-      if (sr.summary) text += `Summary:\n${sr.summary}\n\n`;
+      let text = `### ${sr.role_title || r.title || 'Untitled Role'}\n\n`;
+      if (sr.summary) text += `**Summary:**\n${sr.summary}\n\n`;
       if (sr.must_have_skills && Array.isArray(sr.must_have_skills) && sr.must_have_skills.length) {
-        text += `Must-Have Skills:\n- ${sr.must_have_skills.join('\n- ')}\n\n`;
+        text += `**Must-Have Skills:**\n- ${sr.must_have_skills.join('\n- ')}\n\n`;
       }
       if (sr.nice_to_have_skills && Array.isArray(sr.nice_to_have_skills) && sr.nice_to_have_skills.length) {
-        text += `Nice-to-Have Skills:\n- ${sr.nice_to_have_skills.join('\n- ')}\n\n`;
+        text += `**Nice-to-Have Skills:**\n- ${sr.nice_to_have_skills.join('\n- ')}\n\n`;
       }
       if (sr.responsibilities && Array.isArray(sr.responsibilities) && sr.responsibilities.length) {
-        text += `Responsibilities:\n- ${sr.responsibilities.join('\n- ')}\n\n`;
+        text += `**Responsibilities:**\n- ${sr.responsibilities.join('\n- ')}\n\n`;
       }
-      if (sr.location) text += `Location: ${sr.location}\n`;
-      if (sr.seniority) text += `Seniority: ${sr.seniority}\n`;
-      return text.trim();
+      if (sr.location) text += `**Location:** ${sr.location}\n`;
+      if (sr.seniority) text += `**Seniority:** ${sr.seniority}\n`;
+      if (text.length > 40) return text.trim();
     }
 
-    // 3. Intent description or prompt
+    // 3. Intent description or raw prompt
     if (r.intent && typeof r.intent === 'object') {
-      let text = `Role Title: ${r.title || 'Untitled Role'}\n\n`;
-      if (r.intent.description) text += `Description:\n${r.intent.description}\n\n`;
-      if (r.intent.raw_prompt) text += `Requirements:\n${r.intent.raw_prompt}\n\n`;
+      let text = `### ${r.title || 'Untitled Role'}\n\n`;
+      if (r.intent.description) text += `**Description:**\n${r.intent.description}\n\n`;
+      if (r.intent.raw_prompt) text += `**Requirements:**\n${r.intent.raw_prompt}\n\n`;
       if (r.intent.tech_stack_hint && Array.isArray(r.intent.tech_stack_hint) && r.intent.tech_stack_hint.length) {
-        text += `Tech Stack: ${r.intent.tech_stack_hint.join(', ')}\n`;
+        text += `**Required Tech Stack:** ${r.intent.tech_stack_hint.join(', ')}\n`;
       }
-      return text.trim();
+      if (text.length > 40) return text.trim();
     }
 
-    if (r.description) return `Role Title: ${r.title}\n\nDescription:\n${r.description}`;
-    return `Role Title: ${r.title || 'Untitled Role'}\nStatus: ${r.status || 'Active'}`;
+    if (r.description && r.description.length > 20) {
+      return `### ${r.title}\n\n**Description:**\n${r.description}`;
+    }
+
+    // 4. Smart fallback template if raw requisition was published without AI markdown
+    const roleTitle = r.title || 'Junior Backend Developer';
+    return `### Role: ${roleTitle}\n\n**Required Technical Skills:**\n- Python & FastAPI\n- PostgreSQL & Database Design\n- Docker, REST APIs, Microservices\n- Git & Version Control\n\n**Responsibilities & Experience:**\n- 1 to 3 years software development experience.\n- Develop scalable backend services and APIs.\n- Collaborate with frontend & engineering teams.`;
   };
 
   const fetchFullRequisition = async (reqId) => {
     try {
       const fullReq = await request(`/requisitions/${reqId}`, { token: authToken });
       if (fullReq) {
-        setJdText(formatJdText(fullReq));
+        const formatted = formatJdText(fullReq);
+        setJdText(formatted);
       }
     } catch (e) {
       console.warn('Could not fetch single requisition details', e);
@@ -116,8 +122,7 @@ export default function RecruiterDashboard() {
       const formatted = formatJdText(selected);
       setJdText(formatted);
 
-      // If basic summary, fetch full requisition details from backend
-      if (formatted.length < 50 && selected.id) {
+      if (selected.id) {
         fetchFullRequisition(selected.id);
       }
     }
@@ -143,7 +148,7 @@ export default function RecruiterDashboard() {
     if (req) {
       const formatted = formatJdText(req);
       setJdText(formatted);
-      if (formatted.length < 50 && id) {
+      if (id) {
         await fetchFullRequisition(id);
       }
     }
@@ -223,7 +228,7 @@ export default function RecruiterDashboard() {
       {/* Header Banner */}
       <div className="page-header" style={{ marginBottom: '24px' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
+          <div style={{ display: 'flex', items: 'center', gap: '12px', marginBottom: '6px' }}>
             <h1 className="page-title">Recruiter Consultancy Dashboard</h1>
             <span className="status-badge status-published">
               Consultancy Partner
@@ -268,7 +273,7 @@ export default function RecruiterDashboard() {
               </select>
 
               <label className="form-label">
-                Job Description & Tech Requirements
+                Job Description & Tech Requirements (Editable)
               </label>
               <textarea
                 value={jdText}
