@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { request } from '../api/client';
 
 export default function RecruiterDashboard() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [requisitions, setRequisitions] = useState([]);
   const [selectedReqId, setSelectedReqId] = useState('');
   const [jdText, setJdText] = useState('');
@@ -14,10 +14,12 @@ export default function RecruiterDashboard() {
   const [screeningResult, setScreeningResult] = useState(null);
   const [shortlistedList, setShortlistedList] = useState([]);
 
+  const authToken = token || localStorage.getItem('auth_token');
+
   useEffect(() => {
     loadPublishedRequisitions();
     loadShortlistedCandidates();
-  }, []);
+  }, [authToken]);
 
   const formatJdText = (r) => {
     if (!r) return '';
@@ -38,19 +40,20 @@ export default function RecruiterDashboard() {
     let list = [];
 
     try {
-      const data = await request('/api/requisitions');
+      // Pass authentication token to backend
+      const data = await request('/api/requisitions', { token: authToken });
       if (data && data.requisitions && data.requisitions.length > 0) {
         list = data.requisitions;
       } else if (Array.isArray(data) && data.length > 0) {
         list = data;
       }
-    } catch {
-      console.warn('API /api/requisitions unavailable, trying /requisitions...');
+    } catch (e) {
+      console.warn('/api/requisitions failed, trying /requisitions...', e);
     }
 
     if (list.length === 0) {
       try {
-        const raw = await request('/requisitions');
+        const raw = await request('/requisitions', { token: authToken });
         if (Array.isArray(raw) && raw.length > 0) {
           list = raw;
         } else if (raw && raw.requisitions) {
@@ -74,7 +77,7 @@ export default function RecruiterDashboard() {
 
   const loadShortlistedCandidates = async () => {
     try {
-      const data = await request('/api/candidates/shortlisted');
+      const data = await request('/api/candidates/shortlisted', { token: authToken });
       if (data && data.shortlisted_candidates) {
         setShortlistedList(data.shortlisted_candidates);
       }
@@ -121,6 +124,9 @@ export default function RecruiterDashboard() {
     try {
       const res = await fetch('/api/screen-resumes', {
         method: 'POST',
+        headers: {
+          Authorization: `Bearer ${authToken}`,
+        },
         body: formData,
       });
       const data = await res.json();
@@ -140,6 +146,7 @@ export default function RecruiterDashboard() {
     try {
       const res = await request('/api/approve-candidate', {
         method: 'POST',
+        token: authToken,
         body: {
           submission_id: submissionId,
           action: 'shortlist',
@@ -277,7 +284,7 @@ export default function RecruiterDashboard() {
               style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f8fafc', borderRadius: '10px', marginBottom: '12px', border: '1px solid #e2e8f0' }}
             >
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
                   <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
                     #{cand.rank} {cand.candidate_name}
                   </span>
