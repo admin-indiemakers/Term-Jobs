@@ -1,118 +1,45 @@
-"""FastAPI app exposing the requisition module for end-to-end testing.
-
-Run:
-    uv run uvicorn main:app --reload --port 8000
-
-Configuration via environment (see .env.example):
-    DATABASE_URL  - defaults to Postgres; use sqlite:///requisition.db for a
-                    zero-setup run.
-    LLM_PROVIDER  - "ollama" (default, offline LLM) or "mock" (offline tests).
-
-Quick test (company -> requisition -> approve -> publish):
-    curl -X POST localhost:8000/company-profiles -H 'content-type: application/json' \
-         -d '{"name":"Acme","location":"Bangalore","tech_stack":["Python","Django","Postgres"]}'
-    # then POST /requisitions with the returned profile id
-"""
-from __future__ import annotations
-
-import os
-from pathlib import Path
+import json
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
 
-from modules.requisition.domain import models, schemas
-from modules.shared.db import get_session, init_db
-
-app = FastAPI(title="Term Jobs — Requisition API", version="0.1.0")
-
-from modules.identity.router import router as auth_router
-
-app.include_router(auth_router)
-
+import modules.requisition.agent.graph as agent
+import modules.requisition.domain.models as models
+import modules.requisition.services.requisition_service as req_service
 from modules.candidate.router import router as candidate_router
+from modules.identity.router import router as identity_router
+from modules.shared.config import settings
+from modules.shared.db import get_session
 
-app.include_router(candidate_router)
+app = FastAPI(
+    title="TermJobs Requisition API",
+    description="Intake and structure job requisitions using AI agents.",
+    version="1.0.0",
+)
 
-# Single-file browser UI (index.html) is served from the backend and can also
-# be opened via file:// — allow cross-origin fetches either way.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# --- LLM provider selection -------------------------------------------------
-def _build_service():
-    from modules.requisition.llm.mock import MockLLM
-    from modules.requisition.llm.ollama import OllamaClient
-    from modules.requisition.services.requisition_service import RequisitionService
-
-    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
-    llm = OllamaClient() if provider == "ollama" else MockLLM()
-    return RequisitionService(llm=llm, session_factory=get_session)
+app.include_router(identity_router)
+app.include_router(candidate_router)
 
 
-service = _build_service()
-
-# Ensure tables exist (idempotent — no-op on already-migrated Postgres).
-init_db()
-
-
-# --- request/response models ------------------------------------------------
-class CompanyProfileIn(BaseModel):
-    name: str
-    industry: str = ""
-    size: str = ""
-    location: str = ""
-    tech_stack: list[str] = Field(default_factory=list)
-    notes: str = ""
-
-
-class RequisitionIn(BaseModel):
-    company_profile_id: str
-    title: str = ""
-    description: str = ""
-    tech_stack_hint: list[str] = Field(default_factory=list)
-    prompt: str = ""
-    created_by: str | None = None
-
-
-class AnswerIn(BaseModel):
-    answer: str
-
-
-class RefineIn(BaseModel):
-    instruction: str
-
-
-class ApproveIn(BaseModel):
-    reviewer: str | None = None
-    edited_role: dict | None = None
-
-
-class RejectIn(BaseModel):
-    reviewer: str | None = None
-
-
-class ApproveByIn(BaseModel):
-    by: str | None = None
-
-
-# --- serialization helpers --------------------------------------------------
-def _company_dict(prof: models.CompanyProfile) -> dict:
+# --- helpers -----------------------------------------------------------------
+def _company_dict(c: models.CompanyProfile) -> dict:
     return {
-        "id": prof.id,
-        "tenant_id": prof.tenant_id,
-        "name": prof.name,
-        "industry": prof.industry,
-        "location": prof.location,
-        "tech_stack": prof.tech_stack or [],
+        "id": c.id,
+        "name": c.name,
+        "location": c.location,
+        "industry": c.industry,
+        "size": c.size,
+        "tech_stack": c.tech_stack or [],
+        "notes": c.notes,
     }
 
 
@@ -171,7 +98,7 @@ def _get_requisition(requisition_id: str) -> models.Requisition:
 
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
-def create_company_profile(body: CompanyProfileIn) -> dict:
+def create_company_profile(body: req_service.CompanyProfileIn) -> dict:
     with get_session() as session:
         prof = models.CompanyProfile(**body.model_dump())
         session.add(prof)
@@ -191,16 +118,16 @@ def list_company_profiles() -> list[dict]:
         return [_company_dict(r) for r in rows]
 
 
-# --- requisition lifecycle --------------------------------------------------
+# --- requisition CRUD --------------------------------------------------------
 @app.post("/requisitions", status_code=201)
-def create_requisition(body: RequisitionIn) -> dict:
-    intent = schemas.RoleIntent(
+def create_requisition(body: req_service.RequisitionCreateIn) -> dict:
+    intent = req_service.build_intent(
         title=body.title,
-        description=body.prompt or body.description,
+        description=body.description,
         tech_stack_hint=body.tech_stack_hint,
         prompt=body.prompt,
     )
-    req = service.create(
+    req = req_service.create(
         company_profile_id=body.company_profile_id,
         intent=intent,
         created_by=body.created_by,
@@ -226,6 +153,9 @@ def list_requisitions() -> list[dict]:
                 "company_name": profiles[r.company_profile_id].name
                 if r.company_profile_id in profiles
                 else None,
+                "generated_jd_markdown": r.generated_jd_markdown,
+                "structured_role": r.structured_role,
+                "intent": r.intent,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
             for r in rows
@@ -238,82 +168,118 @@ def get_requisition(requisition_id: str) -> dict:
     return _requisition_dict(requisition_id)
 
 
+# --- agent flow endpoints ----------------------------------------------------
 @app.post("/requisitions/{requisition_id}/start")
-def start_intake(requisition_id: str) -> dict:
+def start_requisition_flow(requisition_id: str) -> dict:
     _get_requisition(requisition_id)
-    state, interrupt = service.start_intake(requisition_id)
-    return _interrupt_payload(state, interrupt)
+
+    def action():
+        graph = agent.get_graph()
+        result = graph.invoke(
+            agent.make_input(requisition_id),
+            config=agent.make_config(requisition_id),
+        )
+        state = agent.get_requisition_state(requisition_id)
+        interrupt = agent.extract_interrupt_value(result)
+        return _interrupt_payload(state, interrupt)
+
+    return req_service.run_action_transactional(requisition_id, "start", action)
 
 
 @app.post("/requisitions/{requisition_id}/answer")
-def answer_intake(requisition_id: str, body: AnswerIn) -> dict:
+def answer_intake_question(
+    requisition_id: str, body: req_service.AnswerIn
+) -> dict:
     _get_requisition(requisition_id)
-    state, interrupt = service.answer(requisition_id, body.answer)
-    return _interrupt_payload(state, interrupt)
+
+    def action():
+        graph = agent.get_graph()
+        result = graph.invoke(
+            agent.make_resume_input(body.answer),
+            config=agent.make_config(requisition_id),
+        )
+        state = agent.get_requisition_state(requisition_id)
+        interrupt = agent.extract_interrupt_value(result)
+        return _interrupt_payload(state, interrupt)
+
+    return req_service.run_action_transactional(requisition_id, "answer", action)
 
 
 @app.post("/requisitions/{requisition_id}/refine")
-def refine_requisition(requisition_id: str, body: RefineIn) -> dict:
+def refine_requisition_jd(
+    requisition_id: str, body: req_service.RefineIn
+) -> dict:
     _get_requisition(requisition_id)
-    try:
-        state, interrupt = service.refine(requisition_id, body.instruction)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return _interrupt_payload(state, interrupt)
+
+    def action():
+        graph = agent.get_graph()
+        result = graph.invoke(
+            agent.make_resume_input(body.instruction),
+            config=agent.make_config(requisition_id),
+        )
+        state = agent.get_requisition_state(requisition_id)
+        interrupt = agent.extract_interrupt_value(result)
+        return _interrupt_payload(state, interrupt)
+
+    return req_service.run_action_transactional(requisition_id, "refine", action)
 
 
 @app.post("/requisitions/{requisition_id}/approve")
-def approve_requisition(requisition_id: str, body: ApproveIn) -> dict:
-    _get_requisition(requisition_id)
-    edited = None
-    if body.edited_role:
-        try:
-            edited = schemas.StructuredRole.model_validate(body.edited_role)
-        except Exception as exc:  # noqa: BLE001
-            raise HTTPException(status_code=422, detail=f"invalid edited_role: {exc}")
-    state, interrupt = service.approve(requisition_id, reviewer=body.reviewer, edited_role=edited)
-    return _interrupt_payload(state, interrupt)
+def approve_requisition(
+    requisition_id: str, body: req_service.ReviewIn | None = None
+) -> dict:
+    reviewer = body.reviewer if body else None
+    req_service.approve(requisition_id, reviewer=reviewer)
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/reject")
-def reject_requisition(requisition_id: str, body: RejectIn) -> dict:
-    _get_requisition(requisition_id)
-    state, interrupt = service.reject(requisition_id, reviewer=body.reviewer)
-    return _interrupt_payload(state, interrupt)
+def reject_requisition(
+    requisition_id: str, body: req_service.ReviewIn | None = None
+) -> dict:
+    reviewer = body.reviewer if body else None
+    req_service.reject(requisition_id, reviewer=reviewer)
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/publish")
-def publish_requisition(requisition_id: str, body: ApproveByIn) -> dict:
-    _get_requisition(requisition_id)
-    req = service.publish(requisition_id, by=body.by)
-    return _requisition_dict(req.id)
+def publish_requisition(
+    requisition_id: str, body: req_service.PublishIn | None = None
+) -> dict:
+    by = body.by if body else None
+    req_service.publish(requisition_id, by=by)
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str) -> dict:
-    _get_requisition(requisition_id)
-    req = service.close(requisition_id)
-    return _requisition_dict(req.id)
+    req_service.close(requisition_id)
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/reset")
 def reset_requisition(requisition_id: str) -> dict:
-    _get_requisition(requisition_id)
-    req = service.reset(requisition_id)
-    return _requisition_dict(req.id)
+    req_service.reset(requisition_id)
+    return _requisition_dict(requisition_id)
 
 
 @app.delete("/requisitions/{requisition_id}", status_code=204)
 def delete_requisition(requisition_id: str) -> None:
-    _get_requisition(requisition_id)
-    service.delete(requisition_id)
+    req_service.delete(requisition_id)
 
 
-@app.get("/", include_in_schema=False)
-def index() -> FileResponse:
-    return FileResponse(Path(__file__).parent / "index.html")
-
-
+# --- health check ------------------------------------------------------------
 @app.get("/health")
-def health() -> dict:
-    return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "ollama")}
+def health_check() -> dict:
+    return {
+        "status": "ok",
+        "llm_provider": settings.llm_provider,
+        "default_model": settings.ollama_default_model,
+        "mongodb_url": settings.mongodb_url,
+    }
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

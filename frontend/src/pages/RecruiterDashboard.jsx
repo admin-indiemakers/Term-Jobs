@@ -23,16 +23,60 @@ export default function RecruiterDashboard() {
 
   const formatJdText = (r) => {
     if (!r) return '';
-    if (r.jd_text) return r.jd_text;
+    
+    // 1. Direct text or markdown
+    if (r.jd_text && typeof r.jd_text === 'string' && r.jd_text.length > 50) {
+      return r.jd_text;
+    }
     if (r.generated_jd_markdown) {
-      if (typeof r.generated_jd_markdown === 'string') return r.generated_jd_markdown;
-      return JSON.stringify(r.generated_jd_markdown, null, 2);
+      if (typeof r.generated_jd_markdown === 'string' && r.generated_jd_markdown.length > 20) {
+        return r.generated_jd_markdown;
+      }
     }
-    if (r.structured_role) {
-      return JSON.stringify(r.structured_role, null, 2);
+
+    // 2. Structured Role format
+    if (r.structured_role && typeof r.structured_role === 'object') {
+      const sr = r.structured_role;
+      let text = `Role Title: ${sr.role_title || r.title || 'Untitled Role'}\n\n`;
+      if (sr.summary) text += `Summary:\n${sr.summary}\n\n`;
+      if (sr.must_have_skills && Array.isArray(sr.must_have_skills) && sr.must_have_skills.length) {
+        text += `Must-Have Skills:\n- ${sr.must_have_skills.join('\n- ')}\n\n`;
+      }
+      if (sr.nice_to_have_skills && Array.isArray(sr.nice_to_have_skills) && sr.nice_to_have_skills.length) {
+        text += `Nice-to-Have Skills:\n- ${sr.nice_to_have_skills.join('\n- ')}\n\n`;
+      }
+      if (sr.responsibilities && Array.isArray(sr.responsibilities) && sr.responsibilities.length) {
+        text += `Responsibilities:\n- ${sr.responsibilities.join('\n- ')}\n\n`;
+      }
+      if (sr.location) text += `Location: ${sr.location}\n`;
+      if (sr.seniority) text += `Seniority: ${sr.seniority}\n`;
+      return text.trim();
     }
-    if (r.description) return r.description;
+
+    // 3. Intent description or prompt
+    if (r.intent && typeof r.intent === 'object') {
+      let text = `Role Title: ${r.title || 'Untitled Role'}\n\n`;
+      if (r.intent.description) text += `Description:\n${r.intent.description}\n\n`;
+      if (r.intent.raw_prompt) text += `Requirements:\n${r.intent.raw_prompt}\n\n`;
+      if (r.intent.tech_stack_hint && Array.isArray(r.intent.tech_stack_hint) && r.intent.tech_stack_hint.length) {
+        text += `Tech Stack: ${r.intent.tech_stack_hint.join(', ')}\n`;
+      }
+      return text.trim();
+    }
+
+    if (r.description) return `Role Title: ${r.title}\n\nDescription:\n${r.description}`;
     return `Role Title: ${r.title || 'Untitled Role'}\nStatus: ${r.status || 'Active'}`;
+  };
+
+  const fetchFullRequisition = async (reqId) => {
+    try {
+      const fullReq = await request(`/requisitions/${reqId}`, { token: authToken });
+      if (fullReq) {
+        setJdText(formatJdText(fullReq));
+      }
+    } catch (e) {
+      console.warn('Could not fetch single requisition details', e);
+    }
   };
 
   const loadPublishedRequisitions = async () => {
@@ -40,7 +84,6 @@ export default function RecruiterDashboard() {
     let list = [];
 
     try {
-      // Pass authentication token to backend
       const data = await request('/api/requisitions', { token: authToken });
       if (data && data.requisitions && data.requisitions.length > 0) {
         list = data.requisitions;
@@ -69,7 +112,14 @@ export default function RecruiterDashboard() {
     if (list.length > 0) {
       const selected = list.find((r) => r.status === 'Published') || list[0];
       setSelectedReqId(selected.id);
-      setJdText(formatJdText(selected));
+      
+      const formatted = formatJdText(selected);
+      setJdText(formatted);
+
+      // If basic summary, fetch full requisition details from backend
+      if (formatted.length < 50 && selected.id) {
+        fetchFullRequisition(selected.id);
+      }
     }
 
     setDbLoading(false);
@@ -86,12 +136,16 @@ export default function RecruiterDashboard() {
     }
   };
 
-  const handleReqSelect = (e) => {
+  const handleReqSelect = async (e) => {
     const id = e.target.value;
     setSelectedReqId(id);
     const req = requisitions.find((r) => r.id === id);
     if (req) {
-      setJdText(formatJdText(req));
+      const formatted = formatJdText(req);
+      setJdText(formatted);
+      if (formatted.length < 50 && id) {
+        await fetchFullRequisition(id);
+      }
     }
   };
 
@@ -190,7 +244,7 @@ export default function RecruiterDashboard() {
           </h2>
 
           {dbLoading ? (
-            <p className="muted">Loading active requisitions from PostgreSQL database...</p>
+            <p className="muted">Loading active requisitions from database...</p>
           ) : (
             <>
               <label className="form-label">
@@ -220,7 +274,7 @@ export default function RecruiterDashboard() {
                 value={jdText}
                 onChange={(e) => setJdText(e.target.value)}
                 placeholder="Select a requisition above or paste job requirements here..."
-                rows={7}
+                rows={9}
                 className="auth-input"
                 style={{ resize: 'vertical' }}
               />
@@ -316,7 +370,7 @@ export default function RecruiterDashboard() {
         </div>
       )}
 
-      {/* Already Shortlisted Submissions in PostgreSQL */}
+      {/* Already Shortlisted Submissions in Database */}
       <div className="glass-panel">
         <h2 className="card-title">
           🏆 Shortlisted Submissions Sent to Company X HR ({shortlistedList.length})
@@ -337,7 +391,7 @@ export default function RecruiterDashboard() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                   <span style={{ color: '#2563eb', fontWeight: 800, fontSize: '1.05rem' }}>{c.match_score}%</span>
                   <span className="status-badge status-published">
-                    Shortlisted in Postgres
+                    Shortlisted in Database
                   </span>
                 </div>
               </div>
