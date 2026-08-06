@@ -6,7 +6,9 @@ the subset of the SQLAlchemy Session API used across the app
 unchanged while documents live in MongoDB Atlas.
 """
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 from typing import ClassVar, Self
 
 from pymongo import ASCENDING, DESCENDING, MongoClient
