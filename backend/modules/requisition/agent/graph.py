@@ -27,19 +27,12 @@ from . import guardrails, prompts
 
 
 def make_checkpointer():
-    """PostgresSaver for prod graph-pause persistence; MemorySaver fallback.
+    """In-memory checkpointer for graph-pause persistence.
 
-    The Postgres checkpointer is imported lazily so the offline test/CI path
-    (no Postgres) works without the optional package installed.
+    Graph state is transient in-memory per agent instance. The business data
+    (requisition, structured role, decision records) is persisted to MongoDB.
     """
-    try:
-        from langgraph.checkpoint.postgres import PostgresSaver
-        from psycopg import Connection
-
-        conn = Connection.connect(settings.database_url)
-        return PostgresSaver(conn)
-    except Exception:  # noqa: BLE001 - fall back to in-memory when Postgres unavailable
-        return MemorySaver()
+    return MemorySaver()
 
 
 class AgentState(TypedDict, total=False):

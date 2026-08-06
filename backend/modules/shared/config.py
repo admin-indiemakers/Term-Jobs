@@ -5,8 +5,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Postgres
-    database_url: str = "postgresql://localhost/termejobs"
+    # MongoDB
+    mongodb_url: str = "mongodb://localhost:27017/termjobs"
+    mongo_db_name: str = "termjobs"
 
     # Ollama (offline LLM)
     ollama_base_url: str = "http://localhost:11434"

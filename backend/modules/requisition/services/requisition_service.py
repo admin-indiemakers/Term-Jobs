@@ -11,9 +11,7 @@ the StateMachine so invalid transitions are rejected.
 """
 from typing import Any
 
-from sqlalchemy import func
-
-from ...shared.db import get_session
+from ...shared.db import _utcnow, get_session
 from .. import events
 from ..agent.graph import JobRequirementAgent
 from ..domain import models
@@ -126,7 +124,7 @@ class RequisitionService:
             sm.transition(RequisitionStatus.PUBLISHED)
             req.status = sm.status.value
             req.approved_by = by
-            req.approved_at = func.now()
+            req.approved_at = _utcnow()
             role = req.structured_role
             session.commit()
         events.emit_requisition_published(requisition_id, structured_role=role)
@@ -217,6 +215,6 @@ class RequisitionService:
             )
             if record:
                 record.reviewed_by = reviewer
-                record.reviewed_at = func.now()
+                record.reviewed_at = _utcnow()
                 record.decision = decision
                 session.commit()

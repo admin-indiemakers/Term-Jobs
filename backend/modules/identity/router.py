@@ -1,5 +1,4 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy.orm import Session
 
 from modules.identity.domain.models import Tenant, User
 from modules.identity.domain.schemas import TokenResponse, UserLogin, UserRegister, UserResponse
@@ -9,9 +8,8 @@ from modules.identity.services.auth_service import (
     hash_password,
     verify_password,
 )
-from modules.shared.db import get_session
-
 from modules.requisition.domain.models import CompanyProfile
+from modules.shared.db import Session, get_session
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 

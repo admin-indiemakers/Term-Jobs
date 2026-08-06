@@ -1,34 +1,42 @@
-import uuid
-from datetime import datetime
+"""Identity models (MongoDB collections)."""
+from typing import ClassVar
 
-from sqlalchemy import DateTime, ForeignKey, String, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from modules.shared.db import Base
+from ...shared.db import Column, Model, _utcnow, _uuid
 
 
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-class Tenant(Base):
+class Tenant(Model):
     __tablename__ = "tenants"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    tenant_type: Mapped[str] = mapped_column(String(50), default="client")  # client or consultancy
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "name": "",
+        "tenant_type": "client",  # client or consultancy
+        "created_at": _utcnow,
+    }
 
-    users: Mapped[list["User"]] = relationship("User", back_populates="tenant", cascade="all, delete-orphan")
+    id = Column("id")
+    name = Column("name")
+    tenant_type = Column("tenant_type")
+    created_at = Column("created_at")
 
-class User(Base):
+
+class User(Model):
     __tablename__ = "users"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    tenant_id: Mapped[str] = mapped_column(String(36), ForeignKey("tenants.id"), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[str] = mapped_column(String(50), nullable=False)  # Hiring Manager, Recruiter, Admin
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "tenant_id": "",
+        "email": "",
+        "name": "",
+        "password_hash": "",
+        "role": "",  # Hiring Manager, Recruiter, Admin
+        "created_at": _utcnow,
+    }
 
-    tenant: Mapped[Tenant] = relationship("Tenant", back_populates="users")
+    id = Column("id")
+    tenant_id = Column("tenant_id")
+    email = Column("email")
+    name = Column("name")
+    password_hash = Column("password_hash")
+    role = Column("role")
+    created_at = Column("created_at")

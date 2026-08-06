@@ -1,10 +1,13 @@
 import os
+import secrets
 from datetime import datetime, timedelta
 
 import bcrypt
 import jwt
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "super-secret-key-term-jobs-red-12345!")
+# No committed default secret: generate an ephemeral one so tokens are
+# invalidated on restart unless JWT_SECRET_KEY is provided via .env.
+SECRET_KEY = os.getenv("JWT_SECRET_KEY") or secrets.token_hex(32)
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

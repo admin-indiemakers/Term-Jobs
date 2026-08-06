@@ -1,21 +1,22 @@
+import mongomock
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from modules.shared.db import Base
-from modules.identity.domain.models import User, Tenant
+
+from modules.identity.domain.models import User
+from modules.identity.domain.schemas import UserLogin, UserRegister
+from modules.identity.router import login_user, register_user
+from modules.identity.services.auth_service import (
+    decode_access_token,
+    hash_password,
+    verify_password,
+)
 from modules.requisition.domain.models import CompanyProfile
-from modules.identity.domain.schemas import UserRegister, UserLogin
-from modules.identity.services.auth_service import hash_password, verify_password, decode_access_token
-from modules.identity.router import register_user, login_user
+from modules.shared.db import Session
+
 
 @pytest.fixture
 def session_factory():
-    engine = create_engine(
-        "sqlite:///:memory:", connect_args={"check_same_thread": False}, future=True
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
-    return factory
+    database = mongomock.MongoClient()["test"]
+    return lambda: Session(database)
 
 def test_password_hashing():
     pwd = "my-secure-password"

@@ -1,79 +1,102 @@
-"""SQLAlchemy models for the requisition module."""
-import uuid
-from datetime import datetime
+"""Requisition domain models (MongoDB collections)."""
+from typing import ClassVar
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
-
-from ...shared.db import Base
+from ...shared.db import Column, Model, _utcnow, _uuid
 
 
-def _uuid() -> str:
-    return str(uuid.uuid4())
-
-
-class CompanyProfile(Base):
+class CompanyProfile(Model):
     __tablename__ = "company_profiles"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    tenant_id: Mapped[str] = mapped_column(String(36), default="local", index=True)
-    name: Mapped[str] = mapped_column(String(255))
-    industry: Mapped[str] = mapped_column(String(255), default="")
-    size: Mapped[str] = mapped_column(String(100), default="")
-    location: Mapped[str] = mapped_column(String(255), default="")
-    tech_stack: Mapped[list] = mapped_column(JSON, default=list)
-    notes: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "tenant_id": "local",
+        "name": "",
+        "industry": "",
+        "size": "",
+        "location": "",
+        "tech_stack": list,
+        "notes": "",
+        "created_at": _utcnow,
+    }
+
+    id = Column("id")
+    tenant_id = Column("tenant_id")
+    name = Column("name")
+    industry = Column("industry")
+    size = Column("size")
+    location = Column("location")
+    tech_stack = Column("tech_stack")
+    notes = Column("notes")
+    created_at = Column("created_at")
 
 
-class Requisition(Base):
+class Requisition(Model):
     __tablename__ = "requisitions"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    tenant_id: Mapped[str] = mapped_column(String(36), default="local", index=True)
-    company_profile_id: Mapped[str | None] = mapped_column(
-        ForeignKey("company_profiles.id"), nullable=True
-    )
-    created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "tenant_id": "local",
+        "company_profile_id": None,
+        "created_by": None,
+        "status": "Draft",
+        "title": None,
+        "intent": None,
+        "intake_answers": list,
+        "pending_question": None,
+        "structured_role": None,
+        "generated_jd_markdown": None,
+        "coverage_result": None,
+        "refinement_log": list,
+        "approved_by": None,
+        "approved_at": None,
+        "created_at": _utcnow,
+        "updated_at": _utcnow,
+    }
 
-    # state machine
-    status: Mapped[str] = mapped_column(String(30), default="Draft")
-
-    # input
-    title: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    intent: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    intake_answers: Mapped[list] = mapped_column(JSON, default=list)
-    pending_question: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    # agent output (candidate, awaiting human approval)
-    structured_role: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    generated_jd_markdown: Mapped[str | None] = mapped_column(Text, nullable=True)
-    coverage_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    refinement_log: Mapped[list] = mapped_column(JSON, default=list)
-
-    # approval
-    approved_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
+    id = Column("id")
+    tenant_id = Column("tenant_id")
+    company_profile_id = Column("company_profile_id")
+    created_by = Column("created_by")
+    status = Column("status")
+    title = Column("title")
+    intent = Column("intent")
+    intake_answers = Column("intake_answers")
+    pending_question = Column("pending_question")
+    structured_role = Column("structured_role")
+    generated_jd_markdown = Column("generated_jd_markdown")
+    coverage_result = Column("coverage_result")
+    refinement_log = Column("refinement_log")
+    approved_by = Column("approved_by")
+    approved_at = Column("approved_at")
+    created_at = Column("created_at")
+    updated_at = Column("updated_at")
 
 
-class DecisionRecord(Base):
+class DecisionRecord(Model):
     __tablename__ = "decision_records"
 
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    requisition_id: Mapped[str] = mapped_column(
-        ForeignKey("requisitions.id"), index=True
-    )
-    agent_name: Mapped[str] = mapped_column(String(100))
-    input_context: Mapped[dict] = mapped_column(JSON, default=dict)
-    output: Mapped[dict] = mapped_column(JSON, default=dict)
-    confidence: Mapped[float] = mapped_column(Float, default=0.0)
-    guardrail_status: Mapped[str] = mapped_column(String(20), default="pending")  # passed | blocked
-    reviewed_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    decision: Mapped[str | None] = mapped_column(String(20), nullable=True)  # approved | rejected
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "requisition_id": "",
+        "agent_name": "",
+        "input_context": dict,
+        "output": dict,
+        "confidence": 0.0,
+        "guardrail_status": "pending",  # passed | blocked
+        "reviewed_by": None,
+        "reviewed_at": None,
+        "decision": None,  # approved | rejected
+        "created_at": _utcnow,
+    }
+
+    id = Column("id")
+    requisition_id = Column("requisition_id")
+    agent_name = Column("agent_name")
+    input_context = Column("input_context")
+    output = Column("output")
+    confidence = Column("confidence")
+    guardrail_status = Column("guardrail_status")
+    reviewed_by = Column("reviewed_by")
+    reviewed_at = Column("reviewed_at")
+    decision = Column("decision")
+    created_at = Column("created_at")
