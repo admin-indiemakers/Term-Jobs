@@ -4,9 +4,8 @@ Run:
     uv run uvicorn main:app --reload --port 8000
 
 Configuration via environment (see .env.example):
-    DATABASE_URL  - defaults to Postgres; use sqlite:///requisition.db for a
-                    zero-setup run.
-    LLM_PROVIDER  - "groq" (default, cloud LLM) or "mock" (offline tests).
+    MONGODB_URL  - MongoDB Atlas connection string (default localhost:27017).
+    LLM_PROVIDER - "groq" (default, cloud LLM) or "mock" (offline tests).
 
 Quick test (company -> requisition -> approve -> publish):
     curl -X POST localhost:8000/company-profiles -H 'content-type: application/json' \
@@ -16,19 +15,24 @@ Quick test (company -> requisition -> approve -> publish):
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
-import modules.requisition.agent.graph as agent
-import modules.requisition.domain.models as models
-import modules.requisition.services.requisition_service as req_service
 from modules.candidate.router import router as candidate_router
 from modules.identity.router import router as identity_router
-from modules.shared.config import settings
-from modules.shared.db import get_session
+from modules.requisition.domain import models, schemas
+from modules.shared.db import get_session, init_db
+
+# The screening agent package uses top-level `services.*` imports, so its
+# directory must be importable (same layout as its standalone main.py).
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "modules", "candidate_screening_agent"))
+from modules.candidate_screening_agent.routers.screening import router as screening_router
 
 app = FastAPI(
     title="TermJobs Requisition API",
@@ -44,6 +48,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(identity_router)
+app.include_router(candidate_router)
+app.include_router(screening_router, prefix="/api", tags=["Screening"])
+
 
 # --- LLM provider selection -------------------------------------------------
 def _build_service():
@@ -56,16 +64,59 @@ def _build_service():
     return RequisitionService(llm=llm, session_factory=get_session)
 
 
-# --- helpers -----------------------------------------------------------------
-def _company_dict(c: models.CompanyProfile) -> dict:
+service = _build_service()
+init_db()
+
+
+# --- request/response models ------------------------------------------------
+class CompanyProfileIn(BaseModel):
+    name: str
+    industry: str = ""
+    size: str = ""
+    location: str = ""
+    tech_stack: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class RequisitionIn(BaseModel):
+    company_profile_id: str
+    title: str = ""
+    description: str = ""
+    tech_stack_hint: list[str] = Field(default_factory=list)
+    prompt: str = ""
+    created_by: str | None = None
+
+
+class AnswerIn(BaseModel):
+    answer: str
+
+
+class RefineIn(BaseModel):
+    instruction: str
+
+
+class ApproveIn(BaseModel):
+    reviewer: str | None = None
+    edited_role: dict | None = None
+
+
+class RejectIn(BaseModel):
+    reviewer: str | None = None
+
+
+class ApproveByIn(BaseModel):
+    by: str | None = None
+
+
+# --- serialization helpers --------------------------------------------------
+def _company_dict(prof: models.CompanyProfile) -> dict:
     return {
-        "id": c.id,
-        "name": c.name,
-        "location": c.location,
-        "industry": c.industry,
-        "size": c.size,
-        "tech_stack": c.tech_stack or [],
-        "notes": c.notes,
+        "id": prof.id,
+        "tenant_id": prof.tenant_id,
+        "name": prof.name,
+        "industry": prof.industry,
+        "location": prof.location,
+        "tech_stack": prof.tech_stack or [],
     }
 
 
@@ -124,7 +175,7 @@ def _get_requisition(requisition_id: str) -> models.Requisition:
 
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
-def create_company_profile(body: req_service.CompanyProfileIn) -> dict:
+def create_company_profile(body: CompanyProfileIn) -> dict:
     with get_session() as session:
         prof = models.CompanyProfile(**body.model_dump())
         session.add(prof)
@@ -144,16 +195,16 @@ def list_company_profiles() -> list[dict]:
         return [_company_dict(r) for r in rows]
 
 
-# --- requisition CRUD --------------------------------------------------------
+# --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
-def create_requisition(body: req_service.RequisitionCreateIn) -> dict:
-    intent = req_service.build_intent(
+def create_requisition(body: RequisitionIn) -> dict:
+    intent = schemas.RoleIntent(
         title=body.title,
-        description=body.description,
+        description=body.prompt or body.description,
         tech_stack_hint=body.tech_stack_hint,
         prompt=body.prompt,
     )
-    req = req_service.create(
+    req = service.create(
         company_profile_id=body.company_profile_id,
         intent=intent,
         created_by=body.created_by,
@@ -194,107 +245,86 @@ def get_requisition(requisition_id: str) -> dict:
     return _requisition_dict(requisition_id)
 
 
-# --- agent flow endpoints ----------------------------------------------------
 @app.post("/requisitions/{requisition_id}/start")
 def start_requisition_flow(requisition_id: str) -> dict:
     _get_requisition(requisition_id)
-
-    def action():
-        graph = agent.get_graph()
-        result = graph.invoke(
-            agent.make_input(requisition_id),
-            config=agent.make_config(requisition_id),
-        )
-        state = agent.get_requisition_state(requisition_id)
-        interrupt = agent.extract_interrupt_value(result)
-        return _interrupt_payload(state, interrupt)
-
-    return req_service.run_action_transactional(requisition_id, "start", action)
+    state, interrupt = service.start_intake(requisition_id)
+    return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/answer")
-def answer_intake_question(
-    requisition_id: str, body: req_service.AnswerIn
-) -> dict:
+def answer_intake_question(requisition_id: str, body: AnswerIn) -> dict:
     _get_requisition(requisition_id)
-
-    def action():
-        graph = agent.get_graph()
-        result = graph.invoke(
-            agent.make_resume_input(body.answer),
-            config=agent.make_config(requisition_id),
-        )
-        state = agent.get_requisition_state(requisition_id)
-        interrupt = agent.extract_interrupt_value(result)
-        return _interrupt_payload(state, interrupt)
-
-    return req_service.run_action_transactional(requisition_id, "answer", action)
+    state, interrupt = service.answer(requisition_id, body.answer)
+    return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/refine")
-def refine_requisition_jd(
-    requisition_id: str, body: req_service.RefineIn
-) -> dict:
+def refine_requisition_jd(requisition_id: str, body: RefineIn) -> dict:
     _get_requisition(requisition_id)
-
-    def action():
-        graph = agent.get_graph()
-        result = graph.invoke(
-            agent.make_resume_input(body.instruction),
-            config=agent.make_config(requisition_id),
-        )
-        state = agent.get_requisition_state(requisition_id)
-        interrupt = agent.extract_interrupt_value(result)
-        return _interrupt_payload(state, interrupt)
-
-    return req_service.run_action_transactional(requisition_id, "refine", action)
+    try:
+        state, interrupt = service.refine(requisition_id, body.instruction)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/approve")
-def approve_requisition(
-    requisition_id: str, body: req_service.ReviewIn | None = None
-) -> dict:
+def approve_requisition(requisition_id: str, body: ApproveIn | None = None) -> dict:
+    _get_requisition(requisition_id)
+    edited = None
+    if body and body.edited_role:
+        try:
+            edited = schemas.StructuredRole.model_validate(body.edited_role)
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(status_code=422, detail=f"invalid edited_role: {exc}")
     reviewer = body.reviewer if body else None
-    req_service.approve(requisition_id, reviewer=reviewer)
-    return _requisition_dict(requisition_id)
+    state, interrupt = service.approve(requisition_id, reviewer=reviewer, edited_role=edited)
+    return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/reject")
-def reject_requisition(
-    requisition_id: str, body: req_service.ReviewIn | None = None
-) -> dict:
+def reject_requisition(requisition_id: str, body: RejectIn | None = None) -> dict:
+    _get_requisition(requisition_id)
     reviewer = body.reviewer if body else None
-    req_service.reject(requisition_id, reviewer=reviewer)
-    return _requisition_dict(requisition_id)
+    state, interrupt = service.reject(requisition_id, reviewer=reviewer)
+    return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/publish")
-def publish_requisition(
-    requisition_id: str, body: req_service.PublishIn | None = None
-) -> dict:
+def publish_requisition(requisition_id: str, body: ApproveByIn | None = None) -> dict:
+    _get_requisition(requisition_id)
     by = body.by if body else None
-    req_service.publish(requisition_id, by=by)
-    return _requisition_dict(requisition_id)
+    req = service.publish(requisition_id, by=by)
+    return _requisition_dict(req.id)
 
 
 @app.post("/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str) -> dict:
-    req_service.close(requisition_id)
-    return _requisition_dict(requisition_id)
+    _get_requisition(requisition_id)
+    req = service.close(requisition_id)
+    return _requisition_dict(req.id)
 
 
 @app.post("/requisitions/{requisition_id}/reset")
 def reset_requisition(requisition_id: str) -> dict:
-    req_service.reset(requisition_id)
-    return _requisition_dict(requisition_id)
+    _get_requisition(requisition_id)
+    req = service.reset(requisition_id)
+    return _requisition_dict(req.id)
 
 
 @app.delete("/requisitions/{requisition_id}", status_code=204)
 def delete_requisition(requisition_id: str) -> None:
-    req_service.delete(requisition_id)
+    _get_requisition(requisition_id)
+    service.delete(requisition_id)
 
 
-# --- health check ------------------------------------------------------------
+# --- static UI / health ------------------------------------------------------
+@app.get("/", include_in_schema=False)
+def index() -> FileResponse:
+    return FileResponse(Path(__file__).parent / "index.html")
+
+
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq")}

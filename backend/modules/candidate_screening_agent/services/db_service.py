@@ -1,18 +1,16 @@
-import os
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
 from pymongo import MongoClient
 
-DEFAULT_DB_URL = "mongodb://localhost:27017/"
-DEFAULT_DB_NAME = "termjobs"
+from modules.shared.config import settings
 
 
 def get_db():
     """Return the MongoDB database."""
-    db_url = os.getenv("MONGODB_URL", DEFAULT_DB_URL)
-    db_name = os.getenv("MONGO_DB_NAME", DEFAULT_DB_NAME)
+    db_url = settings.mongodb_url or "mongodb://localhost:27017/"
+    db_name = settings.mongo_db_name or "termjobs"
     client = MongoClient(db_url, serverSelectionTimeoutMS=15000)
     return client[db_name]
 
