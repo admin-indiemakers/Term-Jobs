@@ -70,7 +70,7 @@ export default function RecruiterDashboard() {
 
     // 4. Smart fallback template if raw requisition was published without AI markdown
     const roleTitle = r.title || 'Junior Backend Developer';
-    return `### Role: ${roleTitle}\n\n**Required Technical Skills:**\n- Python & FastAPI\n- PostgreSQL & Database Design\n- Docker, REST APIs, Microservices\n- Git & Version Control\n\n**Responsibilities & Experience:**\n- 1 to 3 years software development experience.\n- Develop scalable backend services and APIs.\n- Collaborate with frontend & engineering teams.`;
+    return `### Role: ${roleTitle}\n\n**Required Technical Skills:**\n- Python & FastAPI\n- Database & API Design\n- Docker & REST APIs\n- Git & Version Control\n\n**Responsibilities & Experience:**\n- 1 to 3 years software development experience.\n- Develop scalable backend services and APIs.\n- Collaborate with engineering teams.`;
   };
 
   const fetchFullRequisition = async (reqId) => {
@@ -90,23 +90,25 @@ export default function RecruiterDashboard() {
     let list = [];
 
     try {
-      const data = await request('/api/requisitions', { token: authToken });
-      if (data && data.requisitions && data.requisitions.length > 0) {
-        list = data.requisitions;
-      } else if (Array.isArray(data) && data.length > 0) {
-        list = data;
+      // 1. Fetch directly from MongoDB backend (/requisitions)
+      const raw = await request('/requisitions', { token: authToken });
+      if (Array.isArray(raw) && raw.length > 0) {
+        list = raw;
+      } else if (raw && raw.requisitions) {
+        list = raw.requisitions;
       }
     } catch (e) {
-      console.warn('/api/requisitions failed, trying /requisitions...', e);
+      console.warn('GET /requisitions failed, trying /api/requisitions...', e);
     }
 
     if (list.length === 0) {
       try {
-        const raw = await request('/requisitions', { token: authToken });
-        if (Array.isArray(raw) && raw.length > 0) {
-          list = raw;
-        } else if (raw && raw.requisitions) {
-          list = raw.requisitions;
+        // 2. Fallback to screening agent endpoint if core endpoint is empty
+        const data = await request('/api/requisitions', { token: authToken });
+        if (data && data.requisitions && data.requisitions.length > 0) {
+          list = data.requisitions;
+        } else if (Array.isArray(data) && data.length > 0) {
+          list = data;
         }
       } catch (e) {
         console.error('Failed to load requisitions from all endpoints', e);
@@ -125,6 +127,9 @@ export default function RecruiterDashboard() {
       if (selected.id) {
         fetchFullRequisition(selected.id);
       }
+    } else {
+      setSelectedReqId('');
+      setJdText('');
     }
 
     setDbLoading(false);
@@ -228,7 +233,7 @@ export default function RecruiterDashboard() {
       {/* Header Banner */}
       <div className="page-header" style={{ marginBottom: '24px' }}>
         <div>
-          <div style={{ display: 'flex', items: 'center', gap: '12px', marginBottom: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
             <h1 className="page-title">Recruiter Consultancy Dashboard</h1>
             <span className="status-badge status-published">
               Consultancy Partner
@@ -249,7 +254,7 @@ export default function RecruiterDashboard() {
           </h2>
 
           {dbLoading ? (
-            <p className="muted">Loading active requisitions from database...</p>
+            <p className="muted">Loading active requisitions from MongoDB...</p>
           ) : (
             <>
               <label className="form-label">
@@ -262,7 +267,7 @@ export default function RecruiterDashboard() {
                 style={{ marginBottom: '16px', cursor: 'pointer' }}
               >
                 {requisitions.length === 0 ? (
-                  <option value="">-- No Requisitions in Database --</option>
+                  <option value="">-- No Requisitions in MongoDB --</option>
                 ) : (
                   requisitions.map((r) => (
                     <option key={r.id} value={r.id}>
