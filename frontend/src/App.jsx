@@ -1,11 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
+import SuperAdminLogin from './pages/SuperAdminLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import OnboardCompany from './pages/OnboardCompany';
+import OnboardVendor from './pages/OnboardVendor';
 import ConfigureCompanyAccounts from './pages/ConfigureCompanyAccounts';
 import HRDashboard from './pages/HRDashboard';
 import RequisitionOverview from './pages/requisitions/RequisitionOverview';
@@ -52,6 +54,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/" element={<HomeRedirect />} />
         <Route
           path="/dashboard"
@@ -70,6 +73,7 @@ export default function App() {
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />
+          <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>

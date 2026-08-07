@@ -4,7 +4,7 @@ ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter")
 
 # Which roles a given role is allowed to provision.
 PROVISION_MATRIX = {
-    "Super Admin": ("Admin",),
+    "Super Admin": ("Admin", "Recruiter"),
     "Admin": ("Hiring Manager",),
     "HR": ("Hiring Manager",),
 }
@@ -13,6 +13,11 @@ PROVISION_MATRIX = {
 class TenantCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     tenant_type: str = Field("client", pattern="^(client|consultancy)$")
+    industry: str = ""
+    size: str = ""
+    location: str = ""
+    tech_stack: list[str] = Field(default_factory=list)
+    notes: str = ""
 
 class TenantResponse(BaseModel):
     id: str

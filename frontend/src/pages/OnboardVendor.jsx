@@ -5,18 +5,18 @@ import { useAuth } from '../context/AuthContext';
 import { Icons, WelcomeBanner } from '../components/Dashboard';
 
 const EMPTY_FORM = {
-  company_name: '',
+  vendor_name: '',
   industry: '',
   size: '',
   location: '',
-  tech_stack: '',
+  specializations: '',
   notes: '',
   name: '',
   email: '',
   password: '',
 };
 
-export default function OnboardCompany() {
+export default function OnboardVendor() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState(EMPTY_FORM);
@@ -30,13 +30,13 @@ export default function OnboardCompany() {
     setSuccess('');
   };
 
-  const handleCreateCompany = async (e) => {
+  const handleCreateVendor = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
     setSuccess('');
     try {
-      const techStack = form.tech_stack
+      const specializations = form.specializations
         .split(',')
         .map((s) => s.trim())
         .filter(Boolean);
@@ -45,12 +45,12 @@ export default function OnboardCompany() {
         method: 'POST',
         token,
         body: {
-          name: form.company_name,
-          tenant_type: 'client',
+          name: form.vendor_name,
+          tenant_type: 'consultancy',
           industry: form.industry,
           size: form.size,
           location: form.location,
-          tech_stack: techStack,
+          tech_stack: specializations,
           notes: form.notes,
         },
       });
@@ -61,11 +61,11 @@ export default function OnboardCompany() {
           email: form.email,
           name: form.name,
           password: form.password,
-          role: 'Admin',
+          role: 'Recruiter',
           tenant_id: tenant.id,
         },
       });
-      setSuccess(`Company "${form.company_name}" created with Admin account for ${form.email}.`);
+      setSuccess(`Vendor "${form.vendor_name}" created with Recruiter account for ${form.email}.`);
       setForm({ ...EMPTY_FORM });
     } catch (err) {
       setError(err.message);
@@ -77,8 +77,8 @@ export default function OnboardCompany() {
   return (
     <div className="page page-narrow">
       <WelcomeBanner
-        title="Onboard Buyer Company"
-        subtitle="Create a client tenant and its Admin account in one step. Hiring Managers are provisioned later by the company's Admin."
+        title="Onboard Vendor Consultancy"
+        subtitle="Create a consultancy tenant and its first Recruiter account. Vendors screen candidates against published requisitions."
       />
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -90,7 +90,7 @@ export default function OnboardCompany() {
               Back to Dashboard
             </button>
             <button className="ghost-btn" onClick={() => setForm({ ...EMPTY_FORM })}>
-              Onboard Another Company
+              Onboard Another Vendor
             </button>
           </div>
         </>
@@ -98,27 +98,27 @@ export default function OnboardCompany() {
 
       <div className="glass-panel">
         <div className="form-panel-head">
-          <div className="form-panel-icon">{Icons.building}</div>
+          <div className="form-panel-icon">{Icons.users}</div>
           <div>
-          <div className="form-panel-title">Company Details</div>
-          <div className="form-panel-caption">
-            Company profile, tech stack, and its first Admin account. The profile feeds automated requisitions.
-          </div>
+            <div className="form-panel-title">Vendor Details</div>
+            <div className="form-panel-caption">
+              Consultancy profile, specializations, and its first Recruiter account. Vendors submit screened candidates.
+            </div>
           </div>
         </div>
-        <form onSubmit={handleCreateCompany}>
+        <form onSubmit={handleCreateVendor}>
           <div className="form-grid">
             <div>
-              <label className="form-label">Company Name</label>
+              <label className="form-label">Vendor / Agency Name</label>
               <input
                 type="text"
-                name="company_name"
+                name="vendor_name"
                 required
                 minLength={2}
-                value={form.company_name}
+                value={form.vendor_name}
                 onChange={handleInput}
                 className="auth-input"
-                placeholder="e.g. Acme Systems"
+                placeholder="e.g. TalentBridge Consulting"
               />
             </div>
             <div>
@@ -129,7 +129,7 @@ export default function OnboardCompany() {
                 value={form.industry}
                 onChange={handleInput}
                 className="auth-input"
-                placeholder="e.g. SaaS, Fintech, IT Services"
+                placeholder="e.g. Staffing, Tech Recruiting"
               />
             </div>
             <div>
@@ -140,7 +140,7 @@ export default function OnboardCompany() {
                 value={form.size}
                 onChange={handleInput}
                 className="auth-input"
-                placeholder="e.g. 50-200, 1000+"
+                placeholder="e.g. 10-50, 200+"
               />
             </div>
             <div>
@@ -155,44 +155,44 @@ export default function OnboardCompany() {
               />
             </div>
             <div className="form-field-full">
-              <label className="form-label">Tech Stack</label>
+              <label className="form-label">Specializations</label>
               <input
                 type="text"
-                name="tech_stack"
-                value={form.tech_stack}
+                name="specializations"
+                value={form.specializations}
                 onChange={handleInput}
                 className="auth-input"
-                placeholder="Comma separated — e.g. Python, React, PostgreSQL, AWS"
+                placeholder="Comma separated — e.g. Backend, Frontend, Data Science, Cloud"
               />
-              <p className="field-hint">Used to auto-populate skills when the AI structures a requisition.</p>
+              <p className="field-hint">Areas this vendor focuses on when sourcing candidates.</p>
             </div>
             <div className="form-field-full">
-              <label className="form-label">About the Company <span className="form-optional">(optional)</span></label>
+              <label className="form-label">About the Vendor <span className="form-optional">(optional)</span></label>
               <textarea
                 name="notes"
                 value={form.notes}
                 onChange={handleInput}
                 className="auth-input"
                 rows={3}
-                placeholder="Products, hiring culture, anything the AI should know about the company."
+                placeholder="Footprint, hiring strengths, anything Super Admin should know about the vendor."
               />
             </div>
             <div>
-              <label className="form-label">Admin Full Name</label>
-              <input type="text" name="name" required value={form.name} onChange={handleInput} className="auth-input" placeholder="e.g. Rahul Sharma" />
+              <label className="form-label">Recruiter Full Name</label>
+              <input type="text" name="name" required value={form.name} onChange={handleInput} className="auth-input" placeholder="e.g. Priya Menon" />
             </div>
             <div>
-              <label className="form-label">Admin Email</label>
-              <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="admin@acme.com" />
+              <label className="form-label">Recruiter Email</label>
+              <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="recruiter@talentbridge.com" />
             </div>
             <div>
-              <label className="form-label">Admin Password</label>
+              <label className="form-label">Recruiter Password</label>
               <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
             </div>
           </div>
           <div className="form-actions" style={{ display: 'flex', gap: 12, marginTop: 18 }}>
             <button type="submit" className="glow-btn" disabled={submitting}>
-              {submitting ? 'Creating...' : 'Create Company + Admin'}
+              {submitting ? 'Creating...' : 'Create Vendor + Recruiter'}
             </button>
             <button type="button" className="ghost-btn" onClick={() => navigate('/dashboard/superadmin')}>
               Cancel

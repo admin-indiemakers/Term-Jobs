@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 function initials(name) {
@@ -23,6 +23,7 @@ const CONSOLE_CLASS = {
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogout = () => {
     logout();
@@ -48,6 +49,7 @@ export default function DashboardLayout() {
             ? [
                 { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
                 { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
+                { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
                 { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
               ]
             : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
@@ -56,31 +58,114 @@ export default function DashboardLayout() {
     <div className={`app-shell ${consoleClass}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <div className="brand-mark">TJ</div>
-          <div className="brand-text">
-            <span className="brand-name">Term Jobs</span>
-            <span className="brand-sub">Workforce Platform</span>
-          </div>
+          {user.role === 'Hiring Manager' ? (
+            <>
+              <div className="brand-mark">{user.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
+              <div className="brand-text">
+                <span className="brand-name">{user.tenant_name || 'Term Jobs'}</span>
+                <span className="brand-sub">{user.role}</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="brand-mark">TJ</div>
+              <div className="brand-text">
+                <span className="brand-name">Term Jobs</span>
+                <span className="brand-sub">Workforce Platform</span>
+              </div>
+            </>
+          )}
         </div>
 
         <nav className="sidebar-nav">
-          <div className="nav-section-label">Workspace</div>
-          {navItems.map((item) =>
-            item.to ? (
+          {user.role === 'Hiring Manager' ? (
+            <>
+              <div className="nav-section-label">Requisitions</div>
+              {navItems
+                .filter((i) => i.to === '/dashboard/requisitions' || i.to === '/dashboard/requisitions/new')
+                .map((item) => (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              <div className="nav-section-label">Candidates</div>
+              {navItems
+                .filter((i) => i.to === '/dashboard/candidates')
+                .map((item) => (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                  >
+                    {item.label}
+                  </NavLink>
+                ))}
+              <div className="nav-section-label">HR</div>
               <NavLink
-                key={item.label}
-                to={item.to}
-                end={item.end}
+                to="/dashboard/hr"
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                {item.label}
+                HR Overview
               </NavLink>
-            ) : (
-              <span key={item.label} className="nav-link locked">
-                {item.label}
-                <span className="soon-tag">Soon</span>
-              </span>
-            )
+            </>
+          ) : user.role === 'Super Admin' ? (
+            <>
+              <div className="nav-section-label">Overview</div>
+              <NavLink
+                to="/dashboard/superadmin"
+                end
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Dashboard
+              </NavLink>
+              <div className="nav-section-label">Companies</div>
+              <NavLink
+                to="/dashboard/superadmin/onboard"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Onboard Company
+              </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/accounts"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Company Accounts
+              </NavLink>
+              <div className="nav-section-label">Vendors</div>
+              <NavLink
+                to="/dashboard/superadmin/onboard-vendor"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Onboard Vendor
+              </NavLink>
+            </>
+          ) : (
+            <>
+              <div className="nav-section-label">Workspace</div>
+              {navItems.map((item) =>
+                item.to ? (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    end={item.end}
+                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                  >
+                    {item.label}
+                  </NavLink>
+                ) : (
+                  <span key={item.label} className="nav-link locked">
+                    {item.label}
+                    <span className="soon-tag">Soon</span>
+                  </span>
+                )
+              )}
+            </>
           )}
         </nav>
 
@@ -115,7 +200,9 @@ export default function DashboardLayout() {
           </div>
         </header>
         <main className="content-area">
-          <Outlet />
+          <div key={location.pathname} className="page-motion">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

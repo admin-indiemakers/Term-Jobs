@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/StatusBadge';
-import { Icons, StatCard, WelcomeBanner } from '../../components/Dashboard';
+import { Icons, WelcomeBanner } from '../../components/Dashboard';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -14,8 +14,17 @@ function formatDate(iso) {
   }
 }
 
+const STATUS_META = {
+  Draft: { icon: '📝', tone: 'hm-tone-slate' },
+  Intake: { icon: '💬', tone: 'hm-tone-blue' },
+  Structuring: { icon: '🧩', tone: 'hm-tone-violet' },
+  PendingApproval: { icon: '⏳', tone: 'hm-tone-amber' },
+  Published: { icon: '🚀', tone: 'hm-tone-green' },
+  Closed: { icon: '🔒', tone: 'hm-tone-rose' },
+};
+
 export default function RequisitionOverview() {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const navigate = useNavigate();
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,69 +55,80 @@ export default function RequisitionOverview() {
     Published: requisitions.filter((r) => r.status === 'Published').length,
   };
 
+  const ordered = [...requisitions].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
   return (
     <div className="page">
       <WelcomeBanner
-        title="Requisitions"
-        subtitle="Create, structure, and publish job requirements with AI assistance."
+        title="My Requisitions"
+        subtitle="Create, structure, and publish job requirements with AI assistance — right from this workspace."
       >
         <Link to="/dashboard/requisitions/new" className="glow-btn">
           + New Requisition
         </Link>
       </WelcomeBanner>
 
-      <div className="stat-grid">
-        <StatCard label="Total Requisitions" value={counts.total} icon={Icons.layers} tint="tint-blue" />
-        <StatCard label="Draft" value={counts.Draft} icon={Icons.tag} tint="tint-slate" />
-        <StatCard label="Pending Approval" value={counts.PendingApproval} icon={Icons.clock} tint="tint-amber" />
-        <StatCard label="Published" value={counts.Published} icon={Icons.check} tint="tint-green" />
-      </div>
-
       {error && <div className="alert alert-error">{error}</div>}
 
-      <div className="glass-panel table-card">
-        <div className="table-head">
-          <div>
-            <h2 className="card-title">All Requisitions</h2>
-            <p className="muted" style={{ fontSize: '0.82rem' }}>{counts.total} total</p>
-          </div>
+      <div className="hm-stats">
+        <div className="hm-stat hm-stat-total">
+          <span className="hm-stat-value">{counts.total}</span>
+          <span className="hm-stat-label">Total</span>
         </div>
-        {loading ? (
-          <p className="muted" style={{ padding: 24 }}>Loading requisitions...</p>
-        ) : requisitions.length === 0 ? (
-          <div className="empty-state">
-            <h3>No requisitions yet</h3>
-            <p>Create your first requisition and the AI will help structure the role and generate a JD.</p>
-            <Link to="/dashboard/requisitions/new" className="glow-btn">
-              Create Requisition
-            </Link>
-          </div>
-        ) : (
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Company</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {requisitions.map((r) => (
-                <tr key={r.id} onClick={() => navigate(`/dashboard/requisitions/${r.id}`)} className="clickable-row">
-                  <td className="td-title">{r.title || 'Untitled'}</td>
-                  <td className="td-company">{r.company_name}</td>
-                  <td><StatusBadge status={r.status} /></td>
-                  <td className="td-date">{formatDate(r.created_at)}</td>
-                  <td className="td-action"><span className="row-action">Open →</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <div className="hm-stat">
+          <span className="hm-stat-value">{counts.Draft}</span>
+          <span className="hm-stat-label">Draft</span>
+        </div>
+        <div className="hm-stat">
+          <span className="hm-stat-value">{counts.PendingApproval}</span>
+          <span className="hm-stat-label">Pending</span>
+        </div>
+        <div className="hm-stat">
+          <span className="hm-stat-value">{counts.Published}</span>
+          <span className="hm-stat-label">Live</span>
+        </div>
       </div>
+
+      <div className="hm-section-head">
+        <div>
+          <h2 className="hm-section-title">Requisition Board</h2>
+          <p className="hm-section-caption">Click any card to open its workspace flow.</p>
+        </div>
+        <div className="hm-count-pill">{ordered.length} total</div>
+      </div>
+
+      {loading ? (
+        <p className="muted">Loading requisitions...</p>
+      ) : requisitions.length === 0 ? (
+        <div className="hm-empty">
+          <div className="hm-empty-icon">{Icons.layers}</div>
+          <h3>No requisitions yet</h3>
+          <p>Create your first requisition and the AI will help structure the role and generate a JD.</p>
+          <Link to="/dashboard/requisitions/new" className="glow-btn">
+            Create Requisition
+          </Link>
+        </div>
+      ) : (
+        <div className="hm-board">
+          {ordered.map((r) => {
+            const meta = STATUS_META[r.status] || STATUS_META.Draft;
+            return (
+              <div key={r.id} className={`hm-card ${meta.tone}`} onClick={() => navigate(`/dashboard/requisitions/${r.id}`)}>
+                <div className="hm-card-top">
+                  <span className="hm-card-emoji">{meta.icon}</span>
+                  <StatusBadge status={r.status} />
+                </div>
+                <h3 className="hm-card-title">{r.title || 'Untitled'}</h3>
+                <div className="hm-card-company">{r.company_name}</div>
+                <div className="hm-card-foot">
+                  <span className="hm-card-date">Created {formatDate(r.created_at)}</span>
+                  <span className="hm-card-open">Open →</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
-

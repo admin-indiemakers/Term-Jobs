@@ -41,7 +41,7 @@ export function StatCard({ label, value, icon, tint }) {
   return (
     <div className="stat-card">
       <div className={`stat-icon ${tint || 'tint-blue'}`}>{icon}</div>
-      <div>
+      <div className="stat-body">
         <div className="stat-value">{value}</div>
         <div className="stat-label">{label}</div>
       </div>

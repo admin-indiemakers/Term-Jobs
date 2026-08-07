@@ -462,4 +462,19 @@ def create_tenant(
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
+
+    # Keep a company profile in sync so the requisition agents have rich
+    # context (industry, size, location, tech stack) for automated requisitions.
+    profile = CompanyProfile(
+        tenant_id=tenant.id,
+        name=tenant.name,
+        industry=body.industry,
+        size=body.size,
+        location=body.location,
+        tech_stack=body.tech_stack,
+        notes=body.notes,
+    )
+    db.add(profile)
+    db.commit()
+
     return TenantResponse(id=tenant.id, name=tenant.name, tenant_type=tenant.tenant_type)

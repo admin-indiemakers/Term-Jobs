@@ -53,6 +53,9 @@ export default function SuperAdminDashboard() {
         <Link to="/dashboard/superadmin/onboard" className="glow-btn">
           + Onboard Buyer Company
         </Link>
+        <Link to="/dashboard/superadmin/onboard-vendor" className="glow-btn">
+          + Onboard Vendor
+        </Link>
       </WelcomeBanner>
 
       <div className="stat-grid">
