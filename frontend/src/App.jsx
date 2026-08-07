@@ -5,6 +5,8 @@ import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import OnboardCompany from './pages/OnboardCompany';
+import ConfigureCompanyAccounts from './pages/ConfigureCompanyAccounts';
 import HRDashboard from './pages/HRDashboard';
 import RequisitionOverview from './pages/requisitions/RequisitionOverview';
 import NewRequisition from './pages/requisitions/NewRequisition';
@@ -67,6 +69,8 @@ export default function App() {
           <Route path="recruiter" element={<RecruiterDashboard />} />
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
+          <Route path="superadmin/onboard" element={<OnboardCompany />} />
+          <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

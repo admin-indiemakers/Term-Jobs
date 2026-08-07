@@ -100,6 +100,7 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         location=comp.location if comp else "",
         tech_stack=(comp.tech_stack if comp and comp.tech_stack else []),
         notes=comp.notes if comp else "",
+        department=user.department or "",
         created_by=user.created_by,
         is_active=user.is_active,
     )
@@ -123,6 +124,7 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
         location=comp.location if comp else "",
         tech_stack=(comp.tech_stack if comp and comp.tech_stack else []),
         notes=comp.notes if comp else "",
+        department=current_user.department or "",
         created_by=current_user.created_by,
         is_active=current_user.is_active,
     )
@@ -216,6 +218,7 @@ def create_user(
         name=body.name,
         password_hash=hash_password(body.password),
         role=body.role,
+        department=body.department,
         created_by=current_user.id,
     )
     db.add(user)
@@ -230,6 +233,7 @@ def create_user(
         tenant_id=user.tenant_id,
         tenant_name=_tenant_name(user.tenant_id, db),
         tenant_type=_tenant_type(user.tenant_id, db),
+        department=user.department or "",
         created_by=user.created_by,
         is_active=user.is_active,
     )
@@ -265,6 +269,7 @@ def list_users(
             tenant_id=u.tenant_id,
             tenant_name=_tenant_name(u.tenant_id, db),
             tenant_type=_tenant_type(u.tenant_id, db),
+            department=u.department or "",
             is_active=u.is_active,
             created_by=u.created_by,
             created_at=u.created_at.isoformat() if u.created_at else "",
@@ -325,6 +330,8 @@ def update_user(
         target.name = body.name
     if body.password is not None:
         target.password_hash = hash_password(body.password)
+    if body.department is not None:
+        target.department = body.department
     if body.is_active is not None:
         target.is_active = body.is_active
 
@@ -345,6 +352,7 @@ def update_user(
         location=comp.location if comp else "",
         tech_stack=(comp.tech_stack if comp and comp.tech_stack else []),
         notes=comp.notes if comp else "",
+        department=target.department or "",
         created_by=target.created_by,
         is_active=target.is_active,
     )

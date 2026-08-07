@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
@@ -29,11 +28,11 @@ const EMPTY_FORM = {
   email: '',
   name: '',
   password: '',
+  department: '',
 };
 
 export default function AdminDashboard() {
   const { token, user } = useAuth();
-  const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +40,8 @@ export default function AdminDashboard() {
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -76,6 +77,7 @@ export default function AdminDashboard() {
           name: form.name,
           password: form.password,
           role: 'Hiring Manager',
+          department: form.department,
         },
       });
       setSuccess(`Hiring Manager account created for ${form.email}.`);
@@ -85,6 +87,23 @@ export default function AdminDashboard() {
       setError(err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
+      setSuccess(`Hiring Manager account ${confirmDelete.email} deleted.`);
+      setConfirmDelete(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -135,6 +154,10 @@ export default function AdminDashboard() {
                   <label className="form-label">Password</label>
                   <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
                 </div>
+                <div>
+                  <label className="form-label">Department <span className="form-optional">(optional)</span></label>
+                  <input type="text" name="department" value={form.department} onChange={handleInput} className="auth-input" placeholder="e.g. Engineering, Sales, HR" />
+                </div>
               </div>
               <button type="submit" className="glow-btn" disabled={submitting} style={{ marginTop: 18 }}>
                 {submitting ? 'Creating...' : 'Create Hiring Manager'}
@@ -157,9 +180,11 @@ export default function AdminDashboard() {
                   <tr>
                     <th>Name</th>
                     <th>Email</th>
+                    <th>Department</th>
                     <th>Role</th>
                     <th>Status</th>
                     <th>Created</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,9 +192,21 @@ export default function AdminDashboard() {
                     <tr key={u.id}>
                       <td className="td-title">{u.name || '—'}</td>
                       <td>{u.email}</td>
+                      <td>{u.department || <span className="muted">—</span>}</td>
                       <td>{rolePill(u.role)}</td>
                       <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
                       <td className="td-date">{formatDate(u.created_at)}</td>
+                      <td className="td-action">
+                        <div className="row-actions">
+                          <span
+                            className="row-action row-action-danger"
+                            onClick={() => setConfirmDelete(u)}
+                            style={{ cursor: 'pointer' }}
+                          >
+                            Remove
+                          </span>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -181,7 +218,7 @@ export default function AdminDashboard() {
             <div className="table-head">
               <div>
                 <h2 className="card-title">Requisitions</h2>
-                <p className="muted" style={{ fontSize: '0.82rem' }}>Read-only overview of your workspace</p>
+                <p className="muted" style={{ fontSize: '0.82rem' }}>Read-only — view requisitions and their status</p>
               </div>
             </div>
             {requisitions.length === 0 ? (
@@ -193,16 +230,14 @@ export default function AdminDashboard() {
                     <th>Title</th>
                     <th>Status</th>
                     <th>Created</th>
-                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {requisitions.map((r) => (
-                    <tr key={r.id} onClick={() => navigate(`/dashboard/requisitions/${r.id}`)} className="clickable-row">
+                    <tr key={r.id}>
                       <td className="td-title">{r.title || 'Untitled'}</td>
                       <td><StatusBadge status={r.status} /></td>
                       <td className="td-date">{formatDate(r.created_at)}</td>
-                      <td className="td-action"><span className="row-action">Open →</span></td>
                     </tr>
                   ))}
                 </tbody>
@@ -210,6 +245,26 @@ export default function AdminDashboard() {
             )}
           </div>
         </>
+      )}
+
+      {confirmDelete && (
+        <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Remove Hiring Manager?</h3>
+            <p className="modal-text">
+              This will permanently delete the account <strong>{confirmDelete.name || confirmDelete.email}</strong>{' '}
+              ({confirmDelete.email}). This action cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button className="ghost-btn" onClick={() => setConfirmDelete(null)}>
+                Cancel
+              </button>
+              <button className="danger-btn" onClick={handleDeleteUser} disabled={deleting}>
+                {deleting ? 'Removing...' : 'Remove Account'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

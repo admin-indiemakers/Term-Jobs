@@ -9,6 +9,8 @@ function greeting() {
 
 export function WelcomeBanner({ title, subtitle, children }) {
   const { user } = useAuth();
+  const highlightRole = user?.role === 'Super Admin';
+  const highlightOrg = ['Admin', 'Hiring Manager', 'HR'].includes(user?.role);
   return (
     <div className="welcome-banner">
       <div className="welcome-glow"></div>
@@ -23,11 +25,13 @@ export function WelcomeBanner({ title, subtitle, children }) {
         <div className="welcome-actions">{children}</div>
       </div>
       <div className="welcome-meta">
-        <span className="welcome-chip">
+        <span className={`welcome-chip ${highlightRole ? 'welcome-chip-highlight' : ''}`}>
           <span className="welcome-chip-dot"></span>
           {user?.role}
         </span>
-        <span className="welcome-chip welcome-chip-org">{user?.tenant_name}</span>
+        <span className={`welcome-chip welcome-chip-org ${highlightOrg ? 'welcome-chip-highlight' : ''}`}>
+          {user?.tenant_name}
+        </span>
       </div>
     </div>
   );

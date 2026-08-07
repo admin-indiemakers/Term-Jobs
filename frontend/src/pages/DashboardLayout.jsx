@@ -12,6 +12,14 @@ function initials(name) {
     .toUpperCase();
 }
 
+const CONSOLE_CLASS = {
+  'Super Admin': 'console-superadmin',
+  Admin: 'console-admin',
+  HR: 'console-hr',
+  'Hiring Manager': 'console-hiringmanager',
+  Recruiter: 'console-recruiter',
+};
+
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -20,6 +28,10 @@ export default function DashboardLayout() {
     logout();
     navigate('/login');
   };
+
+  const consoleClass = CONSOLE_CLASS[user.role] || 'console-default';
+  const highlightRole = user.role === 'Super Admin';
+  const highlightOrg = ['Admin', 'Hiring Manager', 'HR'].includes(user.role);
 
   const navItems =
     user.role === 'Hiring Manager'
@@ -33,11 +45,15 @@ export default function DashboardLayout() {
         : user.role === 'Admin'
           ? [{ to: '/dashboard/admin', label: 'Dashboard', end: true }]
           : user.role === 'Super Admin'
-            ? [{ to: '/dashboard/superadmin', label: 'Dashboard', end: true }]
+            ? [
+                { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
+                { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
+                { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
+              ]
             : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${consoleClass}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="brand-mark">TJ</div>
@@ -84,10 +100,15 @@ export default function DashboardLayout() {
 
       <div className="main-area">
         <header className="topbar">
-          <div>
-            <span className="topbar-org">{user.tenant_name}</span>
+          <div className="topbar-breadcrumb">
+            {highlightRole ? (
+              <span className="topbar-org topbar-highlight">{user.role}</span>
+            ) : (
+              <span className={`topbar-org ${highlightOrg ? 'topbar-highlight' : ''}`}>{user.tenant_name}</span>
+            )}
             <span className="topbar-divider">/</span>
             <span className="topbar-page">Dashboard</span>
+            {!highlightRole && <span className="topbar-org-label">· {user.role}</span>}
           </div>
           <div className="topbar-right">
             <span className="session-pill">Verified Session</span>

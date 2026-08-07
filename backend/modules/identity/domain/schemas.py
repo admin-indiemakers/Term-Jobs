@@ -25,11 +25,13 @@ class UserCreate(BaseModel):
     password: str = Field(..., min_length=4, max_length=128)
     role: str
     tenant_id: str = ""
+    department: str = ""
 
 class UserUpdate(BaseModel):
     email: str | None = Field(None, min_length=3, max_length=255)
     name: str | None = Field(None, min_length=1, max_length=255)
     password: str | None = Field(None, min_length=4, max_length=128)
+    department: str | None = None
     is_active: bool | None = None
 
 class UserLogin(BaseModel):
@@ -51,6 +53,7 @@ class UserResponse(BaseModel):
     location: str = ""
     tech_stack: list[str] = Field(default_factory=list)
     notes: str = ""
+    department: str = ""
     created_by: str = ""
     is_active: bool = True
 
@@ -62,6 +65,7 @@ class UserListResponse(BaseModel):
     tenant_id: str
     tenant_name: str
     tenant_type: str
+    department: str = ""
     is_active: bool
     created_by: str = ""
     created_at: str = ""
