@@ -1,17 +1,31 @@
+import os
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
+
+UTC = timezone.utc
 from typing import Any
 
 from pymongo import MongoClient
 
-from modules.shared.config import settings
+try:
+    from modules.shared.config import settings
+    DEFAULT_DB_URL = getattr(settings, "mongodb_url", "mongodb://localhost:27017/")
+    DEFAULT_DB_NAME = getattr(settings, "mongo_db_name", "termjobs")
+except ImportError:
+    DEFAULT_DB_URL = "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net/termjobs?retryWrites=true&w=majority"
+    DEFAULT_DB_NAME = "termjobs"
 
 
 def get_db():
     """Return the MongoDB database."""
-    db_url = settings.mongodb_url or "mongodb://localhost:27017/"
-    db_name = settings.mongo_db_name or "termjobs"
-    client = MongoClient(db_url, serverSelectionTimeoutMS=15000)
+    db_url = (
+        os.getenv("MONGODB_URL")
+        or os.getenv("MONGODB_URI")
+        or os.getenv("MONGO_URI")
+        or DEFAULT_DB_URL
+    )
+    db_name = os.getenv("MONGO_DB_NAME", DEFAULT_DB_NAME)
+    client = MongoClient(db_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
     return client[db_name]
 
 

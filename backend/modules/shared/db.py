@@ -6,8 +6,14 @@ the subset of the SQLAlchemy Session API used across the app
 unchanged while documents live in MongoDB Atlas.
 """
 import uuid
-from datetime import UTC, datetime
-from typing import ClassVar, Self
+from datetime import datetime, timezone
+
+UTC = timezone.utc
+from typing import ClassVar
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from pymongo import ASCENDING, DESCENDING, MongoClient
 
@@ -22,7 +28,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-client = MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=15000)
+client = MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, maxPoolSize=50)
 db = client[settings.mongo_db_name]
 
 

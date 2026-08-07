@@ -21,12 +21,19 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+<<<<<<< HEAD
 from fastapi.responses import FileResponse
+=======
+>>>>>>> hashil
 from pydantic import BaseModel, Field
 
 from modules.candidate.router import router as candidate_router
+<<<<<<< HEAD
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
+=======
+from modules.candidate_screening_agent.routers.screening import router as screening_router
+>>>>>>> hashil
 from modules.identity.router import router as identity_router
 from modules.requisition.domain import models, schemas
 from modules.shared.db import get_session, init_db
@@ -52,7 +59,46 @@ app.add_middleware(
 
 app.include_router(identity_router)
 app.include_router(candidate_router)
+<<<<<<< HEAD
 app.include_router(screening_router, prefix="/api", tags=["Screening"])
+=======
+app.include_router(screening_router)
+
+
+# --- Request Schemas ---
+class CompanyProfileIn(BaseModel):
+    name: str
+    industry: str = ""
+    size: str = ""
+    location: str = ""
+    tech_stack: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class RequisitionCreateIn(BaseModel):
+    company_profile_id: str
+    title: str
+    description: str = ""
+    tech_stack_hint: list[str] = Field(default_factory=list)
+    prompt: str = ""
+    created_by: str | None = None
+
+
+class AnswerIn(BaseModel):
+    answer: str
+
+
+class RefineIn(BaseModel):
+    instruction: str
+
+
+class ReviewIn(BaseModel):
+    reviewer: str | None = None
+
+
+class PublishIn(BaseModel):
+    by: str | None = None
+>>>>>>> hashil
 
 
 # --- LLM provider selection -------------------------------------------------
@@ -204,7 +250,11 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
 
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
+<<<<<<< HEAD
 def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(get_current_user)) -> dict:
+=======
+def create_company_profile(body: CompanyProfileIn) -> dict:
+>>>>>>> hashil
     with get_session() as session:
         prof = models.CompanyProfile(**body.model_dump(), tenant_id=current_user.tenant_id)
         session.add(prof)
@@ -225,6 +275,7 @@ def list_company_profiles(current_user: User = Depends(get_current_user)) -> lis
 
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
+<<<<<<< HEAD
 def create_requisition(body: RequisitionIn, current_user: User = Depends(get_current_user)) -> dict:
     # The company profile must belong to the requester's tenant.
     with get_session() as session:
@@ -238,6 +289,10 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
         )
 
     intent = schemas.RoleIntent(
+=======
+def create_requisition(body: RequisitionCreateIn) -> dict:
+    intent = req_service.build_intent(
+>>>>>>> hashil
         title=body.title,
         description=body.prompt or body.description,
         tech_stack_hint=body.tech_stack_hint,
@@ -293,6 +348,7 @@ def start_requisition_flow(requisition_id: str, current_user: User = Depends(get
 
 
 @app.post("/requisitions/{requisition_id}/answer")
+<<<<<<< HEAD
 def answer_intake_question(requisition_id: str, body: AnswerIn, current_user: User = Depends(get_current_user)) -> dict:
     _require_tenant(_get_requisition(requisition_id), current_user)
     state, interrupt = service.answer(requisition_id, body.answer)
@@ -318,22 +374,77 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
             edited = schemas.StructuredRole.model_validate(body.edited_role)
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(status_code=422, detail=f"invalid edited_role: {exc}")
+=======
+def answer_intake_question(
+    requisition_id: str, body: AnswerIn
+) -> dict:
+    _get_requisition(requisition_id)
+
+    def action():
+        graph = agent.get_graph()
+        result = graph.invoke(
+            agent.make_resume_input(body.answer),
+            config=agent.make_config(requisition_id),
+        )
+        state = agent.get_requisition_state(requisition_id)
+        interrupt = agent.extract_interrupt_value(result)
+        return _interrupt_payload(state, interrupt)
+
+    return req_service.run_action_transactional(requisition_id, "answer", action)
+
+
+@app.post("/requisitions/{requisition_id}/refine")
+def refine_requisition_jd(
+    requisition_id: str, body: RefineIn
+) -> dict:
+    _get_requisition(requisition_id)
+
+    def action():
+        graph = agent.get_graph()
+        result = graph.invoke(
+            agent.make_resume_input(body.instruction),
+            config=agent.make_config(requisition_id),
+        )
+        state = agent.get_requisition_state(requisition_id)
+        interrupt = agent.extract_interrupt_value(result)
+        return _interrupt_payload(state, interrupt)
+
+    return req_service.run_action_transactional(requisition_id, "refine", action)
+
+
+@app.post("/requisitions/{requisition_id}/approve")
+def approve_requisition(
+    requisition_id: str, body: ReviewIn | None = None
+) -> dict:
+>>>>>>> hashil
     reviewer = body.reviewer if body else None
     state, interrupt = service.approve(requisition_id, reviewer=reviewer, edited_role=edited)
     return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/reject")
+<<<<<<< HEAD
 def reject_requisition(requisition_id: str, body: RejectIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
     _require_tenant(_get_requisition(requisition_id), current_user)
+=======
+def reject_requisition(
+    requisition_id: str, body: ReviewIn | None = None
+) -> dict:
+>>>>>>> hashil
     reviewer = body.reviewer if body else None
     state, interrupt = service.reject(requisition_id, reviewer=reviewer)
     return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/publish")
+<<<<<<< HEAD
 def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
     _require_tenant(_get_requisition(requisition_id), current_user)
+=======
+def publish_requisition(
+    requisition_id: str, body: PublishIn | None = None
+) -> dict:
+>>>>>>> hashil
     by = body.by if body else None
     req = service.publish(requisition_id, by=by)
     return _requisition_dict(req.id)

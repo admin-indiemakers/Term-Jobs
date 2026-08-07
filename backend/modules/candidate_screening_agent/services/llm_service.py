@@ -4,7 +4,10 @@ import re
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
-from services.email_service import extract_candidate_email
+try:
+    from services.email_service import extract_candidate_email
+except ImportError:
+    from .email_service import extract_candidate_email
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 DEFAULT_OLLAMA_MODEL = "llama3"
