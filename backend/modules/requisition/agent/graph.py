@@ -15,10 +15,12 @@ import re
 from typing import Any, TypedDict
 
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.mongodb import MongoDBSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from ...shared.config import settings
+from ...shared.db import client as mongo_client
 from ..domain import models, schemas
 from ..domain.state import StateMachine
 from ..enrichment import heuristics, skills
@@ -27,12 +29,21 @@ from . import guardrails, prompts
 
 
 def make_checkpointer():
-    """In-memory checkpointer for graph-pause persistence.
+    """MongoDB-backed checkpointer for graph-pause persistence.
 
-    Graph state is transient in-memory per agent instance. The business data
-    (requisition, structured role, decision records) is persisted to MongoDB.
+    Persists graph checkpoints in Mongo so interrupted flows (intake questions,
+    approval checkpoints) survive server restarts. Falls back to an in-memory
+    checkpointer when running against a mock/offline DB (tests).
     """
-    return MemorySaver()
+    try:
+        return MongoDBSaver(
+            mongo_client,
+            db_name=settings.mongo_db_name,
+            checkpoint_collection_name="graph_checkpoints",
+            writes_collection_name="graph_checkpoint_writes",
+        )
+    except Exception:  # noqa: BLE001 - tests run without a live Mongo client
+        return MemorySaver()
 
 
 class AgentState(TypedDict, total=False):
@@ -163,7 +174,7 @@ def _parse_prompt(prompt: str) -> dict:
 
 def build_graph(llm: LLMClient, session_factory, checkpointer=None):
     def budget_gate(state: AgentState) -> AgentState:
-        guardrails.enforce_budget(state["intake_turns"], state["tool_calls"])
+        guardrails.enforce_budget(state.get("intake_turns", 0), state.get("tool_calls", 0))
         return {}
 
     def build_context(state: AgentState) -> AgentState:

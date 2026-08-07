@@ -1,15 +1,15 @@
 import mongomock
 import pytest
+from fastapi import HTTPException
 
-from modules.identity.domain.models import User
-from modules.identity.domain.schemas import UserLogin, UserRegister
-from modules.identity.router import login_user, register_user
+from modules.identity.domain.models import Tenant, User
+from modules.identity.domain.schemas import TenantCreate, UserCreate, UserLogin
+from modules.identity.router import create_tenant, create_user, list_tenants, list_users, login_user, delete_tenant, delete_user, update_user
 from modules.identity.services.auth_service import (
     decode_access_token,
     hash_password,
     verify_password,
 )
-from modules.requisition.domain.models import CompanyProfile
 from modules.shared.db import Session
 
 
@@ -18,6 +18,30 @@ def session_factory():
     database = mongomock.MongoClient()["test"]
     return lambda: Session(database)
 
+
+def _make_user(session, role, tenant_id, email, name="Test User", password="securepass123", created_by=""):
+    user = User(
+        tenant_id=tenant_id,
+        email=email,
+        name=name,
+        password_hash=hash_password(password),
+        role=role,
+        created_by=created_by,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def _make_tenant(session, tenant_type="client", name="Acme Corp"):
+    tenant = Tenant(name=name, tenant_type=tenant_type)
+    session.add(tenant)
+    session.commit()
+    session.refresh(tenant)
+    return tenant
+
+
 def test_password_hashing():
     pwd = "my-secure-password"
     hashed = hash_password(pwd)
@@ -25,83 +49,449 @@ def test_password_hashing():
     assert verify_password(pwd, hashed) is True
     assert verify_password("wrong-password", hashed) is False
 
-def test_user_registration_with_company_profile(session_factory):
-    reg = UserRegister(
-        email="test@example.com",
-        name="Test User",
-        password="password123",
-        role="Hiring Manager",
-        company_name="Acme Corp",
-        tenant_type="client",
-        industry="Fintech",
-        size="51-200",
-        location="Bangalore",
-        tech_stack=["Python", "FastAPI", "PostgreSQL"],
-        notes="High-performance backend workforce"
-    )
-    
+
+def test_login_valid_and_invalid(session_factory):
     with session_factory() as session:
-        # Run register API function logic
-        res = register_user(reg, db=session)
-        assert res.access_token is not None
-        assert res.user.email == "test@example.com"
-        assert res.user.name == "Test User"
-        assert res.user.role == "Hiring Manager"
-        assert res.user.tenant_name == "Acme Corp"
-        assert res.user.tenant_type == "client"
-        assert res.user.industry == "Fintech"
-        assert res.user.size == "51-200"
-        assert res.user.location == "Bangalore"
-        assert res.user.tech_stack == ["Python", "FastAPI", "PostgreSQL"]
-        assert res.user.notes == "High-performance backend workforce"
+        tenant = _make_tenant(session)
+        _make_user(session, "Hiring Manager", tenant.id, "login@example.com")
 
-        # Verify User DB record
-        user_db = session.query(User).filter(User.email == "test@example.com").first()
-        assert user_db is not None
-        assert user_db.name == "Test User"
-        assert verify_password("password123", user_db.password_hash) is True
-
-        # Verify linked CompanyProfile DB record
-        profile_db = session.query(CompanyProfile).filter(CompanyProfile.tenant_id == res.user.tenant_id).first()
-        assert profile_db is not None
-        assert profile_db.name == "Acme Corp"
-        assert profile_db.industry == "Fintech"
-        assert profile_db.tech_stack == ["Python", "FastAPI", "PostgreSQL"]
-
-def test_user_login(session_factory):
-    reg = UserRegister(
-        email="login@example.com",
-        name="Login User",
-        password="securepass123",
-        role="Recruiter",
-        company_name="Consulting Org",
-        tenant_type="consultancy",
-        industry="Recruitment",
-        size="10-50",
-        location="Remote",
-        tech_stack=["React", "Node.js"],
-        notes="Talent acquisition consultants"
-    )
-    
-    with session_factory() as session:
-        register_user(reg, db=session)
-        
-        # Valid login
         login = UserLogin(email="login@example.com", password="securepass123")
         res = login_user(login, db=session)
         assert res.access_token is not None
-        assert res.user.role == "Recruiter"
-        assert res.user.tenant_name == "Consulting Org"
-        assert res.user.tenant_type == "consultancy"
-        assert res.user.tech_stack == ["React", "Node.js"]
+        assert res.user.role == "Hiring Manager"
+        assert res.user.tenant_name == "Acme Corp"
+        assert res.user.tenant_type == "client"
+        assert res.user.created_by == ""
 
-        # Decode token and verify content
         payload = decode_access_token(res.access_token)
         assert payload is not None
         assert payload["email"] == "login@example.com"
-        assert payload["role"] == "Recruiter"
-        
-        # Invalid login
-        with pytest.raises(Exception):
-            invalid_login = UserLogin(email="login@example.com", password="wrongpassword")
-            login_user(invalid_login, db=session)
+        assert payload["role"] == "Hiring Manager"
+
+        with pytest.raises(HTTPException):
+            login_user(UserLogin(email="login@example.com", password="wrongpassword"), db=session)
+
+
+def test_login_rejects_deactivated_account(session_factory):
+    with session_factory() as session:
+        tenant = _make_tenant(session)
+        _make_user(session, "HR", tenant.id, "hr@example.com")
+        user = session.query(User).filter(User.email == "hr@example.com").first()
+        user.is_active = False
+        session.commit()
+
+        with pytest.raises(HTTPException):
+            login_user(UserLogin(email="hr@example.com", password="securepass123"), db=session)
+
+
+def test_super_admin_creates_company_admin(session_factory):
+    with session_factory() as session:
+        platform_tenant = _make_tenant(session, "client", "Term Jobs Platform")
+        super_admin = _make_user(session, "Super Admin", platform_tenant.id, "super@example.com")
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        consultancy_tenant = _make_tenant(session, "consultancy", "Vendor Agency")
+
+        admin_res = create_user(
+            UserCreate(
+                email="admin@example.com",
+                name="Admin Person",
+                password="pass1234",
+                role="Admin",
+                tenant_id=client_tenant.id,
+            ),
+            current_user=super_admin,
+            db=session,
+        )
+        assert admin_res.role == "Admin"
+        assert admin_res.tenant_id == client_tenant.id
+        assert admin_res.created_by == super_admin.id
+
+        consultancy_admin_res = create_user(
+            UserCreate(
+                email="vendoradmin@example.com",
+                name="Vendor Admin",
+                password="pass1234",
+                role="Admin",
+                tenant_id=consultancy_tenant.id,
+            ),
+            current_user=super_admin,
+            db=session,
+        )
+        assert consultancy_admin_res.role == "Admin"
+        assert consultancy_admin_res.tenant_id == consultancy_tenant.id
+
+
+def test_super_admin_cannot_create_non_admin(session_factory):
+    with session_factory() as session:
+        platform_tenant = _make_tenant(session, "client", "Term Jobs Platform")
+        super_admin = _make_user(session, "Super Admin", platform_tenant.id, "super@example.com")
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="hr@example.com",
+                    name="HR Person",
+                    password="pass1234",
+                    role="HR",
+                    tenant_id=client_tenant.id,
+                ),
+                current_user=super_admin,
+                db=session,
+            )
+
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="rec@example.com",
+                    name="Recruiter",
+                    password="pass1234",
+                    role="Recruiter",
+                    tenant_id=client_tenant.id,
+                ),
+                current_user=super_admin,
+                db=session,
+            )
+
+
+def test_admin_creates_hiring_manager(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+
+        hm_res = create_user(
+            UserCreate(email="hm@example.com", name="Hiring Manager", password="pass1234", role="Hiring Manager"),
+            current_user=admin,
+            db=session,
+        )
+        assert hm_res.role == "Hiring Manager"
+        # Hiring Manager inherits the Admin's tenant.
+        assert hm_res.tenant_id == client_tenant.id
+        assert hm_res.created_by == admin.id
+
+
+def test_hr_creates_hiring_manager(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        hr = _make_user(session, "HR", client_tenant.id, "hr@example.com")
+
+        hm_res = create_user(
+            UserCreate(email="hm@example.com", name="Hiring Manager", password="pass1234", role="Hiring Manager"),
+            current_user=hr,
+            db=session,
+        )
+        assert hm_res.role == "Hiring Manager"
+        assert hm_res.tenant_id == client_tenant.id
+        assert hm_res.created_by == hr.id
+
+
+def test_provisioning_role_denied(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        consultancy_tenant = _make_tenant(session, "consultancy", "Vendor Agency")
+
+        # Admin trying to create another Admin (not allowed).
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="admin2@example.com", name="Admin2", password="pass1234", role="Admin"),
+                current_user=admin,
+                db=session,
+            )
+
+        # Admin trying to create an HR (not allowed).
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="hr@example.com", name="HR", password="pass1234", role="HR"),
+                current_user=admin,
+                db=session,
+            )
+
+        # Admin trying to create a Recruiter (not allowed; Recruiters need a consultancy tenant).
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="rec@example.com",
+                    name="Recruiter",
+                    password="pass1234",
+                    role="Recruiter",
+                    tenant_id=consultancy_tenant.id,
+                ),
+                current_user=admin,
+                db=session,
+            )
+
+        # HR trying to create another HR (not allowed).
+        hr = _make_user(session, "HR", client_tenant.id, "hr@example.com")
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="hr2@example.com", name="HR2", password="pass1234", role="HR"),
+                current_user=hr,
+                db=session,
+            )
+
+        # Hiring Manager trying to create anything (not allowed at all).
+        hm = _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com")
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="hm2@example.com", name="HM2", password="pass1234", role="Hiring Manager"),
+                current_user=hm,
+                db=session,
+            )
+
+        # Invalid role string.
+        super_admin = _make_user(session, "Super Admin", client_tenant.id, "super@example.com")
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="x@example.com", name="X", password="pass1234", role="CEO"),
+                current_user=super_admin,
+                db=session,
+            )
+
+
+def test_admin_requires_tenant(session_factory):
+    with session_factory() as session:
+        platform_tenant = _make_tenant(session, "client", "Term Jobs Platform")
+        super_admin = _make_user(session, "Super Admin", platform_tenant.id, "super@example.com")
+
+        # Admin without a tenant_id is rejected.
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="admin@example.com", name="Admin", password="pass1234", role="Admin"),
+                current_user=super_admin,
+                db=session,
+            )
+
+        # Admin pointing at a nonexistent tenant is rejected.
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="admin@example.com", name="Admin", password="pass1234", role="Admin", tenant_id="nope"),
+                current_user=super_admin,
+                db=session,
+            )
+
+
+def test_duplicate_email_rejected(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        _make_user(session, "Hiring Manager", client_tenant.id, "dup@example.com")
+
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="dup@example.com", name="Duplicate", password="pass1234", role="Hiring Manager"),
+                current_user=admin,
+                db=session,
+            )
+
+
+def test_super_admin_tenant_management(session_factory):
+    with session_factory() as session:
+        platform_tenant = _make_tenant(session, "client", "Term Jobs Platform")
+        super_admin = _make_user(session, "Super Admin", platform_tenant.id, "super@example.com")
+
+        created = create_tenant(
+            TenantCreate(name="Vendor Agency", tenant_type="consultancy"),
+            current_user=super_admin,
+            db=session,
+        )
+        assert created.name == "Vendor Agency"
+        assert created.tenant_type == "consultancy"
+        assert created.id
+
+        create_tenant(
+            TenantCreate(name="Client Inc", tenant_type="client"),
+            current_user=super_admin,
+            db=session,
+        )
+
+        result = list_tenants(current_user=super_admin, db=session)
+        names = [t.name for t in result]
+        assert "Vendor Agency" in names
+        assert "Client Inc" in names
+        assert "Term Jobs Platform" in names
+
+    # Non-super-admin cannot create tenants.
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        with pytest.raises(HTTPException):
+            create_tenant(
+                TenantCreate(name="Extra Co", tenant_type="client"),
+                current_user=admin,
+                db=session,
+            )
+        with pytest.raises(HTTPException):
+            create_tenant(
+                TenantCreate(name="Extra Co", tenant_type="client"),
+                current_user=admin,
+                db=session,
+            )
+
+
+def test_admin_lists_own_tenant_only(session_factory):
+    from modules.identity.router import list_tenants
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+
+        result = list_tenants(current_user=admin, db=session)
+        assert [t.name for t in result] == ["Client Inc"]
+
+
+def test_list_users_scoping(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        other_tenant = _make_tenant(session, "consultancy", "Vendor Agency")
+
+        super_admin = _make_user(session, "Super Admin", other_tenant.id, "super@example.com")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        hm = _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com", created_by=admin.id)
+        hr = _make_user(session, "HR", client_tenant.id, "hr@example.com")
+        _make_user(session, "Hiring Manager", client_tenant.id, "hm2@example.com", created_by=hr.id)
+        _make_user(session, "Admin", other_tenant.id, "otheradmin@example.com")
+
+        # Super Admin sees everyone.
+        all_emails = {u.email for u in list_users(current_user=super_admin, db=session)}
+        assert all_emails == {
+            "super@example.com",
+            "admin@example.com",
+            "hm@example.com",
+            "hr@example.com",
+            "hm2@example.com",
+            "otheradmin@example.com",
+        }
+
+        # Admin sees only their tenant.
+        admin_emails = {u.email for u in list_users(current_user=admin, db=session)}
+        assert admin_emails == {"admin@example.com", "hm@example.com", "hr@example.com", "hm2@example.com"}
+
+        # HR sees only the accounts they created.
+        hr_emails = {u.email for u in list_users(current_user=hr, db=session)}
+        assert hr_emails == {"hm2@example.com"}
+
+        # Hiring Manager cannot list users.
+        with pytest.raises(HTTPException):
+            list_users(current_user=hm, db=session)
+
+
+def test_update_user_email_and_password(session_factory):
+    from modules.identity.domain.schemas import UserUpdate
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        hm = _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com", created_by=admin.id)
+
+        # Super Admin updates email + password.
+        super_admin = _make_user(session, "Super Admin", client_tenant.id, "super@example.com")
+        res = update_user(
+            hm.id,
+            UserUpdate(email="hm-new@example.com", password="newpass123"),
+            current_user=super_admin,
+            db=session,
+        )
+        assert res.email == "hm-new@example.com"
+
+        # New password works.
+        login = login_user(UserLogin(email="hm-new@example.com", password="newpass123"), db=session)
+        assert login.user.email == "hm-new@example.com"
+
+        # Duplicate email rejected.
+        with pytest.raises(HTTPException):
+            update_user(
+                hm.id,
+                UserUpdate(email="admin@example.com"),
+                current_user=super_admin,
+                db=session,
+            )
+
+
+def test_update_user_scoping(session_factory):
+    from modules.identity.domain.schemas import UserUpdate
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        other_tenant = _make_tenant(session, "consultancy", "Vendor Agency")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        other_admin = _make_user(session, "Admin", other_tenant.id, "otheradmin@example.com")
+        hr = _make_user(session, "HR", client_tenant.id, "hr@example.com")
+        hm = _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com", created_by=hr.id)
+
+        # Admin cannot update an account in another tenant.
+        with pytest.raises(HTTPException):
+            update_user(
+                other_admin.id,
+                UserUpdate(name="Nope"),
+                current_user=admin,
+                db=session,
+            )
+
+        # Admin can update an HM in their own tenant.
+        res = update_user(hm.id, UserUpdate(name="Updated HM"), current_user=admin, db=session)
+        assert res.name == "Updated HM"
+
+        # HR can update an HM they created, but not one they didn't.
+        other_hm = _make_user(session, "Hiring Manager", client_tenant.id, "otherhm@example.com", created_by=admin.id)
+        with pytest.raises(HTTPException):
+            update_user(other_hm.id, UserUpdate(name="Nope"), current_user=hr, db=session)
+
+        # Hiring Manager cannot update anyone.
+        with pytest.raises(HTTPException):
+            update_user(hm.id, UserUpdate(name="Nope"), current_user=hm, db=session)
+
+
+def test_delete_tenant_cascades_users(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        super_admin = _make_user(session, "Super Admin", client_tenant.id, "super@example.com")
+        _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com")
+
+        delete_tenant(client_tenant.id, current_user=super_admin, db=session)
+
+        assert session.query(Tenant).filter(Tenant.id == client_tenant.id).first() is None
+        assert session.query(User).filter(User.tenant_id == client_tenant.id).all() == []
+
+        # Other tenants are untouched.
+        other = _make_tenant(session, "client", "Other Co")
+        assert session.query(Tenant).filter(Tenant.id == other.id).first() is not None
+
+    # Only Super Admin can delete tenants.
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        with pytest.raises(HTTPException):
+            delete_tenant(client_tenant.id, current_user=admin, db=session)
+
+
+def test_delete_user_scoping(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        other_tenant = _make_tenant(session, "consultancy", "Vendor Agency")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+        other_admin = _make_user(session, "Admin", other_tenant.id, "otheradmin@example.com")
+        hr = _make_user(session, "HR", client_tenant.id, "hr@example.com")
+        hm = _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com", created_by=hr.id)
+
+        # Admin cannot delete accounts outside their tenant.
+        with pytest.raises(HTTPException):
+            delete_user(other_admin.id, current_user=admin, db=session)
+
+        # HR can delete the HMs they created.
+        delete_user(hm.id, current_user=hr, db=session)
+        assert session.query(User).filter(User.id == hm.id).first() is None
+
+        # Admin can delete accounts within their tenant.
+        delete_user(hr.id, current_user=admin, db=session)
+        assert session.query(User).filter(User.id == hr.id).first() is None
+
+        # Super Admin can delete anyone.
+        super_admin = _make_user(session, "Super Admin", client_tenant.id, "super@example.com")
+        delete_user(admin.id, current_user=super_admin, db=session)
+        assert session.query(User).filter(User.id == admin.id).first() is None
+
+        # NotFound.
+        with pytest.raises(HTTPException):
+            delete_user("missing-id", current_user=super_admin, db=session)

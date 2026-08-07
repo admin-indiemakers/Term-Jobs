@@ -2,7 +2,7 @@ import os
 import shutil
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from services.pdf_parser import extract_text_from_pdf
 from services.scoring import rank_candidates
@@ -14,6 +14,8 @@ from services.db_service import (
     fetch_candidates_from_db
 )
 from services.email_service import send_shortlist_notification, send_rejection_notification
+from modules.identity.domain.models import User
+from modules.identity.router import get_current_user
 
 router = APIRouter()
 
@@ -24,6 +26,13 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 CANDIDATE_STORE: List[dict] = []
 
 
+def _tenant_filter(current_user: User) -> str | None:
+    """Return the tenant_id to scope queries to; Super Admin sees all (None)."""
+    if current_user.role == "Super Admin":
+        return None
+    return current_user.tenant_id
+
+
 class ApprovalRequest(BaseModel):
     submission_id: str
     action: str  # "shortlist" or "reject"
@@ -32,9 +41,9 @@ class ApprovalRequest(BaseModel):
 
 
 @router.get("/requisitions")
-async def get_db_requisitions():
+async def get_db_requisitions(current_user: User = Depends(get_current_user)):
     """Fetch Job Descriptions directly from remote PostgreSQL database."""
-    requisitions = fetch_published_requisitions()
+    requisitions = fetch_published_requisitions(tenant_id=_tenant_filter(current_user))
     return {
         "status": "success",
         "count": len(requisitions),
@@ -43,9 +52,9 @@ async def get_db_requisitions():
 
 
 @router.get("/requisitions/{req_id}")
-async def get_db_requisition_detail(req_id: str):
+async def get_db_requisition_detail(req_id: str, current_user: User = Depends(get_current_user)):
     """Fetch specific Job Description details from PostgreSQL."""
-    req = fetch_requisition_by_id(req_id)
+    req = fetch_requisition_by_id(req_id, tenant_id=_tenant_filter(current_user))
     if not req:
         raise HTTPException(status_code=404, detail=f"Requisition ID '{req_id}' not found in database")
     return {
@@ -55,9 +64,9 @@ async def get_db_requisition_detail(req_id: str):
 
 
 @router.get("/candidates/shortlisted")
-async def get_shortlisted_vendor_candidates(requisition_id: Optional[str] = None):
+async def get_shortlisted_vendor_candidates(requisition_id: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Fetch ONLY shortlisted candidates from all vendors stored in PostgreSQL, ranked by match score."""
-    candidates = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")
+    candidates = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted", tenant_id=_tenant_filter(current_user))
     return {
         "status": "success",
         "count": len(candidates),
@@ -70,7 +79,8 @@ async def screen_multiple_candidates(
     jd: str = Form(...),
     requisition_id: Optional[str] = Form(None),
     vendor_name: Optional[str] = Form("Vendor A"),
-    files: List[UploadFile] = File(...)
+    files: List[UploadFile] = File(...),
+    current_user: User = Depends(get_current_user),
 ):
     """Screen multiple uploaded resume PDFs against a Job Description and rank them in memory for Vendor HR review."""
     if not files:
@@ -113,6 +123,7 @@ async def screen_multiple_candidates(
         cand["vendor_name"] = vendor_name or "Vendor A"
         cand["status"] = "Screened"
         cand["email_notification_status"] = "Pending HR Shortlist"
+        cand["tenant_id"] = current_user.tenant_id
         CANDIDATE_STORE.append(cand)
 
     return {
@@ -123,12 +134,17 @@ async def screen_multiple_candidates(
 
 
 @router.get("/approval-queue")
-async def get_approval_queue(requisition_id: Optional[str] = None):
+async def get_approval_queue(requisition_id: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Retrieve candidates queued for Vendor HR review."""
-    pending = [c for c in CANDIDATE_STORE if c.get("status") == "Screened"]
-    
+    tenant_id = _tenant_filter(current_user)
+    pending = [
+        c for c in CANDIDATE_STORE
+        if c.get("status") == "Screened"
+        and (tenant_id is None or c.get("tenant_id") == tenant_id)
+    ]
+
     # Fetch shortlisted candidates from PostgreSQL
-    db_shortlisted = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")
+    db_shortlisted = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted", tenant_id=tenant_id)
 
     return {
         "status": "success",
@@ -140,22 +156,27 @@ async def get_approval_queue(requisition_id: Optional[str] = None):
 
 
 @router.post("/approve-candidate")
-async def approve_candidate(req: ApprovalRequest):
+async def approve_candidate(req: ApprovalRequest, current_user: User = Depends(get_current_user)):
     """Transition candidate status: ONLY save to PostgreSQL when Vendor HR approves & Shortlists a candidate."""
     action = req.action.lower()
     if action not in ["shortlist", "reject"]:
         raise HTTPException(status_code=400, detail="Invalid action. Must be 'shortlist' or 'reject'")
+
+    tenant_id = _tenant_filter(current_user)
 
     # Search candidate in memory screening cache
     target_cand = next((c for c in CANDIDATE_STORE if c.get("submission_id") == req.submission_id), None)
 
     if not target_cand:
         # Search in DB
-        db_candidates = fetch_candidates_from_db()
+        db_candidates = fetch_candidates_from_db(tenant_id=tenant_id)
         target_cand = next((c for c in db_candidates if c["submission_id"] == req.submission_id), None)
 
     if not target_cand:
         raise HTTPException(status_code=404, detail=f"Submission ID '{req.submission_id}' not found")
+
+    if tenant_id is not None and target_cand.get("tenant_id") not in (None, tenant_id):
+        raise HTTPException(status_code=403, detail="You do not have access to this candidate")
 
     old_status = target_cand.get("status", "Screened")
     
@@ -166,7 +187,7 @@ async def approve_candidate(req: ApprovalRequest):
         target_cand["hiring_manager_notes"] = req.notes or ""
 
         # ONLY SAVE TO POSTGRESQL WHEN SHORTLISTED BY VENDOR HR
-        save_candidate_submission(target_cand, requisition_id=target_cand.get("requisition_id"), vendor_name=target_cand["vendor_name"])
+        save_candidate_submission(target_cand, requisition_id=target_cand.get("requisition_id"), vendor_name=target_cand["vendor_name"], tenant_id=target_cand.get("tenant_id"))
         update_candidate_status_in_db(req.submission_id, "Shortlisted", req.notes)
 
         # Send Gmail notification
@@ -210,7 +231,7 @@ async def approve_candidate(req: ApprovalRequest):
 
 
 @router.post("/test-screen")
-async def test_screen(vendor_name: str = "Vendor A"):
+async def test_screen(vendor_name: str = "Vendor A", current_user: User = Depends(get_current_user)):
     """Test endpoint for vendor screening without initial DB persistence."""
     jd = """
     Senior Python & FastAPI Developer
@@ -270,6 +291,7 @@ async def test_screen(vendor_name: str = "Vendor A"):
         cand["vendor_name"] = vendor_name
         cand["status"] = "Screened"
         cand["email_notification_status"] = "Pending HR Shortlist"
+        cand["tenant_id"] = current_user.tenant_id
         CANDIDATE_STORE.append(cand)
 
     return {

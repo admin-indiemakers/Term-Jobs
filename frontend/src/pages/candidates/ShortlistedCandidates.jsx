@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { Icons, StatCard, WelcomeBanner } from '../../components/Dashboard';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -99,31 +100,17 @@ export default function ShortlistedCandidates() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Shortlisted Candidates</h1>
-          <p className="page-subtitle">Candidates shortlisted by your hiring managers across all requisitions.</p>
-        </div>
-        <Link to="/dashboard/requisitions" className="ghost-btn-link">← Back to requisitions</Link>
-      </div>
+      <WelcomeBanner title="Shortlisted Candidates" subtitle="Candidates shortlisted by your hiring managers across all requisitions.">
+        <Link to="/dashboard/requisitions" className="ghost-btn-link" style={{ color: '#dbeafe', fontSize: '0.88rem' }}>
+          ← Back to requisitions
+        </Link>
+      </WelcomeBanner>
 
       <div className="stat-grid">
-        <div className="stat-card">
-          <div className="stat-dot accent-green"></div>
-          <div><div className="stat-value">{stats.total}</div><div className="stat-label">Shortlisted</div></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-dot accent-blue"></div>
-          <div><div className="stat-value">{stats.strong}</div><div className="stat-label">Strong Matches</div></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-dot accent-amber"></div>
-          <div><div className="stat-value">{stats.moderate}</div><div className="stat-label">Moderate Matches</div></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-dot accent-slate"></div>
-          <div><div className="stat-value">{stats.avg ? Math.round(stats.avg) + '%' : '—'}</div><div className="stat-label">Avg Match Score</div></div>
-        </div>
+        <StatCard label="Shortlisted" value={stats.total} icon={Icons.check} tint="tint-green" />
+        <StatCard label="Strong Matches" value={stats.strong} icon={Icons.briefcase} tint="tint-blue" />
+        <StatCard label="Moderate Matches" value={stats.moderate} icon={Icons.layers} tint="tint-amber" />
+        <StatCard label="Avg Match Score" value={stats.avg ? Math.round(stats.avg) + '%' : '—'} icon={Icons.users} tint="tint-violet" />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

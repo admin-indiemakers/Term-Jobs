@@ -19,12 +19,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from modules.candidate.router import router as candidate_router
+from modules.identity.domain.models import User
+from modules.identity.router import get_current_user
 from modules.identity.router import router as identity_router
 from modules.requisition.domain import models, schemas
 from modules.shared.db import get_session, init_db
@@ -55,17 +57,32 @@ app.include_router(screening_router, prefix="/api", tags=["Screening"])
 
 # --- LLM provider selection -------------------------------------------------
 def _build_service():
+    from modules.requisition.agent.graph import make_checkpointer
     from modules.requisition.llm.groq import GroqClient
     from modules.requisition.llm.mock import MockLLM
     from modules.requisition.services.requisition_service import RequisitionService
 
     provider = os.getenv("LLM_PROVIDER", "groq").lower()
     llm = GroqClient() if provider == "groq" else MockLLM()
-    return RequisitionService(llm=llm, session_factory=get_session)
+    return RequisitionService(
+        llm=llm,
+        session_factory=get_session,
+        checkpointer=make_checkpointer(),
+    )
 
 
 service = _build_service()
-init_db()
+try:
+    init_db()
+except Exception as exc:  # noqa: BLE001
+    # Do not hard-crash at startup if MongoDB is unreachable (e.g. Atlas
+    # paused / IP allowlist changed). The server boots and reports degraded
+    # status via /health so callers can diagnose instead of a blank port.
+    import logging
+
+    logging.getLogger("uvicorn.error").warning(
+        "init_db failed (MongoDB unreachable?): %s", exc
+    )
 
 
 # --- request/response models ------------------------------------------------
@@ -173,31 +190,53 @@ def _get_requisition(requisition_id: str) -> models.Requisition:
     return req
 
 
+def _require_tenant(req: models.Requisition, current_user: User) -> models.Requisition:
+    """Raise 403 unless the requester belongs to the requisition's tenant (Super Admin sees all)."""
+    if current_user.role == "Super Admin":
+        return req
+    if req.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You do not have access to this requisition",
+        )
+    return req
+
+
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
-def create_company_profile(body: CompanyProfileIn) -> dict:
+def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(get_current_user)) -> dict:
     with get_session() as session:
-        prof = models.CompanyProfile(**body.model_dump())
+        prof = models.CompanyProfile(**body.model_dump(), tenant_id=current_user.tenant_id)
         session.add(prof)
         session.commit()
         session.refresh(prof)
-        return {"id": prof.id, "name": prof.name}
+        return {"id": prof.id, "name": prof.name, "tenant_id": prof.tenant_id}
 
 
 @app.get("/company-profiles")
-def list_company_profiles() -> list[dict]:
+def list_company_profiles(current_user: User = Depends(get_current_user)) -> list[dict]:
     with get_session() as session:
-        rows = (
-            session.query(models.CompanyProfile)
-            .order_by(models.CompanyProfile.created_at.desc())
-            .all()
-        )
+        query = session.query(models.CompanyProfile).order_by(models.CompanyProfile.created_at.desc())
+        if current_user.role != "Super Admin":
+            query = query.filter(models.CompanyProfile.tenant_id == current_user.tenant_id)
+        rows = query.all()
         return [_company_dict(r) for r in rows]
 
 
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
-def create_requisition(body: RequisitionIn) -> dict:
+def create_requisition(body: RequisitionIn, current_user: User = Depends(get_current_user)) -> dict:
+    # The company profile must belong to the requester's tenant.
+    with get_session() as session:
+        prof = session.get(models.CompanyProfile, body.company_profile_id)
+    if prof is None:
+        raise HTTPException(status_code=404, detail="company profile not found")
+    if current_user.role != "Super Admin" and prof.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Company profile does not belong to your tenant",
+        )
+
     intent = schemas.RoleIntent(
         title=body.title,
         description=body.prompt or body.description,
@@ -207,23 +246,24 @@ def create_requisition(body: RequisitionIn) -> dict:
     req = service.create(
         company_profile_id=body.company_profile_id,
         intent=intent,
-        created_by=body.created_by,
+        created_by=body.created_by or current_user.id,
+        tenant_id=current_user.tenant_id,
     )
     return _requisition_dict(req.id)
 
 
 @app.get("/requisitions")
-def list_requisitions() -> list[dict]:
+def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
     with get_session() as session:
-        rows = (
-            session.query(models.Requisition)
-            .order_by(models.Requisition.created_at.desc())
-            .all()
-        )
+        query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
+        if current_user.role != "Super Admin":
+            query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
+        rows = query.all()
         profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}
         return [
             {
                 "id": r.id,
+                "tenant_id": r.tenant_id,
                 "status": r.status,
                 "title": r.title,
                 "company_profile_id": r.company_profile_id,
@@ -240,28 +280,28 @@ def list_requisitions() -> list[dict]:
 
 
 @app.get("/requisitions/{requisition_id}")
-def get_requisition(requisition_id: str) -> dict:
-    _get_requisition(requisition_id)
+def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/start")
-def start_requisition_flow(requisition_id: str) -> dict:
-    _get_requisition(requisition_id)
+def start_requisition_flow(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     state, interrupt = service.start_intake(requisition_id)
     return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/answer")
-def answer_intake_question(requisition_id: str, body: AnswerIn) -> dict:
-    _get_requisition(requisition_id)
+def answer_intake_question(requisition_id: str, body: AnswerIn, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     state, interrupt = service.answer(requisition_id, body.answer)
     return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/refine")
-def refine_requisition_jd(requisition_id: str, body: RefineIn) -> dict:
-    _get_requisition(requisition_id)
+def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     try:
         state, interrupt = service.refine(requisition_id, body.instruction)
     except ValueError as exc:
@@ -270,8 +310,8 @@ def refine_requisition_jd(requisition_id: str, body: RefineIn) -> dict:
 
 
 @app.post("/requisitions/{requisition_id}/approve")
-def approve_requisition(requisition_id: str, body: ApproveIn | None = None) -> dict:
-    _get_requisition(requisition_id)
+def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     edited = None
     if body and body.edited_role:
         try:
@@ -284,38 +324,38 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None) -> d
 
 
 @app.post("/requisitions/{requisition_id}/reject")
-def reject_requisition(requisition_id: str, body: RejectIn | None = None) -> dict:
-    _get_requisition(requisition_id)
+def reject_requisition(requisition_id: str, body: RejectIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     reviewer = body.reviewer if body else None
     state, interrupt = service.reject(requisition_id, reviewer=reviewer)
     return _interrupt_payload(state, interrupt)
 
 
 @app.post("/requisitions/{requisition_id}/publish")
-def publish_requisition(requisition_id: str, body: ApproveByIn | None = None) -> dict:
-    _get_requisition(requisition_id)
+def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     by = body.by if body else None
     req = service.publish(requisition_id, by=by)
     return _requisition_dict(req.id)
 
 
 @app.post("/requisitions/{requisition_id}/close")
-def close_requisition(requisition_id: str) -> dict:
-    _get_requisition(requisition_id)
+def close_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     req = service.close(requisition_id)
     return _requisition_dict(req.id)
 
 
 @app.post("/requisitions/{requisition_id}/reset")
-def reset_requisition(requisition_id: str) -> dict:
-    _get_requisition(requisition_id)
+def reset_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     req = service.reset(requisition_id)
     return _requisition_dict(req.id)
 
 
 @app.delete("/requisitions/{requisition_id}", status_code=204)
-def delete_requisition(requisition_id: str) -> None:
-    _get_requisition(requisition_id)
+def delete_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> None:
+    _require_tenant(_get_requisition(requisition_id), current_user)
     service.delete(requisition_id)
 
 
@@ -327,4 +367,11 @@ def index() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq")}
+    from modules.shared.db import db
+
+    try:
+        db.command("ping")
+        db_status = "ok"
+    except Exception:  # noqa: BLE001
+        db_status = "degraded"
+    return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq"), "db": db_status}

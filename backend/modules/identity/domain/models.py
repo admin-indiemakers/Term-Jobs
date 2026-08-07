@@ -29,7 +29,9 @@ class User(Model):
         "email": "",
         "name": "",
         "password_hash": "",
-        "role": "",  # Hiring Manager, Recruiter, Admin
+        "role": "",  # Admin, HR, Hiring Manager, Recruiter
+        "created_by": "",  # id of the user who provisioned this account ("" for Admin)
+        "is_active": True,
         "created_at": _utcnow,
     }
 
@@ -39,4 +41,6 @@ class User(Model):
     name = Column("name")
     password_hash = Column("password_hash")
     role = Column("role")
+    created_by = Column("created_by")
+    is_active = Column("is_active")
     created_at = Column("created_at")

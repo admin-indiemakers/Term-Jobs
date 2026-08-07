@@ -4,6 +4,8 @@ import AuthPage from './pages/AuthPage';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import HRDashboard from './pages/HRDashboard';
 import RequisitionOverview from './pages/requisitions/RequisitionOverview';
 import NewRequisition from './pages/requisitions/NewRequisition';
 import RequisitionDetail from './pages/requisitions/RequisitionDetail';
@@ -27,15 +29,19 @@ function RequireAuth({ children }) {
 function HomeRedirect() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
+  if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
 function DashboardIndex() {
   const { user } = useAuth();
+  if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
+  if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -60,6 +66,8 @@ export default function App() {
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard />} />
           <Route path="admin" element={<AdminDashboard />} />
+          <Route path="superadmin" element={<SuperAdminDashboard />} />
+          <Route path="hr" element={<HRDashboard />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

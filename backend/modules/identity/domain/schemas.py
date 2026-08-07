@@ -1,22 +1,36 @@
 from pydantic import BaseModel, ConfigDict, Field
 
+ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter")
+
+# Which roles a given role is allowed to provision.
+PROVISION_MATRIX = {
+    "Super Admin": ("Admin",),
+    "Admin": ("Hiring Manager",),
+    "HR": ("Hiring Manager",),
+}
+
 
 class TenantCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     tenant_type: str = Field("client", pattern="^(client|consultancy)$")
 
-class UserRegister(BaseModel):
-    email: str
+class TenantResponse(BaseModel):
+    id: str
+    name: str
+    tenant_type: str
+
+class UserCreate(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
     name: str = Field(..., min_length=1, max_length=255)
-    password: str = Field(..., min_length=1)
-    role: str = Field(default="Hiring Manager")
-    company_name: str = Field(default="Company", min_length=1, max_length=255)
-    tenant_type: str = Field(default="client")
-    industry: str = Field(default="")
-    size: str = Field(default="")
-    location: str = Field(default="")
-    tech_stack: list[str] = Field(default_factory=list)
-    notes: str = Field(default="")
+    password: str = Field(..., min_length=4, max_length=128)
+    role: str
+    tenant_id: str = ""
+
+class UserUpdate(BaseModel):
+    email: str | None = Field(None, min_length=3, max_length=255)
+    name: str | None = Field(None, min_length=1, max_length=255)
+    password: str | None = Field(None, min_length=4, max_length=128)
+    is_active: bool | None = None
 
 class UserLogin(BaseModel):
     email: str
@@ -37,6 +51,20 @@ class UserResponse(BaseModel):
     location: str = ""
     tech_stack: list[str] = Field(default_factory=list)
     notes: str = ""
+    created_by: str = ""
+    is_active: bool = True
+
+class UserListResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    tenant_id: str
+    tenant_name: str
+    tenant_type: str
+    is_active: bool
+    created_by: str = ""
+    created_at: str = ""
 
 class TokenResponse(BaseModel):
     access_token: str

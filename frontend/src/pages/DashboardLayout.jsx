@@ -30,7 +30,11 @@ export default function DashboardLayout() {
         ]
       : user.role === 'Recruiter'
         ? [{ to: '/dashboard/recruiter', label: 'Dashboard', end: true }]
-        : [{ to: '/dashboard/admin', label: 'Dashboard', end: true }];
+        : user.role === 'Admin'
+          ? [{ to: '/dashboard/admin', label: 'Dashboard', end: true }]
+          : user.role === 'Super Admin'
+            ? [{ to: '/dashboard/superadmin', label: 'Dashboard', end: true }]
+            : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
   return (
     <div className="app-shell">

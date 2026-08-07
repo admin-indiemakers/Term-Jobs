@@ -1,11 +1,19 @@
 """FastAPI router exposing candidate submissions for the Hiring Manager UI."""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from modules.candidate.domain.models import CandidateSubmission
+from modules.identity.domain.models import User
+from modules.identity.router import get_current_user
 from modules.requisition.domain.models import CompanyProfile, Requisition
 from modules.shared.db import get_session
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
+
+
+def _tenant_requisition_ids(session, tenant_id: str) -> set[str]:
+    """IDs of all requisitions belonging to a tenant."""
+    rows = session.query(Requisition.id).filter(Requisition.tenant_id == tenant_id).all()
+    return {r[0] for r in rows}
 
 
 def _candidate_dict(session, row: CandidateSubmission) -> dict:
@@ -36,7 +44,11 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
 
 
 @router.get("")
-def list_candidates(status: str | None = None, requisition_id: str | None = None) -> list[dict]:
+def list_candidates(
+    status: str | None = None,
+    requisition_id: str | None = None,
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
     """List candidate submissions, optionally filtered by status and/or requisition."""
     with get_session() as session:
         query = session.query(CandidateSubmission).order_by(CandidateSubmission.created_at.desc())
@@ -44,29 +56,41 @@ def list_candidates(status: str | None = None, requisition_id: str | None = None
             query = query.filter(CandidateSubmission.status == status)
         if requisition_id:
             query = query.filter(CandidateSubmission.requisition_id == requisition_id)
+        if current_user.role != "Super Admin":
+            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
+            query = query.filter(CandidateSubmission.requisition_id.in_(tenant_reqs or {""}))
         return [_candidate_dict(session, row) for row in query.all()]
 
 
 @router.get("/shortlisted")
-def list_shortlisted() -> list[dict]:
+def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dict]:
     """Shortcut for the shortlisted candidates queue."""
     with get_session() as session:
-        rows = (
+        query = (
             session.query(CandidateSubmission)
             .filter(CandidateSubmission.status == "Shortlisted")
             .order_by(
                 CandidateSubmission.match_score.desc().nulls_last(),
                 CandidateSubmission.created_at.desc(),
             )
-            .all()
         )
-        return [_candidate_dict(session, row) for row in rows]
+        if current_user.role != "Super Admin":
+            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
+            query = query.filter(CandidateSubmission.requisition_id.in_(tenant_reqs or {""}))
+        return [_candidate_dict(session, row) for row in query.all()]
 
 
 @router.get("/{candidate_id}")
-def get_candidate(candidate_id: str) -> dict:
+def get_candidate(candidate_id: str, current_user: User = Depends(get_current_user)) -> dict:
     with get_session() as session:
         row = session.get(CandidateSubmission, candidate_id)
         if row is None:
             raise HTTPException(status_code=404, detail="candidate not found")
+        if current_user.role != "Super Admin":
+            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
+            if row.requisition_id not in tenant_reqs:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You do not have access to this candidate",
+                )
         return _candidate_dict(session, row)

@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/StatusBadge';
+import { Icons, StatCard, WelcomeBanner } from '../../components/Dashboard';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -13,20 +14,8 @@ function formatDate(iso) {
   }
 }
 
-function StatCard({ label, value, accent }) {
-  return (
-    <div className="stat-card">
-      <div className={`stat-dot ${accent}`}></div>
-      <div>
-        <div className="stat-value">{value}</div>
-        <div className="stat-label">{label}</div>
-      </div>
-    </div>
-  );
-}
-
 export default function RequisitionOverview() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const navigate = useNavigate();
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,26 +48,31 @@ export default function RequisitionOverview() {
 
   return (
     <div className="page">
-      <div className="page-header">
-        <div>
-          <h1 className="page-title">Requisitions</h1>
-          <p className="page-subtitle">Create, structure, and publish job requirements with AI assistance.</p>
-        </div>
+      <WelcomeBanner
+        title="Requisitions"
+        subtitle="Create, structure, and publish job requirements with AI assistance."
+      >
         <Link to="/dashboard/requisitions/new" className="glow-btn">
           + New Requisition
         </Link>
-      </div>
+      </WelcomeBanner>
 
       <div className="stat-grid">
-        <StatCard label="Total Requisitions" value={counts.total} accent="accent-blue" />
-        <StatCard label="Draft" value={counts.Draft} accent="accent-slate" />
-        <StatCard label="Pending Approval" value={counts.PendingApproval} accent="accent-amber" />
-        <StatCard label="Published" value={counts.Published} accent="accent-green" />
+        <StatCard label="Total Requisitions" value={counts.total} icon={Icons.layers} tint="tint-blue" />
+        <StatCard label="Draft" value={counts.Draft} icon={Icons.tag} tint="tint-slate" />
+        <StatCard label="Pending Approval" value={counts.PendingApproval} icon={Icons.clock} tint="tint-amber" />
+        <StatCard label="Published" value={counts.Published} icon={Icons.check} tint="tint-green" />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="glass-panel table-card">
+        <div className="table-head">
+          <div>
+            <h2 className="card-title">All Requisitions</h2>
+            <p className="muted" style={{ fontSize: '0.82rem' }}>{counts.total} total</p>
+          </div>
+        </div>
         {loading ? (
           <p className="muted" style={{ padding: 24 }}>Loading requisitions...</p>
         ) : requisitions.length === 0 ? (
@@ -117,3 +111,4 @@ export default function RequisitionOverview() {
     </div>
   );
 }
+

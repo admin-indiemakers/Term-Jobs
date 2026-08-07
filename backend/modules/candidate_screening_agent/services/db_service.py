@@ -29,7 +29,7 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None = None, vendor_name: str = "Vendor A") -> str:
+def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None = None, vendor_name: str = "Vendor A", tenant_id: str | None = None) -> str:
     """Save or update candidate submission document in MongoDB."""
     init_db()
     submission_id = cand.get("submission_id") or str(uuid.uuid4())[:8]
@@ -39,6 +39,7 @@ def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None =
         doc = {
             "id": submission_id,
             "requisition_id": requisition_id or cand.get("requisition_id"),
+            "tenant_id": tenant_id or cand.get("tenant_id"),
             "candidate_name": cand["candidate_name"],
             "candidate_email": cand.get("candidate_email"),
             "vendor_name": vendor_name or cand.get("vendor_name", "Vendor A"),
@@ -76,7 +77,7 @@ def update_candidate_status_in_db(submission_id: str, status: str, notes: str | 
         return False
 
 
-def fetch_candidates_from_db(requisition_id: str | None = None, status: str | None = None) -> list[dict[str, Any]]:
+def fetch_candidates_from_db(requisition_id: str | None = None, status: str | None = None, tenant_id: str | None = None) -> list[dict[str, Any]]:
     """Fetch stored candidate submissions from MongoDB sorted by match_score DESC."""
     init_db()
     try:
@@ -86,6 +87,8 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
             query["requisition_id"] = requisition_id
         if status:
             query["status"] = status
+        if tenant_id:
+            query["tenant_id"] = tenant_id
 
         cursor = db["candidate_submissions"].find(query).sort(
             [("match_score", -1), ("created_at", -1)]
@@ -95,6 +98,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
             results.append({
                 "submission_id": doc.get("id"),
                 "requisition_id": doc.get("requisition_id"),
+                "tenant_id": doc.get("tenant_id"),
                 "candidate_name": doc.get("candidate_name"),
                 "candidate_email": doc.get("candidate_email"),
                 "vendor_name": doc.get("vendor_name") or "Vendor A",
@@ -116,11 +120,14 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
         return []
 
 
-def fetch_published_requisitions() -> list[dict[str, Any]]:
-    """Fetch all published requisitions from MongoDB."""
+def fetch_published_requisitions(tenant_id: str | None = None) -> list[dict[str, Any]]:
+    """Fetch published requisitions from MongoDB, optionally restricted to a tenant."""
     try:
         db = get_db()
-        cursor = db["requisitions"].find({}).sort("created_at", -1)
+        query = {"status": "Published"}
+        if tenant_id:
+            query["tenant_id"] = tenant_id
+        cursor = db["requisitions"].find(query).sort("created_at", -1)
         results = []
         for doc in cursor:
             markdown_jd = doc.get("generated_jd_markdown")
@@ -145,11 +152,14 @@ def fetch_published_requisitions() -> list[dict[str, Any]]:
         return []
 
 
-def fetch_requisition_by_id(req_id: str) -> dict[str, Any] | None:
+def fetch_requisition_by_id(req_id: str, tenant_id: str | None = None) -> dict[str, Any] | None:
     """Fetch a specific requisition by ID from MongoDB."""
     try:
         db = get_db()
-        doc = db["requisitions"].find_one({"id": req_id})
+        query: dict[str, Any] = {"id": req_id}
+        if tenant_id:
+            query["tenant_id"] = tenant_id
+        doc = db["requisitions"].find_one(query)
         if not doc:
             return None
 

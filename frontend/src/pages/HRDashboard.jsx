@@ -25,25 +25,15 @@ function rolePill(role) {
   return <span className={`role-pill ${map[role] || 'role-admin'}`}>{role}</span>;
 }
 
-const EMPTY_FORM = {
-  email: '',
-  name: '',
-  password: '',
-};
-
-export default function AdminDashboard() {
+export default function HRDashboard() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
 
-  const load = () => {
-    setLoading(true);
+  useEffect(() => {
     Promise.all([request('/api/auth/users', { token }), request('/requisitions', { token })])
       .then(([usersRes, reqsRes]) => {
         setUsers(usersRes || []);
@@ -52,41 +42,7 @@ export default function AdminDashboard() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  };
-
-  useEffect(load, [token]);
-
-  const handleInput = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError('');
-    setSuccess('');
-  };
-
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError('');
-    setSuccess('');
-    try {
-      await request('/api/auth/users', {
-        method: 'POST',
-        token,
-        body: {
-          email: form.email,
-          name: form.name,
-          password: form.password,
-          role: 'Hiring Manager',
-        },
-      });
-      setSuccess(`Hiring Manager account created for ${form.email}.`);
-      setForm({ ...EMPTY_FORM });
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  }, [token]);
 
   const hiringManagers = users.filter((u) => u.role === 'Hiring Manager');
   const published = requisitions.filter((r) => r.status === 'Published').length;
@@ -95,8 +51,8 @@ export default function AdminDashboard() {
   return (
     <div className="page">
       <WelcomeBanner
-        title="Admin Console"
-        subtitle={`${user.tenant_name} workspace — manage your Hiring Managers and oversee requisitions.`}
+        title="HR Overview"
+        subtitle={`${user.tenant_name} — oversight of the Hiring Managers you created and their requisitions.`}
       />
 
       <div className="stat-grid">
@@ -107,41 +63,11 @@ export default function AdminDashboard() {
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
 
       {loading ? (
         <p className="muted" style={{ padding: 24 }}>Loading workspace...</p>
       ) : (
         <>
-          <div className="glass-panel">
-            <div className="form-panel-head">
-              <div className="form-panel-icon">{Icons.usersPlus}</div>
-              <div>
-                <div className="form-panel-title">Create Hiring Manager Account</div>
-                <div className="form-panel-caption">New accounts are attached to your {user.tenant_name} workspace.</div>
-              </div>
-            </div>
-            <form onSubmit={handleCreateUser}>
-              <div className="form-grid">
-                <div>
-                  <label className="form-label">Full Name</label>
-                  <input type="text" name="name" required value={form.name} onChange={handleInput} className="auth-input" placeholder="e.g. Rahul Sharma" />
-                </div>
-                <div>
-                  <label className="form-label">Email Address</label>
-                  <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="hm@company.com" />
-                </div>
-                <div>
-                  <label className="form-label">Password</label>
-                  <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
-                </div>
-              </div>
-              <button type="submit" className="glow-btn" disabled={submitting} style={{ marginTop: 18 }}>
-                {submitting ? 'Creating...' : 'Create Hiring Manager'}
-              </button>
-            </form>
-          </div>
-
           <div className="glass-panel table-card">
             <div className="table-head">
               <div>
@@ -150,7 +76,9 @@ export default function AdminDashboard() {
               </div>
             </div>
             {hiringManagers.length === 0 ? (
-              <p className="muted" style={{ padding: 16 }}>No Hiring Manager accounts yet.</p>
+              <p className="muted" style={{ padding: 16 }}>
+                No Hiring Manager accounts yet. Ask your company admin to provision them.
+              </p>
             ) : (
               <table className="data-table">
                 <thead>
@@ -159,7 +87,6 @@ export default function AdminDashboard() {
                     <th>Email</th>
                     <th>Role</th>
                     <th>Status</th>
-                    <th>Created</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -169,7 +96,6 @@ export default function AdminDashboard() {
                       <td>{u.email}</td>
                       <td>{rolePill(u.role)}</td>
                       <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
-                      <td className="td-date">{formatDate(u.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
