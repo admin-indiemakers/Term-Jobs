@@ -21,11 +21,13 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 import modules.requisition.agent.graph as agent
 import modules.requisition.domain.models as models
 import modules.requisition.services.requisition_service as req_service
 from modules.candidate.router import router as candidate_router
+from modules.candidate_screening_agent.routers.screening import router as screening_router
 from modules.identity.router import router as identity_router
 from modules.shared.config import settings
 from modules.shared.db import get_session
@@ -43,6 +45,45 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(identity_router)
+app.include_router(candidate_router)
+app.include_router(screening_router)
+
+
+# --- Request Schemas ---
+class CompanyProfileIn(BaseModel):
+    name: str
+    industry: str = ""
+    size: str = ""
+    location: str = ""
+    tech_stack: list[str] = Field(default_factory=list)
+    notes: str = ""
+
+
+class RequisitionCreateIn(BaseModel):
+    company_profile_id: str
+    title: str
+    description: str = ""
+    tech_stack_hint: list[str] = Field(default_factory=list)
+    prompt: str = ""
+    created_by: str | None = None
+
+
+class AnswerIn(BaseModel):
+    answer: str
+
+
+class RefineIn(BaseModel):
+    instruction: str
+
+
+class ReviewIn(BaseModel):
+    reviewer: str | None = None
+
+
+class PublishIn(BaseModel):
+    by: str | None = None
 
 
 # --- LLM provider selection -------------------------------------------------
@@ -124,7 +165,7 @@ def _get_requisition(requisition_id: str) -> models.Requisition:
 
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
-def create_company_profile(body: req_service.CompanyProfileIn) -> dict:
+def create_company_profile(body: CompanyProfileIn) -> dict:
     with get_session() as session:
         prof = models.CompanyProfile(**body.model_dump())
         session.add(prof)
@@ -146,7 +187,7 @@ def list_company_profiles() -> list[dict]:
 
 # --- requisition CRUD --------------------------------------------------------
 @app.post("/requisitions", status_code=201)
-def create_requisition(body: req_service.RequisitionCreateIn) -> dict:
+def create_requisition(body: RequisitionCreateIn) -> dict:
     intent = req_service.build_intent(
         title=body.title,
         description=body.description,
@@ -214,7 +255,7 @@ def start_requisition_flow(requisition_id: str) -> dict:
 
 @app.post("/requisitions/{requisition_id}/answer")
 def answer_intake_question(
-    requisition_id: str, body: req_service.AnswerIn
+    requisition_id: str, body: AnswerIn
 ) -> dict:
     _get_requisition(requisition_id)
 
@@ -233,7 +274,7 @@ def answer_intake_question(
 
 @app.post("/requisitions/{requisition_id}/refine")
 def refine_requisition_jd(
-    requisition_id: str, body: req_service.RefineIn
+    requisition_id: str, body: RefineIn
 ) -> dict:
     _get_requisition(requisition_id)
 
@@ -252,7 +293,7 @@ def refine_requisition_jd(
 
 @app.post("/requisitions/{requisition_id}/approve")
 def approve_requisition(
-    requisition_id: str, body: req_service.ReviewIn | None = None
+    requisition_id: str, body: ReviewIn | None = None
 ) -> dict:
     reviewer = body.reviewer if body else None
     req_service.approve(requisition_id, reviewer=reviewer)
@@ -261,7 +302,7 @@ def approve_requisition(
 
 @app.post("/requisitions/{requisition_id}/reject")
 def reject_requisition(
-    requisition_id: str, body: req_service.ReviewIn | None = None
+    requisition_id: str, body: ReviewIn | None = None
 ) -> dict:
     reviewer = body.reviewer if body else None
     req_service.reject(requisition_id, reviewer=reviewer)
@@ -270,7 +311,7 @@ def reject_requisition(
 
 @app.post("/requisitions/{requisition_id}/publish")
 def publish_requisition(
-    requisition_id: str, body: req_service.PublishIn | None = None
+    requisition_id: str, body: PublishIn | None = None
 ) -> dict:
     by = body.by if body else None
     req_service.publish(requisition_id, by=by)

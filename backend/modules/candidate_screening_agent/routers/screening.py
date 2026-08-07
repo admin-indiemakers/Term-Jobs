@@ -4,16 +4,28 @@ import uuid
 from typing import List, Optional
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
-from services.pdf_parser import extract_text_from_pdf
-from services.scoring import rank_candidates
-from services.db_service import (
-    fetch_published_requisitions, 
-    fetch_requisition_by_id,
-    save_candidate_submission,
-    update_candidate_status_in_db,
-    fetch_candidates_from_db
-)
-from services.email_service import send_shortlist_notification, send_rejection_notification
+try:
+    from services.pdf_parser import extract_text_from_pdf
+    from services.scoring import rank_candidates
+    from services.db_service import (
+        fetch_published_requisitions, 
+        fetch_requisition_by_id,
+        save_candidate_submission,
+        update_candidate_status_in_db,
+        fetch_candidates_from_db
+    )
+    from services.email_service import send_shortlist_notification, send_rejection_notification
+except ImportError:
+    from modules.candidate_screening_agent.services.pdf_parser import extract_text_from_pdf
+    from modules.candidate_screening_agent.services.scoring import rank_candidates
+    from modules.candidate_screening_agent.services.db_service import (
+        fetch_published_requisitions, 
+        fetch_requisition_by_id,
+        save_candidate_submission,
+        update_candidate_status_in_db,
+        fetch_candidates_from_db
+    )
+    from modules.candidate_screening_agent.services.email_service import send_shortlist_notification, send_rejection_notification
 
 router = APIRouter()
 
@@ -31,7 +43,7 @@ class ApprovalRequest(BaseModel):
     vendor_name: Optional[str] = "Vendor A"
 
 
-@router.get("/requisitions")
+@router.get("/api/screening/requisitions")
 async def get_db_requisitions():
     """Fetch Job Descriptions directly from remote PostgreSQL database."""
     requisitions = fetch_published_requisitions()
@@ -42,9 +54,9 @@ async def get_db_requisitions():
     }
 
 
-@router.get("/requisitions/{req_id}")
+@router.get("/api/screening/requisitions/{req_id}")
 async def get_db_requisition_detail(req_id: str):
-    """Fetch specific Job Description details from PostgreSQL."""
+    """Fetch specific Job Description details from MongoDB."""
     req = fetch_requisition_by_id(req_id)
     if not req:
         raise HTTPException(status_code=404, detail=f"Requisition ID '{req_id}' not found in database")
@@ -54,7 +66,7 @@ async def get_db_requisition_detail(req_id: str):
     }
 
 
-@router.get("/candidates/shortlisted")
+@router.get("/api/candidates/shortlisted")
 async def get_shortlisted_vendor_candidates(requisition_id: Optional[str] = None):
     """Fetch ONLY shortlisted candidates from all vendors stored in PostgreSQL, ranked by match score."""
     candidates = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")
@@ -65,7 +77,7 @@ async def get_shortlisted_vendor_candidates(requisition_id: Optional[str] = None
     }
 
 
-@router.post("/screen-resumes")
+@router.post("/api/screen-resumes")
 async def screen_multiple_candidates(
     jd: str = Form(...),
     requisition_id: Optional[str] = Form(None),

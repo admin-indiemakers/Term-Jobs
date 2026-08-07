@@ -7,15 +7,20 @@ from typing import Any
 
 from pymongo import MongoClient
 
-DEFAULT_DB_URL = "mongodb://localhost:27017/"
+DEFAULT_DB_URL = "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net/termjobs?retryWrites=true&w=majority"
 DEFAULT_DB_NAME = "termjobs"
 
 
 def get_db():
     """Return the MongoDB database."""
-    db_url = os.getenv("MONGODB_URL", DEFAULT_DB_URL)
+    db_url = (
+        os.getenv("MONGODB_URL")
+        or os.getenv("MONGODB_URI")
+        or os.getenv("MONGO_URI")
+        or DEFAULT_DB_URL
+    )
     db_name = os.getenv("MONGO_DB_NAME", DEFAULT_DB_NAME)
-    client = MongoClient(db_url, serverSelectionTimeoutMS=15000)
+    client = MongoClient(db_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
     return client[db_name]
 
 

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { request } from '../api/client';
+import { request, API_BASE_URL } from '../api/client';
 
 export default function RecruiterDashboard() {
   const { user, token } = useAuth();
@@ -186,7 +186,8 @@ export default function RecruiterDashboard() {
     files.forEach((f) => formData.append('files', f));
 
     try {
-      const res = await fetch('/api/screen-resumes', {
+      // Direct call to Backend API URL on Port 8000
+      const res = await fetch(`${API_BASE_URL}/api/screen-resumes`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${authToken}`,

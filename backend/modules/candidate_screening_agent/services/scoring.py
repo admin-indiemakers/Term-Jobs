@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Optional
-from services.llm_service import screen_candidate
+try:
+    from services.llm_service import screen_candidate
+except ImportError:
+    from .llm_service import screen_candidate
 
 
 def rank_candidates(
