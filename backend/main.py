@@ -197,12 +197,23 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
     """Raise 403 unless the requester belongs to the requisition's tenant (Super Admin sees all)."""
     if current_user.role == "Super Admin":
         return req
-    if req.tenant_id != current_user.tenant_id:
-        raise HTTPException(
-            status_code=403,
-            detail="You do not have access to this requisition",
-        )
-    return req
+    if req.tenant_id == current_user.tenant_id:
+        return req
+    # Vendors may view requisitions of companies that engaged them.
+    if current_user.role == "Recruiter":
+        from modules.identity.domain.models import VendorEngagement
+
+        with get_session() as session:
+            engaged = session.query(VendorEngagement).filter(
+                VendorEngagement.vendor_tenant_id == current_user.tenant_id,
+                VendorEngagement.tenant_id == req.tenant_id,
+            ).first()
+        if engaged:
+            return req
+    raise HTTPException(
+        status_code=403,
+        detail="You do not have access to this requisition",
+    )
 
 
 # --- company profile endpoints ----------------------------------------------
@@ -259,9 +270,22 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
 
 @app.get("/requisitions")
 def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
+    from modules.identity.domain.models import VendorEngagement
+
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
-        if current_user.role != "Super Admin":
+        if current_user.role == "Super Admin":
+            pass
+        elif current_user.role == "Recruiter":
+            # Vendors only see requisitions from companies that engaged them.
+            engaged_company_ids = {
+                e.tenant_id
+                for e in session.query(VendorEngagement)
+                .filter(VendorEngagement.vendor_tenant_id == current_user.tenant_id)
+                .all()
+            }
+            query = query.filter(models.Requisition.tenant_id.in_(engaged_company_ids or {""}))
+        else:
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
         profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}

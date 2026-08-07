@@ -46,3 +46,25 @@ class User(Model):
     created_by = Column("created_by")
     is_active = Column("is_active")
     created_at = Column("created_at")
+
+
+class VendorEngagement(Model):
+    """Links a client company tenant to a consultancy vendor tenant.
+
+    Only engaged vendors can see / submit against that company's published
+    requisitions.
+    """
+
+    __tablename__ = "vendor_engagements"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "tenant_id": "",  # client company tenant id
+        "vendor_tenant_id": "",  # consultancy tenant id
+        "created_at": _utcnow,
+    }
+
+    id = Column("id")
+    tenant_id = Column("tenant_id")
+    vendor_tenant_id = Column("vendor_tenant_id")
+    created_at = Column("created_at")

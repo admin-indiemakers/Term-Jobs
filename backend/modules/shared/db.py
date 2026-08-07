@@ -84,6 +84,9 @@ class Column:
     def __ne__(self, other) -> Criterion:
         return Criterion(self.name, "$ne", other)
 
+    def in_(self, values) -> Criterion:
+        return Criterion(self.name, "$in", list(values))
+
     def asc(self) -> Sort:
         return Sort(self.name, ASCENDING)
 
@@ -130,9 +133,12 @@ class Query:
     def filter(self, *criteria, **kwargs) -> "Query":
         for c in criteria:
             if isinstance(c, Criterion):
-                self._filters[c.name] = (
-                    {"$ne": c.value} if c.op == "$ne" else c.value
-                )
+                if c.op == "$ne":
+                    self._filters[c.name] = {"$ne": c.value}
+                elif c.op == "$in":
+                    self._filters[c.name] = {"$in": c.value if c.value else [""]}
+                else:
+                    self._filters[c.name] = c.value
             elif isinstance(c, dict):
                 self._filters.update(c)
         for name, value in kwargs.items():

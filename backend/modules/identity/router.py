@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
-from modules.identity.domain.models import Tenant, User
+from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
     PROVISION_MATRIX,
     ROLES,
@@ -12,6 +12,8 @@ from modules.identity.domain.schemas import (
     UserLogin,
     UserResponse,
     UserUpdate,
+    VendorEngagementsIn,
+    VendorResponse,
 )
 from modules.identity.services.auth_service import (
     create_access_token,
@@ -478,3 +480,89 @@ def create_tenant(
     db.commit()
 
     return TenantResponse(id=tenant.id, name=tenant.name, tenant_type=tenant.tenant_type)
+
+
+def _engaged_vendor_ids(db: Session, client_tenant_id: str) -> set[str]:
+    """Tenant ids of consultancy vendors currently engaged by a client company."""
+    rows = (
+        db.query(VendorEngagement)
+        .filter(VendorEngagement.tenant_id == client_tenant_id)
+        .all()
+    )
+    return {r.vendor_tenant_id for r in rows}
+
+
+# --- Vendor management (company Admin selects which vendors it works with) ----
+@router.get("/vendors", response_model=list[VendorResponse])
+def list_vendors(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Admin lists all consultancy vendors; engaged flags reflect this company's selection.
+
+    Super Admin sees every vendor with no per-company engagement context.
+    """
+    if current_user.role not in ("Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company Admins can list vendors",
+        )
+
+    engaged = _engaged_vendor_ids(db, current_user.tenant_id) if current_user.role == "Admin" else set()
+    vendors = db.query(Tenant).filter(Tenant.tenant_type == "consultancy").all()
+    profiles = {
+        p.tenant_id: p
+        for p in db.query(CompanyProfile).filter(CompanyProfile.tenant_id.in_([v.id for v in vendors])).all()
+    }
+    return [
+        VendorResponse(
+            id=v.id,
+            name=v.name,
+            industry=(prof.industry if (prof := profiles.get(v.id)) else ""),
+            size=(prof.size if (prof := profiles.get(v.id)) else ""),
+            location=(prof.location if (prof := profiles.get(v.id)) else ""),
+            specializations=(prof.tech_stack or [] if (prof := profiles.get(v.id)) else []),
+            engaged=(v.id in engaged),
+        )
+        for v in sorted(vendors, key=lambda t: t.name)
+    ]
+
+
+@router.put("/vendors", response_model=list[VendorResponse])
+def set_vendor_engagements(
+    body: VendorEngagementsIn,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Admin replaces the set of vendors its company works with."""
+    if current_user.role != "Admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company Admins can manage vendor partnerships",
+        )
+
+    # Validate requested vendor ids are real consultancy tenants.
+    existing = {
+        v.id
+        for v in db.query(Tenant)
+        .filter(Tenant.tenant_type == "consultancy")
+        .filter(Tenant.id.in_(body.vendor_tenant_ids or []))
+        .all()
+    }
+    invalid = set(body.vendor_tenant_ids or []) - existing
+    if invalid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown vendor ids: {', '.join(sorted(invalid))}",
+        )
+
+    existing_rows = db.query(VendorEngagement).filter(
+        VendorEngagement.tenant_id == current_user.tenant_id
+    ).all()
+    for row in existing_rows:
+        db.delete(row)
+    for vid in body.vendor_tenant_ids:
+        db.add(VendorEngagement(tenant_id=current_user.tenant_id, vendor_tenant_id=vid))
+    db.commit()
+
+    return list_vendors(current_user=current_user, db=db)

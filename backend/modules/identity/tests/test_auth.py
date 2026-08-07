@@ -495,3 +495,71 @@ def test_delete_user_scoping(session_factory):
         # NotFound.
         with pytest.raises(HTTPException):
             delete_user("missing-id", current_user=super_admin, db=session)
+
+
+def test_admin_lists_and_engages_vendors(session_factory):
+    from modules.identity.domain.models import VendorEngagement
+    from modules.identity.domain.schemas import VendorEngagementsIn
+    from modules.identity.router import list_vendors, set_vendor_engagements
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        vendor_a = _make_tenant(session, "consultancy", "Vendor A")
+        vendor_b = _make_tenant(session, "consultancy", "Vendor B")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+
+        # Admin lists vendors; none engaged initially.
+        vendors = list_vendors(current_user=admin, db=session)
+        assert {v.id for v in vendors} == {vendor_a.id, vendor_b.id}
+        assert all(not v.engaged for v in vendors)
+
+        # Admin engages Vendor A only.
+        updated = set_vendor_engagements(
+            VendorEngagementsIn(vendor_tenant_ids=[vendor_a.id]),
+            current_user=admin,
+            db=session,
+        )
+        engaged = [v for v in updated if v.engaged]
+        assert [v.id for v in engaged] == [vendor_a.id]
+
+        # Engagement persisted.
+        rows = session.query(VendorEngagement).filter(
+            VendorEngagement.tenant_id == client_tenant.id
+        ).all()
+        assert {r.vendor_tenant_id for r in rows} == {vendor_a.id}
+
+        # Replace with Vendor B.
+        updated2 = set_vendor_engagements(
+            VendorEngagementsIn(vendor_tenant_ids=[vendor_b.id]),
+            current_user=admin,
+            db=session,
+        )
+        engaged2 = [v for v in updated2 if v.engaged]
+        assert [v.id for v in engaged2] == [vendor_b.id]
+
+        # Invalid vendor id rejected.
+        with pytest.raises(HTTPException):
+            set_vendor_engagements(
+                VendorEngagementsIn(vendor_tenant_ids=["missing-vendor"]),
+                current_user=admin,
+                db=session,
+            )
+
+
+def test_non_admin_cannot_manage_vendors(session_factory):
+    from modules.identity.domain.schemas import VendorEngagementsIn
+    from modules.identity.router import list_vendors, set_vendor_engagements
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        vendor_a = _make_tenant(session, "consultancy", "Vendor A")
+        recruiter = _make_user(session, "Recruiter", vendor_a.id, "rec@example.com")
+
+        with pytest.raises(HTTPException):
+            list_vendors(current_user=recruiter, db=session)
+        with pytest.raises(HTTPException):
+            set_vendor_engagements(
+                VendorEngagementsIn(vendor_tenant_ids=[client_tenant.id]),
+                current_user=recruiter,
+                db=session,
+            )

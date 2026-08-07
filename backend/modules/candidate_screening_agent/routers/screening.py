@@ -39,11 +39,29 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 CANDIDATE_STORE: List[dict] = []
 
 
-def _tenant_filter(current_user: User) -> str | None:
-    """Return the tenant_id to scope queries to; Super Admin sees all (None)."""
+def _tenant_filter(current_user: User) -> tuple[str | None, list[str] | None]:
+    """Return (tenant_id, company_tenant_ids) scope for the current user.
+
+    Super Admin sees all (None, None). Recruiters (vendors) only see
+    requisitions from companies that engaged their consultancy.
+    """
     if current_user.role == "Super Admin":
-        return None
-    return current_user.tenant_id
+        return None, None
+
+    if current_user.role == "Recruiter":
+        from modules.identity.domain.models import VendorEngagement
+        from modules.shared.db import get_session
+
+        with get_session() as session:
+            company_ids = {
+                e.tenant_id
+                for e in session.query(VendorEngagement)
+                .filter(VendorEngagement.vendor_tenant_id == current_user.tenant_id)
+                .all()
+            }
+        return None, list(company_ids or [])
+
+    return current_user.tenant_id, None
 
 
 class ApprovalRequest(BaseModel):
@@ -56,7 +74,8 @@ class ApprovalRequest(BaseModel):
 @router.get("/api/screening/requisitions")
 async def get_db_requisitions(current_user: User = Depends(get_current_user)):
     """Fetch Job Descriptions directly from remote PostgreSQL database."""
-    requisitions = fetch_published_requisitions(tenant_id=_tenant_filter(current_user))
+    _tenant_id, company_ids = _tenant_filter(current_user)
+    requisitions = fetch_published_requisitions(company_tenant_ids=company_ids) if company_ids is not None else fetch_published_requisitions(tenant_id=_tenant_id)
     return {
         "status": "success",
         "count": len(requisitions),
@@ -67,7 +86,8 @@ async def get_db_requisitions(current_user: User = Depends(get_current_user)):
 @router.get("/api/screening/requisitions/{req_id}")
 async def get_db_requisition_detail(req_id: str, current_user: User = Depends(get_current_user)):
     """Fetch specific Job Description details from MongoDB."""
-    req = fetch_requisition_by_id(req_id, tenant_id=_tenant_filter(current_user))
+    _tenant_id, company_ids = _tenant_filter(current_user)
+    req = fetch_requisition_by_id(req_id, tenant_id=_tenant_id, company_tenant_ids=company_ids)
     if not req:
         raise HTTPException(status_code=404, detail=f"Requisition ID '{req_id}' not found in database")
     return {
@@ -79,7 +99,8 @@ async def get_db_requisition_detail(req_id: str, current_user: User = Depends(ge
 @router.get("/api/candidates/shortlisted")
 async def get_shortlisted_vendor_candidates(requisition_id: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Fetch ONLY shortlisted candidates from all vendors stored in PostgreSQL, ranked by match score."""
-    candidates = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted", tenant_id=_tenant_filter(current_user))
+    _tenant_id, company_ids = _tenant_filter(current_user)
+    candidates = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted", tenant_id=_tenant_id, company_tenant_ids=company_ids)
     return {
         "status": "success",
         "count": len(candidates),
@@ -149,7 +170,8 @@ async def screen_multiple_candidates(
 @router.get("/approval-queue")
 async def get_approval_queue(requisition_id: Optional[str] = None, current_user: User = Depends(get_current_user)):
     """Retrieve candidates queued for Vendor HR review."""
-    tenant_id = _tenant_filter(current_user)
+    _tenant_id, company_ids = _tenant_filter(current_user)
+    tenant_id = _tenant_id
     pending = [
         c for c in CANDIDATE_STORE
         if c.get("status") == "Screened"
@@ -157,7 +179,7 @@ async def get_approval_queue(requisition_id: Optional[str] = None, current_user:
     ]
 
     # Fetch shortlisted candidates from PostgreSQL
-    db_shortlisted = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted", tenant_id=tenant_id)
+    db_shortlisted = fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted", tenant_id=tenant_id, company_tenant_ids=company_ids)
 
     return {
         "status": "success",
@@ -175,14 +197,15 @@ async def approve_candidate(req: ApprovalRequest, current_user: User = Depends(g
     if action not in ["shortlist", "reject"]:
         raise HTTPException(status_code=400, detail="Invalid action. Must be 'shortlist' or 'reject'")
 
-    tenant_id = _tenant_filter(current_user)
+    _tenant_id, company_ids = _tenant_filter(current_user)
+    tenant_id = _tenant_id
 
     # Search candidate in memory screening cache
     target_cand = next((c for c in CANDIDATE_STORE if c.get("submission_id") == req.submission_id), None)
 
     if not target_cand:
         # Search in DB
-        db_candidates = fetch_candidates_from_db(tenant_id=tenant_id)
+        db_candidates = fetch_candidates_from_db(tenant_id=tenant_id, company_tenant_ids=company_ids)
         target_cand = next((c for c in db_candidates if c["submission_id"] == req.submission_id), None)
 
     if not target_cand:

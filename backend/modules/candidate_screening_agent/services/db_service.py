@@ -91,7 +91,7 @@ def update_candidate_status_in_db(submission_id: str, status: str, notes: str | 
         return False
 
 
-def fetch_candidates_from_db(requisition_id: str | None = None, status: str | None = None, tenant_id: str | None = None) -> list[dict[str, Any]]:
+def fetch_candidates_from_db(requisition_id: str | None = None, status: str | None = None, tenant_id: str | None = None, company_tenant_ids: list[str] | None = None) -> list[dict[str, Any]]:
     """Fetch stored candidate submissions from MongoDB sorted by match_score DESC."""
     init_db()
     try:
@@ -101,7 +101,9 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
             query["requisition_id"] = requisition_id
         if status:
             query["status"] = status
-        if tenant_id:
+        if company_tenant_ids is not None:
+            query["tenant_id"] = {"$in": company_tenant_ids}
+        elif tenant_id:
             query["tenant_id"] = tenant_id
 
         cursor = db["candidate_submissions"].find(query).sort(
@@ -134,12 +136,14 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
         return []
 
 
-def fetch_published_requisitions(tenant_id: str | None = None) -> list[dict[str, Any]]:
-    """Fetch published requisitions from MongoDB, optionally restricted to a tenant."""
+def fetch_published_requisitions(tenant_id: str | None = None, company_tenant_ids: list[str] | None = None) -> list[dict[str, Any]]:
+    """Fetch published requisitions from MongoDB, optionally restricted to a tenant or set of company tenants."""
     try:
         db = get_db()
-        query = {"status": "Published"}
-        if tenant_id:
+        query: dict[str, Any] = {"status": "Published"}
+        if company_tenant_ids is not None:
+            query["tenant_id"] = {"$in": company_tenant_ids}
+        elif tenant_id:
             query["tenant_id"] = tenant_id
         cursor = db["requisitions"].find(query).sort("created_at", -1)
         results = []
@@ -166,12 +170,14 @@ def fetch_published_requisitions(tenant_id: str | None = None) -> list[dict[str,
         return []
 
 
-def fetch_requisition_by_id(req_id: str, tenant_id: str | None = None) -> dict[str, Any] | None:
+def fetch_requisition_by_id(req_id: str, tenant_id: str | None = None, company_tenant_ids: list[str] | None = None) -> dict[str, Any] | None:
     """Fetch a specific requisition by ID from MongoDB."""
     try:
         db = get_db()
         query: dict[str, Any] = {"id": req_id}
-        if tenant_id:
+        if company_tenant_ids is not None:
+            query["tenant_id"] = {"$in": company_tenant_ids}
+        elif tenant_id:
             query["tenant_id"] = tenant_id
         doc = db["requisitions"].find_one(query)
         if not doc:

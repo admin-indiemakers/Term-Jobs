@@ -24,6 +24,18 @@ class TenantResponse(BaseModel):
     name: str
     tenant_type: str
 
+class VendorResponse(BaseModel):
+    id: str
+    name: str
+    industry: str = ""
+    size: str = ""
+    location: str = ""
+    specializations: list[str] = Field(default_factory=list)
+    engaged: bool = False
+
+class VendorEngagementsIn(BaseModel):
+    vendor_tenant_ids: list[str] = Field(default_factory=list)
+
 class UserCreate(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)
     name: str = Field(..., min_length=1, max_length=255)

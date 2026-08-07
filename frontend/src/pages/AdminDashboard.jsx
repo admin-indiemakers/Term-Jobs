@@ -35,7 +35,9 @@ export default function AdminDashboard() {
   const { token, user } = useAuth();
   const [users, setUsers] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
+  const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [savingVendors, setSavingVendors] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -45,10 +47,11 @@ export default function AdminDashboard() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([request('/api/auth/users', { token }), request('/requisitions', { token })])
-      .then(([usersRes, reqsRes]) => {
+    Promise.all([request('/api/auth/users', { token }), request('/requisitions', { token }), request('/api/auth/vendors', { token })])
+      .then(([usersRes, reqsRes, vendorsRes]) => {
         setUsers(usersRes || []);
         setRequisitions(reqsRes || []);
+        setVendors(vendorsRes || []);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -56,6 +59,32 @@ export default function AdminDashboard() {
   };
 
   useEffect(load, [token]);
+
+  const toggleVendor = (id) => {
+    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, engaged: !v.engaged } : v)));
+    setError('');
+    setSuccess('');
+  };
+
+  const saveVendors = async () => {
+    setSavingVendors(true);
+    setError('');
+    setSuccess('');
+    try {
+      const selected = vendors.filter((v) => v.engaged).map((v) => v.id);
+      const updated = await request('/api/auth/vendors', {
+        method: 'PUT',
+        token,
+        body: { vendor_tenant_ids: selected },
+      });
+      setVendors(updated || []);
+      setSuccess(`Vendor partnerships updated — ${updated.length} engaged.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingVendors(false);
+    }
+  };
 
   const handleInput = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -123,6 +152,57 @@ export default function AdminDashboard() {
         <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} tint="tint-violet" />
         <StatCard label="Pending Approval" value={pending} icon={Icons.clock} tint="tint-amber" />
         <StatCard label="Published" value={published} icon={Icons.check} tint="tint-green" />
+      </div>
+
+      <div className="glass-panel">
+        <div className="form-panel-head">
+          <div className="form-panel-icon">{Icons.users}</div>
+          <div>
+            <div className="form-panel-title">Partner Vendors</div>
+            <div className="form-panel-caption">
+              Select which consultancy vendors your Hiring Managers work with. Only engaged vendors can see your company's published requisitions and submit screened candidates.
+            </div>
+          </div>
+        </div>
+        {loading ? (
+          <p className="muted">Loading vendors...</p>
+        ) : vendors.length === 0 ? (
+          <p className="muted">
+            No vendor consultancies onboarded yet. Ask the Super Admin to onboard vendors before you can partner with them.
+          </p>
+        ) : (
+          <div>
+            <div className="vendor-grid">
+              {vendors.map((v) => (
+                <div
+                  key={v.id}
+                  className={`vendor-card ${v.engaged ? 'vendor-card-selected' : ''}`}
+                  onClick={() => toggleVendor(v.id)}
+                >
+                  <div className="vendor-card-top">
+                    <span className="vendor-check">{v.engaged ? '✓' : ''}</span>
+                    <span className="vendor-name">{v.name}</span>
+                  </div>
+                  <div className="vendor-meta">
+                    {v.location && <span>{v.location}</span>}
+                    {v.industry && <span>{v.industry}</span>}
+                    {v.size && <span>{v.size}</span>}
+                  </div>
+                  {v.specializations.length > 0 && (
+                    <div className="vendor-tags">
+                      {v.specializations.slice(0, 4).map((s) => (
+                        <span key={s} className="vendor-tag">{s}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button className="glow-btn" style={{ marginTop: 16 }} onClick={saveVendors} disabled={savingVendors}>
+              {savingVendors ? 'Saving...' : 'Save Vendor Partnerships'}
+            </button>
+          </div>
+        )}
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
