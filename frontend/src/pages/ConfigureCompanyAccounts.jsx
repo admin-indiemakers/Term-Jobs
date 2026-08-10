@@ -20,6 +20,7 @@ function rolePill(role) {
     HR: 'role-hr',
     'Hiring Manager': 'role-hiringmanager',
     Recruiter: 'role-recruiter',
+    Director: 'role-director',
   };
   return <span className={`role-pill ${map[role] || 'role-admin'}`}>{role}</span>;
 }

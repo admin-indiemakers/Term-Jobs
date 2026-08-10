@@ -4,6 +4,7 @@ from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
     PROVISION_MATRIX,
     ROLES,
+    PasswordChange,
     TenantCreate,
     TenantResponse,
     TokenResponse,
@@ -132,6 +133,24 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
     )
 
 
+@router.post("/change-password")
+def change_password(
+    body: PasswordChange,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Self-service password change: verifies the current password before updating."""
+    if not verify_password(body.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    user = db.query(User).filter(User.id == current_user.id).first()
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return {"status": "ok", "message": "Password updated successfully"}
+
+
 # --- Admin/HR provisioning (MVP v2: no self-registration) --------------------
 
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -209,6 +228,19 @@ def create_user(
                     detail="HR accounts must belong to a client tenant",
                 )
         tenant_id = body.tenant_id or current_user.tenant_id
+
+    elif body.role == "Director":
+        # Directors are company executives provisioned by the company Admin.
+        if body.tenant_id:
+            tenant = db.query(Tenant).filter(Tenant.id == body.tenant_id).first()
+            if not tenant or tenant.tenant_type != "client":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Director accounts must belong to a client tenant",
+                )
+            tenant_id = body.tenant_id
+        else:
+            tenant_id = current_user.tenant_id
 
     else:
         # Hiring Manager: place in the same tenant as the Admin/HR who provisions them.
@@ -502,7 +534,7 @@ def list_vendors(
 
     Super Admin sees every vendor with no per-company engagement context.
     """
-    if current_user.role not in ("Admin", "Super Admin"):
+    if current_user.role not in ("Admin", "Super Admin", "Director"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only company Admins can list vendors",

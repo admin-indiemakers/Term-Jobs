@@ -160,6 +160,7 @@ export default function RequisitionDetail() {
   const currentStep = STATE_STEPS.indexOf(normStatus);
   const coverage = req.coverage_result;
   const canShowReview = (req.structured_role || req.generated_jd_markdown) && ['Structuring', 'PendingApproval', 'Published', 'Closed'].includes(normStatus);
+  const isReadOnly = user.role === 'Director';
 
   return (
     <div className="page page-narrow">
@@ -178,6 +179,12 @@ export default function RequisitionDetail() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {info && <div className="alert alert-success">{info}</div>}
+
+      {isReadOnly && (
+        <div className="alert" style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', color: '#fbbf24' }}>
+          Read-only view — Directors can review requisitions but cannot make changes.
+        </div>
+      )}
 
       <div className="glass-panel timeline-card">
         <div className="timeline">
@@ -208,7 +215,7 @@ export default function RequisitionDetail() {
         </div>
       )}
 
-      {normStatus === 'Draft' && (
+      {!isReadOnly && normStatus === 'Draft' && (
         <div className="glass-panel action-card">
           <h3 className="card-title">Run the Job Requirement Agent</h3>
           <p className="card-text">
@@ -220,7 +227,7 @@ export default function RequisitionDetail() {
         </div>
       )}
 
-      {normStatus === 'Intake' && (
+      {!isReadOnly && normStatus === 'Intake' && (
         <div className="glass-panel action-card">
           <div className="assistant-head">
             <span className="assistant-avatar">AI</span>
@@ -249,7 +256,7 @@ export default function RequisitionDetail() {
         </div>
       )}
 
-      {normStatus === 'Structuring' && (
+      {!isReadOnly && normStatus === 'Structuring' && (
         <div className="glass-panel action-card">
           <h3 className="card-title">Review the generated role</h3>
           <p className="card-text">The AI has drafted a structured role and JD. Edit before approving, or request a refinement.</p>
@@ -278,7 +285,7 @@ export default function RequisitionDetail() {
         </div>
       )}
 
-      {normStatus === 'PendingApproval' && (
+      {!isReadOnly && normStatus === 'PendingApproval' && (
         <div className="glass-panel action-card">
           <h3 className="card-title">Approved — ready to publish</h3>
           <p className="card-text">Publish this requisition to share it with your consultancy partners.</p>
@@ -293,7 +300,7 @@ export default function RequisitionDetail() {
         </div>
       )}
 
-      {normStatus === 'Published' && (
+      {!isReadOnly && normStatus === 'Published' && (
         <div className="glass-panel action-card">
           <h3 className="card-title">Published</h3>
           <p className="card-text">This requisition is live. Close it when the position is filled.</p>
@@ -303,7 +310,7 @@ export default function RequisitionDetail() {
         </div>
       )}
 
-      {normStatus === 'Closed' && (
+      {!isReadOnly && normStatus === 'Closed' && (
         <div className="glass-panel action-card">
           <h3 className="card-title">Closed</h3>
           <p className="card-text">This requisition is finished. Reset to draft to re-run the flow.</p>

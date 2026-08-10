@@ -216,9 +216,19 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
     )
 
 
+def _require_writable(current_user: User) -> None:
+    """Raise 403 for read-only roles (Director) on mutation endpoints."""
+    if current_user.role == "Director":
+        raise HTTPException(
+            status_code=403,
+            detail="Directors have read-only access",
+        )
+
+
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
 def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
 
     with get_session() as session:
         prof = models.CompanyProfile(**body.model_dump(), tenant_id=current_user.tenant_id)
@@ -241,6 +251,8 @@ def list_company_profiles(current_user: User = Depends(get_current_user)) -> lis
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
 def create_requisition(body: RequisitionIn, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
+
     # The company profile must belong to the requester's tenant.
     with get_session() as session:
         prof = session.get(models.CompanyProfile, body.company_profile_id)
@@ -316,6 +328,7 @@ def get_requisition(requisition_id: str, current_user: User = Depends(get_curren
 
 @app.post("/requisitions/{requisition_id}/start")
 def start_requisition_flow(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     state, interrupt = service.start_intake(requisition_id)
     return _interrupt_payload(state, interrupt)
@@ -323,6 +336,7 @@ def start_requisition_flow(requisition_id: str, current_user: User = Depends(get
 
 @app.post("/requisitions/{requisition_id}/answer")
 def answer_intake_question(requisition_id: str, body: AnswerIn, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     state, interrupt = service.answer(requisition_id, body.answer)
     return _interrupt_payload(state, interrupt)
@@ -330,6 +344,7 @@ def answer_intake_question(requisition_id: str, body: AnswerIn, current_user: Us
 
 @app.post("/requisitions/{requisition_id}/refine")
 def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     try:
         state, interrupt = service.refine(requisition_id, body.instruction)
@@ -340,6 +355,7 @@ def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: Use
 
 @app.post("/requisitions/{requisition_id}/approve")
 def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     edited = None
     if body and body.edited_role:
@@ -355,6 +371,7 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
 
 @app.post("/requisitions/{requisition_id}/reject")
 def reject_requisition(requisition_id: str, body: RejectIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
 
     reviewer = body.reviewer if body else None
@@ -364,6 +381,7 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
 
 @app.post("/requisitions/{requisition_id}/publish")
 def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
 
     by = body.by if body else None
@@ -373,6 +391,7 @@ def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, cu
 
 @app.post("/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     req = service.close(requisition_id)
     return _requisition_dict(req.id)
@@ -380,6 +399,7 @@ def close_requisition(requisition_id: str, current_user: User = Depends(get_curr
 
 @app.post("/requisitions/{requisition_id}/reset")
 def reset_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     req = service.reset(requisition_id)
     return _requisition_dict(req.id)
@@ -387,6 +407,7 @@ def reset_requisition(requisition_id: str, current_user: User = Depends(get_curr
 
 @app.delete("/requisitions/{requisition_id}", status_code=204)
 def delete_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> None:
+    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     service.delete(requisition_id)
 

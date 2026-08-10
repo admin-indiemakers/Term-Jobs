@@ -80,6 +80,22 @@ def test_require_tenant_gates_cross_tenant_access():
     assert app_main._require_tenant(req, super_admin) is req
 
 
+def test_director_read_only_enforcement():
+    director = User(id="u-d", tenant_id="tenant-a", role="Director")
+    req = Requisition(id="r-1", tenant_id="tenant-a")
+
+    # Directors can read requisitions in their own tenant.
+    assert app_main._require_tenant(req, director) is req
+
+    # Directors are blocked from any mutation endpoint.
+    with pytest.raises(HTTPException) as exc:
+        app_main._require_writable(director)
+    assert exc.value.status_code == 403
+
+    # Other roles (e.g. Admin, Hiring Manager) are allowed to write.
+    app_main._require_writable(User(id="u-hm", tenant_id="tenant-a", role="Hiring Manager"))
+
+
 def test_create_company_profile_assigns_tenant(db_session_factory):
     with db_session_factory() as session:
         tenant = _make_tenant(session, name="Bearitt")

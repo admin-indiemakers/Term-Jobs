@@ -18,6 +18,7 @@ const CONSOLE_CLASS = {
   HR: 'console-hr',
   'Hiring Manager': 'console-hiringmanager',
   Recruiter: 'console-recruiter',
+  Director: 'console-director',
 };
 
 export default function DashboardLayout() {
@@ -32,7 +33,7 @@ export default function DashboardLayout() {
 
   const consoleClass = CONSOLE_CLASS[user.role] || 'console-default';
   const highlightRole = user.role === 'Super Admin';
-  const highlightOrg = ['Admin', 'Hiring Manager', 'HR'].includes(user.role);
+  const highlightOrg = ['Admin', 'Hiring Manager', 'HR', 'Director'].includes(user.role);
 
   const navItems =
     user.role === 'Hiring Manager'
@@ -45,20 +46,22 @@ export default function DashboardLayout() {
         ? [{ to: '/dashboard/recruiter', label: 'Dashboard', end: true }]
         : user.role === 'Admin'
           ? [{ to: '/dashboard/admin', label: 'Dashboard', end: true }]
-          : user.role === 'Super Admin'
-            ? [
-                { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
-                { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
-                { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
-                { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
-              ]
-            : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
+          : user.role === 'Director'
+            ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
+            : user.role === 'Super Admin'
+              ? [
+                  { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
+                  { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
+                  { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
+                  { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
+                ]
+              : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
   return (
     <div className={`app-shell ${consoleClass}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          {user.role === 'Hiring Manager' ? (
+          {user.role === 'Hiring Manager' || user.role === 'Director' ? (
             <>
               <div className="brand-mark">{user.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
               <div className="brand-text">

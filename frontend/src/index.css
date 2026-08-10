@@ -17,6 +17,7 @@
 .app-shell.console-hr { --console-h: 187; --console-s: 85%; --console-l: 40%; }
 .app-shell.console-hiringmanager { --console-h: 152; --console-s: 70%; --console-l: 40%; }
 .app-shell.console-recruiter { --console-h: 28; --console-s: 90%; --console-l: 55%; }
+.app-shell.console-director { --console-h: 38; --console-s: 100%; --console-l: 55%; }
 
 @layer base {
   * {
@@ -384,6 +385,7 @@
   .role-hr { @apply border border-violet-200 bg-violet-50 text-violet-700; }
   .role-hiringmanager { @apply border border-emerald-200 bg-emerald-50 text-emerald-700; }
   .role-recruiter { @apply border border-red-200 bg-red-50 text-red-700; }
+  .role-director { @apply border border-amber-300 bg-amber-50 text-amber-700; }
 
   /* ============ COMPANY TYPE PILLS ============ */
 
@@ -562,6 +564,20 @@
 
   .auth-input::placeholder {
     @apply text-slate-400;
+  }
+
+  select.auth-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+    cursor: pointer;
+  }
+
+  select.auth-input option {
+    @apply text-slate-800;
   }
 
   .select-sm {
@@ -1956,4 +1972,171 @@
 .hm-empty-icon svg {
   width: 24px;
   height: 24px;
+}
+
+/* ============ DIRECTOR CONSOLE THEME (amber / executive) ============ */
+
+.app-shell.console-director {
+  --console-h: 38;
+  --console-s: 100%;
+  --console-l: 55%;
+  background: linear-gradient(180deg, #fffbeb 0%, #fffbeb 55%, #fefce8 100%);
+  position: relative;
+}
+
+.app-shell.console-director .sidebar {
+  background: #ffffff;
+  border-right: 1px solid #fde68a;
+}
+
+.app-shell.console-director .brand-mark {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  box-shadow: 0 6px 18px -6px rgba(217, 119, 6, 0.5);
+}
+
+.app-shell.console-director .brand-name {
+  color: #78350f;
+}
+
+.app-shell.console-director .brand-sub,
+.app-shell.console-director .nav-section-label {
+  color: #fcd34d;
+}
+
+.app-shell.console-director .nav-link {
+  color: #64748b;
+  border-radius: 12px;
+}
+
+.app-shell.console-director .nav-link:hover {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.app-shell.console-director .nav-link.active {
+  background: #fef3c7;
+  color: #b45309;
+  box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.app-shell.console-director .sidebar-footer {
+  border-top: 1px solid #fffbeb;
+}
+
+.app-shell.console-director .user-avatar {
+  background: linear-gradient(135deg, #d97706, #f59e0b);
+  color: #ffffff;
+}
+
+.app-shell.console-director .user-name {
+  color: #78350f;
+}
+
+.app-shell.console-director .user-role {
+  color: #fcd34d;
+}
+
+.app-shell.console-director .topbar {
+  background: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid #fde68a;
+  color: #64748b;
+}
+
+.app-shell.console-director .topbar-org,
+.app-shell.console-director .topbar-highlight {
+  color: #78350f;
+}
+
+.app-shell.console-director .topbar-highlight {
+  background: #fef3c7;
+}
+
+.app-shell.console-director .topbar-divider {
+  color: #fde68a;
+}
+
+.app-shell.console-director .session-pill {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #059669;
+}
+
+.app-shell.console-director .glass-panel {
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px -12px rgba(217, 119, 6, 0.1);
+}
+
+.app-shell.console-director .glow-btn {
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+  box-shadow: 0 6px 18px -6px rgba(217, 119, 6, 0.5);
+}
+
+.app-shell.console-director .ghost-btn {
+  background: #ffffff;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.app-shell.console-director .ghost-btn:hover:not(:disabled) {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.app-shell.console-director .auth-input:focus {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
+}
+
+.app-shell.console-director .data-table th {
+  background: #fffbeb;
+  color: #fcd34d;
+  border-bottom-color: #fef3c7;
+}
+
+.app-shell.console-director .card-title,
+.app-shell.console-director .td-title {
+  color: #78350f;
+}
+
+.app-shell.console-director .modal {
+  background: #ffffff;
+  border: 1px solid #fde68a;
+  box-shadow: 0 24px 64px -16px rgba(120, 53, 15, 0.25);
+}
+
+.app-shell.console-director .modal-title {
+  color: #78350f;
+}
+
+/* Animated background orbs (Director) */
+
+.app-shell.console-director .content-area::before,
+.app-shell.console-director .content-area::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(70px);
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.4;
+}
+
+.app-shell.console-director .content-area::before {
+  width: 460px;
+  height: 460px;
+  top: -110px;
+  right: -90px;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.4) 0%, transparent 70%);
+  animation: sa-drift 16s ease-in-out infinite alternate;
+}
+
+.app-shell.console-director .content-area::after {
+  width: 400px;
+  height: 400px;
+  bottom: -90px;
+  left: -70px;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.3) 0%, transparent 70%);
+  animation: sa-drift 20s ease-in-out -8s infinite alternate;
 }

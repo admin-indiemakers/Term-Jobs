@@ -170,6 +170,57 @@ def test_admin_creates_hiring_manager(session_factory):
         assert hm_res.created_by == admin.id
 
 
+def test_admin_creates_hr(session_factory):
+    from modules.identity.router import list_users
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+
+        hr_res = create_user(
+            UserCreate(email="hr@example.com", name="HR Lead", password="pass1234", role="HR"),
+            current_user=admin,
+            db=session,
+        )
+        assert hr_res.role == "HR"
+        assert hr_res.tenant_id == client_tenant.id
+        assert hr_res.created_by == admin.id
+
+        # Admin sees the HR account in their tenant user list.
+        emails = {u.email for u in list_users(current_user=admin, db=session)}
+        assert "hr@example.com" in emails
+
+
+def test_change_password(session_factory):
+    from modules.identity.domain.schemas import PasswordChange
+    from modules.identity.router import change_password
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+
+        # Wrong current password -> rejected.
+        with pytest.raises(HTTPException):
+            change_password(
+                PasswordChange(current_password="wrongpass", new_password="newpass123"),
+                current_user=admin,
+                db=session,
+            )
+
+        # Correct current password -> updated, new password works, old does not.
+        change_password(
+            PasswordChange(current_password="securepass123", new_password="newpass123"),
+            current_user=admin,
+            db=session,
+        )
+        session.refresh(admin)
+        assert verify_password("newpass123", admin.password_hash)
+        assert not verify_password("securepass123", admin.password_hash)
+
+        login = login_user(UserLogin(email="admin@example.com", password="newpass123"), db=session)
+        assert login.user.email == "admin@example.com"
+
+
 def test_hr_creates_hiring_manager(session_factory):
     with session_factory() as session:
         client_tenant = _make_tenant(session, "client", "Client Inc")
@@ -199,14 +250,6 @@ def test_provisioning_role_denied(session_factory):
                 db=session,
             )
 
-        # Admin trying to create an HR (not allowed).
-        with pytest.raises(HTTPException):
-            create_user(
-                UserCreate(email="hr@example.com", name="HR", password="pass1234", role="HR"),
-                current_user=admin,
-                db=session,
-            )
-
         # Admin trying to create a Recruiter (not allowed; Recruiters need a consultancy tenant).
         with pytest.raises(HTTPException):
             create_user(
@@ -217,6 +260,14 @@ def test_provisioning_role_denied(session_factory):
                     role="Recruiter",
                     tenant_id=consultancy_tenant.id,
                 ),
+                current_user=admin,
+                db=session,
+            )
+
+        # Admin cannot provision another Admin.
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(email="super2@example.com", name="SA2", password="pass1234", role="Super Admin"),
                 current_user=admin,
                 db=session,
             )
@@ -563,3 +614,123 @@ def test_non_admin_cannot_manage_vendors(session_factory):
                 current_user=recruiter,
                 db=session,
             )
+
+
+# --- Director accounts ------------------------------------------------------
+
+def test_admin_creates_director(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        admin = _make_user(session, "Admin", client_tenant.id, "admin@example.com")
+
+        res = create_user(
+            UserCreate(
+                email="director@example.com",
+                name="Board Director",
+                password="pass1234",
+                role="Director",
+            ),
+            current_user=admin,
+            db=session,
+        )
+        assert res.role == "Director"
+        # Director inherits the Admin's client tenant.
+        assert res.tenant_id == client_tenant.id
+        assert res.created_by == admin.id
+
+        # Director can log in with the provisioned credentials.
+        login = login_user(UserLogin(email="director@example.com", password="pass1234"), db=session)
+        assert login.user.role == "Director"
+        payload = decode_access_token(login.access_token)
+        assert payload["role"] == "Director"
+
+
+def test_director_invalid_tenant_type_rejected(session_factory):
+    with session_factory() as session:
+        consultancy_tenant = _make_tenant(session, "consultancy", "Vendor Agency")
+        admin = _make_user(session, "Admin", consultancy_tenant.id, "admin@vendor.com")
+
+        # Directors must belong to a client company tenant.
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="director@example.com",
+                    name="Director",
+                    password="pass1234",
+                    role="Director",
+                    tenant_id=consultancy_tenant.id,
+                ),
+                current_user=admin,
+                db=session,
+            )
+
+
+def test_non_admin_cannot_create_director(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        hr = _make_user(session, "HR", client_tenant.id, "hr@example.com")
+        hm = _make_user(session, "Hiring Manager", client_tenant.id, "hm@example.com")
+
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="director@example.com",
+                    name="Director",
+                    password="pass1234",
+                    role="Director",
+                ),
+                current_user=hr,
+                db=session,
+            )
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="director@example.com",
+                    name="Director",
+                    password="pass1234",
+                    role="Director",
+                ),
+                current_user=hm,
+                db=session,
+            )
+
+
+def test_director_read_only_vendor_access(session_factory):
+    from modules.identity.router import list_vendors, set_vendor_engagements
+
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        vendor_a = _make_tenant(session, "consultancy", "Vendor A")
+        director = _make_user(session, "Director", client_tenant.id, "director@example.com")
+
+        # Director can READ the vendor list (read-only executive view).
+        vendors = list_vendors(current_user=director, db=session)
+        assert {v.id for v in vendors} == {vendor_a.id}
+
+        # Director cannot modify vendor partnerships.
+        from modules.identity.domain.schemas import VendorEngagementsIn
+        with pytest.raises(HTTPException):
+            set_vendor_engagements(
+                VendorEngagementsIn(vendor_tenant_ids=[vendor_a.id]),
+                current_user=director,
+                db=session,
+            )
+
+
+def test_director_cannot_create_users(session_factory):
+    with session_factory() as session:
+        client_tenant = _make_tenant(session, "client", "Client Inc")
+        director = _make_user(session, "Director", client_tenant.id, "director@example.com")
+
+        with pytest.raises(HTTPException):
+            create_user(
+                UserCreate(
+                    email="hm@example.com",
+                    name="HM",
+                    password="pass1234",
+                    role="Hiring Manager",
+                ),
+                current_user=director,
+                db=session,
+            )
+

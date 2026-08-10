@@ -1,11 +1,11 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter")
+ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter", "Director")
 
 # Which roles a given role is allowed to provision.
 PROVISION_MATRIX = {
     "Super Admin": ("Admin", "Recruiter"),
-    "Admin": ("Hiring Manager",),
+    "Admin": ("Hiring Manager", "Director", "HR"),
     "HR": ("Hiring Manager",),
 }
 
@@ -54,6 +54,10 @@ class UserUpdate(BaseModel):
 class UserLogin(BaseModel):
     email: str
     password: str
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=4, max_length=128)
 
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)

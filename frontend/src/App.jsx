@@ -2,10 +2,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import SuperAdminLogin from './pages/SuperAdminLogin';
+import DirectorLogin from './pages/DirectorLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import DirectorDashboard from './pages/DirectorDashboard';
 import OnboardCompany from './pages/OnboardCompany';
 import OnboardVendor from './pages/OnboardVendor';
 import ConfigureCompanyAccounts from './pages/ConfigureCompanyAccounts';
@@ -36,6 +38,7 @@ function HomeRedirect() {
   if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
+  if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
@@ -45,6 +48,7 @@ function DashboardIndex() {
   if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
+  if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
@@ -55,6 +59,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<AuthPage />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
+        <Route path="/director/login" element={<DirectorLogin />} />
         <Route path="/" element={<HomeRedirect />} />
         <Route
           path="/dashboard"
@@ -71,6 +76,7 @@ export default function App() {
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard />} />
           <Route path="admin" element={<AdminDashboard />} />
+          <Route path="director" element={<DirectorDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
