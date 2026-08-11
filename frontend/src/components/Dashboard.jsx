@@ -37,13 +37,14 @@ export function WelcomeBanner({ title, subtitle, children }) {
   );
 }
 
-export function StatCard({ label, value, icon, tint }) {
+export function StatCard({ label, value, icon, tint, delta, deltaTone }) {
   return (
     <div className="stat-card">
       <div className={`stat-icon ${tint || 'tint-blue'}`}>{icon}</div>
       <div className="stat-body">
         <div className="stat-value">{value}</div>
         <div className="stat-label">{label}</div>
+        {delta && <span className={`stat-delta ${deltaTone ? `stat-delta-tone-${deltaTone}` : ''}`}>{delta}</span>}
       </div>
     </div>
   );

@@ -47,6 +47,7 @@ class Requisition(Model):
         "generated_jd_markdown": None,
         "coverage_result": None,
         "refinement_log": list,
+        "intake_meta": dict,
         "approved_by": None,
         "approved_at": None,
         "created_at": _utcnow,
@@ -66,6 +67,7 @@ class Requisition(Model):
     generated_jd_markdown = Column("generated_jd_markdown")
     coverage_result = Column("coverage_result")
     refinement_log = Column("refinement_log")
+    intake_meta = Column("intake_meta")
     approved_by = Column("approved_by")
     approved_at = Column("approved_at")
     created_at = Column("created_at")

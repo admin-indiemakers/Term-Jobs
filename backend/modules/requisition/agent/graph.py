@@ -96,12 +96,13 @@ def _sanitize_role(raw: dict) -> None:
             raw.pop("confidence", None)
 
 
-def _load_context(session_factory, requisition_id: str) -> tuple[dict, dict] | None:
+def _load_context(session_factory, requisition_id: str) -> tuple[dict, dict, dict] | None:
     with session_factory() as session:
         req = session.get(models.Requisition, requisition_id)
         if req is None:
             raise ValueError(f"requisition {requisition_id} not found")
         intent = req.intent or {}
+        intake_meta = req.intake_meta or {}
         profile = {}
         if req.company_profile_id:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
@@ -114,7 +115,7 @@ def _load_context(session_factory, requisition_id: str) -> tuple[dict, dict] | N
                     tech_stack=prof.tech_stack or [],
                     notes=prof.notes,
                 ).model_dump()
-    return profile, intent
+    return profile, intent, intake_meta
 
 
 def _compute_gaps(parsed: dict) -> list[str]:
@@ -178,8 +179,8 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
         return {}
 
     def build_context(state: AgentState) -> AgentState:
-        profile, intent = _load_context(session_factory, state["requisition_id"])
-        return {"profile": profile, "intent": intent}
+        profile, intent, intake_meta = _load_context(session_factory, state["requisition_id"])
+        return {"profile": profile, "intent": intent, "intake_meta": intake_meta}
 
     def coverage_check(state: AgentState) -> AgentState:
         intent = state["intent"]
@@ -227,36 +228,190 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             return "generate"
         return "intake_loop"
 
+    def _apply_prefill(role: schemas.StructuredRole, prefill: dict) -> schemas.StructuredRole:
+        """Apply pre-filled values from intake_meta to the generated role.
+
+        Only fills in fields that are empty/None in the generated role.
+        """
+        if not prefill:
+            return role
+
+        data = role.model_dump()
+
+        # Role tab fields
+        if not data.get("job_family") and prefill.get("job_family"):
+            data["job_family"] = prefill["job_family"]
+        if not data.get("must_have_skills") and prefill.get("must_have_skills"):
+            data["must_have_skills"] = prefill["must_have_skills"]
+        if not data.get("nice_to_have_skills") and prefill.get("nice_to_have_skills"):
+            data["nice_to_have_skills"] = prefill["nice_to_have_skills"]
+        if not data.get("seniority") and prefill.get("seniority"):
+            data["seniority"] = prefill["seniority"]
+        if not data.get("experience") and prefill.get("experience"):
+            data["experience"] = prefill["experience"]
+        if not data.get("headcount") and prefill.get("headcount"):
+            data["headcount"] = prefill["headcount"]
+        if not data.get("certifications") and prefill.get("certifications"):
+            data["certifications"] = prefill["certifications"]
+
+        # Engagement tab fields
+        if not data.get("engagement_type") and prefill.get("engagement_type"):
+            data["engagement_type"] = prefill["engagement_type"]
+        if not data.get("duration") and prefill.get("duration"):
+            data["duration"] = prefill["duration"]
+        if not data.get("start_date") and prefill.get("start_date"):
+            data["start_date"] = prefill["start_date"]
+        if not data.get("ends_on") and prefill.get("ends_on"):
+            data["ends_on"] = prefill["ends_on"]
+        if data.get("extension_likely") is False and prefill.get("extension_likely") is not None:
+            data["extension_likely"] = prefill["extension_likely"]
+        if not data.get("max_notice_period") and prefill.get("max_notice_period"):
+            data["max_notice_period"] = prefill["max_notice_period"]
+
+        # Commercials tab fields
+        if data.get("ceiling_internal") is None and prefill.get("ceiling_internal") not in (None, ""):
+            data["ceiling_internal"] = prefill["ceiling_internal"]
+        if data.get("range_vendors_see") is None and (prefill.get("range_vendors_see_min") or prefill.get("range_vendors_see_max")):
+            min_val = prefill.get("range_vendors_see_min")
+        max_val = prefill.get("range_vendors_see_max")
+        if min_val is not None or max_val is not None:
+            data["range_vendors_see"] = (min_val, max_val)
+        if data.get("rate_card_cap") is None and prefill.get("rate_card_cap") not in (None, ""):
+            data["rate_card_cap"] = prefill["rate_card_cap"]
+        if not data.get("total_engagement_value") and prefill.get("total_engagement_value"):
+            data["total_engagement_value"] = prefill["total_engagement_value"]
+        if not data.get("cost_centre") and prefill.get("cost_centre"):
+            data["cost_centre"] = prefill["cost_centre"]
+        if data.get("budget_approved") is False and prefill.get("budget_approved") is not None:
+            data["budget_approved"] = prefill["budget_approved"]
+        if not data.get("budget_reference") and prefill.get("budget_reference"):
+            data["budget_reference"] = prefill["budget_reference"]
+        if data.get("variance_approved") is False and prefill.get("variance_approved") is not None:
+            data["variance_approved"] = prefill["variance_approved"]
+    
+        # Work setup tab fields
+        if not data.get("work_mode") and prefill.get("work_mode"):
+            data["work_mode"] = prefill["work_mode"]
+        if not data.get("work_locations") and prefill.get("work_locations"):
+            data["work_locations"] = prefill["work_locations"]
+        if not data.get("working_hours") and prefill.get("working_hours"):
+            data["working_hours"] = prefill["working_hours"]
+        if not data.get("location_remote_policy") and prefill.get("location_remote_policy"):
+            data["location_remote_policy"] = prefill["location_remote_policy"]
+        if not data.get("onsite_requirement") and prefill.get("onsite_requirement"):
+            data["onsite_requirement"] = prefill["onsite_requirement"]
+        if not data.get("equipment_provisioning") and prefill.get("equipment_provisioning"):
+            data["equipment_provisioning"] = prefill["equipment_provisioning"]
+    
+        # Compliance tab fields
+        if not data.get("background_check") and prefill.get("background_check"):
+            data["background_check"] = prefill["background_check"]
+        if data.get("background_check_required") is False and prefill.get("background_check_required") is not None:
+            data["background_check_required"] = prefill["background_check_required"]
+        if not data.get("nda_contract_type") and prefill.get("nda_contract_type"):
+            data["nda_contract_type"] = prefill["nda_contract_type"]
+        if not data.get("work_authorization") and prefill.get("work_authorization"):
+            data["work_authorization"] = prefill["work_authorization"]
+        if data.get("security_clearance_required") is False and prefill.get("security_clearance_required") is not None:
+            data["security_clearance_required"] = prefill["security_clearance_required"]
+        if not data.get("security_clearance_notes") and prefill.get("security_clearance_notes"):
+            data["security_clearance_notes"] = prefill["security_clearance_notes"]
+    
+        # Process tab fields
+        if not data.get("hiring_manager") and prefill.get("hiring_manager"):
+            data["hiring_manager"] = prefill["hiring_manager"]
+        if not data.get("submission_deadline") and prefill.get("submission_deadline"):
+            data["submission_deadline"] = prefill["submission_deadline"]
+        if not data.get("priority") and prefill.get("priority"):
+            data["priority"] = prefill["priority"]
+    
+        return schemas.StructuredRole.model_validate(data)
+
+
     def generate(state: AgentState) -> AgentState:
-        profile = schemas.CompanyProfile.model_validate(state["profile"])
-        intent = schemas.RoleIntent.model_validate(state["intent"])
-        calls = state["tool_calls"]
+            profile = schemas.CompanyProfile.model_validate(state["profile"])
+            intent = schemas.RoleIntent.model_validate(state["intent"])
+            calls = state["tool_calls"]
 
-        instruction = (state.get("refine_instruction") or "").strip()
-        if instruction:
-            # Refinement loop: apply the manager's edit request to the current
-            # role + JD, then come back to the approval checkpoint.
-            refine_turns = state.get("refine_turns", 0)
-            guardrails.enforce_budget(refine_turns + 1, calls, turns_label="refinement")
-            role = schemas.StructuredRole.model_validate(state["structured_role"])
-            current_jd = state.get("jd_markdown") or ""
+            instruction = (state.get("refine_instruction") or "").strip()
+            if instruction:
+                # Refinement loop: apply the manager's edit request to the current
+                # role + JD, then come back to the approval checkpoint.
+                refine_turns = state.get("refine_turns", 0)
+                guardrails.enforce_budget(refine_turns + 1, calls, turns_label="refinement")
+                role = schemas.StructuredRole.model_validate(state["structured_role"])
+                current_jd = state.get("jd_markdown") or ""
 
-            role_prompt = prompts.ROLE_REFINE_PROMPT.format(
+                role_prompt = prompts.ROLE_REFINE_PROMPT.format(
+                    profile=profile.model_dump_json(),
+                    role=role.model_dump_json(),
+                    instruction=instruction,
+                )
+                raw = llm.generate_structured(role_prompt, schemas.StructuredRole)
+                _sanitize_role(raw)
+                role = guardrails.validate_role(raw)
+                role.must_have_skills = skills.canonicalize_skills(role.must_have_skills)
+                role.nice_to_have_skills = skills.canonicalize_skills(role.nice_to_have_skills)
+
+                jd_prompt = prompts.JD_REFINE_PROMPT.format(
+                    profile=profile.model_dump_json(),
+                    jd=current_jd,
+                    role=role.model_dump_json(),
+                    instruction=instruction,
+                    sections=_jd_sections(role.contract_duration),
+                )
+                jd_markdown = _ensure_contract_section(
+                    llm.generate_text(jd_prompt), role.contract_duration
+                )
+
+                return {
+                    "structured_role": role.model_dump(),
+                    "jd_markdown": jd_markdown,
+                    "tool_calls": calls,
+                    "refine_turns": refine_turns + 1,
+                    "status": schemas.RequisitionStatus.STRUCTURING.value,
+                }
+
+            answers = "\n".join(f"- {a['value']}" for a in state["answers"])
+
+            role_prompt = prompts.ROLE_EXTRACTION_PROMPT.format(
                 profile=profile.model_dump_json(),
-                role=role.model_dump_json(),
-                instruction=instruction,
+                intent=intent.model_dump_json(),
+                answers=answers,
             )
-            raw = llm.generate_structured(role_prompt, schemas.StructuredRole)
-            _sanitize_role(raw)
-            role = guardrails.validate_role(raw)
+
+            last_error = None
+            role = None
+            calls = state["tool_calls"]
+            while role is None and calls < settings.max_tool_calls:
+                calls += 1
+                try:
+                    raw = llm.generate_structured(role_prompt, schemas.StructuredRole)
+                    _sanitize_role(raw)
+                    role = guardrails.validate_role(raw)
+                except Exception as exc:  # noqa: BLE001 - bounded retry over small-model JSON quirks
+                    last_error = exc
+
+            if role is None:
+                raise guardrails.GuardrailError(f"could not produce a valid role: {last_error}")
+
             role.must_have_skills = skills.canonicalize_skills(role.must_have_skills)
             role.nice_to_have_skills = skills.canonicalize_skills(role.nice_to_have_skills)
+            # Fold ingested details when LLM left them blank
+            if not role.location and state["parsed"].get("location"):
+                role.location = state["parsed"]["location"]
+            if role.rate_band is None and state["parsed"].get("rate_band"):
+                role.rate_band = state["parsed"]["rate_band"]
+            if not role.contract_duration and state["parsed"].get("contract_duration"):
+                role.contract_duration = state["parsed"]["contract_duration"]
+            # Apply pre-filled values from intake_meta (New Requisition form)
+            prefill = state.get("intake_meta", {}).get("prefill", {})
+            role = _apply_prefill(role, prefill)
 
-            jd_prompt = prompts.JD_REFINE_PROMPT.format(
+            jd_prompt = prompts.JD_GENERATION_PROMPT.format(
                 profile=profile.model_dump_json(),
-                jd=current_jd,
+                intent=intent.model_dump_json(),
                 role=role.model_dump_json(),
-                instruction=instruction,
                 sections=_jd_sections(role.contract_duration),
             )
             jd_markdown = _ensure_contract_section(
@@ -267,59 +422,8 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
                 "structured_role": role.model_dump(),
                 "jd_markdown": jd_markdown,
                 "tool_calls": calls,
-                "refine_turns": refine_turns + 1,
                 "status": schemas.RequisitionStatus.STRUCTURING.value,
             }
-
-        answers = "\n".join(f"- {a['value']}" for a in state["answers"])
-
-        role_prompt = prompts.ROLE_EXTRACTION_PROMPT.format(
-            profile=profile.model_dump_json(),
-            intent=intent.model_dump_json(),
-            answers=answers,
-        )
-
-        last_error = None
-        role = None
-        calls = state["tool_calls"]
-        while role is None and calls < settings.max_tool_calls:
-            calls += 1
-            try:
-                raw = llm.generate_structured(role_prompt, schemas.StructuredRole)
-                _sanitize_role(raw)
-                role = guardrails.validate_role(raw)
-            except Exception as exc:  # noqa: BLE001 - bounded retry over small-model JSON quirks
-                last_error = exc
-
-        if role is None:
-            raise guardrails.GuardrailError(f"could not produce a valid role: {last_error}")
-
-        role.must_have_skills = skills.canonicalize_skills(role.must_have_skills)
-        role.nice_to_have_skills = skills.canonicalize_skills(role.nice_to_have_skills)
-        # Fold ingested details when LLM left them blank
-        if not role.location and state["parsed"].get("location"):
-            role.location = state["parsed"]["location"]
-        if role.rate_band is None and state["parsed"].get("rate_band"):
-            role.rate_band = state["parsed"]["rate_band"]
-        if not role.contract_duration and state["parsed"].get("contract_duration"):
-            role.contract_duration = state["parsed"]["contract_duration"]
-
-        jd_prompt = prompts.JD_GENERATION_PROMPT.format(
-            profile=profile.model_dump_json(),
-            intent=intent.model_dump_json(),
-            role=role.model_dump_json(),
-            sections=_jd_sections(role.contract_duration),
-        )
-        jd_markdown = _ensure_contract_section(
-            llm.generate_text(jd_prompt), role.contract_duration
-        )
-
-        return {
-            "structured_role": role.model_dump(),
-            "jd_markdown": jd_markdown,
-            "tool_calls": calls,
-            "status": schemas.RequisitionStatus.STRUCTURING.value,
-        }
 
     def guardrail_check(state: AgentState) -> AgentState:
         role = schemas.StructuredRole.model_validate(state["structured_role"])
@@ -446,12 +550,13 @@ class JobRequirementAgent:
         interrupt_value is a string; for approval it is the checkpoint dict.
         If the flow completed, interrupt_value is None.
         """
-        profile, intent = _load_context(self.session_factory, requisition_id)
+        profile, intent, intake_meta = _load_context(self.session_factory, requisition_id)
         initial: AgentState = {
             "requisition_id": requisition_id,
             "status": schemas.RequisitionStatus.INTAKE.value,
             "profile": profile,
             "intent": intent,
+            "intake_meta": intake_meta,
             "answers": [],
             "asked_questions": [],
             "parsed": {},

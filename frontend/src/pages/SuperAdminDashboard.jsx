@@ -44,6 +44,11 @@ export default function SuperAdminDashboard() {
   const consultancyTenants = tenants.filter((t) => t.tenant_type === 'consultancy');
   const adminAccounts = users.filter((u) => u.role === 'Admin');
 
+  const totalTenants = tenants.length;
+  const buyerShare = totalTenants === 0 ? 0 : Math.round((clientTenants.length / totalTenants) * 100);
+  const vendorShare = totalTenants === 0 ? 0 : Math.round((consultancyTenants.length / totalTenants) * 100);
+  const adminsPerBuyer = clientTenants.length === 0 ? '—' : (adminAccounts.length / clientTenants.length).toFixed(1);
+
   return (
     <div className="page">
       <WelcomeBanner
@@ -53,16 +58,16 @@ export default function SuperAdminDashboard() {
         <Link to="/dashboard/superadmin/onboard" className="glow-btn">
           + Onboard Buyer Company
         </Link>
-        <Link to="/dashboard/superadmin/onboard-vendor" className="glow-btn">
+        <Link to="/dashboard/superadmin/onboard-vendor" className="ghost-btn">
           + Onboard Vendor
         </Link>
       </WelcomeBanner>
 
       <div className="stat-grid">
-        <StatCard label="Companies" value={tenants.length} icon={Icons.building} tint="tint-blue" />
-        <StatCard label="Client (Buyer)" value={clientTenants.length} icon={Icons.briefcase} tint="tint-green" />
-        <StatCard label="Consultancies (Vendor)" value={consultancyTenants.length} icon={Icons.layers} tint="tint-amber" />
-        <StatCard label="Company Admins" value={adminAccounts.length} icon={Icons.users} tint="tint-violet" />
+        <StatCard label="Companies" value={tenants.length} icon={Icons.building} tint="tint-ink" delta={totalTenants === 0 ? 'No tenants' : '100% of all'} deltaTone="ink" />
+        <StatCard label="Client (Buyer)" value={clientTenants.length} icon={Icons.briefcase} tint="tint-green" delta={`${buyerShare}% of tenants`} deltaTone="green" />
+        <StatCard label="Consultancies (Vendor)" value={consultancyTenants.length} icon={Icons.layers} tint="tint-amber" delta={`${vendorShare}% of tenants`} deltaTone="amber" />
+        <StatCard label="Company Admins" value={adminAccounts.length} icon={Icons.users} tint="tint-violet" delta={`${adminsPerBuyer} per buyer`} deltaTone="violet" />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

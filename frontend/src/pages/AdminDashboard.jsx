@@ -25,18 +25,10 @@ function rolePill(role) {
   return <span className={`role-pill ${map[role] || 'role-admin'}`}>{role}</span>;
 }
 
-const ROLE_OPTIONS = [
-  { value: 'Hiring Manager', label: 'Hiring Manager', hint: 'Creates and manages requisitions' },
-  { value: 'Director', label: 'Director', hint: 'Read-only executive portal' },
-  { value: 'HR', label: 'HR', hint: 'Oversees Hiring Managers' },
-];
-
 const EMPTY_FORM = {
   email: '',
   name: '',
   password: '',
-  department: '',
-  role: 'Hiring Manager',
 };
 
 const EMPTY_PWD = {
@@ -59,6 +51,8 @@ export default function AdminDashboard() {
   const [deleting, setDeleting] = useState(false);
   const [pwdForm, setPwdForm] = useState(EMPTY_PWD);
   const [changingPwd, setChangingPwd] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const [editing, setEditing] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -117,15 +111,14 @@ export default function AdminDashboard() {
         email: form.email,
         name: form.name,
         password: form.password,
-        role: form.role,
+        role: 'HR',
       };
-      if (form.role === 'Hiring Manager') payload.department = form.department;
       await request('/api/auth/users', {
         method: 'POST',
         token,
         body: payload,
       });
-      setSuccess(`${form.role} account created for ${form.email}.`);
+      setSuccess(`HR account created for ${form.email}.`);
       setForm({ ...EMPTY_FORM });
       load();
     } catch (err) {
@@ -158,6 +151,38 @@ export default function AdminDashboard() {
     setSuccess('');
   };
 
+  const openEdit = (u) => {
+    setEdit({ id: u.id, email: u.email, name: u.name || '', password: '' });
+    setError('');
+    setSuccess('');
+  };
+
+  const handleEditInput = (e) => {
+    setEdit({ ...edit, [e.target.name]: e.target.value });
+  };
+
+  const handleSaveEdit = async (e) => {
+    e.preventDefault();
+    if (!edit) return;
+    setEditing(true);
+    setError('');
+    setSuccess('');
+    try {
+      const payload = {};
+      if (edit.email !== '') payload.email = edit.email;
+      if (edit.name !== '') payload.name = edit.name;
+      if (edit.password) payload.password = edit.password;
+      await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
+      setSuccess(`HR account ${edit.email} updated.`);
+      setEdit(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setEditing(false);
+    }
+  };
+
   const handleChangePassword = async (e) => {
     e.preventDefault();
     setChangingPwd(true);
@@ -178,6 +203,14 @@ export default function AdminDashboard() {
     }
   };
 
+  const scrollToAddTeam = () => {
+    document.getElementById('add-team')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const scrollToVendors = () => {
+    document.getElementById('vendor-grid')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
   const hiringManagers = users.filter((u) => u.role === 'Hiring Manager');
   const directors = users.filter((u) => u.role === 'Director');
   const hrList = users.filter((u) => u.role === 'HR');
@@ -189,84 +222,106 @@ export default function AdminDashboard() {
       <WelcomeBanner
         title="Admin Console"
         subtitle={`${user.tenant_name} workspace — manage your Hiring Managers, Directors and HR, and oversee requisitions.`}
-      />
+      >
+        <button className="glow-btn" onClick={scrollToAddTeam}>
+          + Invite Team Member
+        </button>
+      </WelcomeBanner>
 
       <div className="stat-grid">
-        <StatCard label="Hiring Managers" value={hiringManagers.length} icon={Icons.usersPlus} tint="tint-blue" />
-        <StatCard label="Directors" value={directors.length} icon={Icons.shield} tint="tint-amber" />
-        <StatCard label="HR" value={hrList.length} icon={Icons.users} tint="tint-violet" />
-        <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} tint="tint-sky" />
-        <StatCard label="Pending Approval" value={pending} icon={Icons.clock} tint="tint-amber" />
-        <StatCard label="Published" value={published} icon={Icons.check} tint="tint-green" />
-      </div>
-
-      <div className="glass-panel">
-        <div className="form-panel-head">
-          <div className="form-panel-icon">{Icons.users}</div>
-          <div>
-            <div className="form-panel-title">Partner Vendors</div>
-            <div className="form-panel-caption">
-              Select which consultancy vendors your Hiring Managers work with. Only engaged vendors can see your company's published requisitions and submit screened candidates.
-            </div>
-          </div>
-        </div>
-        {loading ? (
-          <p className="muted">Loading vendors...</p>
-        ) : vendors.length === 0 ? (
-          <p className="muted">
-            No vendor consultancies onboarded yet. Ask the Super Admin to onboard vendors before you can partner with them.
-          </p>
-        ) : (
-          <div>
-            <div className="vendor-grid">
-              {vendors.map((v) => (
-                <div
-                  key={v.id}
-                  className={`vendor-card ${v.engaged ? 'vendor-card-selected' : ''}`}
-                  onClick={() => toggleVendor(v.id)}
-                >
-                  <div className="vendor-card-top">
-                    <span className="vendor-check">{v.engaged ? '✓' : ''}</span>
-                    <span className="vendor-name">{v.name}</span>
-                  </div>
-                  <div className="vendor-meta">
-                    {v.location && <span>{v.location}</span>}
-                    {v.industry && <span>{v.industry}</span>}
-                    {v.size && <span>{v.size}</span>}
-                  </div>
-                  {v.specializations.length > 0 && (
-                    <div className="vendor-tags">
-                      {v.specializations.slice(0, 4).map((s) => (
-                        <span key={s} className="vendor-tag">{s}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button className="glow-btn" style={{ marginTop: 16 }} onClick={saveVendors} disabled={savingVendors}>
-              {savingVendors ? 'Saving...' : 'Save Vendor Partnerships'}
-            </button>
-          </div>
-        )}
+        <StatCard label="Hiring Managers" value={hiringManagers.length} icon={Icons.usersPlus} />
+        <StatCard label="Directors" value={directors.length} icon={Icons.shield} />
+        <StatCard label="HR" value={hrList.length} icon={Icons.users} />
+        <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} />
+        <StatCard label="Pending Approval" value={pending} icon={Icons.clock} />
+        <StatCard label="Published" value={published} icon={Icons.check} />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
+      <div className="glass-panel">
+        <div className="split-card">
+          <div className="split-card-head">
+            <div className="form-panel-head">
+              <div className="form-panel-icon">{Icons.users}</div>
+              <div>
+                <div className="form-panel-title">Partner Vendors</div>
+                <div className="form-panel-caption">
+                  Select which consultancy vendors your Hiring Managers work with. Only engaged vendors can see your company's published requisitions and submit screened candidates.
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="split-card-body">
+            {loading ? (
+              <p className="muted">Loading vendors...</p>
+            ) : vendors.length === 0 ? (
+              <div className="empty-box">
+                <strong>No vendor consultancies onboarded yet.</strong>
+                <br />
+                Ask the Super Admin to onboard vendors before you can partner with them.
+              </div>
+            ) : (
+              <div id="vendor-grid">
+                <div className="vendor-grid">
+                  {vendors.map((v) => (
+                    <div
+                      key={v.id}
+                      className={`vendor-card ${v.engaged ? 'vendor-card-selected' : ''}`}
+                      onClick={() => toggleVendor(v.id)}
+                    >
+                      <div className="vendor-card-top">
+                        <span className="vendor-check">{v.engaged ? '✓' : ''}</span>
+                        <span className="vendor-name">{v.name}</span>
+                      </div>
+                      <div className="vendor-meta">
+                        {v.location && <span>{v.location}</span>}
+                        {v.industry && <span>{v.industry}</span>}
+                        {v.size && <span>{v.size}</span>}
+                      </div>
+                      {v.specializations.length > 0 && (
+                        <div className="vendor-tags">
+                          {v.specializations.slice(0, 4).map((s) => (
+                            <span key={s} className="vendor-tag">{s}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button className="ghost-btn" style={{ marginTop: 12 }} onClick={saveVendors} disabled={savingVendors}>
+                  {savingVendors ? 'Saving...' : 'Save Vendor Partnerships'}
+                </button>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+              <button className="glow-btn" onClick={scrollToVendors} disabled={vendors.length === 0}>
+                Manage Vendors
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {loading ? (
         <p className="muted" style={{ padding: 24 }}>Loading workspace...</p>
       ) : (
         <>
-          <div className="glass-panel">
-            <div className="form-panel-head">
-              <div className="form-panel-icon">{Icons.usersPlus}</div>
-              <div>
-                <div className="form-panel-title">Add Team Member</div>
-                <div className="form-panel-caption">Create a Hiring Manager, Director or HR account in the {user.tenant_name} workspace.</div>
+          <div className="glass-panel" id="add-team">
+            <div className="card-head-row">
+              <div className="form-panel-head">
+                <div className="form-panel-icon">{Icons.users}</div>
+                <div>
+                  <div className="form-panel-title">Add HR</div>
+                  <div className="form-panel-caption">Create an HR account to oversee the Hiring Managers. Directors and Hiring Managers are managed from the Workspace menu.</div>
+                </div>
               </div>
+              <button type="submit" form="add-team-form" className="glow-btn" disabled={submitting} style={{ flexShrink: 0 }}>
+                {submitting ? 'Creating...' : 'Create HR Account'}
+              </button>
             </div>
-            <form onSubmit={handleCreateUser}>
+            <form id="add-team-form" onSubmit={handleCreateUser}>
               <div className="form-grid">
                 <div>
                   <label className="form-label">Full Name</label>
@@ -274,30 +329,13 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <label className="form-label">Email Address</label>
-                  <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="member@company.com" />
+                  <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="hr@company.com" />
                 </div>
                 <div>
                   <label className="form-label">Password</label>
                   <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
                 </div>
-                <div>
-                  <label className="form-label">Role</label>
-                  <select name="role" value={form.role} onChange={handleInput} className="auth-input">
-                    {ROLE_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{opt.label} — {opt.hint}</option>
-                    ))}
-                  </select>
-                </div>
-                {form.role === 'Hiring Manager' && (
-                  <div>
-                    <label className="form-label">Department <span className="form-optional">(optional)</span></label>
-                    <input type="text" name="department" value={form.department} onChange={handleInput} className="auth-input" placeholder="e.g. Engineering, Sales, HR" />
-                  </div>
-                )}
               </div>
-              <button type="submit" className="glow-btn" disabled={submitting} style={{ marginTop: 18 }}>
-                {submitting ? 'Creating...' : `Create ${form.role} Account`}
-              </button>
             </form>
           </div>
 
@@ -430,6 +468,9 @@ export default function AdminDashboard() {
                       <td className="td-date">{formatDate(u.created_at)}</td>
                       <td className="td-action">
                         <div className="row-actions">
+                          <span className="row-action" onClick={() => openEdit(u)} style={{ cursor: 'pointer' }}>
+                            Edit
+                          </span>
                           <span
                             className="row-action row-action-danger"
                             onClick={() => setConfirmDelete(u)}
@@ -502,6 +543,38 @@ export default function AdminDashboard() {
             )}
           </div>
         </>
+      )}
+
+      {edit && (
+        <div className="modal-overlay" onClick={() => setEdit(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">Edit HR Account</h3>
+            <form onSubmit={handleSaveEdit}>
+              <div className="modal-fields">
+                <div>
+                  <label className="form-label">Full Name</label>
+                  <input type="text" name="name" value={edit.name} onChange={handleEditInput} className="auth-input" />
+                </div>
+                <div>
+                  <label className="form-label">Email</label>
+                  <input type="text" name="email" required inputMode="email" value={edit.email} onChange={handleEditInput} className="auth-input" />
+                </div>
+                <div>
+                  <label className="form-label">New Password</label>
+                  <input type="password" name="password" minLength={4} value={edit.password} onChange={handleEditInput} className="auth-input" placeholder="Leave blank to keep current" />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="ghost-btn" onClick={() => setEdit(null)}>
+                  Cancel
+                </button>
+                <button type="submit" className="glow-btn" disabled={editing}>
+                  {editing ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
 
       {confirmDelete && (

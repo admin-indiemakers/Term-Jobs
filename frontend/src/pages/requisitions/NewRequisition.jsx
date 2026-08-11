@@ -1,33 +1,231 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../../api/client';
+import { API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+
+const MODES = [
+  { id: 'guided', label: 'Guided intake', desc: 'Agent asks targeted questions to fill gaps, using your company background.' },
+  { id: 'paste', label: 'Paste JD directly', desc: 'Paste the raw JD text — the agent structures the whole role from it.' },
+  { id: 'upload', label: 'Upload existing document', desc: 'Upload a JD/spec file (.docx, .pdf) — the agent reads and prefills the form.' },
+];
+
+const ACCEPT = '.docx,.doc,.pdf,.txt,.md';
+
+const ENGAGEMENT_TYPES = ['Contract', 'Permanent', 'Freelance', 'Consulting', 'Time & Material', 'Fixed Price'];
+const WORK_MODES = ['Remote', 'Hybrid', 'Onsite'];
+const EQUIPMENT_OPTIONS = ['Company-provided', 'Vendor-provided', 'BYOD'];
+const CONTRACT_OPTIONS = ['Consultancy agreement', 'NDA-only', 'MSA-linked', 'Permanent offer'];
+const SENIORITY_OPTIONS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
+const PRIORITY_OPTIONS = ['High', 'Normal', 'Low'];
+const BOOL_OPTIONS = ['Yes', 'No'];
+
+const Section = ({ title, children, expanded, onToggle }) => (
+  <div className="intake-section" style={{ marginTop: 24 }}>
+    <div className="intake-section-head" onClick={onToggle} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <h2 className="intake-section-title" style={{ margin: 0 }}>{title}</h2>
+      <span style={{ fontSize: '1.2rem', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+    </div>
+    {expanded && <div className="intake-grid" style={{ marginTop: 16 }}>{children}</div>}
+  </div>
+);
+
+const Field = ({ label, hint, children, required }) => (
+  <div className="intake-field">
+    <label className="form-label">{label} {required && <span className="required">*</span>}</label>
+    {children}
+    {hint && <p className="field-hint">{hint}</p>}
+  </div>
+);
+
+const TextInput = ({ value, onChange, placeholder, type, min, ...props }) => (
+  <input className="auth-input" type={type || 'text'} min={min} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} {...props} />
+);
+
+const SelectInput = ({ value, onChange, options, placeholder, ...props }) => (
+  <select className="auth-input" value={value} onChange={(e) => onChange(e.target.value)} {...props}>
+    <option value="">{placeholder || 'Select...'}</option>
+    {options.map((o) => <option key={o} value={o}>{o}</option>)}
+  </select>
+);
+
+const ChipInput = ({ value, onChange, onRemove, placeholder }) => {
+  const [text, setText] = useState('');
+  const add = () => {
+    const v = text.trim();
+    if (v) {
+      onChange([...value, v]);
+      setText('');
+    }
+  };
+  return (
+    <div className="chips-input-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+      {value.map((s, i) => (
+        <span key={`${s}-${i}`} className="chip-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--chip-bg)', padding: '4px 8px', borderRadius: 999, fontSize: '0.8rem' }}>
+          {s}
+          <button type="button" className="chip-tag-remove" onClick={() => onRemove(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}>×</button>
+        </span>
+      ))}
+      <input
+        className="chip-adder auth-input" style={{ flex: 1, minWidth: 120 }}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); }}}
+        onBlur={add}
+        placeholder={placeholder || '+ add'}
+      />
+    </div>
+  );
+};
+
+const RangeInput = ({ minVal, maxVal, onMinChange, onMaxChange, placeholder }) => (
+  <div className="rate-band-input" style={{ display: 'flex', gap: 10 }}>
+    <input className="auth-input" type="number" min="0" placeholder={`${placeholder} min`} value={minVal} onChange={(e) => onMinChange(e.target.value === '' ? '' : Number(e.target.value))} />
+    <input className="auth-input" type="number" min="0" placeholder={`${placeholder} max`} value={maxVal} onChange={(e) => onMaxChange(e.target.value === '' ? '' : Number(e.target.value))} />
+  </div>
+);
 
 export default function NewRequisition() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
 
-  const [profiles, setProfiles] = useState([]);
-  const [mode, setMode] = useState('guided');
-  const [title, setTitle] = useState('');
-  const [techStackHint, setTechStackHint] = useState('');
-  const [prompt, setPrompt] = useState('');
   const [companyProfileId, setCompanyProfileId] = useState('');
+
+  const [mode, setMode] = useState('guided');
+  const [prompt, setPrompt] = useState('');
+  const [sourceFilename, setSourceFilename] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
+  const fileInputRef = useRef(null);
+
+  // Pre-fill structured role fields (all 6 tabs)
+  const [prefill, setPrefill] = useState({
+    // Role tab
+    job_title: '',
+    job_family: '',
+    must_have_skills: [],
+    nice_to_have_skills: [],
+    seniority: '',
+    experience: '',
+    headcount: 1,
+    certifications: [],
+    // Engagement tab
+    engagement_type: '',
+    duration: '',
+    start_date: '',
+    ends_on: '',
+    extension_likely: false,
+    max_notice_period: '',
+    // Commercials tab
+    ceiling_internal: '',
+    range_vendors_see_min: '',
+    range_vendors_see_max: '',
+    rate_card_cap: '',
+    total_engagement_value: '',
+    cost_centre: '',
+    budget_approved: false,
+    budget_reference: '',
+    variance_approved: false,
+    // Work setup tab
+    work_mode: '',
+    work_locations: [],
+    working_hours: '',
+    location_remote_policy: '',
+    onsite_requirement: '',
+    equipment_provisioning: '',
+    // Compliance tab
+    background_check: '',
+    background_check_required: false,
+    nda_contract_type: '',
+    work_authorization: '',
+    security_clearance_required: false,
+    security_clearance_notes: '',
+    // Process tab
+    hiring_manager: '',
+    submission_deadline: '',
+    priority: 'Normal',
+  });
+
+  const [expandedSections, setExpandedSections] = useState({
+    role: true,
+    engagement: true,
+    commercials: true,
+    workSetup: true,
+    compliance: true,
+    process: true,
+  });
+
+  const loadProfiles = () => {
+    setLoading(true);
     request('/company-profiles', { token })
       .then((profiles) => {
         const own = (profiles || []).filter((p) => p.tenant_id === user.tenant_id);
         const list = own.length ? own : profiles || [];
-        setProfiles(list);
-        if (list.length) setCompanyProfileId(list[0].id);
+        setCompanyProfileId((prev) => prev || (list[0]?.id || ''));
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
-  }, [token, user.tenant_id]);
+  };
+
+  useEffect(loadProfiles, [token, user.tenant_id]);
+
+  const handleSourceFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setSourceFilename(file.name);
+    
+    // Upload and extract text
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await fetch(`${API_BASE_URL}/upload/jd-document`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Upload failed');
+      }
+      
+      const data = await response.json();
+      
+      // Use extracted text as prompt (paste mode behavior)
+      if (data.extracted_text) {
+        setPrompt(data.extracted_text);
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+    
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const roleTitle = prefill.job_title.trim();
+  const canSubmit =
+    Boolean(companyProfileId) && (roleTitle.length > 0 || ((mode === 'paste' || mode === 'upload') && prompt.trim().length > 0));
+
+  const handlePrefillChange = (section, field, value) => {
+    setPrefill((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleChipRemove = (field, index) => {
+    setPrefill((prev) => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index),
+    }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -38,22 +236,34 @@ export default function NewRequisition() {
     }
     setSubmitting(true);
     try {
+      const prefillData = { ...prefill };
+      const fallbackTitle = mode === 'paste' ? 'Pasted JD draft' : sourceFilename || 'New contract requirement';
+      // Convert chip arrays from state
       const body = {
         company_profile_id: companyProfileId,
-        title,
+        title: roleTitle || fallbackTitle,
+        tech_stack_hint: [...prefill.must_have_skills, ...prefill.nice_to_have_skills].filter(Boolean),
+        intake_mode: mode,
+        source_filename: mode === 'upload' ? sourceFilename : '',
+        prompt: (mode === 'paste' || mode === 'upload') ? prompt : '',
         created_by: user.id,
+        // Pass all prefill fields in intake_meta for the agent to use
+        intake_meta: {
+          intake_mode: mode,
+          company_profile_id: companyProfileId,
+          source_filename: mode === 'upload' ? sourceFilename : '',
+          // Pre-filled structured role fields
+          prefill: prefillData,
+        },
       };
-      if (mode === 'guided') {
-        body.tech_stack_hint = techStackHint
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-        body.prompt = '';
-      } else {
-        body.prompt = prompt;
-        body.tech_stack_hint = [];
-      }
       const req = await request('/requisitions', { method: 'POST', body, token });
+      if (mode !== 'paste') {
+        try {
+          await request(`/requisitions/${req.id}/start`, { method: 'POST', token });
+        } catch {
+          // Draft-state fallback: the detail page offers "Run Agent" to retry.
+        }
+      }
       navigate(`/dashboard/requisitions/${req.id}`);
     } catch (err) {
       setError(err.message);
@@ -62,96 +272,314 @@ export default function NewRequisition() {
     }
   };
 
+  const ToggleSection = (section) => () => setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
+
   return (
     <div className="page page-narrow">
       <div className="page-header">
         <div>
-          <h1 className="page-title">New Requisition</h1>
-          <p className="page-subtitle">Tell us the role you need — the AI will structure it and draft the JD.</p>
+          <h1 className="page-title">New contract requirement</h1>
+          <p className="page-subtitle">Draft saved just now · Review the role details before sending to HR.</p>
         </div>
-        <Link to="/dashboard/requisitions" className="ghost-btn-link">← Back to list</Link>
+        <div className="requisition-header-actions">
+          <button type="button" className="ghost-btn">Save draft</button>
+          <Link to="/dashboard/requisitions" className="ghost-btn-link">Back to list</Link>
+        </div>
       </div>
 
       {loading ? (
         <p className="muted">Loading company profile...</p>
       ) : (
         <form onSubmit={handleSubmit} className="glass-panel form-card">
-          {error && <div className="alert alert-error">{error}</div>}
+          {error && <div className="alert alert-error" style={{ margin: '20px 32px 0' }}>{error}</div>}
 
-          <div>
-            <label className="form-label">Company / Profile</label>
-            <select
-              className="auth-input"
-              value={companyProfileId}
-              onChange={(e) => setCompanyProfileId(e.target.value)}
-              required
-            >
-              {profiles.length === 0 && <option value="">No profile available</option>}
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} — {p.location || 'Location TBD'}
-                </option>
+          <nav className="requisition-step-nav" aria-label="Requisition sections">
+            {['Role', 'Engagement', 'Commercials', 'Work setup', 'Compliance', 'Process'].map((step, i) => (
+              <span key={step} className={`requisition-step ${i === 0 ? 'active' : ''}`}>{step}</span>
+            ))}
+          </nav>
+
+          {/* A. How should the AI draft this JD? */}
+          <section className="intake-section">
+            <div className="intake-section-head">
+              <h2 className="intake-section-title">How should the AI draft this JD?</h2>
+              <span className="intake-section-caption">Choose one</span>
+            </div>
+            <div className="intake-mode-tabs" role="radiogroup">
+              {MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === m.id}
+                  className={`mode-tab ${mode === m.id ? 'active' : ''}`}
+                  onClick={() => setMode(m.id)}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, textAlign: 'left' }}
+                >
+                  <span>{m.label}</span>
+                  <span style={{ fontWeight: 500, fontSize: '0.74rem', lineHeight: 1.4 }}>{m.desc}</span>
+                </button>
               ))}
-            </select>
-            {profiles.length === 0 && (
-              <p className="field-hint">
-                A company profile is created when you register a workspace. Re-register your workspace to continue.
+            </div>
+
+            {mode === 'paste' && (
+              <div className="intake-field" style={{ marginTop: 18 }}>
+                <label className="form-label">Full Job Description / Requirements</label>
+                <textarea
+                  className="auth-input"
+                  rows="9"
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  placeholder="Paste the raw JD text — the agent parses the whole role from it in one pass."
+                  required
+                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </div>
+            )}
+
+            {mode === 'upload' && (
+              <div className="intake-field" style={{ marginTop: 18 }}>
+                <label className="form-label">Job description / spec file</label>
+                <input ref={fileInputRef} type="file" accept={ACCEPT} onChange={handleSourceFile} style={{ display: 'none' }} />
+                {sourceFilename ? (
+                  <div className="source-banner" style={{ marginBottom: 0 }}>
+                    <span className="source-banner-icon">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 6 9 17l-5-5" />
+                      </svg>
+                    </span>
+                    <p className="source-banner-text">
+                      <strong>&ldquo;{sourceFilename}&rdquo; read</strong> — Title, skills, experience, and location prefilled below.
+                    </p>
+                    <button type="button" className="source-banner-replace" onClick={() => fileInputRef.current?.click()}>
+                      Replace
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" className="upload-zone" onClick={() => fileInputRef.current?.click()}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <path d="m17 8-5-5-5 5" />
+                      <path d="M12 3v12" />
+                    </svg>
+                    Choose a file — .docx, .pdf, .txt, .md
+                  </button>
+                )}
+              </div>
+            )}
+
+            {mode === 'guided' && (
+              <p className="intake-mode-note">
+                The agent will ask you a few targeted questions to fill any gaps, using your role brief and the company background from onboarding.
               </p>
             )}
-          </div>
+          </section>
 
-          <div>
-            <label className="form-label">Role Title <span className="required">*</span></label>
-            <input
-              className="auth-input"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Senior Backend Engineer"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="form-label">How should the AI work?</label>
-            <div className="mode-tabs">
-              <button type="button" className={`mode-tab ${mode === 'guided' ? 'active' : ''}`} onClick={() => setMode('guided')}>
-                Guided intake
-              </button>
-              <button type="button" className={`mode-tab ${mode === 'prompt' ? 'active' : ''}`} onClick={() => setMode('prompt')}>
-                Paste JD directly
-              </button>
+          {/* D. Pre-fill Structured Role Fields (Optional) */}
+          <section className="intake-section">
+            <div className="intake-section-head">
+              <h2 className="intake-section-title">Role definition</h2>
+              <span className="intake-section-caption">Fill any known fields now — the AI will ask only about gaps.</span>
             </div>
+
+            <Section title="Role" expanded={expandedSections.role} onToggle={ToggleSection('role')}>
+              <Field label="Job Title" hint="e.g. Senior Backend Engineer">
+                <TextInput value={prefill.job_title} onChange={(v) => handlePrefillChange('role', 'job_title', v)} placeholder="Senior Backend Engineer" required />
+              </Field>
+              <Field label="Job Family" hint="e.g. Engineering / Platform">
+                <TextInput value={prefill.job_family} onChange={(v) => handlePrefillChange('role', 'job_family', v)} placeholder="Engineering / Platform" />
+              </Field>
+              <Field label="Must-have Skills">
+                <ChipInput
+                  value={prefill.must_have_skills}
+                  onChange={(v) => handlePrefillChange('role', 'must_have_skills', v)}
+                  onRemove={(i) => handleChipRemove('must_have_skills', i)}
+                  placeholder="+ add skill"
+                />
+              </Field>
+              <Field label="Nice-to-have Skills">
+                <ChipInput
+                  value={prefill.nice_to_have_skills}
+                  onChange={(v) => handlePrefillChange('role', 'nice_to_have_skills', v)}
+                  onRemove={(i) => handleChipRemove('nice_to_have_skills', i)}
+                  placeholder="+ add skill"
+                />
+              </Field>
+              <div className="editor-row-3" style={{ marginTop: 18 }}>
+                <Field label="Seniority Level">
+                  <SelectInput value={prefill.seniority} onChange={(v) => handlePrefillChange('role', 'seniority', v)} options={SENIORITY_OPTIONS} placeholder="Select level…" />
+                </Field>
+                <Field label="Experience" hint="e.g. 5–8 years">
+                  <TextInput value={prefill.experience} onChange={(v) => handlePrefillChange('role', 'experience', v)} placeholder="5–8 years" />
+                </Field>
+                <Field label="Headcount">
+                  <TextInput type="number" min="1" value={prefill.headcount} onChange={(v) => handlePrefillChange('role', 'headcount', v === '' ? 1 : Number(v))} placeholder="1" />
+                </Field>
+              </div>
+              <Field label="Certifications">
+                <ChipInput
+                  value={prefill.certifications}
+                  onChange={(v) => handlePrefillChange('role', 'certifications', v)}
+                  onRemove={(i) => handleChipRemove('certifications', i)}
+                  placeholder="+ add certification"
+                />
+              </Field>
+            </Section>
+
+            <Section title="Engagement" expanded={expandedSections.engagement} onToggle={ToggleSection('engagement')}>
+              <div className="editor-row-3">
+                <Field label="Engagement Type">
+                  <SelectInput value={prefill.engagement_type} onChange={(v) => handlePrefillChange('engagement', 'engagement_type', v)} options={ENGAGEMENT_TYPES} placeholder="Select…" />
+                </Field>
+                <Field label="Duration" hint="e.g. 6 months">
+                  <TextInput value={prefill.duration} onChange={(v) => handlePrefillChange('engagement', 'duration', v)} placeholder="6 months" />
+                </Field>
+                <Field label="Start Date">
+                  <TextInput type="date" value={prefill.start_date} onChange={(v) => handlePrefillChange('engagement', 'start_date', v)} />
+                </Field>
+              </div>
+              <div className="editor-row-3" style={{ marginTop: 18 }}>
+                <Field label="Ends On" hint="Auto-calculated from start + duration when left blank">
+                  <TextInput type="date" value={prefill.ends_on} onChange={(v) => handlePrefillChange('engagement', 'ends_on', v)} />
+                </Field>
+                <Field label="Extension Likely">
+                  <SelectInput value={prefill.extension_likely ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('engagement', 'extension_likely', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
+                </Field>
+                <Field label="Max Notice Period" hint="e.g. 30 days">
+                  <TextInput value={prefill.max_notice_period} onChange={(v) => handlePrefillChange('engagement', 'max_notice_period', v)} placeholder="30 days" />
+                </Field>
+              </div>
+            </Section>
+
+            <Section title="Commercials" expanded={expandedSections.commercials} onToggle={ToggleSection('commercials')}>
+              <div className="editor-row" style={{ gap: 16 }}>
+                <Field label="Your Ceiling — Internal" hint="Only visible to internal HR; vendors see the range below (INR p.a.)">
+                  <TextInput type="number" min="0" value={prefill.ceiling_internal} onChange={(v) => handlePrefillChange('commercials', 'ceiling_internal', v === '' ? '' : Number(v))} placeholder="INR p.a." />
+                </Field>
+                <Field label="Range Vendors Will See" hint="Min–Max INR p.a.">
+                  <RangeInput
+                    minVal={prefill.range_vendors_see_min}
+                    maxVal={prefill.range_vendors_see_max}
+                    onMinChange={(v) => handlePrefillChange('commercials', 'range_vendors_see_min', v)}
+                    onMaxChange={(v) => handlePrefillChange('commercials', 'range_vendors_see_max', v)}
+                    placeholder="INR p.a."
+                  />
+                </Field>
+              </div>
+              <div className="editor-row-3" style={{ marginTop: 18 }}>
+                <Field label="Rate Card Cap" hint="Agreed rate-card cap for variance checks (INR p.a.)">
+                  <TextInput type="number" min="0" value={prefill.rate_card_cap} onChange={(v) => handlePrefillChange('commercials', 'rate_card_cap', v === '' ? '' : Number(v))} placeholder="INR p.a." />
+                </Field>
+                <Field label="Total Engagement Value" hint="Auto-calculated from headcount × rate × duration — editable override">
+                  <TextInput value={prefill.total_engagement_value} onChange={(v) => handlePrefillChange('commercials', 'total_engagement_value', v)} placeholder="e.g. ₹36,00,000" />
+                </Field>
+                <Field label="Cost Centre" hint="e.g. ENG-4102">
+                  <TextInput value={prefill.cost_centre} onChange={(v) => handlePrefillChange('commercials', 'cost_centre', v)} placeholder="ENG-4102" />
+                </Field>
+              </div>
+              <div className="editor-row-3" style={{ marginTop: 18 }}>
+                <Field label="Budget Approved">
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <SelectInput value={prefill.budget_approved ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('commercials', 'budget_approved', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" style={{ width: '80px' }} />
+                    <TextInput value={prefill.budget_reference} onChange={(v) => handlePrefillChange('commercials', 'budget_reference', v)} placeholder="PO / reference…" disabled={!prefill.budget_approved} />
+                  </div>
+                </Field>
+                <Field label="HR Approved Variance">
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={prefill.variance_approved} onChange={(e) => handlePrefillChange('commercials', 'variance_approved', e.target.checked)} />
+                    <span>HR approved the rate-card variance</span>
+                  </label>
+                </Field>
+              </div>
+            </Section>
+
+            <Section title="Work Setup" expanded={expandedSections.workSetup} onToggle={ToggleSection('workSetup')}>
+              <div className="editor-row-3">
+                <Field label="Work Mode">
+                  <SelectInput value={prefill.work_mode} onChange={(v) => handlePrefillChange('workSetup', 'work_mode', v)} options={WORK_MODES} placeholder="Select…" />
+                </Field>
+                <Field label="Location(s)">
+                  <ChipInput
+                    value={prefill.work_locations}
+                    onChange={(v) => handlePrefillChange('workSetup', 'work_locations', v)}
+                    onRemove={(i) => handleChipRemove('work_locations', i)}
+                    placeholder="+ add city / region"
+                  />
+                </Field>
+                <Field label="Equipment Provisioning">
+                  <SelectInput value={prefill.equipment_provisioning} onChange={(v) => handlePrefillChange('workSetup', 'equipment_provisioning', v)} options={EQUIPMENT_OPTIONS} placeholder="Select…" />
+                </Field>
+              </div>
+              <div className="editor-row" style={{ marginTop: 18 }}>
+                <Field label="Working Hours / Shift" hint="e.g. IST business hours (9:30 – 18:30)">
+                  <TextInput value={prefill.working_hours} onChange={(v) => handlePrefillChange('workSetup', 'working_hours', v)} placeholder="IST business hours (9:30 – 18:30)" />
+                </Field>
+              </div>
+              <div className="editor-row" style={{ marginTop: 18 }}>
+                <Field label="Location Remote Policy">
+                  <TextInput value={prefill.location_remote_policy} onChange={(v) => handlePrefillChange('workSetup', 'location_remote_policy', v)} placeholder="e.g. Remote-first, onsite quarterly" />
+                </Field>
+              </div>
+              <div className="editor-row" style={{ marginTop: 18 }}>
+                <Field label="Onsite Requirement">
+                  <TextInput value={prefill.onsite_requirement} onChange={(v) => handlePrefillChange('workSetup', 'onsite_requirement', v)} placeholder="e.g. 2 days/week in Bangalore office" />
+                </Field>
+              </div>
+            </Section>
+
+            <Section title="Compliance" expanded={expandedSections.compliance} onToggle={ToggleSection('compliance')}>
+              <div className="editor-row-3">
+                <Field label="Background Check Required">
+                  <SelectInput value={prefill.background_check_required ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'background_check_required', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
+                </Field>
+                <Field label="Contract Type">
+                  <SelectInput value={prefill.nda_contract_type} onChange={(v) => handlePrefillChange('compliance', 'nda_contract_type', v)} options={CONTRACT_OPTIONS} placeholder="Select…" />
+                </Field>
+                <Field label="Data / Security Clearance Required">
+                  <SelectInput value={prefill.security_clearance_required ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'security_clearance_required', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
+                </Field>
+              </div>
+              <div className="editor-row" style={{ marginTop: 18 }}>
+                <Field label="Background Check Details" hint="e.g. Standard police + education verification">
+                  <TextInput value={prefill.background_check} onChange={(v) => handlePrefillChange('compliance', 'background_check', v)} placeholder="Standard police + education verification" />
+                </Field>
+              </div>
+              <div className="editor-row" style={{ marginTop: 18 }}>
+                <Field label="Work Authorization" hint="Visa / authorization constraints">
+                  <TextInput value={prefill.work_authorization} onChange={(v) => handlePrefillChange('compliance', 'work_authorization', v)} placeholder="Indian citizen / work visa required" />
+                </Field>
+              </div>
+              <div className="editor-row" style={{ marginTop: 18 }}>
+                <Field label="Security Clearance Notes" hint="Applies when clearance is required">
+                  <TextInput value={prefill.security_clearance_notes} onChange={(v) => handlePrefillChange('compliance', 'security_clearance_notes', v)} placeholder="Govt client — background + screening" />
+                </Field>
+              </div>
+            </Section>
+
+            <Section title="Process" expanded={expandedSections.process} onToggle={ToggleSection('process')}>
+              <div className="editor-row-3">
+                <Field label="Hiring Manager" hint="e.g. Arjun Mehta">
+                  <TextInput value={prefill.hiring_manager} onChange={(v) => handlePrefillChange('process', 'hiring_manager', v)} placeholder="Arjun Mehta" />
+                </Field>
+                <Field label="Submission Deadline">
+                  <TextInput type="date" value={prefill.submission_deadline} onChange={(v) => handlePrefillChange('process', 'submission_deadline', v)} />
+                </Field>
+                <Field label="Priority">
+                  <SelectInput value={prefill.priority} onChange={(v) => handlePrefillChange('process', 'priority', v)} options={PRIORITY_OPTIONS} placeholder="Normal" />
+                </Field>
+              </div>
+            </Section>
+          </section>
+
+          {/* E. Submit */}
+          <div className="intake-footer">
+            <p className="intake-footer-note">
+              Nothing auto-publishes — the draft lands in a review editor where you check every field first.
+            </p>
+            <button type="submit" className="glow-btn" disabled={submitting || !canSubmit}>
+              {submitting ? 'Creating...' : 'Create & Start Agent'}
+            </button>
           </div>
-
-          {mode === 'guided' ? (
-            <div>
-              <label className="form-label">Tech Stack Hint (comma-separated, optional)</label>
-              <input
-                className="auth-input"
-                value={techStackHint}
-                onChange={(e) => setTechStackHint(e.target.value)}
-                placeholder="Python, FastAPI, PostgreSQL"
-              />
-              <p className="field-hint">The agent will ask targeted questions to fill any gaps before generating the role.</p>
-            </div>
-          ) : (
-            <div>
-              <label className="form-label">Full Job Description / Requirements</label>
-              <textarea
-                className="auth-input"
-                rows="10"
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Paste the raw JD text — the agent parses the whole role from it in one pass."
-                required
-                style={{ resize: 'vertical', fontFamily: 'inherit' }}
-              />
-            </div>
-          )}
-
-          <button type="submit" className="glow-btn" disabled={submitting || profiles.length === 0}>
-            {submitting ? 'Creating...' : 'Create & Start Agent'}
-          </button>
         </form>
       )}
     </div>

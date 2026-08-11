@@ -13,17 +13,11 @@ function formatDate(iso) {
   }
 }
 
-function rolePill(role) {
-  const map = {
-    'Super Admin': 'role-superadmin',
-    Admin: 'role-admin',
-    HR: 'role-hr',
-    'Hiring Manager': 'role-hiringmanager',
-    Recruiter: 'role-recruiter',
-    Director: 'role-director',
-  };
-  return <span className={`role-pill ${map[role] || 'role-admin'}`}>{role}</span>;
-}
+const EMPTY_FORM = {
+  name: '',
+  email: '',
+  password: '',
+};
 
 const EMPTY_EDIT = {
   id: '',
@@ -32,22 +26,25 @@ const EMPTY_EDIT = {
   password: '',
 };
 
-export default function ConfigureCompanyAccounts() {
-  const { token } = useAuth();
+export default function ManageDirectors() {
+  const { token, user } = useAuth();
   const navigate = useNavigate();
-  const [admins, setAdmins] = useState([]);
+  const [directors, setDirectors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
-  const [edit, setEdit] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [edit, setEdit] = useState(null);
+  const [editing, setEditing] = useState(false);
 
   const load = () => {
     setLoading(true);
     request('/api/auth/users', { token })
       .then((usersRes) => {
-        setAdmins((usersRes || []).filter((u) => u.role === 'Admin'));
+        setDirectors((usersRes || []).filter((u) => u.role === 'Director'));
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -56,8 +53,52 @@ export default function ConfigureCompanyAccounts() {
 
   useEffect(load, [token]);
 
+  const handleInput = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    setError('');
+    setSuccess('');
+  };
+
+  const handleCreateDirector = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await request('/api/auth/users', {
+        method: 'POST',
+        token,
+        body: { email: form.email, name: form.name, password: form.password, role: 'Director' },
+      });
+      setSuccess(`Director account created for ${form.email}.`);
+      setForm({ ...EMPTY_FORM });
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteDirector = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
+      setSuccess(`Director account ${confirmDelete.email} removed.`);
+      setConfirmDelete(null);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const openEdit = (u) => {
-    setEdit({ id: u.id, email: u.email, name: u.name || '', password: '' });
+    setEdit({ ...EMPTY_EDIT, id: u.id, email: u.email, name: u.name || '' });
     setError('');
     setSuccess('');
   };
@@ -68,7 +109,8 @@ export default function ConfigureCompanyAccounts() {
 
   const handleSaveEdit = async (e) => {
     e.preventDefault();
-    setSubmitting(true);
+    if (!edit) return;
+    setEditing(true);
     setError('');
     setSuccess('');
     try {
@@ -77,40 +119,23 @@ export default function ConfigureCompanyAccounts() {
       if (edit.name !== '') payload.name = edit.name;
       if (edit.password) payload.password = edit.password;
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
-      setSuccess('Admin account updated.');
+      setSuccess(`Director account ${edit.email} updated.`);
       setEdit(null);
       load();
     } catch (err) {
       setError(err.message);
     } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteUser = async () => {
-    if (!confirmDelete) return;
-    setSubmitting(true);
-    setError('');
-    setSuccess('');
-    try {
-      await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
-      setSuccess(`Admin account ${confirmDelete.email} deleted.`);
-      setConfirmDelete(null);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
+      setEditing(false);
     }
   };
 
   return (
     <div className="page">
       <WelcomeBanner
-        title="Configure Company Accounts"
-        subtitle="View and manage the Admin accounts across all buyer companies. Hiring Managers are provisioned by each company's Admin or HR."
+        title="Directors"
+        subtitle={`Create and manage Director accounts in the ${user.tenant_name} workspace. Directors get read-only executive access to requisitions, shortlists and vendor engagement.`}
       >
-        <button className="ghost-btn" onClick={() => navigate('/dashboard/superadmin')}>
+        <button className="ghost-btn" onClick={() => navigate('/dashboard/admin')}>
           Back to Dashboard
         </button>
       </WelcomeBanner>
@@ -118,25 +143,49 @@ export default function ConfigureCompanyAccounts() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
+      <div className="glass-panel" id="create-director">
+        <div className="card-head-row">
+          <div className="form-panel-head">
+            <div className="form-panel-icon">{Icons.shield}</div>
+            <div>
+              <div className="form-panel-title">Create Director</div>
+              <div className="form-panel-caption">Provision a new Director account for executive read-only access.</div>
+            </div>
+          </div>
+          <button type="submit" form="create-director-form" className="glow-btn" disabled={submitting} style={{ flexShrink: 0 }}>
+            {submitting ? 'Creating...' : 'Create Director Account'}
+          </button>
+        </div>
+        <form id="create-director-form" onSubmit={handleCreateDirector}>
+          <div className="form-grid">
+            <div>
+              <label className="form-label">Full Name</label>
+              <input type="text" name="name" required value={form.name} onChange={handleInput} className="auth-input" placeholder="e.g. Rajesh Kumar" />
+            </div>
+            <div>
+              <label className="form-label">Email Address</label>
+              <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="director@company.com" />
+            </div>
+            <div>
+              <label className="form-label">Password</label>
+              <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
+            </div>
+          </div>
+        </form>
+      </div>
+
       <div className="glass-panel table-card">
         <div className="table-head">
           <div>
-            <h2 className="card-title">Company Admin Accounts</h2>
-            <p className="muted" style={{ fontSize: '0.82rem' }}>{admins.length} total</p>
+            <h2 className="card-title">Directors</h2>
+            <p className="muted" style={{ fontSize: '0.82rem' }}>{directors.length} total</p>
           </div>
         </div>
         {loading ? (
-          <p className="muted" style={{ padding: 24 }}>Loading accounts...</p>
-        ) : admins.length === 0 ? (
+          <p className="muted" style={{ padding: 24 }}>Loading directors...</p>
+        ) : directors.length === 0 ? (
           <p className="muted" style={{ padding: 16 }}>
-            No Admin accounts yet.{' '}
-            <button
-              className="auth-switch-link"
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#2563eb', fontWeight: 600 }}
-              onClick={() => navigate('/dashboard/superadmin/onboard')}
-            >
-              Onboard a buyer company
-            </button>
+            No Director accounts yet. Directors log in at the Director Portal (read-only executive access).
           </p>
         ) : (
           <table className="data-table">
@@ -144,20 +193,16 @@ export default function ConfigureCompanyAccounts() {
               <tr>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Role</th>
-                <th>Company</th>
                 <th>Status</th>
                 <th>Created</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {admins.map((u) => (
+              {directors.map((u) => (
                 <tr key={u.id}>
                   <td className="td-title">{u.name || '—'}</td>
                   <td>{u.email}</td>
-                  <td>{rolePill(u.role)}</td>
-                  <td className="td-company">{u.tenant_name}</td>
                   <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
                   <td className="td-date">{formatDate(u.created_at)}</td>
                   <td className="td-action">
@@ -170,7 +215,7 @@ export default function ConfigureCompanyAccounts() {
                         onClick={() => setConfirmDelete(u)}
                         style={{ cursor: 'pointer' }}
                       >
-                        Delete
+                        Remove
                       </span>
                     </div>
                   </td>
@@ -184,7 +229,7 @@ export default function ConfigureCompanyAccounts() {
       {confirmDelete && (
         <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Delete Admin account?</h3>
+            <h3 className="modal-title">Remove Director account?</h3>
             <p className="modal-text">
               This will permanently delete the account <strong>{confirmDelete.name || confirmDelete.email}</strong> ({confirmDelete.email}).
               This action cannot be undone.
@@ -193,18 +238,17 @@ export default function ConfigureCompanyAccounts() {
               <button className="ghost-btn" onClick={() => setConfirmDelete(null)}>
                 Cancel
               </button>
-              <button className="danger-btn" onClick={handleDeleteUser} disabled={submitting}>
-                {submitting ? 'Deleting...' : 'Delete Account'}
+              <button className="danger-btn" onClick={handleDeleteDirector} disabled={deleting}>
+                {deleting ? 'Removing...' : 'Remove Account'}
               </button>
             </div>
           </div>
         </div>
       )}
-
       {edit && (
         <div className="modal-overlay" onClick={() => setEdit(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Edit Admin Account</h3>
+            <h3 className="modal-title">Edit Director Account</h3>
             <form onSubmit={handleSaveEdit}>
               <div className="modal-fields">
                 <div>
@@ -224,8 +268,8 @@ export default function ConfigureCompanyAccounts() {
                 <button type="button" className="ghost-btn" onClick={() => setEdit(null)}>
                   Cancel
                 </button>
-                <button type="submit" className="glow-btn" disabled={submitting}>
-                  {submitting ? 'Saving...' : 'Save Changes'}
+                <button type="submit" className="glow-btn" disabled={editing}>
+                  {editing ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </form>

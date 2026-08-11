@@ -44,9 +44,9 @@ export default function DashboardLayout() {
         ]
       : user.role === 'Recruiter'
         ? [{ to: '/dashboard/recruiter', label: 'Dashboard', end: true }]
-        : user.role === 'Admin'
-          ? [{ to: '/dashboard/admin', label: 'Dashboard', end: true }]
-          : user.role === 'Director'
+      : user.role === 'Recruiter'
+        ? [{ to: '/dashboard/recruiter', label: 'Dashboard', end: true }]
+        : user.role === 'Director'
             ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
             : user.role === 'Super Admin'
               ? [
@@ -146,6 +146,29 @@ export default function DashboardLayout() {
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
                 Onboard Vendor
+              </NavLink>
+            </>
+          ) : user.role === 'Admin' ? (
+            <>
+              <div className="nav-section-label">Workspace</div>
+              <NavLink
+                to="/dashboard/admin"
+                end
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Dashboard
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/hiring-managers"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Hiring Managers
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/directors"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Directors
               </NavLink>
             </>
           ) : (

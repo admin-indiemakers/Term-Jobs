@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -105,6 +105,14 @@ class RequisitionIn(BaseModel):
     tech_stack_hint: list[str] = Field(default_factory=list)
     prompt: str = ""
     created_by: str | None = None
+    # Stage-1 intake (tabbed intake flow)
+    intake_mode: str = "guided"  # guided | paste | upload
+    background_profile_id: str | None = None
+    reference_documents: list[str] = Field(default_factory=list)
+    context_notes: str = ""
+    source_filename: str = ""  # uploaded source document name
+    # Pre-filled structured role fields (optional, all 6 tabs)
+    prefill: dict | None = None
 
 
 class AnswerIn(BaseModel):
@@ -140,7 +148,29 @@ def _company_dict(prof: models.CompanyProfile) -> dict:
     }
 
 
-def _requisition_dict(requisition_id: str) -> dict:
+INTERNAL_ROLE_KEYS = {
+    "ceiling_internal",
+    "rate_card_cap",
+    "total_engagement_value",
+    "cost_centre",
+    "budget_approved",
+    "budget_reference",
+    "variance_approved",
+}
+
+
+def _strip_internal_role(role: Any) -> Any:
+    """Remove internal-only commercial fields before a vendor sees a role.
+
+    ``ceiling_internal`` must never reach a vendor-facing response; only
+    ``range_vendors_see`` is published to consultancies.
+    """
+    if not isinstance(role, dict):
+        return role
+    return {k: v for k, v in role.items() if k not in INTERNAL_ROLE_KEYS}
+
+
+def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
     with get_session() as session:
         req = session.get(models.Requisition, requisition_id)
         if req is None:
@@ -160,10 +190,13 @@ def _requisition_dict(requisition_id: str) -> dict:
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
-            "structured_role": req.structured_role,
+            "structured_role": (
+                _strip_internal_role(req.structured_role) if for_vendor else req.structured_role
+            ),
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
+            "intake_meta": req.intake_meta or {},
             "approved_by": req.approved_by,
             "approved_at": req.approved_at.isoformat() if req.approved_at else None,
             "created_at": req.created_at.isoformat() if req.created_at else None,
@@ -276,6 +309,14 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
         intent=intent,
         created_by=body.created_by or current_user.id,
         tenant_id=current_user.tenant_id,
+        intake_meta={
+            "intake_mode": body.intake_mode,
+            "background_profile_id": body.background_profile_id,
+            "reference_documents": body.reference_documents,
+            "context_notes": body.context_notes,
+            "source_filename": body.source_filename,
+            "prefill": body.prefill or {},
+        },
     )
     return _requisition_dict(req.id)
 
@@ -301,6 +342,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
         profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}
+        is_vendor = current_user.role == "Recruiter"
         return [
             {
                 "id": r.id,
@@ -312,7 +354,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 if r.company_profile_id in profiles
                 else None,
                 "generated_jd_markdown": r.generated_jd_markdown,
-                "structured_role": r.structured_role,
+                "structured_role": _strip_internal_role(r.structured_role) if is_vendor else r.structured_role,
                 "intent": r.intent,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
@@ -323,7 +365,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
 @app.get("/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _require_tenant(_get_requisition(requisition_id), current_user)
-    return _requisition_dict(requisition_id)
+    return _requisition_dict(requisition_id, for_vendor=current_user.role == "Recruiter")
 
 
 @app.post("/requisitions/{requisition_id}/start")
@@ -385,7 +427,10 @@ def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, cu
     _require_tenant(_get_requisition(requisition_id), current_user)
 
     by = body.by if body else None
-    req = service.publish(requisition_id, by=by)
+    try:
+        req = service.publish(requisition_id, by=by)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     return _requisition_dict(req.id)
 
 
@@ -410,6 +455,69 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
     service.delete(requisition_id)
+
+
+# --- file upload for JD documents ---------------------------------------------
+@app.post("/upload/jd-document")
+async def upload_jd_document(file: UploadFile = File(...), current_user: User = Depends(get_current_user)) -> dict:
+    """Upload a JD/spec document (.docx, .pdf) and extract text content."""
+    _require_writable(current_user)
+    
+    # Validate file type
+    allowed_types = {
+        'application/pdf': '.pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+        'application/msword': '.doc',
+        'text/plain': '.txt',
+        'text/markdown': '.md',
+    }
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Unsupported file type: {file.content_type}")
+    
+    # Read file content
+    content = await file.read()
+    
+    # Extract text based on file type
+    if file.content_type == 'application/pdf':
+        text = _extract_pdf_text(content)
+    elif file.content_type in ('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword'):
+        text = _extract_docx_text(content)
+    else:
+        text = content.decode('utf-8', errors='ignore')
+    
+    if not text or not text.strip():
+        raise HTTPException(status_code=400, detail="Could not extract text from document")
+    
+    return {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "extracted_text": text.strip(),
+        "size": len(content)
+    }
+
+
+def _extract_pdf_text(pdf_bytes: bytes) -> str:
+    """Extract text from PDF bytes."""
+    try:
+        import fitz
+        extracted_text = ""
+        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+            for page in doc:
+                extracted_text += page.get_text("text")
+        return extracted_text
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
+
+
+def _extract_docx_text(docx_bytes: bytes) -> str:
+    """Extract text from DOCX bytes."""
+    try:
+        from docx import Document
+        import io
+        doc = Document(io.BytesIO(docx_bytes))
+        return "\n".join([para.text for para in doc.paragraphs])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DOCX parsing failed: {e}")
 
 
 # --- static UI / health ------------------------------------------------------

@@ -136,6 +136,29 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
         return []
 
 
+INTERNAL_ROLE_KEYS = {
+    "ceiling_internal",
+    "rate_card_cap",
+    "total_engagement_value",
+    "cost_centre",
+    "budget_approved",
+    "budget_reference",
+    "variance_approved",
+}
+
+
+def _vendor_role_text(structured_role: Any) -> str:
+    """Serialise a structured role for vendor eyes without internal commercial fields.
+
+    ``ceiling_internal`` and other restricted fields must never appear in the
+    JD text surfaced to consultancies.
+    """
+    if not isinstance(structured_role, dict):
+        return str(structured_role)
+    visible = {k: v for k, v in structured_role.items() if k not in INTERNAL_ROLE_KEYS}
+    return str(visible)
+
+
 def fetch_published_requisitions(tenant_id: str | None = None, company_tenant_ids: list[str] | None = None) -> list[dict[str, Any]]:
     """Fetch published requisitions from MongoDB, optionally restricted to a tenant or set of company tenants."""
     try:
@@ -155,7 +178,7 @@ def fetch_published_requisitions(tenant_id: str | None = None, company_tenant_id
             if markdown_jd:
                 jd_text = markdown_jd
             elif structured_role:
-                jd_text = str(structured_role)
+                jd_text = _vendor_role_text(structured_role)
 
             results.append({
                 "id": doc.get("id"),
@@ -185,7 +208,7 @@ def fetch_requisition_by_id(req_id: str, tenant_id: str | None = None, company_t
 
         markdown_jd = doc.get("generated_jd_markdown")
         structured_role = doc.get("structured_role")
-        jd_text = markdown_jd if markdown_jd else (str(structured_role) if structured_role else "")
+        jd_text = markdown_jd if markdown_jd else (_vendor_role_text(structured_role) if structured_role else "")
 
         return {
             "id": doc.get("id"),

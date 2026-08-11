@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/StatusBadge';
-import StructuredRoleView from '../../components/StructuredRoleView';
+import RequisitionEditor from '../../components/RequisitionEditor';
 import JdPreview from '../../components/JdPreview';
 
 const STATE_STEPS = ['Draft', 'Intake', 'Structuring', 'PendingApproval', 'Published', 'Closed'];
@@ -46,7 +46,9 @@ export default function RequisitionDetail() {
     request(`/requisitions/${id}`, { token })
       .then((data) => {
         setReq(data);
-        setDraftRole(data.structured_role || null);
+        const role = data.structured_role ? { ...data.structured_role } : null;
+        if (role && !role.hiring_manager && user?.name) role.hiring_manager = user.name;
+        setDraftRole(role);
         setEditing(false);
         setError('');
       })
@@ -54,7 +56,7 @@ export default function RequisitionDetail() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [id, token]);
+  useEffect(load, [id, token, user?.name]);
 
   const run = async (path, method, body) => {
     setError('');
@@ -98,12 +100,12 @@ export default function RequisitionDetail() {
     setBusy('approve');
     const body = {};
     if (editing && draftRole) {
+      const normPair = (arr) =>
+        arr && arr[0] != null && arr[1] != null ? [arr[0], arr[1]] : null;
       body.edited_role = {
         ...draftRole,
-        rate_band:
-          draftRole.rate_band && draftRole.rate_band[0] != null && draftRole.rate_band[1] != null
-            ? [draftRole.rate_band[0], draftRole.rate_band[1]]
-            : null,
+        rate_band: normPair(draftRole.rate_band),
+        range_vendors_see: normPair(draftRole.range_vendors_see),
       };
     }
     const ok = await run('/approve', 'POST', { ...body, reviewer: user.id });
@@ -161,6 +163,13 @@ export default function RequisitionDetail() {
   const coverage = req.coverage_result;
   const canShowReview = (req.structured_role || req.generated_jd_markdown) && ['Structuring', 'PendingApproval', 'Published', 'Closed'].includes(normStatus);
   const isReadOnly = user.role === 'Director';
+
+  const intakeMeta = req.intake_meta || {};
+  const sourceLabel = intakeMeta.source_filename
+    ? intakeMeta.source_filename
+    : intakeMeta.background_profile_id || intakeMeta.reference_documents?.length || intakeMeta.context_notes
+      ? 'Company Background sources'
+      : null;
 
   return (
     <div className="page page-narrow">
@@ -272,9 +281,6 @@ export default function RequisitionDetail() {
             </button>
           </div>
           <div className="approval-actions">
-            <button className="ghost-btn" onClick={() => setEditing((v) => !v)}>
-              {editing ? 'Done editing' : 'Edit role'}
-            </button>
             <button className="danger-btn" onClick={handleReject} disabled={busy === 'reject'}>
               Reject
             </button>
@@ -332,11 +338,15 @@ export default function RequisitionDetail() {
             <span className="review-tab">Job Description</span>
           </div>
 
-          <StructuredRoleView
-            role={draftRole}
-            editable={editing && normStatus === 'Structuring'}
-            onChange={setDraftRole}
-          />
+          <div className="editor-panel">
+            <RequisitionEditor
+              role={draftRole}
+              editable={normStatus === 'Structuring' && !isReadOnly}
+              onChange={setDraftRole}
+              sourceLabel={sourceLabel}
+              onReplace={() => setInfo('Replace sources from the New Requisition intake screen.')}
+            />
+          </div>
 
           <div className="jd-section">
             <h3 className="card-title">Generated JD</h3>

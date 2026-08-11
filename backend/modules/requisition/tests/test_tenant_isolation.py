@@ -244,7 +244,7 @@ class _FakeService:
         self.last_tenant_id = None
         self.created_req = None
 
-    def create(self, company_profile_id, intent, created_by, tenant_id="local"):
+    def create(self, company_profile_id, intent, created_by, tenant_id="local", intake_meta=None):
         self.last_tenant_id = tenant_id
         self.created_req = Requisition(
             tenant_id=tenant_id,

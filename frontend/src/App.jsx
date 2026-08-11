@@ -6,6 +6,8 @@ import DirectorLogin from './pages/DirectorLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
+import ManageDirectors from './pages/ManageDirectors';
+import ManageHiringManagers from './pages/ManageHiringManagers';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import DirectorDashboard from './pages/DirectorDashboard';
 import OnboardCompany from './pages/OnboardCompany';
@@ -76,6 +78,8 @@ export default function App() {
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard />} />
           <Route path="admin" element={<AdminDashboard />} />
+          <Route path="admin/directors" element={<ManageDirectors />} />
+          <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
           <Route path="director" element={<DirectorDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />

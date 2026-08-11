@@ -19,6 +19,7 @@ from ..domain.schemas import (
     RequisitionStatus,
     RoleIntent,
     StructuredRole,
+    rate_card_variance,
 )
 from ..domain.state import StateMachine
 from ..llm.base import LLMClient
@@ -48,6 +49,7 @@ class RequisitionService:
         intent: RoleIntent,
         created_by: str | None = None,
         tenant_id: str = "local",
+        intake_meta: dict | None = None,
     ) -> models.Requisition:
         with self.session_factory() as session:
             req = models.Requisition(
@@ -57,6 +59,7 @@ class RequisitionService:
                 status=RequisitionStatus.DRAFT.value,
                 title=intent.title,
                 intent=intent.model_dump(),
+                intake_meta=intake_meta or {},
             )
             session.add(req)
             session.commit()
@@ -120,6 +123,11 @@ class RequisitionService:
     def publish(self, requisition_id: str, by: str | None = None) -> models.Requisition:
         with self.session_factory() as session:
             req = session.get(models.Requisition, requisition_id)
+            if rate_card_variance(req.structured_role):
+                raise ValueError(
+                    "Your ceiling is above the agreed rate card. HR must approve "
+                    "the variance before this requisition can be published."
+                )
             sm = StateMachine(RequisitionStatus(req.status))
             sm.transition(RequisitionStatus.PUBLISHED)
             req.status = sm.status.value
