@@ -147,6 +147,12 @@ export default function DashboardLayout() {
               >
                 Onboard Vendor
               </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/vendor-accounts"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Vendor Accounts
+              </NavLink>
             </>
           ) : user.role === 'Admin' ? (
             <>

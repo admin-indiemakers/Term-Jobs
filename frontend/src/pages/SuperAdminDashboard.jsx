@@ -42,7 +42,8 @@ export default function SuperAdminDashboard() {
 
   const clientTenants = tenants.filter((t) => t.tenant_type === 'client');
   const consultancyTenants = tenants.filter((t) => t.tenant_type === 'consultancy');
-  const adminAccounts = users.filter((u) => u.role === 'Admin');
+  // Include both Admin and Recruiter roles for vendor admin visibility
+  const adminAccounts = users.filter((u) => u.role === 'Admin' || u.role === 'Recruiter');
 
   const totalTenants = tenants.length;
   const buyerShare = totalTenants === 0 ? 0 : Math.round((clientTenants.length / totalTenants) * 100);
@@ -64,10 +65,11 @@ export default function SuperAdminDashboard() {
       </WelcomeBanner>
 
       <div className="stat-grid">
-        <StatCard label="Companies" value={tenants.length} icon={Icons.building} tint="tint-ink" delta={totalTenants === 0 ? 'No tenants' : '100% of all'} deltaTone="ink" />
-        <StatCard label="Client (Buyer)" value={clientTenants.length} icon={Icons.briefcase} tint="tint-green" delta={`${buyerShare}% of tenants`} deltaTone="green" />
-        <StatCard label="Consultancies (Vendor)" value={consultancyTenants.length} icon={Icons.layers} tint="tint-amber" delta={`${vendorShare}% of tenants`} deltaTone="amber" />
-        <StatCard label="Company Admins" value={adminAccounts.length} icon={Icons.users} tint="tint-violet" delta={`${adminsPerBuyer} per buyer`} deltaTone="violet" />
+        <StatCard label="Companies" value={tenants.length} icon={Icons.building} tint="tint-black" delta={totalTenants === 0 ? 'No tenants' : '100% of all'} deltaTone="ink" />
+        <StatCard label="Client (Buyer)" value={clientTenants.length} icon={Icons.briefcase} tint="tint-black" delta={`${buyerShare}% of tenants`} deltaTone="ink" />
+        <StatCard label="Consultancies (Vendor)" value={consultancyTenants.length} icon={Icons.layers} tint="tint-black" delta={`${vendorShare}% of tenants`} deltaTone="ink" />
+        <StatCard label="Vendor Admins (Recruiters)" value={adminAccounts.filter(u => u.role === 'Recruiter').length} icon={Icons.layers} tint="tint-black" delta={`${consultancyTenants.length === 0 ? '—' : (adminAccounts.filter(u => u.role === 'Recruiter').length / consultancyTenants.length).toFixed(1)} per vendor`} deltaTone="ink" />
+        <StatCard label="Company Admins" value={adminAccounts.filter(u => u.role === 'Admin').length} icon={Icons.users} tint="tint-black" delta={`${adminsPerBuyer} per buyer`} deltaTone="ink" />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -99,6 +101,8 @@ export default function SuperAdminDashboard() {
                 <tbody>
                   {tenants.map((t) => {
                     const tenantAdmins = adminAccounts.filter((a) => a.tenant_id === t.id);
+                    const admins = tenantAdmins.filter((a) => a.role === 'Admin');
+                    const recruiters = tenantAdmins.filter((a) => a.role === 'Recruiter');
                     return (
                       <tr key={t.id}>
                         <td className="td-title">{t.name}</td>
@@ -108,7 +112,24 @@ export default function SuperAdminDashboard() {
                           </span>
                         </td>
                         <td className="td-company">
-                          {tenantAdmins.length === 0 ? '—' : tenantAdmins.map((a) => a.email).join(', ')}
+                          {admins.length === 0 && recruiters.length === 0 ? '—' : (
+                            <>
+                              {admins.length > 0 && (
+                                <div style={{ marginBottom: 4 }}>
+                                  <strong style={{ fontSize: '0.75rem', color: '#64748b' }}>Admins:</strong>
+                                  {' '}
+                                  {admins.map((a) => a.email).join(', ')}
+                                </div>
+                              )}
+                              {recruiters.length > 0 && (
+                                <div>
+                                  <strong style={{ fontSize: '0.75rem', color: '#64748b' }}>Recruiters:</strong>
+                                  {' '}
+                                  {recruiters.map((a) => a.email).join(', ')}
+                                </div>
+                              )}
+                            </>
+                          )}
                         </td>
                         <td className="td-action">
                           <div className="row-actions">

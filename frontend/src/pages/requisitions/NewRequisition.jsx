@@ -12,7 +12,7 @@ const MODES = [
 
 const ACCEPT = '.docx,.doc,.pdf,.txt,.md';
 
-const ENGAGEMENT_TYPES = ['Contract', 'Permanent', 'Freelance', 'Consulting', 'Time & Material', 'Fixed Price'];
+const ENGAGEMENT_TYPES = ['Contract'];
 const WORK_MODES = ['Remote', 'Hybrid', 'Onsite'];
 const EQUIPMENT_OPTIONS = ['Company-provided', 'Vendor-provided', 'BYOD'];
 const CONTRACT_OPTIONS = ['Consultancy agreement', 'NDA-only', 'MSA-linked', 'Permanent offer'];
@@ -101,6 +101,11 @@ export default function NewRequisition() {
 
   const fileInputRef = useRef(null);
 
+  // Template import state
+  const [templates, setTemplates] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
   // Pre-fill structured role fields (all 6 tabs)
   const [prefill, setPrefill] = useState({
     // Role tab
@@ -141,10 +146,11 @@ export default function NewRequisition() {
     background_check_required: false,
     nda_contract_type: '',
     work_authorization: '',
+    client_site_access: false,
     security_clearance_required: false,
     security_clearance_notes: '',
     // Process tab
-    hiring_manager: '',
+    hiring_manager: user?.name || '',
     submission_deadline: '',
     priority: 'Normal',
   });
@@ -171,6 +177,96 @@ export default function NewRequisition() {
   };
 
   useEffect(loadProfiles, [token, user.tenant_id]);
+
+  // Load requisitions with structured roles + director-uploaded templates for import
+  const loadTemplates = async () => {
+    if (!token) return;
+    setLoadingTemplates(true);
+    try {
+      const [reqs, tpls] = await Promise.all([
+        request('/requisitions', { token }),
+        request('/templates', { token }),
+      ]);
+      const completed = (reqs || [])
+        .filter((r) => r.structured_role && r.status !== 'Draft')
+        .map((r) => ({ ...r, source: 'requisition' }));
+      const roleTpls = (tpls || []).map((t) => ({
+        ...t,
+        source: 'template',
+        status: 'Template',
+        company_name: 'Director template',
+      }));
+      setTemplates([...roleTpls, ...completed]);
+    } catch (err) {
+      console.error('Failed to load templates:', err);
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
+  useEffect(() => {
+    if (token) loadTemplates();
+  }, [token]);
+
+  const handleImportTemplate = (templateId) => {
+    if (!templateId) return;
+    const item = templates.find((t) => t.id === templateId);
+    if (!item || !item.structured_role) {
+      setError('Template not found');
+      return;
+    }
+    const role = item.structured_role;
+        const range = Array.isArray(role.range_vendors_see) ? role.range_vendors_see : [role.range_vendors_see_min, role.range_vendors_see_max];
+        setPrefill((prev) => ({
+          ...prev,
+          // Role tab
+          job_title: role.title || '',
+          job_family: role.job_family || '',
+          must_have_skills: role.must_have_skills || [],
+          nice_to_have_skills: role.nice_to_have_skills || [],
+          seniority: role.seniority || '',
+          experience: role.experience || '',
+          headcount: role.headcount || 1,
+          certifications: role.certifications || [],
+          // Engagement
+          engagement_type: role.engagement_type || 'Contract',
+          duration: role.duration || '',
+          start_date: role.start_date || '',
+          ends_on: role.ends_on || '',
+          extension_likely: role.extension_likely || false,
+          max_notice_period: role.max_notice_period || '',
+          // Commercials
+          ceiling_internal: role.ceiling_internal ?? '',
+          range_vendors_see_min: range[0] ?? '',
+          range_vendors_see_max: range[1] ?? '',
+          rate_card_cap: role.rate_card_cap ?? '',
+          total_engagement_value: role.total_engagement_value || '',
+          cost_centre: role.cost_centre || '',
+          budget_approved: role.budget_approved || false,
+          budget_reference: role.budget_reference || '',
+          variance_approved: role.variance_approved || false,
+          // Work setup
+          work_mode: role.work_mode || '',
+          work_locations: role.work_locations || [],
+          working_hours: role.working_hours || '',
+          location_remote_policy: role.location_remote_policy || '',
+          onsite_requirement: role.onsite_requirement || '',
+          equipment_provisioning: role.equipment_provisioning || '',
+          // Compliance
+          background_check: role.background_check || '',
+          background_check_required: role.background_check_required || false,
+          nda_contract_type: role.nda_contract_type || '',
+          work_authorization: role.work_authorization || '',
+          client_site_access: role.client_site_access || false,
+          security_clearance_required: role.security_clearance_required || false,
+          security_clearance_notes: role.security_clearance_notes || '',
+          // Process
+          hiring_manager: role.hiring_manager || '',
+          submission_deadline: role.submission_deadline || '',
+          priority: role.priority || 'Normal',
+        }));
+        setSelectedTemplateId('');
+  };
 
   const handleSourceFile = async (e) => {
     const file = e.target.files?.[0];
@@ -201,6 +297,20 @@ export default function NewRequisition() {
       // Use extracted text as prompt (paste mode behavior)
       if (data.extracted_text) {
         setPrompt(data.extracted_text);
+      }
+      
+      // Use extracted structured fields for prefill
+      if (data.extracted_fields) {
+        const fields = data.extracted_fields;
+        setPrefill((prev) => ({
+          ...prev,
+          ...fields,
+          // Merge array fields without duplicates
+          must_have_skills: fields.must_have_skills ? [...new Set([...(prev.must_have_skills || []), ...fields.must_have_skills])] : prev.must_have_skills,
+          nice_to_have_skills: fields.nice_to_have_skills ? [...new Set([...(prev.nice_to_have_skills || []), ...fields.nice_to_have_skills])] : prev.nice_to_have_skills,
+          work_locations: fields.work_locations ? [...new Set([...(prev.work_locations || []), ...fields.work_locations])] : prev.work_locations,
+          certifications: fields.certifications ? [...new Set([...(prev.certifications || []), ...fields.certifications])] : prev.certifications,
+        }));
       }
     } catch (err) {
       setError(err.message);
@@ -237,11 +347,11 @@ export default function NewRequisition() {
     setSubmitting(true);
     try {
       const prefillData = { ...prefill };
-      const fallbackTitle = mode === 'paste' ? 'Pasted JD draft' : sourceFilename || 'New contract requirement';
+      const fallbackTitle = roleTitle || sourceFilename || 'Pasted JD draft';
       // Convert chip arrays from state
       const body = {
         company_profile_id: companyProfileId,
-        title: roleTitle || fallbackTitle,
+        title: fallbackTitle,
         tech_stack_hint: [...prefill.must_have_skills, ...prefill.nice_to_have_skills].filter(Boolean),
         intake_mode: mode,
         source_filename: mode === 'upload' ? sourceFilename : '',
@@ -278,7 +388,7 @@ export default function NewRequisition() {
     <div className="page page-narrow">
       <div className="page-header">
         <div>
-          <h1 className="page-title">New contract requirement</h1>
+          <h1 className="page-title">{roleTitle || 'New contract requirement'}</h1>
           <p className="page-subtitle">Draft saved just now · Review the role details before sending to HR.</p>
         </div>
         <div className="requisition-header-actions">
@@ -372,6 +482,33 @@ export default function NewRequisition() {
               <p className="intake-mode-note">
                 The agent will ask you a few targeted questions to fill any gaps, using your role brief and the company background from onboarding.
               </p>
+            )}
+
+            {/* Template Import Dropdown */}
+            {templates.length > 0 && (
+              <div className="intake-section" style={{ marginTop: 24 }}>
+                <div className="intake-section-head">
+                  <h2 className="intake-section-title">Import from Template</h2>
+                  <span className="intake-section-caption">Select an existing requisition to pre-fill all fields as a starting point.</span>
+                </div>
+                <div className="template-selector" style={{ marginTop: 12 }}>
+                  <label className="form-label">Select Template</label>
+                  <select
+                    className="auth-input"
+                    value={selectedTemplateId}
+                    onChange={(e) => handleImportTemplate(e.target.value)}
+                    disabled={loadingTemplates}
+                  >
+                    <option value="">— Choose a requisition to import —</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name || t.title || 'Untitled'} — {t.company_name || 'Unknown'} ({t.status})
+                      </option>
+                    ))}
+                  </select>
+                  {loadingTemplates && <span className="field-hint">Loading templates...</span>}
+                </div>
+              </div>
             )}
           </section>
 
@@ -535,6 +672,11 @@ export default function NewRequisition() {
                 <Field label="Contract Type">
                   <SelectInput value={prefill.nda_contract_type} onChange={(v) => handlePrefillChange('compliance', 'nda_contract_type', v)} options={CONTRACT_OPTIONS} placeholder="Select…" />
                 </Field>
+                <Field label="Client Site Access">
+                  <SelectInput value={prefill.client_site_access ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'client_site_access', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
+                </Field>
+              </div>
+              <div className="editor-row-3" style={{ marginTop: 18 }}>
                 <Field label="Data / Security Clearance Required">
                   <SelectInput value={prefill.security_clearance_required ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'security_clearance_required', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
                 </Field>

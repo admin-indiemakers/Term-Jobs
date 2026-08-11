@@ -52,7 +52,8 @@ class UserUpdate(BaseModel):
     is_active: bool | None = None
 
 class UserLogin(BaseModel):
-    email: str
+    email: str | None = None
+    username: str | None = None
     password: str
 
 class PasswordChange(BaseModel):

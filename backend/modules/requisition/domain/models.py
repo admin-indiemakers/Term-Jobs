@@ -74,6 +74,32 @@ class Requisition(Model):
     updated_at = Column("updated_at")
 
 
+class RoleTemplate(Model):
+    """A director-uploaded JSON template that hiring managers can pick from to
+    pre-fill the New Requisition form. ``structured_role`` holds the same field
+    shape as a Requisition's structured role (all 6 tabs)."""
+
+    __tablename__ = "role_templates"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "tenant_id": "local",
+        "created_by": None,
+        "name": "",
+        "description": "",
+        "structured_role": None,
+        "created_at": _utcnow,
+    }
+
+    id = Column("id")
+    tenant_id = Column("tenant_id")
+    created_by = Column("created_by")
+    name = Column("name")
+    description = Column("description")
+    structured_role = Column("structured_role")
+    created_at = Column("created_at")
+
+
 class DecisionRecord(Model):
     __tablename__ = "decision_records"
 

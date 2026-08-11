@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import { Icons, StatCard, WelcomeBanner } from '../components/Dashboard';
@@ -20,24 +20,76 @@ export default function DirectorDashboard() {
   const [requisitions, setRequisitions] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [templates, setTemplates] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [templateMsg, setTemplateMsg] = useState('');
+  const templateFileRef = useRef(null);
+
+  const loadTemplates = () => {
+    request('/templates', { token })
+      .then((res) => setTemplates(res || []))
+      .catch((err) => setError(err.message));
+  };
 
   useEffect(() => {
     Promise.all([
       request('/requisitions', { token }),
       request('/candidates/shortlisted', { token }),
       request('/api/auth/vendors', { token }),
+      request('/templates', { token }),
     ])
-      .then(([reqsRes, candsRes, vendorsRes]) => {
+      .then(([reqsRes, candsRes, vendorsRes, templatesRes]) => {
         setRequisitions(reqsRes || []);
         setCandidates(candsRes || []);
         setVendors(vendorsRes || []);
+        setTemplates(templatesRes || []);
         setError('');
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [token]);
+
+  const handleTemplateUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setTemplateMsg('');
+    setError('');
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await fetch(`${API_BASE_URL}/templates`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+      });
+      if (!response.ok) {
+        const errData = await response.json();
+        throw new Error(errData.detail || 'Upload failed');
+      }
+      await response.json();
+      setTemplateMsg(`Template "${file.name}" uploaded — hiring managers can now pick it in the New Requisition form.`);
+      loadTemplates();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+      if (templateFileRef.current) templateFileRef.current.value = '';
+    }
+  };
+
+  const handleTemplateDelete = async (id) => {
+    setTemplateMsg('');
+    setError('');
+    try {
+      await request(`/templates/${id}`, { method: 'DELETE', token });
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   const published = requisitions.filter((r) => r.status === 'Published').length;
   const pending = requisitions.filter((r) => r.status === 'PendingApproval').length;
@@ -60,14 +112,66 @@ export default function DirectorDashboard() {
       />
 
       <div className="stat-grid">
-        <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} tint="tint-violet" />
-        <StatCard label="Pending Approval" value={pending} icon={Icons.clock} tint="tint-amber" />
-        <StatCard label="Published" value={published} icon={Icons.check} tint="tint-green" />
-        <StatCard label="Shortlisted Candidates" value={candidates.length} icon={Icons.users} tint="tint-blue" />
-        <StatCard label="Partner Vendors" value={engagedVendors} icon={Icons.layers} tint="tint-slate" />
+        <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} tint="tint-black" />
+        <StatCard label="Pending Approval" value={pending} icon={Icons.clock} tint="tint-black" />
+        <StatCard label="Published" value={published} icon={Icons.check} tint="tint-black" />
+        <StatCard label="Shortlisted Candidates" value={candidates.length} icon={Icons.users} tint="tint-black" />
+        <StatCard label="Partner Vendors" value={engagedVendors} icon={Icons.layers} tint="tint-black" />
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {templateMsg && <div className="alert alert-success">{templateMsg}</div>}
+
+      <div className="glass-panel table-card" style={{ marginBottom: 24 }}>
+        <div className="table-head">
+          <div>
+            <h2 className="card-title">Role Templates</h2>
+            <p className="muted" style={{ fontSize: '0.82rem' }}>
+              Upload a JSON template (full role details) — hiring managers can select it to auto-fill the New Requisition form.
+            </p>
+          </div>
+          <input
+            ref={templateFileRef}
+            type="file"
+            accept=".json,application/json"
+            onChange={handleTemplateUpload}
+            style={{ display: 'none' }}
+          />
+          <button type="button" className="glow-btn" onClick={() => templateFileRef.current?.click()} disabled={uploading}>
+            {uploading ? 'Uploading...' : 'Upload JSON Template'}
+          </button>
+        </div>
+        {templates.length === 0 ? (
+          <p className="muted" style={{ padding: 16 }}>
+            No templates yet — upload a JSON file containing the role title, skills, engagement, commercials, work setup, compliance and process details.
+          </p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Template</th>
+                <th>Role Title</th>
+                <th>Created</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {templates.map((t) => (
+                <tr key={t.id}>
+                  <td className="td-title">{t.name || 'Untitled template'}</td>
+                  <td>{t.structured_role?.title || '—'}</td>
+                  <td className="td-date">{formatDate(t.created_at)}</td>
+                  <td className="td-action">
+                    <button type="button" className="row-action-danger" onClick={() => handleTemplateDelete(t.id)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
 
       {loading ? (
         <p className="muted" style={{ padding: 24 }}>Loading executive overview...</p>

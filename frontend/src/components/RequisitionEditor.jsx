@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
 const TABS = ['Role', 'Engagement', 'Commercials', 'Work setup', 'Compliance', 'Process'];
-const ENGAGEMENT_TYPES = ['Contract', 'Permanent', 'Freelance', 'Consulting', 'Time & Material', 'Fixed Price'];
+const ENGAGEMENT_TYPES = ['Contract'];
 const WORK_MODES = ['Remote', 'Hybrid', 'Onsite'];
 const EQUIPMENT_OPTIONS = ['Company-provided', 'Vendor-provided', 'BYOD'];
 const CONTRACT_OPTIONS = ['Consultancy agreement', 'NDA-only', 'MSA-linked', 'Permanent offer'];
@@ -266,10 +266,10 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
             <section className="editor-section">
               <h3 className="editor-section-title">Role definition</h3>
               <div className="editor-row">
-                <Field label="Job title">
+                <Field label="Job title" required>
                   <TextField value={role.title} editable={editable} onChange={(v) => set({ title: v })} placeholder="e.g. Senior Backend Engineer" />
                 </Field>
-                <Field label="Job family">
+                <Field label="Job family" required>
                   <TextField value={role.job_family} editable={editable} onChange={(v) => set({ job_family: v })} placeholder="e.g. Engineering / Platform" />
                 </Field>
               </div>
@@ -277,19 +277,19 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
 
             <section className="editor-section">
               <h3 className="editor-section-title">Skills & scope</h3>
-              <Field label="Must-have skills">
+              <Field label="Must-have skills" required>
                 <ChipInput value={role.must_have_skills} editable={editable} onChange={(v) => set({ must_have_skills: v })} placeholder="+ add" />
               </Field>
               <div style={{ height: 16 }} />
-              <Field label="Experience" hint="e.g. 5–8 years">
+              <Field label="Experience" hint="e.g. 5–8 years" required>
                 <TextField value={role.experience} editable={editable} onChange={(v) => set({ experience: v })} placeholder="5–8 years" />
               </Field>
               <div style={{ height: 16 }} />
-              <Field label="Certifications">
+              <Field label="Certifications" required>
                 <ChipInput value={role.certifications} editable={editable} onChange={(v) => set({ certifications: v })} placeholder="+ add" />
               </Field>
               <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Headcount">
+                <Field label="Headcount" required>
                   <TextField type="number" min="1" value={role.headcount} editable={editable} onChange={(v) => set({ headcount: v === '' ? 1 : Number(v) })} placeholder="1" />
                 </Field>
               </div>
@@ -302,10 +302,10 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
           <section className="editor-section">
             <h3 className="editor-section-title">Engagement terms</h3>
             <div className="editor-row-3">
-              <Field label="Engagement type">
+              <Field label="Engagement type" required>
                 <SelectField value={role.engagement_type} options={ENGAGEMENT_TYPES} editable={editable} onChange={(v) => set({ engagement_type: v })} placeholder="Select…" />
               </Field>
-              <Field label="Duration" hint="e.g. 6 months">
+              <Field label="Duration" hint="e.g. 6 months" required>
                 <TextField
                   value={role.duration}
                   editable={editable}
@@ -317,7 +317,7 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
                   placeholder="e.g. 6 months"
                 />
               </Field>
-              <Field label="Start date">
+              <Field label="Start date" required>
                 <TextField
                   type="date"
                   value={role.start_date}
@@ -331,13 +331,13 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
               </Field>
             </div>
             <div className="editor-row-3" style={{ marginTop: 18 }}>
-              <Field label="Ends on" hint={editable && !role.ends_on ? 'Auto-calculated from start + duration when left blank.' : undefined}>
+              <Field label="Ends on" hint={editable && !role.ends_on ? 'Auto-calculated from start + duration when left blank.' : undefined} required>
                 <TextField type="date" value={role.ends_on} editable={editable} onChange={(v) => set({ ends_on: v })} />
               </Field>
-              <Field label="Extension likely">
+              <Field label="Extension likely" required>
                 <SelectField value={role.extension_likely ? 'Yes' : 'No'} options={BOOL_OPTIONS} editable={editable} onChange={(v) => set({ extension_likely: v === 'Yes' })} placeholder="No" />
               </Field>
-              <Field label="Max notice period" hint="e.g. 30 days">
+              <Field label="Max notice period" hint="e.g. 30 days" required>
                 <TextField value={role.max_notice_period} editable={editable} onChange={(v) => set({ max_notice_period: v })} placeholder="e.g. 30 days" />
               </Field>
             </div>
@@ -350,25 +350,25 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
             <section className="editor-section">
               <h3 className="editor-section-title">Commercials</h3>
               <div className="editor-row">
-                <Field label="Your ceiling — internal" hint="Only visible to internal HR; vendors see the range below.">
+                <Field label="Your ceiling — internal" hint="Only visible to internal HR; vendors see the range below." required>
                   <div className="editor-ceiling">
                     <TextField type="number" min="0" value={role.ceiling_internal} editable={editable} onChange={(v) => set({ ceiling_internal: v === '' ? null : Number(v) })} placeholder="INR p.a." />
                     {lockIcon}
                   </div>
                 </Field>
-                <Field label="Range vendors will see" hint="Min–Max INR p.a.">
+                <Field label="Range vendors will see" hint="Min–Max INR p.a." required>
                   <RangeField value={role.range_vendors_see} editable={editable} onChange={(v) => set({ range_vendors_see: v })} placeholder="INR p.a." />
                 </Field>
               </div>
               <VarianceWarning role={role} />
               <div className="editor-row-3" style={{ marginTop: 18 }}>
-                <Field label="Total engagement value" hint={editable ? 'Auto-calculated from headcount × rate × duration — editable override.' : undefined}>
+                <Field label="Total engagement value" hint={editable ? 'Auto-calculated from headcount × rate × duration — editable override.' : undefined} required>
                   <TextField value={role.total_engagement_value} editable={editable} onChange={(v) => set({ total_engagement_value: v })} placeholder={computeEngagementValue(role) || 'e.g. ₹36,00,000'} />
                 </Field>
-                <Field label="Cost centre" hint="e.g. ENG-4102">
+                <Field label="Cost centre" hint="e.g. ENG-4102" required>
                   <TextField value={role.cost_centre} editable={editable} onChange={(v) => set({ cost_centre: v })} placeholder="ENG-4102" />
                 </Field>
-                <Field label="Budget approved">
+                <Field label="Budget approved" required>
                   <BudgetApproved value={role.budget_approved} editable={editable} onChange={(v) => set({ budget_approved: v })} reference={role.budget_reference} onReference={(v) => set({ budget_reference: v })} />
                 </Field>
               </div>
@@ -376,23 +376,23 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
           </>
         );
 
-      case 'Work setup':
+case 'Work setup':
         return (
           <section className="editor-section">
             <h3 className="editor-section-title">Work setup</h3>
             <div className="editor-row-3">
-              <Field label="Work mode">
+              <Field label="Work mode" required>
                 <SelectField value={role.work_mode} options={WORK_MODES} editable={editable} onChange={(v) => set({ work_mode: v })} placeholder="Select…" />
               </Field>
-              <Field label="Location(s)">
+              <Field label="Location(s)" required>
                 <ChipInput value={role.work_locations} editable={editable} onChange={(v) => set({ work_locations: v })} placeholder="+ add city / region" />
               </Field>
-              <Field label="Equipment provisioning">
+              <Field label="Equipment provisioning" required>
                 <SelectField value={role.equipment_provisioning} options={EQUIPMENT_OPTIONS} editable={editable} onChange={(v) => set({ equipment_provisioning: v })} placeholder="Select…" />
               </Field>
             </div>
             <div className="editor-row" style={{ marginTop: 18 }}>
-              <Field label="Working hours / shift" hint="e.g. IST business hours (9:30 – 18:30)">
+              <Field label="Working hours / shift" hint="e.g. IST business hours (9:30 – 18:30)" required>
                 <TextField value={role.working_hours} editable={editable} onChange={(v) => set({ working_hours: v })} placeholder="IST business hours (9:30 – 18:30)" />
               </Field>
             </div>
@@ -404,18 +404,18 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
           <section className="editor-section">
             <h3 className="editor-section-title">Compliance</h3>
             <div className="editor-row-3">
-              <Field label="Background check required">
+              <Field label="Background check required" required>
                 <SelectField value={role.background_check_required ? 'Yes' : 'No'} options={BOOL_OPTIONS} editable={editable} onChange={(v) => set({ background_check_required: v === 'Yes' })} placeholder="No" />
               </Field>
-              <Field label="Contract type">
+              <Field label="Contract type" required>
                 <SelectField value={role.nda_contract_type} options={CONTRACT_OPTIONS} editable={editable} onChange={(v) => set({ nda_contract_type: v })} placeholder="Select…" />
               </Field>
-              <Field label="Work authorization notes" hint="Visa / authorization constraints">
+              <Field label="Work authorization notes" hint="Visa / authorization constraints" required>
                 <TextField value={role.work_authorization} editable={editable} onChange={(v) => set({ work_authorization: v })} placeholder="e.g. Indian citizen / work visa required" />
               </Field>
             </div>
             <div className="editor-row" style={{ marginTop: 18 }}>
-              <Field label="Client-site access needed" hint="Whether the role requires on-site access at client premises">
+              <Field label="Client-site access needed" hint="Whether the role requires on-site access at client premises" required>
                 <SelectField value={role.client_site_access ? 'Yes' : 'No'} options={BOOL_OPTIONS} editable={editable} onChange={(v) => set({ client_site_access: v === 'Yes' })} placeholder="No" />
               </Field>
             </div>
@@ -427,13 +427,13 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
           <section className="editor-section">
             <h3 className="editor-section-title">Process</h3>
             <div className="editor-row-3">
-              <Field label="Hiring manager" hint="e.g. Arjun Mehta">
+              <Field label="Hiring manager" hint="e.g. Arjun Mehta" required>
                 <TextField value={role.hiring_manager} editable={editable} onChange={(v) => set({ hiring_manager: v })} placeholder="Arjun Mehta" />
               </Field>
-              <Field label="Submission deadline">
+              <Field label="Submission deadline" required>
                 <TextField type="date" value={role.submission_deadline} editable={editable} onChange={(v) => set({ submission_deadline: v })} />
               </Field>
-              <Field label="Priority">
+              <Field label="Priority" required>
                 {editable ? (
                   <SelectField value={role.priority} options={PRIORITY_OPTIONS} editable placeholder="Normal" onChange={(v) => set({ priority: v })} />
                 ) : (

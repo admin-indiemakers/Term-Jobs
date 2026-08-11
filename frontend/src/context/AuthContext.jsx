@@ -24,7 +24,11 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(
     async (email, password) => {
-      const data = await request('/api/auth/login', { method: 'POST', body: { email, password } });
+      // Send both email and username; backend accepts either
+      const data = await request('/api/auth/login', { 
+        method: 'POST', 
+        body: { email, username: email, password } 
+      });
       applySession(data.access_token, data.user);
       return data.user;
     },

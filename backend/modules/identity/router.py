@@ -25,7 +25,7 @@ from modules.identity.services.auth_service import (
 from modules.requisition.domain.models import CompanyProfile
 from modules.shared.db import Session, get_session
 
-router = APIRouter(prefix="/api/auth", tags=["Authentication"])
+router = APIRouter(tags=["Authentication"])
 
 def get_db():
     with get_session() as session:
@@ -78,7 +78,17 @@ def _tenant_type(tenant_id: str, db: Session) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 def login_user(body: UserLogin, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == body.email).first()
+    # Allow login with either email or username "ADMIN" for superadmin
+    if body.username == "ADMIN":
+        user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
+    elif body.email:
+        user = db.query(User).filter(User.email == body.email).first()
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    
     if not user or not user.is_active or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

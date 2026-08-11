@@ -14,6 +14,7 @@ Quick test (company -> requisition -> approve -> publish):
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -52,7 +53,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(identity_router)
+app.include_router(identity_router, prefix="/api/auth")
 app.include_router(candidate_router)
 app.include_router(screening_router, prefix="/api", tags=["Screening"])
 
@@ -281,6 +282,201 @@ def list_company_profiles(current_user: User = Depends(get_current_user)) -> lis
         return [_company_dict(r) for r in rows]
 
 
+# --- role template endpoints -------------------------------------------------
+def _template_dict(t: models.RoleTemplate) -> dict:
+    return {
+        "id": t.id,
+        "tenant_id": t.tenant_id,
+        "name": t.name,
+        "description": t.description,
+        "structured_role": t.structured_role,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+
+@app.post("/templates", status_code=201)
+async def upload_template(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload a JSON role template (director-defined) that hiring managers can
+    use to pre-fill the New Requisition form.
+
+    Accepts a single template or a ``{"templates": [...]}`` bundle. Each item
+    may use the app's internal ``structured_role`` shape or the director's
+    flat format with nested ``role`` / ``engagement`` / ``commercials`` /
+    ``work_setup`` / ``compliance`` / ``process`` objects.
+    """
+    if file.content_type not in ("application/json", "text/json"):
+        raise HTTPException(status_code=400, detail="Template must be a JSON file")
+    content = await file.read()
+    try:
+        payload = json.loads(content.decode("utf-8"))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Template file contains invalid JSON")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Template JSON must be an object")
+
+    bundle = payload.get("templates")
+    items = bundle if isinstance(bundle, list) else [payload]
+
+    created = []
+    with get_session() as session:
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            role, name, description = _template_role(item)
+            title = (role or {}).get("title") or item.get("title") or item.get("name")
+            if not title:
+                continue
+            tpl = models.RoleTemplate(
+                tenant_id=current_user.tenant_id,
+                created_by=current_user.id,
+                name=name or f"Template — {title}",
+                description=description or "",
+                structured_role=role,
+            )
+            session.add(tpl)
+            created.append(tpl)
+        if not created:
+            raise HTTPException(status_code=400, detail="No valid templates found in the JSON file")
+        session.commit()
+        for tpl in created:
+            session.refresh(tpl)
+    result = [_template_dict(t) for t in created]
+    return result if len(result) > 1 else result[0]
+
+
+def _template_role(item: dict) -> tuple[dict, str, str]:
+    """Extract a canonical ``structured_role`` dict + name + description from an
+    uploaded template item, supporting several input shapes."""
+    name = item.get("name") or item.get("position_name") or ""
+    description = item.get("description") or ""
+
+    # 1) Internal shape: { "structured_role": {...}, "name": ... }
+    if isinstance(item.get("structured_role"), dict):
+        return item["structured_role"], name, description
+
+    # 2) Director's flat shape with nested sections
+    if isinstance(item.get("role"), dict):
+        return _normalize_template(item), name, description
+
+    # 3) Bare structured_role dict
+    return dict(item), name, description
+
+
+def _normalize_template(payload: dict) -> dict:
+    """Normalise the director's flat JSON format into the internal
+    ``structured_role`` shape consumed by the New Requisition prefill."""
+    role_src = payload.get("role") or {}
+    eng = payload.get("engagement") or {}
+    com = payload.get("commercials") or {}
+    ws = payload.get("work_setup") or {}
+    comp = payload.get("compliance") or {}
+    proc = payload.get("process") or {}
+
+    title = role_src.get("job_title") or payload.get("position_name") or payload.get("title")
+
+    certs_raw = role_src.get("certifications") or ""
+    certifications = (
+        [c.strip() for c in str(certs_raw).split(",") if c.strip()]
+        if isinstance(certs_raw, str) and certs_raw
+        else (certs_raw or [])
+    )
+
+    extension_likely = str(eng.get("extension_likely") or "").lower() in ("yes", "maybe", "true", "1")
+
+    try:
+        on_days = int(ws.get("onsite_days_per_week") or 0)
+    except (TypeError, ValueError):
+        on_days = 0
+
+    shift = str(ws.get("shift") or "")
+    if ws.get("on_call"):
+        shift = (shift + ", " if shift else "") + "on-call rotation"
+
+    bg_level = str(comp.get("background_check_level") or "")
+
+    laptop = str(comp.get("laptop_provided_by") or "")
+    equipment = (
+        "Vendor-provided"
+        if laptop.lower() == "vendor"
+        else "Company-provided"
+        if laptop.lower() == "client"
+        else ""
+    )
+
+    priority = str(proc.get("priority") or "Normal")
+    if priority.lower() == "critical":
+        priority = "High"
+
+    notes = ", ".join(
+        x
+        for x in [
+            str(com.get("rate_basis") or ""),
+            str(com.get("currency") or ""),
+            f"SLA {proc.get('first_submission_sla_hours')}h" if proc.get("first_submission_sla_hours") else "",
+            f"max {proc.get('max_submissions_per_vendor')} subs/vendor" if proc.get("max_submissions_per_vendor") else "",
+            f"BGV paid by {comp.get('bgv_paid_by')}" if comp.get("bgv_paid_by") else "",
+        ]
+        if x
+    )
+
+    def _num(v):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "title": title,
+        "job_family": role_src.get("job_family") or "",
+        "must_have_skills": role_src.get("must_have_skills") or [],
+        "nice_to_have_skills": role_src.get("good_to_have_skills") or [],
+        "experience": role_src.get("experience") or "",
+        "headcount": role_src.get("headcount") or 1,
+        "certifications": certifications,
+        "engagement_type": eng.get("engagement_type") or "",
+        "duration": eng.get("duration") or "",
+        "extension_likely": extension_likely,
+        "max_notice_period": eng.get("max_notice_period") or "",
+        "ceiling_internal": _num(com.get("internal_ceiling")),
+        "range_vendors_see": [_num(com.get("vendor_range_min")), _num(com.get("vendor_range_max"))],
+        "cost_centre": com.get("cost_centre") or "",
+        "work_mode": ws.get("work_mode") or "",
+        "onsite_requirement": f"{on_days} days/week on-site" if on_days else "",
+        "working_hours": shift,
+        "equipment_provisioning": equipment,
+        "background_check": bg_level,
+        "background_check_required": bool(bg_level),
+        "nda_contract_type": "NDA-only" if comp.get("nda_required") else "",
+        "priority": priority,
+        "notes": notes,
+    }
+
+
+@app.get("/templates")
+def list_templates(current_user: User = Depends(get_current_user)) -> list[dict]:
+    with get_session() as session:
+        query = session.query(models.RoleTemplate).order_by(models.RoleTemplate.created_at.desc())
+        if current_user.role != "Super Admin":
+            query = query.filter(models.RoleTemplate.tenant_id == current_user.tenant_id)
+        rows = query.all()
+        return [_template_dict(r) for r in rows]
+
+
+@app.delete("/templates/{template_id}", status_code=204)
+def delete_template(template_id: str, current_user: User = Depends(get_current_user)) -> None:
+    with get_session() as session:
+        tpl = session.get(models.RoleTemplate, template_id)
+        if tpl is None:
+            raise HTTPException(status_code=404, detail="template not found")
+        if current_user.role != "Super Admin" and tpl.tenant_id != current_user.tenant_id:
+            raise HTTPException(status_code=403, detail="You do not have access to this template")
+        session.delete(tpl)
+        session.commit()
+
+
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
 def create_requisition(body: RequisitionIn, current_user: User = Depends(get_current_user)) -> dict:
@@ -460,7 +656,7 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
 # --- file upload for JD documents ---------------------------------------------
 @app.post("/upload/jd-document")
 async def upload_jd_document(file: UploadFile = File(...), current_user: User = Depends(get_current_user)) -> dict:
-    """Upload a JD/spec document (.docx, .pdf) and extract text content."""
+    """Upload a JD/spec document (.docx, .pdf) and extract text content + structured fields."""
     _require_writable(current_user)
     
     # Validate file type
@@ -488,12 +684,94 @@ async def upload_jd_document(file: UploadFile = File(...), current_user: User = 
     if not text or not text.strip():
         raise HTTPException(status_code=400, detail="Could not extract text from document")
     
+    # Extract structured fields for prefill
+    extracted_fields = _extract_structured_fields(text.strip())
+    
     return {
         "filename": file.filename,
         "content_type": file.content_type,
         "extracted_text": text.strip(),
+        "extracted_fields": extracted_fields,
         "size": len(content)
     }
+
+
+def _extract_structured_fields(text: str) -> dict:
+    """Extract structured fields from JD text for form prefill."""
+    from modules.requisition.enrichment.heuristics import extract_from_text
+    from modules.requisition.enrichment import skills as skills_module
+    
+    extracted = extract_from_text(text)
+    skill_list = skills_module.skills_in_text(text)
+    
+    fields = {}
+    
+    # Title - extract just the role title
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    title_line = None
+    
+    # First, try to find a title-like line in the first few lines
+    for line in lines[:5]:
+        if len(line) < 80:
+            lower = line.lower()
+            if any(kw in lower for kw in ['engineer', 'developer', 'manager', 'analyst', 'architect', 'lead', 'senior', 'junior', 'principal', 'director', 'head', 'vp', 'cto', 'cfo', 'ceo']):
+                title_line = line
+                break
+    
+    # If no title found in lines, try to extract from single-line document
+    if not title_line and len(lines) == 1:
+        # For single-line documents, try to extract just the role title part
+        line = lines[0]
+        # Look for patterns like "Senior DevOps Engineer needed" or "Senior DevOps Engineer -"
+        import re
+        title_match = re.search(r'^(Senior|Junior|Lead|Principal|Staff)?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*(?:Engineer|Developer|Manager|Analyst|Architect|Lead|Director|Head)', line)
+        if title_match:
+            title_line = title_match.group(0).strip()
+        else:
+            # Try to find just the role title before common separators
+            for sep in [' needed', ' required', ' wanted', ' - ', ' | ', ':', ';']:
+                if sep in line:
+                    potential = line.split(sep)[0].strip()
+                    if len(potential) < 80 and any(kw in potential.lower() for kw in ['engineer', 'developer', 'manager', 'analyst', 'architect', 'lead', 'senior', 'junior', 'principal', 'director', 'head']):
+                        title_line = potential
+                        break
+    
+    if not title_line and lines:
+        # Fallback: use first short line
+        for line in lines[:3]:
+            if len(line) < 80:
+                title_line = line
+                break
+    
+    if title_line:
+        fields['job_title'] = title_line
+    
+    # Skills
+    if skill_list:
+        fields['must_have_skills'] = skill_list
+    
+    # Experience
+    if extracted.get('years'):
+        fields['experience'] = f"{extracted['years']} years"
+    
+    # Seniority
+    if extracted.get('seniority'):
+        fields['seniority'] = extracted['seniority'].value
+    
+    # Location
+    if extracted.get('location'):
+        fields['work_locations'] = [extracted['location']]
+    
+    # Rate band
+    if extracted.get('rate_band'):
+        fields['range_vendors_see_min'] = extracted['rate_band'][0]
+        fields['range_vendors_see_max'] = extracted['rate_band'][1]
+    
+    # Contract duration
+    if extracted.get('contract_duration'):
+        fields['duration'] = extracted['contract_duration']
+    
+    return fields
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> str:

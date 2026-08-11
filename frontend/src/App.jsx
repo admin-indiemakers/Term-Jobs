@@ -13,6 +13,7 @@ import DirectorDashboard from './pages/DirectorDashboard';
 import OnboardCompany from './pages/OnboardCompany';
 import OnboardVendor from './pages/OnboardVendor';
 import ConfigureCompanyAccounts from './pages/ConfigureCompanyAccounts';
+import ConfigureVendorAccounts from './pages/ConfigureVendorAccounts';
 import HRDashboard from './pages/HRDashboard';
 import RequisitionOverview from './pages/requisitions/RequisitionOverview';
 import NewRequisition from './pages/requisitions/NewRequisition';
@@ -85,6 +86,7 @@ export default function App() {
           <Route path="superadmin/onboard" element={<OnboardCompany />} />
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
+          <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

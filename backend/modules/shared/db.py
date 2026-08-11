@@ -261,5 +261,6 @@ def init_db() -> None:
     db["company_profiles"].create_index("tenant_id")
     db["requisitions"].create_index("tenant_id")
     db["requisitions"].create_index("company_profile_id")
+    db["role_templates"].create_index("tenant_id")
     db["decision_records"].create_index("requisition_id")
     db["candidate_submissions"].create_index("requisition_id")

@@ -111,14 +111,14 @@ export default function AdminDashboard() {
         email: form.email,
         name: form.name,
         password: form.password,
-        role: 'HR',
+        role: 'Hiring Manager',
       };
       await request('/api/auth/users', {
         method: 'POST',
         token,
         body: payload,
       });
-      setSuccess(`HR account created for ${form.email}.`);
+      setSuccess(`Hiring Manager account created for ${form.email}.`);
       setForm({ ...EMPTY_FORM });
       load();
     } catch (err) {
@@ -173,7 +173,7 @@ export default function AdminDashboard() {
       if (edit.name !== '') payload.name = edit.name;
       if (edit.password) payload.password = edit.password;
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
-      setSuccess(`HR account ${edit.email} updated.`);
+      setSuccess(`Hiring Manager account ${edit.email} updated.`);
       setEdit(null);
       load();
     } catch (err) {
@@ -313,12 +313,12 @@ export default function AdminDashboard() {
               <div className="form-panel-head">
                 <div className="form-panel-icon">{Icons.users}</div>
                 <div>
-                  <div className="form-panel-title">Add HR</div>
-                  <div className="form-panel-caption">Create an HR account to oversee the Hiring Managers. Directors and Hiring Managers are managed from the Workspace menu.</div>
+                  <div className="form-panel-title">Add Hiring Manager</div>
+                  <div className="form-panel-caption">Create a Hiring Manager account to manage requisitions. Directors are managed from the Workspace menu.</div>
                 </div>
               </div>
               <button type="submit" form="add-team-form" className="glow-btn" disabled={submitting} style={{ flexShrink: 0 }}>
-                {submitting ? 'Creating...' : 'Create HR Account'}
+                {submitting ? 'Creating...' : 'Create Hiring Manager Account'}
               </button>
             </div>
             <form id="add-team-form" onSubmit={handleCreateUser}>
@@ -329,7 +329,7 @@ export default function AdminDashboard() {
                 </div>
                 <div>
                   <label className="form-label">Email Address</label>
-                  <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="hr@company.com" />
+                  <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="manager@company.com" />
                 </div>
                 <div>
                   <label className="form-label">Password</label>
@@ -548,7 +548,7 @@ export default function AdminDashboard() {
       {edit && (
         <div className="modal-overlay" onClick={() => setEdit(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Edit HR Account</h3>
+            <h3 className="modal-title">Edit Hiring Manager Account</h3>
             <form onSubmit={handleSaveEdit}>
               <div className="modal-fields">
                 <div>

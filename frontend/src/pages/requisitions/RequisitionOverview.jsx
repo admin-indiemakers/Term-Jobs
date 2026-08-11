@@ -24,12 +24,25 @@ function statusClass(status) {
   return `hm-row-status-${(status || 'Draft').replace(/\s+/g, '').toLowerCase()}`;
 }
 
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function RequisitionOverview() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -48,6 +61,22 @@ export default function RequisitionOverview() {
   };
 
   useEffect(load, [token]);
+
+  const handleExportAll = async () => {
+    setExporting(true);
+    try {
+      const data = await request('/requisitions', { token });
+      downloadJSON(data, `requisitions-export-${new Date().toISOString().split('T')[0]}.json`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportSingle = (req) => {
+    downloadJSON(req, `requisition-${req.id}-${new Date().toISOString().split('T')[0]}.json`);
+  };
 
   const counts = {
     total: requisitions.length,
@@ -72,9 +101,17 @@ export default function RequisitionOverview() {
             Hiring Manager <span>·</span> {user?.tenant_name || 'Term Jobs'}
           </p>
         </div>
-        <Link to="/dashboard/requisitions/new" className="glow-btn hm-header-cta">
-          + New Requisition
-        </Link>
+        <div className="hm-header-actions">
+          <div className="hm-export-dropdown">
+            <button className="hm-export-btn" onClick={handleExportAll} disabled={exporting}>
+              {Icons.download}
+              <span>{exporting ? 'Exporting...' : 'Export All JSON'}</span>
+            </button>
+          </div>
+          <Link to="/dashboard/requisitions/new" className="glow-btn hm-header-cta">
+            + New Requisition
+          </Link>
+        </div>
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -102,7 +139,7 @@ export default function RequisitionOverview() {
         <div className="hm-board-head">
           <div>
             <h2 className="hm-board-title">Requisition Board</h2>
-            <p className="hm-board-caption">Click any requisition to open its workspace flow.</p>
+            <p className="hm-board-caption">Click any requisition to open its workspace flow. Use the menu to export JSON.</p>
           </div>
           <span className="hm-board-count">{ordered.length} total</span>
         </div>
@@ -131,7 +168,16 @@ export default function RequisitionOverview() {
                   {r.status || 'Draft'}
                 </span>
                 <span className="hm-row-date">Created {formatDate(r.created_at)}</span>
-                <span className="hm-row-chevron">→</span>
+                <div className="hm-row-actions">
+                  <button
+                    className="hm-row-export"
+                    onClick={(e) => { e.stopPropagation(); handleExportSingle(r); }}
+                    title="Export this requisition as JSON"
+                  >
+                    {Icons.download}
+                  </button>
+                  <span className="hm-row-chevron">→</span>
+                </div>
               </div>
             ))}
           </div>
