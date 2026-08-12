@@ -213,7 +213,6 @@ export default function AdminDashboard() {
 
   const hiringManagers = users.filter((u) => u.role === 'Hiring Manager');
   const directors = users.filter((u) => u.role === 'Director');
-  const hrList = users.filter((u) => u.role === 'HR');
   const published = requisitions.filter((r) => r.status === 'Published').length;
   const pending = requisitions.filter((r) => r.status === 'PendingApproval').length;
 
@@ -221,7 +220,7 @@ export default function AdminDashboard() {
     <div className="page">
       <WelcomeBanner
         title="Admin Console"
-        subtitle={`${user.tenant_name} workspace — manage your Hiring Managers, Directors and HR, and oversee requisitions.`}
+        subtitle={`${user.tenant_name} workspace — manage your Hiring Managers and Directors, and oversee requisitions.`}
       >
         <button className="glow-btn" onClick={scrollToAddTeam}>
           + Invite Team Member
@@ -231,7 +230,6 @@ export default function AdminDashboard() {
       <div className="stat-grid">
         <StatCard label="Hiring Managers" value={hiringManagers.length} icon={Icons.usersPlus} />
         <StatCard label="Directors" value={directors.length} icon={Icons.shield} />
-        <StatCard label="HR" value={hrList.length} icon={Icons.users} />
         <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} />
         <StatCard label="Pending Approval" value={pending} icon={Icons.clock} />
         <StatCard label="Published" value={published} icon={Icons.check} />
@@ -421,56 +419,6 @@ export default function AdminDashboard() {
                       <td className="td-date">{formatDate(u.created_at)}</td>
                       <td className="td-action">
                         <div className="row-actions">
-                          <span
-                            className="row-action row-action-danger"
-                            onClick={() => setConfirmDelete(u)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            Remove
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          <div className="glass-panel table-card">
-            <div className="table-head">
-              <div>
-                <h2 className="card-title">HR</h2>
-                <p className="muted" style={{ fontSize: '0.82rem' }}>{hrList.length} total</p>
-              </div>
-            </div>
-            {hrList.length === 0 ? (
-              <p className="muted" style={{ padding: 16 }}>No HR accounts yet. HR oversees the Hiring Managers.</p>
-            ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {hrList.map((u) => (
-                    <tr key={u.id}>
-                      <td className="td-title">{u.name || '—'}</td>
-                      <td>{u.email}</td>
-                      <td>{rolePill(u.role)}</td>
-                      <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
-                      <td className="td-date">{formatDate(u.created_at)}</td>
-                      <td className="td-action">
-                        <div className="row-actions">
-                          <span className="row-action" onClick={() => openEdit(u)} style={{ cursor: 'pointer' }}>
-                            Edit
-                          </span>
                           <span
                             className="row-action row-action-danger"
                             onClick={() => setConfirmDelete(u)}
