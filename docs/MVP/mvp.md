@@ -111,13 +111,13 @@ Note: this is a materially bigger Admin surface than the original doc assumed ("
 
 **Client<->vendor allowlist:** Admin maintains which consultancies are eligible to receive JDs for a given client (many-to-many: `client_tenant_id` x `vendor_tenant_id`). This is the *eligible pool* - it does not mean a vendor automatically receives every JD from that client (see 3.2).
 
-RLS from day one, single country pack (India).
+, from day one, single country pack (India).
 
 Open question carried forward: does one consultancy span multiple client relationships as a single tenant, or a scoped record per relationship? Blocks nothing at this narrow MVP scope (no billing yet), but should be answered before Phase 2 re-introduces billing. The mirror-image question now also applies to Recruiter scoping - see section 7.
 
 ### 3.2 `requisition/`
 
-**Domain entity:** Requisition (raw JD, structured role once processed, status)
+**Domain entity:** Requisition (raw JDagf, structured role once processed, status)
 
 **State machine:** `Draft -> Structuring -> PendingApproval -> Published -> Closed`
 

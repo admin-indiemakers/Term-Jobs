@@ -9,6 +9,7 @@ agent's guardrail loop owns validation + sanitization so model quirks don't
 crash generation outright.
 """
 import json
+import time
 
 import httpx
 from pydantic import BaseModel
@@ -50,10 +51,28 @@ class GroqClient(LLMClient):
             "Authorization": f"Bearer {self.api_key}",
         }
 
-    def _post(self, payload: dict) -> dict:
-        resp = httpx.post(self._chat_url, json=payload, headers=self._headers(), timeout=120.0)
-        resp.raise_for_status()
-        return resp.json()
+    def _post(self, payload: dict, max_retries: int = 5) -> dict:
+        """POST with exponential backoff on rate limits (429) and transient 5xx errors."""
+        last_exc: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                resp = httpx.post(self._chat_url, json=payload, headers=self._headers(), timeout=120.0)
+                if resp.status_code in (429, 500, 502, 503, 504):
+                    last_exc = httpx.HTTPStatusError(
+                        f"Groq {resp.status_code} (attempt {attempt + 1}/{max_retries})",
+                        request=resp.request,
+                        response=resp,
+                    )
+                    retry_after = resp.headers.get("retry-after")
+                    delay = float(retry_after) if retry_after and retry_after.isdigit() else min(2 ** attempt, 30)
+                    time.sleep(delay)
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except httpx.TimeoutException as exc:
+                last_exc = exc
+                time.sleep(min(2 ** attempt, 30))
+        raise RuntimeError(f"Groq request failed after {max_retries} attempts: {last_exc}") from last_exc
 
     def chat(self, messages: list[dict[str, str]], tier: str = "small") -> str:
         payload = {

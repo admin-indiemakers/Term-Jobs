@@ -173,6 +173,67 @@ def _parse_prompt(prompt: str) -> dict:
     }
 
 
+def _min_experience_years(text: str) -> int | None:
+    """Lower bound of an experience range ('5 – 8 years' -> 5) for seniority."""
+    m = re.search(r"(\d{1,2}(?:\.\d+)?)\s*[-–]\s*\d{1,2}(?:\.\d+)?", text)
+    if m:
+        return int(float(m.group(1)))
+    return heuristics.extract_from_text(text)["years"]
+
+
+def _seniority_from_years(years: int) -> str:
+    """Infer a seniority level from years of experience when the form did not
+    state one explicitly (e.g. '4 – 7 years' -> Senior)."""
+    if years >= 9:
+        return "Principal"
+    if years >= 7:
+        return "Lead"
+    if years >= 4:
+        return "Senior"
+    if years >= 2:
+        return "Mid"
+    return "Junior"
+
+
+def _prefill_to_parsed(prefill: dict) -> dict:
+    """Seed the intake state from fields already filled in the New Requisition
+    form, so the agent only asks about real gaps instead of re-asking for
+    values the hiring manager already provided."""
+    if not prefill:
+        return {}
+    parsed: dict = {}
+
+    skills_list = prefill.get("must_have_skills") or []
+    if skills_list:
+        parsed["skills"] = [str(s).lower() for s in skills_list]
+
+    if prefill.get("seniority"):
+        parsed["seniority"] = prefill["seniority"]
+
+    if prefill.get("experience"):
+        years = heuristics.extract_from_text(str(prefill["experience"]))["years"]
+        if years is not None:
+            parsed["years"] = years
+            if not prefill.get("seniority"):
+                parsed["seniority"] = _seniority_from_years(_min_experience_years(str(prefill["experience"])) or years)
+
+    locations = prefill.get("work_locations") or []
+    if locations:
+        parsed["location"] = locations[0]
+
+    min_val = prefill.get("range_vendors_see_min")
+    max_val = prefill.get("range_vendors_see_max")
+    if min_val is None:
+        min_val = prefill.get("ceiling_internal")
+    if min_val is not None or max_val is not None:
+        parsed["rate_band"] = (min_val, max_val)
+
+    if prefill.get("duration"):
+        parsed["contract_duration"] = prefill["duration"]
+
+    return parsed
+
+
 def build_graph(llm: LLMClient, session_factory, checkpointer=None):
     def budget_gate(state: AgentState) -> AgentState:
         guardrails.enforce_budget(state.get("intake_turns", 0), state.get("tool_calls", 0))
@@ -271,11 +332,11 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
         # Commercials tab fields
         if data.get("ceiling_internal") is None and prefill.get("ceiling_internal") not in (None, ""):
             data["ceiling_internal"] = prefill["ceiling_internal"]
-        if data.get("range_vendors_see") is None and (prefill.get("range_vendors_see_min") or prefill.get("range_vendors_see_max")):
+        if data.get("range_vendors_see") is None:
             min_val = prefill.get("range_vendors_see_min")
-        max_val = prefill.get("range_vendors_see_max")
-        if min_val is not None or max_val is not None:
-            data["range_vendors_see"] = (min_val, max_val)
+            max_val = prefill.get("range_vendors_see_max")
+            if min_val is not None or max_val is not None:
+                data["range_vendors_see"] = (min_val, max_val)
         if data.get("rate_card_cap") is None and prefill.get("rate_card_cap") not in (None, ""):
             data["rate_card_cap"] = prefill["rate_card_cap"]
         if not data.get("total_engagement_value") and prefill.get("total_engagement_value"):
@@ -374,6 +435,26 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
 
             answers = "\n".join(f"- {a['value']}" for a in state["answers"])
 
+            # Include details already provided on the New Requisition form so the
+            # LLM mirrors them instead of guessing (seniority is often inferred
+            # from experience, location from work_locations, etc.).
+            parsed = state.get("parsed") or {}
+            provided_facts = []
+            if parsed.get("skills"):
+                provided_facts.append("Required skills (from form): " + ", ".join(parsed["skills"]))
+            if parsed.get("seniority"):
+                provided_facts.append(f"Seniority (from form): {parsed['seniority']}")
+            if parsed.get("years"):
+                provided_facts.append(f"Required experience (from form): {parsed['years']}+ years")
+            if parsed.get("location"):
+                provided_facts.append(f"Location (from form): {parsed['location']}")
+            if parsed.get("rate_band"):
+                provided_facts.append(f"Rate band (from form): INR {parsed['rate_band']}")
+            if parsed.get("contract_duration"):
+                provided_facts.append(f"Contract duration (from form): {parsed['contract_duration']}")
+            if provided_facts:
+                answers = (answers + "\n" if answers else "") + "\n".join(f"- {f}" for f in provided_facts)
+
             role_prompt = prompts.ROLE_EXTRACTION_PROMPT.format(
                 profile=profile.model_dump_json(),
                 intent=intent.model_dump_json(),
@@ -389,6 +470,9 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
                     raw = llm.generate_structured(role_prompt, schemas.StructuredRole)
                     _sanitize_role(raw)
                     role = guardrails.validate_role(raw)
+                except RuntimeError:
+                    # Client already exhausted its own retry/backoff budget.
+                    raise
                 except Exception as exc:  # noqa: BLE001 - bounded retry over small-model JSON quirks
                     last_error = exc
 
@@ -405,7 +489,11 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             if not role.contract_duration and state["parsed"].get("contract_duration"):
                 role.contract_duration = state["parsed"]["contract_duration"]
             # Apply pre-filled values from intake_meta (New Requisition form)
-            prefill = state.get("intake_meta", {}).get("prefill", {})
+            prefill = dict(state.get("intake_meta", {}).get("prefill", {}))
+            # Fall back to values derived during intake (e.g. seniority inferred
+            # from the form's experience field) when they were not stored.
+            if not prefill.get("seniority") and state.get("parsed", {}).get("seniority"):
+                prefill["seniority"] = state["parsed"]["seniority"]
             role = _apply_prefill(role, prefill)
 
             jd_prompt = prompts.JD_GENERATION_PROMPT.format(
@@ -551,6 +639,15 @@ class JobRequirementAgent:
         If the flow completed, interrupt_value is None.
         """
         profile, intent, intake_meta = _load_context(self.session_factory, requisition_id)
+        prefill = dict(intake_meta.get("prefill") or {})
+        # Infer a seniority level from experience so the agent neither asks for
+        # it nor leaves it blank when the form only states years of experience.
+        if not prefill.get("seniority") and prefill.get("experience"):
+            years = _min_experience_years(str(prefill["experience"]))
+            if years is not None:
+                prefill["seniority"] = _seniority_from_years(years)
+        if prefill:
+            intake_meta = {**(intake_meta or {}), "prefill": prefill}
         initial: AgentState = {
             "requisition_id": requisition_id,
             "status": schemas.RequisitionStatus.INTAKE.value,
@@ -559,7 +656,7 @@ class JobRequirementAgent:
             "intake_meta": intake_meta,
             "answers": [],
             "asked_questions": [],
-            "parsed": {},
+            "parsed": _prefill_to_parsed(prefill),
             "missing_skills": [],
             "covered": False,
             "intake_turns": 0,

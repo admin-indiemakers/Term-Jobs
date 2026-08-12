@@ -85,6 +85,29 @@ const RangeInput = ({ minVal, maxVal, onMinChange, onMaxChange, placeholder }) =
   </div>
 );
 
+const toISODate = (d) => {
+  const dt = d instanceof Date ? d : new Date(d);
+  if (Number.isNaN(dt.getTime())) return '';
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const day = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const addDuration = (duration, startDate) => {
+  const m = String(duration || '').match(/(\d+)\s*(day|week|month|year)s?/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  const unit = m[2].toLowerCase();
+  const base = startDate ? new Date(startDate) : new Date();
+  const d = new Date(base);
+  if (unit === 'day') d.setDate(d.getDate() + n);
+  else if (unit === 'week') d.setDate(d.getDate() + n * 7);
+  else if (unit === 'month') d.setMonth(d.getMonth() + n);
+  else if (unit === 'year') d.setFullYear(d.getFullYear() + n);
+  return toISODate(d);
+};
+
 export default function NewRequisition() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -208,6 +231,29 @@ export default function NewRequisition() {
     if (token) loadTemplates();
   }, [token]);
 
+  const autoCalculatedEnds = useRef(false);
+
+  // Auto-set Start Date to today and compute Ends On from the duration.
+  useEffect(() => {
+    if (!prefill.duration) return;
+    const start = prefill.start_date || toISODate(new Date());
+    const end = addDuration(prefill.duration, start);
+    setPrefill((prev) => {
+      const updates = {};
+      if (!prev.start_date) updates.start_date = start;
+      if (end && (!prev.ends_on || autoCalculatedEnds.current)) {
+        updates.ends_on = end;
+        autoCalculatedEnds.current = true;
+      }
+      return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+    });
+  }, [prefill.duration, prefill.start_date]);
+
+  const handleEndsOnChange = (v) => {
+    autoCalculatedEnds.current = false;
+    handlePrefillChange('engagement', 'ends_on', v);
+  };
+
   const handleImportTemplate = (templateId) => {
     if (!templateId) return;
     const item = templates.find((t) => t.id === templateId);
@@ -261,7 +307,7 @@ export default function NewRequisition() {
           security_clearance_required: role.security_clearance_required || false,
           security_clearance_notes: role.security_clearance_notes || '',
           // Process
-          hiring_manager: role.hiring_manager || '',
+          hiring_manager: role.hiring_manager || prev.hiring_manager,
           submission_deadline: role.submission_deadline || '',
           priority: role.priority || 'Normal',
         }));
@@ -357,6 +403,7 @@ export default function NewRequisition() {
         source_filename: mode === 'upload' ? sourceFilename : '',
         prompt: (mode === 'paste' || mode === 'upload') ? prompt : '',
         created_by: user.id,
+        prefill: prefillData,
         // Pass all prefill fields in intake_meta for the agent to use
         intake_meta: {
           intake_mode: mode,
@@ -577,7 +624,7 @@ export default function NewRequisition() {
               </div>
               <div className="editor-row-3" style={{ marginTop: 18 }}>
                 <Field label="Ends On" hint="Auto-calculated from start + duration when left blank">
-                  <TextInput type="date" value={prefill.ends_on} onChange={(v) => handlePrefillChange('engagement', 'ends_on', v)} />
+                  <TextInput type="date" value={prefill.ends_on} onChange={handleEndsOnChange} />
                 </Field>
                 <Field label="Extension Likely">
                   <SelectInput value={prefill.extension_likely ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('engagement', 'extension_likely', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
