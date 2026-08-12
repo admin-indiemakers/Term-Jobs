@@ -197,7 +197,7 @@ export default function NewRequisition() {
         request('/templates', { token }),
       ]);
       const completed = (reqs || [])
-        .filter((r) => r.structured_role && r.status !== 'Draft')
+        .filter((r) => r.structured_role)
         .map((r) => ({ ...r, source: 'requisition' }));
       const roleTpls = (tpls || []).map((t) => ({
         ...t,
@@ -248,56 +248,61 @@ export default function NewRequisition() {
       return;
     }
     const role = item.structured_role;
-        const range = Array.isArray(role.range_vendors_see) ? role.range_vendors_see : [role.range_vendors_see_min, role.range_vendors_see_max];
-        setPrefill((prev) => ({
-          ...prev,
-          // Role tab
-          job_title: role.title || '',
-          job_family: role.job_family || '',
-          must_have_skills: role.must_have_skills || [],
-          nice_to_have_skills: role.nice_to_have_skills || [],
-          seniority: role.seniority || '',
-          experience: role.experience || '',
-          headcount: role.headcount || 1,
-          certifications: role.certifications || [],
-          // Engagement
-          engagement_type: role.engagement_type || 'Contract',
-          duration: role.duration || '',
-          start_date: role.start_date || '',
-          ends_on: role.ends_on || '',
-          extension_likely: role.extension_likely || false,
-          max_notice_period: role.max_notice_period || '',
-          // Commercials
-          ceiling_internal: role.ceiling_internal ?? '',
-          range_vendors_see_min: range[0] ?? '',
-          range_vendors_see_max: range[1] ?? '',
-          rate_card_cap: role.rate_card_cap ?? '',
-          total_engagement_value: role.total_engagement_value || '',
-          cost_centre: role.cost_centre || '',
-          budget_approved: role.budget_approved || false,
-          budget_reference: role.budget_reference || '',
-          variance_approved: role.variance_approved || false,
-          // Work setup
-          work_mode: role.work_mode || '',
-          work_locations: role.work_locations || [],
-          working_hours: role.working_hours || '',
-          location_remote_policy: role.location_remote_policy || '',
-          onsite_requirement: role.onsite_requirement || '',
-          equipment_provisioning: role.equipment_provisioning || '',
-          // Compliance
-          background_check: role.background_check || '',
-          background_check_required: role.background_check_required || false,
-          nda_contract_type: role.nda_contract_type || '',
-          work_authorization: role.work_authorization || '',
-          client_site_access: role.client_site_access || false,
-          security_clearance_required: role.security_clearance_required || false,
-          security_clearance_notes: role.security_clearance_notes || '',
-          // Process
-          hiring_manager: role.hiring_manager || prev.hiring_manager,
-          submission_deadline: role.submission_deadline || '',
-          priority: role.priority || 'Normal',
-        }));
-        setSelectedTemplateId('');
+    const range = Array.isArray(role.range_vendors_see) && role.range_vendors_see.some(v => v != null)
+      ? role.range_vendors_see
+      : Array.isArray(role.rate_band) && role.rate_band.some(v => v != null)
+      ? role.rate_band
+      : [role.range_vendors_see_min ?? role.vendor_range_min, role.range_vendors_see_max ?? role.vendor_range_max];
+
+    setPrefill((prev) => ({
+      ...prev,
+      // Role tab
+      job_title: role.title || item.title || '',
+      job_family: role.job_family || '',
+      must_have_skills: role.must_have_skills || [],
+      nice_to_have_skills: role.nice_to_have_skills || [],
+      seniority: role.seniority || '',
+      experience: role.experience || '',
+      headcount: role.headcount || 1,
+      certifications: role.certifications || [],
+      // Engagement
+      engagement_type: role.engagement_type || 'Contract',
+      duration: role.duration || role.contract_duration || '',
+      start_date: role.start_date || '',
+      ends_on: role.ends_on || '',
+      extension_likely: Boolean(role.extension_likely),
+      max_notice_period: role.max_notice_period || '',
+      // Commercials
+      ceiling_internal: role.ceiling_internal ?? role.internal_ceiling ?? '',
+      range_vendors_see_min: range[0] ?? '',
+      range_vendors_see_max: range[1] ?? '',
+      rate_card_cap: role.rate_card_cap ?? role.cap ?? '',
+      total_engagement_value: role.total_engagement_value || '',
+      cost_centre: role.cost_centre || '',
+      budget_approved: Boolean(role.budget_approved),
+      budget_reference: role.budget_reference || '',
+      variance_approved: Boolean(role.variance_approved),
+      // Work setup
+      work_mode: role.work_mode || '',
+      work_locations: Array.isArray(role.work_locations) && role.work_locations.length ? role.work_locations : role.location ? [role.location] : [],
+      working_hours: role.working_hours || '',
+      location_remote_policy: role.location_remote_policy || '',
+      onsite_requirement: role.onsite_requirement || '',
+      equipment_provisioning: role.equipment_provisioning || '',
+      // Compliance
+      background_check: role.background_check || '',
+      background_check_required: Boolean(role.background_check_required),
+      nda_contract_type: role.nda_contract_type || '',
+      work_authorization: role.work_authorization || '',
+      client_site_access: Boolean(role.client_site_access),
+      security_clearance_required: Boolean(role.security_clearance_required),
+      security_clearance_notes: role.security_clearance_notes || '',
+      // Process
+      hiring_manager: role.hiring_manager || prev.hiring_manager,
+      submission_deadline: role.submission_deadline || '',
+      priority: role.priority || 'Normal',
+    }));
+    setSelectedTemplateId('');
   };
 
   const roleTitle = prefill.job_title.trim();

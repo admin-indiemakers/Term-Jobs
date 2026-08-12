@@ -335,15 +335,45 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             data["max_notice_period"] = prefill["max_notice_period"]
 
         # Commercials tab fields
-        if data.get("ceiling_internal") is None and prefill.get("ceiling_internal") not in (None, ""):
-            data["ceiling_internal"] = prefill["ceiling_internal"]
-        if data.get("range_vendors_see") is None:
+        if data.get("ceiling_internal") is None:
+            c = prefill.get("ceiling_internal")
+            if c in (None, ""):
+                c = prefill.get("internal_ceiling")
+            if c not in (None, ""):
+                data["ceiling_internal"] = c
+
+        if data.get("range_vendors_see") is None or data.get("range_vendors_see") == (None, None):
             min_val = prefill.get("range_vendors_see_min")
+            if min_val is None:
+                min_val = prefill.get("vendor_range_min")
             max_val = prefill.get("range_vendors_see_max")
+            if max_val is None:
+                max_val = prefill.get("vendor_range_max")
+            if min_val is None and max_val is None and prefill.get("range_vendors_see"):
+                rvs = prefill.get("range_vendors_see")
+                if isinstance(rvs, (list, tuple)) and len(rvs) == 2:
+                    min_val, max_val = rvs[0], rvs[1]
+            if min_val is None and max_val is None and prefill.get("rate_band"):
+                rb = prefill.get("rate_band")
+                if isinstance(rb, (list, tuple)) and len(rb) == 2:
+                    min_val, max_val = rb[0], rb[1]
             if min_val is not None or max_val is not None:
                 data["range_vendors_see"] = (min_val, max_val)
-        if data.get("rate_card_cap") is None and prefill.get("rate_card_cap") not in (None, ""):
-            data["rate_card_cap"] = prefill["rate_card_cap"]
+
+        if data.get("rate_band") is None or data.get("rate_band") == (None, None):
+            if data.get("range_vendors_see"):
+                data["rate_band"] = data.get("range_vendors_see")
+            elif prefill.get("rate_band"):
+                rb = prefill.get("rate_band")
+                if isinstance(rb, (list, tuple)) and len(rb) == 2:
+                    data["rate_band"] = (rb[0], rb[1])
+
+        if data.get("rate_card_cap") is None:
+            cap = prefill.get("rate_card_cap")
+            if cap in (None, ""):
+                cap = prefill.get("cap")
+            if cap not in (None, ""):
+                data["rate_card_cap"] = cap
         if not data.get("total_engagement_value") and prefill.get("total_engagement_value"):
             data["total_engagement_value"] = prefill["total_engagement_value"]
         if not data.get("cost_centre") and prefill.get("cost_centre"):

@@ -169,11 +169,18 @@ export default function RecruiterDashboard() {
   const roleDetailRows = () => {
     if (!fullReq) return [];
     const sr = fullReq.structured_role || {};
-    const fmtLpa = (v) =>
-      v == null || v === '' ? null : `₹${Number(v).toLocaleString('en-IN')} p.a.`;
-    const range = Array.isArray(sr.range_vendors_see)
+    const fmtLpa = (v) => {
+      if (v == null || v === '') return null;
+      const num = Number(v);
+      if (!Number.isFinite(num) || num <= 0) return null;
+      const lakhs = num >= 100000 ? num / 100000 : num >= 100 ? num / 100 : num;
+      return `₹${lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)} L p.a.`;
+    };
+    const range = Array.isArray(sr.range_vendors_see) && sr.range_vendors_see.some(v => v != null && v > 0)
       ? sr.range_vendors_see
-      : [sr.range_vendors_see_min, sr.range_vendors_see_max];
+      : Array.isArray(sr.rate_band) && sr.rate_band.some(v => v != null && v > 0)
+      ? sr.rate_band
+      : [sr.range_vendors_see_min ?? sr.vendor_range_min, sr.range_vendors_see_max ?? sr.vendor_range_max];
     return [
       { label: 'Role title', value: sr.title || fullReq.title },
       { label: 'Job family', value: sr.job_family },

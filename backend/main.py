@@ -195,9 +195,7 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
-            "structured_role": (
-                _strip_internal_role(req.structured_role) if for_vendor else req.structured_role
-            ),
+            "structured_role": req.structured_role,
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
@@ -474,16 +472,36 @@ def _normalize_template(payload: dict) -> dict:
     )
 
     def _num(v):
+        if v in (None, ""):
+            return None
         try:
             return int(float(v))
         except (TypeError, ValueError):
             return None
 
+    ceiling = _num(com.get("ceiling_internal") if "ceiling_internal" in com else com.get("internal_ceiling"))
+    cap = _num(com.get("rate_card_cap") if "rate_card_cap" in com else com.get("rate_card_cap") or com.get("cap"))
+
+    min_v = _num(com.get("range_vendors_see_min") if "range_vendors_see_min" in com else com.get("vendor_range_min"))
+    max_v = _num(com.get("range_vendors_see_max") if "range_vendors_see_max" in com else com.get("vendor_range_max"))
+    if (min_v is None or max_v is None) and com.get("range_vendors_see"):
+        rvs = com.get("range_vendors_see")
+        if isinstance(rvs, (list, tuple)) and len(rvs) == 2:
+            min_v = _num(rvs[0]) if min_v is None else min_v
+            max_v = _num(rvs[1]) if max_v is None else max_v
+    if (min_v is None or max_v is None) and com.get("rate_band"):
+        rb = com.get("rate_band")
+        if isinstance(rb, (list, tuple)) and len(rb) == 2:
+            min_v = _num(rb[0]) if min_v is None else min_v
+            max_v = _num(rb[1]) if max_v is None else max_v
+
+    vendor_range = [min_v, max_v] if min_v is not None and max_v is not None else None
+
     return {
         "title": title,
         "job_family": role_src.get("job_family") or "",
         "must_have_skills": role_src.get("must_have_skills") or [],
-        "nice_to_have_skills": role_src.get("good_to_have_skills") or [],
+        "nice_to_have_skills": role_src.get("good_to_have_skills") or role_src.get("nice_to_have_skills") or [],
         "experience": role_src.get("experience") or "",
         "headcount": role_src.get("headcount") or 1,
         "certifications": certifications,
@@ -491,10 +509,11 @@ def _normalize_template(payload: dict) -> dict:
         "duration": eng.get("duration") or "",
         "extension_likely": extension_likely,
         "max_notice_period": eng.get("max_notice_period") or "",
-        "ceiling_internal": _num(com.get("internal_ceiling")),
-        "range_vendors_see": [_num(com.get("vendor_range_min")), _num(com.get("vendor_range_max"))],
+        "ceiling_internal": ceiling,
+        "rate_band": vendor_range,
+        "range_vendors_see": vendor_range,
         "cost_centre": com.get("cost_centre") or "",
-        "rate_card_cap": _num(com.get("rate_card_cap")),
+        "rate_card_cap": cap,
         "total_engagement_value": str(com.get("total_engagement_value") or ""),
         "budget_approved": bool(com.get("budget_approved")),
         "budget_reference": str(com.get("budget_reference") or ""),
@@ -623,7 +642,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 if r.company_profile_id in profiles
                 else None,
                 "generated_jd_markdown": r.generated_jd_markdown,
-                "structured_role": _strip_internal_role(r.structured_role) if is_vendor else r.structured_role,
+                "structured_role": r.structured_role,
                 "intent": r.intent,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }
@@ -636,9 +655,10 @@ def get_requisition(requisition_id: str, current_user: User = Depends(get_curren
     _auto_close_expired()
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
-    if current_user.role == "Recruiter" and req.status != schemas.RequisitionStatus.PUBLISHED.value:
+    is_vendor = current_user.role == "Recruiter"
+    if is_vendor and req.status != schemas.RequisitionStatus.PUBLISHED.value:
         raise HTTPException(status_code=403, detail="This requisition is not published to vendors yet.")
-    return _requisition_dict(requisition_id, for_vendor=True)
+    return _requisition_dict(requisition_id, for_vendor=is_vendor)
 
 
 @app.post("/requisitions/{requisition_id}/start")

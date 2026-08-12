@@ -2,9 +2,20 @@ const SENIORITY_OPTIONS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
 
 function rateBandText(rateBand) {
   if (!rateBand || !Array.isArray(rateBand) || rateBand.length < 2) return 'Not specified';
-  const format = (n) => `₹${(n / 100000).toFixed(1)} L`;
-  if (rateBand[0] === rateBand[1]) return `${format(rateBand[0])} p.a.`;
-  return `${format(rateBand[0])} – ${format(rateBand[1])} p.a.`;
+  const format = (n) => {
+    if (n === null || n === undefined || n === '') return '—';
+    const num = Number(n);
+    if (!Number.isFinite(num) || num <= 0) return '—';
+    const lakhs = num >= 100000 ? num / 100000 : num >= 100 ? num / 100 : num;
+    return `₹${lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)} L`;
+  };
+  const left = format(rateBand[0]);
+  const right = format(rateBand[1]);
+  if (left === '—' && right === '—') return 'Not specified';
+  if (left === '—') return `${right} p.a.`;
+  if (right === '—') return `${left} p.a.`;
+  if (left === right) return `${left} p.a.`;
+  return `${left} – ${right} p.a.`;
 }
 
 function RateBandInput({ value, onChange }) {

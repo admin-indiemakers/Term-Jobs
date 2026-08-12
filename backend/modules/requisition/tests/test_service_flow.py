@@ -164,6 +164,9 @@ def test_prefill_is_saved_and_guided_only_asks_real_gaps(service, company_profil
         assert saved.structured_role["experience"] == "5-8 years"
         assert saved.structured_role["seniority"] == "Senior"
         assert saved.structured_role["range_vendors_see"] == [1_700_000, 1_950_000]
+        assert saved.structured_role["rate_band"] == [1_700_000, 1_950_000]
+        assert saved.structured_role["ceiling_internal"] == 2_100_000
+        assert saved.structured_role["rate_card_cap"] == 1_950_000
         assert saved.structured_role["client_site_access"] is True
 
     _, interrupt = service.start_intake(req.id)
@@ -176,6 +179,8 @@ def test_prefill_is_saved_and_guided_only_asks_real_gaps(service, company_profil
         assert role["title"] == "Senior Backend Engineer"
         assert role["experience"] == "5-8 years"
         assert role["range_vendors_see"] == [1_700_000, 1_950_000]
+        assert role["ceiling_internal"] == 2_100_000
+        assert role["rate_card_cap"] == 1_950_000
         assert role["client_site_access"] is True
         assert generated.pending_question is None
 

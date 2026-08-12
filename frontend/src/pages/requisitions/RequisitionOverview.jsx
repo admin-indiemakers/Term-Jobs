@@ -38,12 +38,30 @@ function downloadJSON(data, filename) {
   URL.revokeObjectURL(url);
 }
 
-const fmtLakhs = (n) => (n == null ? '—' : `₹${(n / 100000).toFixed(1)} L`);
+const toLakhsNum = (n) => {
+  if (n === null || n === undefined || n === '') return null;
+  const num = Number(n);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  if (num >= 100000) return num / 100000;
+  if (num >= 100) return num / 100;
+  return num;
+};
+
+const fmtLakhs = (n) => {
+  const lakhs = toLakhsNum(n);
+  if (lakhs === null) return '—';
+  return `₹${lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)} L`;
+};
+
 const pairText = (pair) => {
-  if (!pair || !Array.isArray(pair)) return '—';
-  if (pair[0] == null && pair[1] == null) return '—';
-  if (pair[0] === pair[1]) return fmtLakhs(pair[0]);
-  return `${fmtLakhs(pair[0])} – ${fmtLakhs(pair[1])}`;
+  if (!pair || !Array.isArray(pair) || pair.length < 2) return '—';
+  const left = fmtLakhs(pair[0]);
+  const right = fmtLakhs(pair[1]);
+  if (left === '—' && right === '—') return '—';
+  if (left === '—') return right;
+  if (right === '—') return left;
+  if (left === right) return left;
+  return `${left} – ${right}`;
 };
 
 function Field({ label, value }) {
@@ -60,19 +78,34 @@ function Field({ label, value }) {
   );
 }
 
-function RequisitionDetails({ id, token }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+function RequisitionDetails({ id, initialData, token }) {
+  const [data, setData] = useState(initialData || null);
+  const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    setLoading(true);
+    if (initialData) {
+      setData((prev) => (prev ? { ...prev, ...initialData, structured_role: { ...prev.structured_role, ...initialData.structured_role } } : initialData));
+    }
     request(`/requisitions/${id}`, { token })
       .then((d) => {
-        setData(d);
+        setData((prev) => {
+          if (!prev) return d;
+          return {
+            ...d,
+            structured_role: {
+              ...(prev.structured_role || {}),
+              ...(d.structured_role || {}),
+              ceiling_internal: d.structured_role?.ceiling_internal ?? prev.structured_role?.ceiling_internal ?? d.structured_role?.internal_ceiling ?? prev.structured_role?.internal_ceiling,
+              rate_card_cap: d.structured_role?.rate_card_cap ?? prev.structured_role?.rate_card_cap ?? d.structured_role?.cap ?? prev.structured_role?.cap,
+            },
+          };
+        });
         setError('');
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => {
+        if (!initialData) setError(err.message);
+      })
       .finally(() => setLoading(false));
   }, [id, token]);
 
@@ -120,10 +153,10 @@ function RequisitionDetails({ id, token }) {
 
       <h4 className="hm-detail-section-title">Commercials</h4>
       <div className="hm-detail-grid">
-        <Field label="Rate band" value={pairText(role.rate_band)} />
-        <Field label="Ceiling (internal)" value={fmtLakhs(role.ceiling_internal)} />
-        <Field label="Range vendors see" value={pairText(role.range_vendors_see)} />
-        <Field label="Rate-card cap" value={fmtLakhs(role.rate_card_cap)} />
+        <Field label="Rate band" value={pairText(role.rate_band || role.range_vendors_see)} />
+        <Field label="Ceiling (internal)" value={fmtLakhs(role.ceiling_internal ?? role.internal_ceiling)} />
+        <Field label="Range vendors see" value={pairText(role.range_vendors_see || role.rate_band)} />
+        <Field label="Rate-card cap" value={fmtLakhs(role.rate_card_cap ?? role.cap)} />
         <Field label="Total engagement value" value={role.total_engagement_value} />
         <Field label="Cost centre" value={role.cost_centre} />
         <Field label="Budget approved" value={role.budget_approved} />
@@ -224,6 +257,12 @@ const SECTION_META = {
     caption: 'Finished requisitions that have been cancelled or closed.',
     to: '/dashboard/requisitions/completed',
   },
+  history: {
+    statuses: ['Draft', 'Intake', 'Structuring', 'PendingApproval', 'Published', 'Closed'],
+    title: 'Requisition History',
+    caption: 'Full audit history of all requisitions and complete field specifications including internal ceiling rates and rate card caps.',
+    to: '/dashboard/requisitions/history',
+  },
 };
 
 export default function RequisitionOverview({ section = 'drafted' }) {
@@ -315,6 +354,7 @@ export default function RequisitionOverview({ section = 'drafted' }) {
     drafted: requisitions.filter((r) => SECTION_META.drafted.statuses.includes(r.status)).length,
     published: requisitions.filter((r) => r.status === 'Published').length,
     completed: requisitions.filter((r) => r.status === 'Closed').length,
+    history: requisitions.length,
   }), [requisitions]);
 
   const rows = useMemo(
@@ -326,67 +366,82 @@ export default function RequisitionOverview({ section = 'drafted' }) {
 
   const firstName = user?.name?.split(' ')[0] || 'there';
 
-  const Row = ({ r }) => (
-    <div className="hm-row-wrap">
-      <div className="hm-row" onClick={() => setExpandedId((prev) => (prev === r.id ? null : r.id))}>
-        <div className="hm-row-main">
-          <button
-            type="button"
-            className="hm-row-title-link"
-            onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/requisitions/${r.id}`); }}
-            title={`Open the workspace flow for ${r.title || 'this requisition'}`}
-          >
-            {r.title || 'Untitled'}
-          </button>
-          <span className="hm-row-company">{r.company_name}</span>
-        </div>
-        <span className={`hm-row-status ${statusClass(r.status)}`}>
-          <span className="hm-dot" />
-          {r.status || 'Draft'}
-        </span>
-        <span className="hm-row-date">Created {formatDate(r.created_at)}</span>
-        <div className="hm-row-actions">
-          {section === 'published' && (
+  const Row = ({ r }) => {
+    const sr = r.structured_role || {};
+    const ceilingVal = fmtLakhs(sr.ceiling_internal);
+    const capVal = fmtLakhs(sr.rate_card_cap);
+    return (
+      <div className="hm-row-wrap">
+        <div className="hm-row" onClick={() => setExpandedId((prev) => (prev === r.id ? null : r.id))}>
+          <div className="hm-row-main">
             <button
               type="button"
-              className="ghost-btn hm-row-btn"
-              disabled={busyId === r.id}
-              onClick={(e) => { e.stopPropagation(); handleCancel(r); }}
-              title="Cancel — close this requisition and remove it from vendors"
+              className="hm-row-title-link"
+              onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/requisitions/${r.id}`); }}
+              title={`Open the workspace flow for ${r.title || 'this requisition'}`}
             >
-              {busyId === r.id ? '…' : 'Cancel'}
+              {r.title || 'Untitled'}
             </button>
-          )}
-          <button
-            type="button"
-            className="hm-row-export"
-            onClick={(e) => { e.stopPropagation(); handleExportSingle(r); }}
-            title="Export this requisition as JSON"
-          >
-            {Icons.download}
-          </button>
-          <button
-            type="button"
-            className="hm-row-delete"
-            disabled={busyId === r.id}
-            onClick={(e) => { e.stopPropagation(); handleDelete(r); }}
-            title="Delete this requisition permanently"
-          >
-            Delete
-          </button>
-          <span className="hm-row-chevron">{expandedId === r.id ? '▲' : '▼'}</span>
+            <span className="hm-row-company">{r.company_name}</span>
+            {r.structured_role && (
+              <div className="hm-row-commercials-pill" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
+                <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                  Ceiling: <strong style={{ color: '#0f172a' }}>{ceilingVal}</strong>
+                </span>
+                <span style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                  Rate Cap: <strong style={{ color: '#0f172a' }}>{capVal}</strong>
+                </span>
+              </div>
+            )}
+          </div>
+          <span className={`hm-row-status ${statusClass(r.status)}`}>
+            <span className="hm-dot" />
+            {r.status || 'Draft'}
+          </span>
+          <span className="hm-row-date">Created {formatDate(r.created_at)}</span>
+          <div className="hm-row-actions">
+            {section === 'published' && (
+              <button
+                type="button"
+                className="ghost-btn hm-row-btn"
+                disabled={busyId === r.id}
+                onClick={(e) => { e.stopPropagation(); handleCancel(r); }}
+                title="Cancel — close this requisition and remove it from vendors"
+              >
+                {busyId === r.id ? '…' : 'Cancel'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="hm-row-export"
+              onClick={(e) => { e.stopPropagation(); handleExportSingle(r); }}
+              title="Export this requisition as JSON"
+            >
+              {Icons.download}
+            </button>
+            <button
+              type="button"
+              className="hm-row-delete"
+              disabled={busyId === r.id}
+              onClick={(e) => { e.stopPropagation(); handleDelete(r); }}
+              title="Delete this requisition permanently"
+            >
+              Delete
+            </button>
+            <span className="hm-row-chevron">{expandedId === r.id ? '▲' : '▼'}</span>
+          </div>
         </div>
+        {expandedId === r.id && <RequisitionDetails id={r.id} initialData={r} token={token} />}
       </div>
-      {expandedId === r.id && <RequisitionDetails id={r.id} token={token} />}
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="page hm-page">
       <header className="hm-header">
         <div className="hm-header-left">
           <p className="hm-eyebrow">{greeting()}, {firstName}</p>
-          <h1 className="hm-title">{meta.title} Requisitions</h1>
+          <h1 className="hm-title">{meta.title}</h1>
           <p className="hm-description">{meta.caption}</p>
           <p className="hm-context">
             Hiring Manager <span>·</span> {user?.tenant_name || 'Term Jobs'}
@@ -407,6 +462,7 @@ export default function RequisitionOverview({ section = 'drafted' }) {
           { key: 'drafted', label: 'Drafted' },
           { key: 'published', label: 'Published' },
           { key: 'completed', label: 'Completed' },
+          { key: 'history', label: 'All History' },
         ].map((s) => (
           <Link
             key={s.key}

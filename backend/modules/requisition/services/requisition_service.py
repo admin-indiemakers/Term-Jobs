@@ -66,24 +66,63 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
     if not prefill:
         return None
 
-    title = (prefill.get("job_title") or intent.title or "").strip()
+    title = (prefill.get("job_title") or prefill.get("title") or intent.title or "").strip()
     if not title:
         return None
 
     min_rate = _num(prefill.get("range_vendors_see_min"))
+    if min_rate is None:
+        min_rate = _num(prefill.get("vendor_range_min"))
+
     max_rate = _num(prefill.get("range_vendors_see_max"))
+    if max_rate is None:
+        max_rate = _num(prefill.get("vendor_range_max"))
+
+    if (min_rate is None or max_rate is None) and prefill.get("range_vendors_see"):
+        rvs = prefill.get("range_vendors_see")
+        if isinstance(rvs, (list, tuple)) and len(rvs) == 2:
+            min_rate = _num(rvs[0]) if min_rate is None else min_rate
+            max_rate = _num(rvs[1]) if max_rate is None else max_rate
+
+    if (min_rate is None or max_rate is None) and prefill.get("rate_band"):
+        rb = prefill.get("rate_band")
+        if isinstance(rb, (list, tuple)) and len(rb) == 2:
+            min_rate = _num(rb[0]) if min_rate is None else min_rate
+            max_rate = _num(rb[1]) if max_rate is None else max_rate
+
     vendor_range = (min_rate, max_rate) if min_rate is not None and max_rate is not None else None
+
+    ceiling = _num(prefill.get("ceiling_internal"))
+    if ceiling is None:
+        ceiling = _num(prefill.get("internal_ceiling"))
+
+    rate_card_cap = _num(prefill.get("rate_card_cap"))
+    if rate_card_cap is None:
+        rate_card_cap = _num(prefill.get("cap"))
+
     locations = prefill.get("work_locations") or []
     seniority = prefill.get("seniority") or _seniority_from_experience(str(prefill.get("experience") or ""))
+
+    raw_rate_band = vendor_range or prefill.get("rate_band")
+    if isinstance(raw_rate_band, (list, tuple)) and len(raw_rate_band) == 2:
+        raw_rate_band = (raw_rate_band[0], raw_rate_band[1])
+    else:
+        raw_rate_band = None
+
+    raw_range_vendors_see = vendor_range or prefill.get("range_vendors_see") or raw_rate_band
+    if isinstance(raw_range_vendors_see, (list, tuple)) and len(raw_range_vendors_see) == 2:
+        raw_range_vendors_see = (raw_range_vendors_see[0], raw_range_vendors_see[1])
+    else:
+        raw_range_vendors_see = None
 
     role = StructuredRole(
         title=title,
         must_have_skills=prefill.get("must_have_skills") or [],
         nice_to_have_skills=prefill.get("nice_to_have_skills") or [],
         seniority=seniority,
-        location=locations[0] if locations else "",
-        rate_band=vendor_range,
-        contract_duration=prefill.get("duration") or "",
+        location=locations[0] if locations else (prefill.get("location") or ""),
+        rate_band=raw_rate_band,
+        contract_duration=prefill.get("duration") or prefill.get("contract_duration") or "",
         confidence=0.75,
         notes="Saved from structured requisition form.",
         job_family=prefill.get("job_family") or "",
@@ -91,18 +130,18 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
         headcount=_num(prefill.get("headcount")) or 1,
         experience=prefill.get("experience") or "",
         engagement_type=prefill.get("engagement_type") or "",
-        duration=prefill.get("duration") or "",
+        duration=prefill.get("duration") or prefill.get("contract_duration") or "",
         start_date=prefill.get("start_date") or "",
         ends_on=prefill.get("ends_on") or "",
         extension_likely=bool(prefill.get("extension_likely")),
         max_notice_period=prefill.get("max_notice_period") or "",
-        ceiling_internal=_num(prefill.get("ceiling_internal")),
-        range_vendors_see=vendor_range,
-        rate_card_cap=_num(prefill.get("rate_card_cap")),
-        total_engagement_value=prefill.get("total_engagement_value") or "",
+        ceiling_internal=ceiling,
+        range_vendors_see=raw_range_vendors_see,
+        rate_card_cap=rate_card_cap,
+        total_engagement_value=str(prefill.get("total_engagement_value") or ""),
         cost_centre=prefill.get("cost_centre") or "",
         budget_approved=bool(prefill.get("budget_approved")),
-        budget_reference=prefill.get("budget_reference") or "",
+        budget_reference=str(prefill.get("budget_reference") or ""),
         variance_approved=bool(prefill.get("variance_approved")),
         work_mode=prefill.get("work_mode") or "",
         work_locations=locations,
@@ -113,7 +152,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
         background_check=prefill.get("background_check") or "",
         background_check_required=bool(prefill.get("background_check_required")),
         nda_contract_type=prefill.get("nda_contract_type") or "",
-        work_authorization=prefill.get("work_authorization") or "",
+        work_authorization=str(prefill.get("work_authorization") or ""),
         client_site_access=bool(prefill.get("client_site_access")),
         security_clearance_required=bool(prefill.get("security_clearance_required")),
         security_clearance_notes=prefill.get("security_clearance_notes") or "",

@@ -61,7 +61,7 @@ export default function DashboardLayout() {
     <div className={`app-shell ${consoleClass}`}>
       <aside className="sidebar">
         <div className="sidebar-brand">
-          {user.role === 'Hiring Manager' || user.role === 'Director' ? (
+          {['Admin', 'Hiring Manager', 'HR', 'Director'].includes(user.role) ? (
             <>
               <div className="brand-mark">{user.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
               <div className="brand-text">
@@ -101,6 +101,12 @@ export default function DashboardLayout() {
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
                 Completed
+              </NavLink>
+              <NavLink
+                to="/dashboard/requisitions/history"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Requisition History
               </NavLink>
               <NavLink
                 to="/dashboard/requisitions/new"

@@ -33,7 +33,10 @@ function computeEngagementValue(role) {
 
 function fmtLpa(n) {
   if (n == null || n === '') return 'Not set';
-  return `₹${(Number(n) / 100000).toFixed(1)} L p.a.`;
+  const num = Number(n);
+  if (!Number.isFinite(num) || num <= 0) return 'Not set';
+  const lakhs = num >= 100000 ? num / 100000 : num >= 100 ? num / 100 : num;
+  return `₹${lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)} L p.a.`;
 }
 
 function Field({ label, hint, children }) {
@@ -352,7 +355,7 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
               <div className="editor-row">
                 <Field label="Your ceiling — internal" hint="Only visible to internal HR; vendors see the range below." required>
                   <div className="editor-ceiling">
-                    <TextField type="number" min="0" value={role.ceiling_internal} editable={editable} onChange={(v) => set({ ceiling_internal: v === '' ? null : Number(v) })} placeholder="INR p.a." />
+                    <TextField type="number" min="0" value={role.ceiling_internal ?? role.internal_ceiling} editable={editable} onChange={(v) => set({ ceiling_internal: v === '' ? null : Number(v) })} placeholder="INR p.a." />
                     {lockIcon}
                   </div>
                 </Field>
