@@ -146,7 +146,8 @@ export default function RequisitionDetail() {
     setBusy('delete');
     try {
       await request(`/requisitions/${id}`, { method: 'DELETE', token });
-      navigate('/dashboard/requisitions');
+      const section = req?.status === 'Closed' ? 'completed' : req?.status === 'Published' ? 'published' : 'drafted';
+      navigate(`/dashboard/requisitions/${section}`);
     } catch (err) {
       setError(err.message);
       setBusy('');
@@ -183,7 +184,7 @@ export default function RequisitionDetail() {
             {req.company?.name || 'Company'} · Created {formatDate(req.created_at)}
           </p>
         </div>
-        <Link to="/dashboard/requisitions" className="ghost-btn-link">← Back to list</Link>
+        <Link to="/dashboard/requisitions/drafted" className="ghost-btn-link">← Back to list</Link>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

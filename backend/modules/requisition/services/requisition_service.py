@@ -26,6 +26,104 @@ from ..llm.base import LLMClient
 from ..llm.mock import MockLLM
 
 
+def _present(value: Any) -> bool:
+    return value not in (None, "", [], {})
+
+
+def _num(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _seniority_from_experience(text: str) -> str:
+    import re
+
+    m = re.search(r"(\d{1,2}(?:\.\d+)?)", text or "")
+    if not m:
+        return "Mid"
+    years = int(float(m.group(1)))
+    if years >= 9:
+        return "Principal"
+    if years >= 7:
+        return "Lead"
+    if years >= 4:
+        return "Senior"
+    if years >= 2:
+        return "Mid"
+    return "Junior"
+
+
+def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> dict | None:
+    """Persist the requisition form as a StructuredRole immediately.
+
+    The agent may later enrich/regenerate the JD, but vendor/internal portals
+    should not have to wait for the LLM before the submitted fields exist in DB.
+    """
+    if not prefill:
+        return None
+
+    title = (prefill.get("job_title") or intent.title or "").strip()
+    if not title:
+        return None
+
+    min_rate = _num(prefill.get("range_vendors_see_min"))
+    max_rate = _num(prefill.get("range_vendors_see_max"))
+    vendor_range = (min_rate, max_rate) if min_rate is not None and max_rate is not None else None
+    locations = prefill.get("work_locations") or []
+    seniority = prefill.get("seniority") or _seniority_from_experience(str(prefill.get("experience") or ""))
+
+    role = StructuredRole(
+        title=title,
+        must_have_skills=prefill.get("must_have_skills") or [],
+        nice_to_have_skills=prefill.get("nice_to_have_skills") or [],
+        seniority=seniority,
+        location=locations[0] if locations else "",
+        rate_band=vendor_range,
+        contract_duration=prefill.get("duration") or "",
+        confidence=0.75,
+        notes="Saved from structured requisition form.",
+        job_family=prefill.get("job_family") or "",
+        certifications=prefill.get("certifications") or [],
+        headcount=_num(prefill.get("headcount")) or 1,
+        experience=prefill.get("experience") or "",
+        engagement_type=prefill.get("engagement_type") or "",
+        duration=prefill.get("duration") or "",
+        start_date=prefill.get("start_date") or "",
+        ends_on=prefill.get("ends_on") or "",
+        extension_likely=bool(prefill.get("extension_likely")),
+        max_notice_period=prefill.get("max_notice_period") or "",
+        ceiling_internal=_num(prefill.get("ceiling_internal")),
+        range_vendors_see=vendor_range,
+        rate_card_cap=_num(prefill.get("rate_card_cap")),
+        total_engagement_value=prefill.get("total_engagement_value") or "",
+        cost_centre=prefill.get("cost_centre") or "",
+        budget_approved=bool(prefill.get("budget_approved")),
+        budget_reference=prefill.get("budget_reference") or "",
+        variance_approved=bool(prefill.get("variance_approved")),
+        work_mode=prefill.get("work_mode") or "",
+        work_locations=locations,
+        working_hours=prefill.get("working_hours") or "",
+        location_remote_policy=prefill.get("location_remote_policy") or "",
+        onsite_requirement=prefill.get("onsite_requirement") or "",
+        equipment_provisioning=prefill.get("equipment_provisioning") or "",
+        background_check=prefill.get("background_check") or "",
+        background_check_required=bool(prefill.get("background_check_required")),
+        nda_contract_type=prefill.get("nda_contract_type") or "",
+        work_authorization=prefill.get("work_authorization") or "",
+        client_site_access=bool(prefill.get("client_site_access")),
+        security_clearance_required=bool(prefill.get("security_clearance_required")),
+        security_clearance_notes=prefill.get("security_clearance_notes") or "",
+        hiring_manager=prefill.get("hiring_manager") or "",
+        submission_deadline=prefill.get("submission_deadline") or "",
+        priority=prefill.get("priority") or "Normal",
+    )
+    return role.model_dump()
+
+
 class RequisitionService:
     def __init__(self, llm: LLMClient | None = None, session_factory=None, checkpointer=None) -> None:
         self.session_factory = session_factory or get_session
@@ -51,6 +149,8 @@ class RequisitionService:
         tenant_id: str = "local",
         intake_meta: dict | None = None,
     ) -> models.Requisition:
+        prefill = dict((intake_meta or {}).get("prefill") or {})
+        saved_role = _structured_role_from_prefill(intent, prefill)
         with self.session_factory() as session:
             req = models.Requisition(
                 tenant_id=tenant_id,
@@ -60,6 +160,7 @@ class RequisitionService:
                 title=intent.title,
                 intent=intent.model_dump(),
                 intake_meta=intake_meta or {},
+                structured_role=saved_role,
             )
             session.add(req)
             session.commit()

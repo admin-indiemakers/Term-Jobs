@@ -4,14 +4,6 @@ import { request } from '../../api/client';
 import { API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 
-const MODES = [
-  { id: 'guided', label: 'Guided intake', desc: 'Agent asks targeted questions to fill gaps, using your company background.' },
-  { id: 'paste', label: 'Paste JD directly', desc: 'Paste the raw JD text — the agent structures the whole role from it.' },
-  { id: 'upload', label: 'Upload existing document', desc: 'Upload a JD/spec file (.docx, .pdf) — the agent reads and prefills the form.' },
-];
-
-const ACCEPT = '.docx,.doc,.pdf,.txt,.md';
-
 const ENGAGEMENT_TYPES = ['Contract'];
 const WORK_MODES = ['Remote', 'Hybrid', 'Onsite'];
 const EQUIPMENT_OPTIONS = ['Company-provided', 'Vendor-provided', 'BYOD'];
@@ -114,15 +106,9 @@ export default function NewRequisition() {
 
   const [companyProfileId, setCompanyProfileId] = useState('');
 
-  const [mode, setMode] = useState('guided');
-  const [prompt, setPrompt] = useState('');
-  const [sourceFilename, setSourceFilename] = useState('');
-
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-
-  const fileInputRef = useRef(null);
 
   // Template import state
   const [templates, setTemplates] = useState([]);
@@ -314,60 +300,8 @@ export default function NewRequisition() {
         setSelectedTemplateId('');
   };
 
-  const handleSourceFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setSourceFilename(file.name);
-    
-    // Upload and extract text
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await fetch(`${API_BASE_URL}/upload/jd-document`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Upload failed');
-      }
-      
-      const data = await response.json();
-      
-      // Use extracted text as prompt (paste mode behavior)
-      if (data.extracted_text) {
-        setPrompt(data.extracted_text);
-      }
-      
-      // Use extracted structured fields for prefill
-      if (data.extracted_fields) {
-        const fields = data.extracted_fields;
-        setPrefill((prev) => ({
-          ...prev,
-          ...fields,
-          // Merge array fields without duplicates
-          must_have_skills: fields.must_have_skills ? [...new Set([...(prev.must_have_skills || []), ...fields.must_have_skills])] : prev.must_have_skills,
-          nice_to_have_skills: fields.nice_to_have_skills ? [...new Set([...(prev.nice_to_have_skills || []), ...fields.nice_to_have_skills])] : prev.nice_to_have_skills,
-          work_locations: fields.work_locations ? [...new Set([...(prev.work_locations || []), ...fields.work_locations])] : prev.work_locations,
-          certifications: fields.certifications ? [...new Set([...(prev.certifications || []), ...fields.certifications])] : prev.certifications,
-        }));
-      }
-    } catch (err) {
-      setError(err.message);
-    }
-    
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
   const roleTitle = prefill.job_title.trim();
-  const canSubmit =
-    Boolean(companyProfileId) && (roleTitle.length > 0 || ((mode === 'paste' || mode === 'upload') && prompt.trim().length > 0));
+  const canSubmit = Boolean(companyProfileId) && roleTitle.length > 0;
 
   const handlePrefillChange = (section, field, value) => {
     setPrefill((prev) => ({
@@ -393,33 +327,30 @@ export default function NewRequisition() {
     setSubmitting(true);
     try {
       const prefillData = { ...prefill };
-      const fallbackTitle = roleTitle || sourceFilename || 'Pasted JD draft';
       // Convert chip arrays from state
       const body = {
         company_profile_id: companyProfileId,
-        title: fallbackTitle,
+        title: roleTitle,
         tech_stack_hint: [...prefill.must_have_skills, ...prefill.nice_to_have_skills].filter(Boolean),
-        intake_mode: mode,
-        source_filename: mode === 'upload' ? sourceFilename : '',
-        prompt: (mode === 'paste' || mode === 'upload') ? prompt : '',
+        intake_mode: 'guided',
+        source_filename: '',
+        prompt: '',
         created_by: user.id,
         prefill: prefillData,
         // Pass all prefill fields in intake_meta for the agent to use
         intake_meta: {
-          intake_mode: mode,
+          intake_mode: 'guided',
           company_profile_id: companyProfileId,
-          source_filename: mode === 'upload' ? sourceFilename : '',
+          source_filename: '',
           // Pre-filled structured role fields
           prefill: prefillData,
         },
       };
       const req = await request('/requisitions', { method: 'POST', body, token });
-      if (mode !== 'paste') {
-        try {
-          await request(`/requisitions/${req.id}/start`, { method: 'POST', token });
-        } catch {
-          // Draft-state fallback: the detail page offers "Run Agent" to retry.
-        }
+      try {
+        await request(`/requisitions/${req.id}/start`, { method: 'POST', token });
+      } catch {
+        // Draft-state fallback: the detail page offers "Run Agent" to retry.
       }
       navigate(`/dashboard/requisitions/${req.id}`);
     } catch (err) {
@@ -440,7 +371,7 @@ export default function NewRequisition() {
         </div>
         <div className="requisition-header-actions">
           <button type="button" className="ghost-btn">Save draft</button>
-          <Link to="/dashboard/requisitions" className="ghost-btn-link">Back to list</Link>
+          <Link to="/dashboard/requisitions/drafted" className="ghost-btn-link">Back to list</Link>
         </div>
       </div>
 
@@ -460,76 +391,11 @@ export default function NewRequisition() {
           <section className="intake-section">
             <div className="intake-section-head">
               <h2 className="intake-section-title">How should the AI draft this JD?</h2>
-              <span className="intake-section-caption">Choose one</span>
+              <span className="intake-section-caption">Guided intake</span>
             </div>
-            <div className="intake-mode-tabs" role="radiogroup">
-              {MODES.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={mode === m.id}
-                  className={`mode-tab ${mode === m.id ? 'active' : ''}`}
-                  onClick={() => setMode(m.id)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 4, textAlign: 'left' }}
-                >
-                  <span>{m.label}</span>
-                  <span style={{ fontWeight: 500, fontSize: '0.74rem', lineHeight: 1.4 }}>{m.desc}</span>
-                </button>
-              ))}
-            </div>
-
-            {mode === 'paste' && (
-              <div className="intake-field" style={{ marginTop: 18 }}>
-                <label className="form-label">Full Job Description / Requirements</label>
-                <textarea
-                  className="auth-input"
-                  rows="9"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  placeholder="Paste the raw JD text — the agent parses the whole role from it in one pass."
-                  required
-                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
-                />
-              </div>
-            )}
-
-            {mode === 'upload' && (
-              <div className="intake-field" style={{ marginTop: 18 }}>
-                <label className="form-label">Job description / spec file</label>
-                <input ref={fileInputRef} type="file" accept={ACCEPT} onChange={handleSourceFile} style={{ display: 'none' }} />
-                {sourceFilename ? (
-                  <div className="source-banner" style={{ marginBottom: 0 }}>
-                    <span className="source-banner-icon">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 6 9 17l-5-5" />
-                      </svg>
-                    </span>
-                    <p className="source-banner-text">
-                      <strong>&ldquo;{sourceFilename}&rdquo; read</strong> — Title, skills, experience, and location prefilled below.
-                    </p>
-                    <button type="button" className="source-banner-replace" onClick={() => fileInputRef.current?.click()}>
-                      Replace
-                    </button>
-                  </div>
-                ) : (
-                  <button type="button" className="upload-zone" onClick={() => fileInputRef.current?.click()}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <path d="m17 8-5-5-5 5" />
-                      <path d="M12 3v12" />
-                    </svg>
-                    Choose a file — .docx, .pdf, .txt, .md
-                  </button>
-                )}
-              </div>
-            )}
-
-            {mode === 'guided' && (
-              <p className="intake-mode-note">
-                The agent will ask you a few targeted questions to fill any gaps, using your role brief and the company background from onboarding.
-              </p>
-            )}
+            <p className="intake-mode-note">
+              The agent will ask you a few targeted questions to fill any gaps, using your role brief and the company background from onboarding.
+            </p>
 
             {/* Template Import Dropdown */}
             {templates.length > 0 && (

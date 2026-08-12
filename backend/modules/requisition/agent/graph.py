@@ -51,6 +51,7 @@ class AgentState(TypedDict, total=False):
     status: str
     profile: dict
     intent: dict
+    intake_meta: dict
     answers: list[dict]
     asked_questions: list[dict]
     parsed: dict
@@ -211,11 +212,11 @@ def _prefill_to_parsed(prefill: dict) -> dict:
         parsed["seniority"] = prefill["seniority"]
 
     if prefill.get("experience"):
-        years = heuristics.extract_from_text(str(prefill["experience"]))["years"]
+        years = _min_experience_years(str(prefill["experience"]))
         if years is not None:
             parsed["years"] = years
             if not prefill.get("seniority"):
-                parsed["seniority"] = _seniority_from_years(_min_experience_years(str(prefill["experience"])) or years)
+                parsed["seniority"] = _seniority_from_years(years)
 
     locations = prefill.get("work_locations") or []
     if locations:
@@ -223,9 +224,9 @@ def _prefill_to_parsed(prefill: dict) -> dict:
 
     min_val = prefill.get("range_vendors_see_min")
     max_val = prefill.get("range_vendors_see_max")
-    if min_val is None:
+    if min_val in (None, ""):
         min_val = prefill.get("ceiling_internal")
-    if min_val is not None or max_val is not None:
+    if min_val not in (None, "") and max_val not in (None, ""):
         parsed["rate_band"] = (min_val, max_val)
 
     if prefill.get("duration"):
@@ -254,7 +255,9 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
     def _route_after_coverage(state: AgentState) -> str:
         if (state["intent"].get("prompt") or "").strip():
             return "generate"  # direct-prompt mode: no intake Q&A, generate now
-        if state["covered"]:
+        if not (state.get("intake_meta") or {}).get("prefill") and state["covered"]:
+            return "generate"
+        if not _compute_gaps(state.get("parsed") or {}):
             return "generate"
         return "intake_loop"
 
@@ -300,6 +303,8 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
         data = role.model_dump()
 
         # Role tab fields
+        if prefill.get("job_title"):
+            data["title"] = prefill["job_title"]
         if not data.get("job_family") and prefill.get("job_family"):
             data["job_family"] = prefill["job_family"]
         if not data.get("must_have_skills") and prefill.get("must_have_skills"):
@@ -373,6 +378,8 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             data["nda_contract_type"] = prefill["nda_contract_type"]
         if not data.get("work_authorization") and prefill.get("work_authorization"):
             data["work_authorization"] = prefill["work_authorization"]
+        if data.get("client_site_access") is False and prefill.get("client_site_access") is not None:
+            data["client_site_access"] = prefill["client_site_access"]
         if data.get("security_clearance_required") is False and prefill.get("security_clearance_required") is not None:
             data["security_clearance_required"] = prefill["security_clearance_required"]
         if not data.get("security_clearance_notes") and prefill.get("security_clearance_notes"):

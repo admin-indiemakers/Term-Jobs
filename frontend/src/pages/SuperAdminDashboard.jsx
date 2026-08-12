@@ -13,12 +13,23 @@ export default function SuperAdminDashboard() {
   const [success, setSuccess] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
 
+  const [candidateLimit, setCandidateLimit] = useState(3);
+  const [limitInput, setLimitInput] = useState(3);
+  const [limitSaving, setLimitSaving] = useState(false);
+
   const load = () => {
     setLoading(true);
-    Promise.all([request('/api/auth/users', { token }), request('/api/auth/tenants', { token })])
-      .then(([usersRes, tenantsRes]) => {
+    Promise.all([
+      request('/api/auth/users', { token }),
+      request('/api/auth/tenants', { token }),
+      request('/api/settings/candidate-limit', { token }),
+    ])
+      .then(([usersRes, tenantsRes, limitRes]) => {
         setUsers(usersRes || []);
         setTenants(tenantsRes || []);
+        const l = limitRes?.limit ?? 3;
+        setCandidateLimit(l);
+        setLimitInput(l);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -37,6 +48,23 @@ export default function SuperAdminDashboard() {
       load();
     } catch (err) {
       setError(err.message);
+    }
+  };
+
+  const handleSaveLimit = async () => {
+    const value = Math.max(1, Math.round(Number(limitInput) || 0));
+    setLimitSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await request('/api/settings/candidate-limit', { method: 'PUT', body: { limit: value }, token });
+      setCandidateLimit(res?.limit ?? value);
+      setLimitInput(res?.limit ?? value);
+      setSuccess(`Vendor submission limit updated to ${res?.limit ?? value} candidates per requisition.`);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLimitSaving(false);
     }
   };
 
@@ -74,6 +102,40 @@ export default function SuperAdminDashboard() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
+
+      <div className="glass-panel table-card" style={{ marginBottom: 24 }}>
+        <div className="table-head">
+          <div>
+            <h2 className="card-title">Platform Settings</h2>
+            <p className="muted" style={{ fontSize: '0.82rem' }}>Platform-wide defaults applied to all vendors and requisitions.</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', padding: '16px 4px' }}>
+          <div style={{ minWidth: 280 }}>
+            <p className="card-title" style={{ fontSize: '0.95rem', marginBottom: 6 }}>
+              Max candidate submissions per requisition
+            </p>
+            <p className="muted" style={{ fontSize: '0.8rem', lineHeight: 1.5 }}>
+              How many candidates a single vendor can apply to one published requisition.
+              Currently <strong>{candidateLimit}</strong>.
+            </p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <input
+              type="number"
+              min="1"
+              value={limitInput}
+              onChange={(e) => setLimitInput(e.target.value)}
+              className="auth-input"
+              style={{ width: 90 }}
+              disabled={limitSaving}
+            />
+            <button type="button" className="glow-btn" onClick={handleSaveLimit} disabled={limitSaving}>
+              {limitSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {loading ? (
         <p className="muted" style={{ padding: 24 }}>Loading workspace...</p>

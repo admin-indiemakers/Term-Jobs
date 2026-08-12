@@ -43,6 +43,7 @@ class UserCreate(BaseModel):
     role: str
     tenant_id: str = ""
     department: str = ""
+    candidate_limit: int | None = Field(None, ge=1, le=100)
 
 class UserUpdate(BaseModel):
     email: str | None = Field(None, min_length=3, max_length=255)
@@ -50,6 +51,7 @@ class UserUpdate(BaseModel):
     password: str | None = Field(None, min_length=4, max_length=128)
     department: str | None = None
     is_active: bool | None = None
+    candidate_limit: int | None = Field(None, ge=1, le=100)
 
 class UserLogin(BaseModel):
     email: str | None = None
@@ -78,6 +80,7 @@ class UserResponse(BaseModel):
     department: str = ""
     created_by: str = ""
     is_active: bool = True
+    candidate_limit: int | None = None
 
 class UserListResponse(BaseModel):
     id: str
@@ -91,6 +94,7 @@ class UserListResponse(BaseModel):
     is_active: bool
     created_by: str = ""
     created_at: str = ""
+    candidate_limit: int | None = None
 
 class TokenResponse(BaseModel):
     access_token: str

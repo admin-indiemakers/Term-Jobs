@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import StatusBadge from '../../components/StatusBadge';
+import JdPreview from '../../components/JdPreview';
 import { Icons } from '../../components/Dashboard';
 
 function formatDate(iso) {
@@ -36,13 +38,206 @@ function downloadJSON(data, filename) {
   URL.revokeObjectURL(url);
 }
 
-export default function RequisitionOverview() {
+const fmtLakhs = (n) => (n == null ? '—' : `₹${(n / 100000).toFixed(1)} L`);
+const pairText = (pair) => {
+  if (!pair || !Array.isArray(pair)) return '—';
+  if (pair[0] == null && pair[1] == null) return '—';
+  if (pair[0] === pair[1]) return fmtLakhs(pair[0]);
+  return `${fmtLakhs(pair[0])} – ${fmtLakhs(pair[1])}`;
+};
+
+function Field({ label, value }) {
+  if (value === undefined || value === null || value === '') return null;
+  let display = value;
+  if (Array.isArray(value)) display = value.length ? value.join(', ') : null;
+  if (typeof value === 'boolean') display = value ? 'Yes' : 'No';
+  if (display === null) return null;
+  return (
+    <div className="hm-detail-item">
+      <span className="hm-detail-label">{label}</span>
+      <span className="hm-detail-value">{display}</span>
+    </div>
+  );
+}
+
+function RequisitionDetails({ id, token }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    setLoading(true);
+    request(`/requisitions/${id}`, { token })
+      .then((d) => {
+        setData(d);
+        setError('');
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [id, token]);
+
+  if (loading) return <p className="muted" style={{ padding: 12 }}>Loading full details…</p>;
+  if (error) return <div className="alert alert-error">{error}</div>;
+  if (!data) return null;
+
+  const role = data.structured_role || {};
+  const intake = data.intake_meta || {};
+
+  return (
+    <div className="hm-detail-panel">
+      <div className="hm-detail-meta">
+        <Field label="Status" value={data.status} />
+        <Field label="Company" value={data.company?.name} />
+        <Field label="Created" value={data.created_at ? formatDate(data.created_at) : null} />
+        <Field label="Approved by" value={data.approved_by} />
+        <Field label="Approved at" value={data.approved_at ? formatDate(data.approved_at) : null} />
+        <Field label="Source file" value={intake.source_filename} />
+      </div>
+
+      <h4 className="hm-detail-section-title">Role</h4>
+      <div className="hm-detail-grid">
+        <Field label="Title" value={role.title} />
+        <Field label="Seniority" value={role.seniority} />
+        <Field label="Job family" value={role.job_family} />
+        <Field label="Headcount" value={role.headcount} />
+        <Field label="Experience" value={role.experience} />
+        <Field label="Location" value={role.location} />
+        <Field label="Must-have skills" value={role.must_have_skills} />
+        <Field label="Nice-to-have skills" value={role.nice_to_have_skills} />
+        <Field label="Certifications" value={role.certifications} />
+        <Field label="Contract duration" value={role.contract_duration} />
+      </div>
+
+      <h4 className="hm-detail-section-title">Engagement</h4>
+      <div className="hm-detail-grid">
+        <Field label="Engagement type" value={role.engagement_type} />
+        <Field label="Duration" value={role.duration} />
+        <Field label="Start date" value={role.start_date} />
+        <Field label="Ends on" value={role.ends_on} />
+        <Field label="Extension likely" value={role.extension_likely} />
+        <Field label="Max notice period" value={role.max_notice_period} />
+      </div>
+
+      <h4 className="hm-detail-section-title">Commercials</h4>
+      <div className="hm-detail-grid">
+        <Field label="Rate band" value={pairText(role.rate_band)} />
+        <Field label="Ceiling (internal)" value={fmtLakhs(role.ceiling_internal)} />
+        <Field label="Range vendors see" value={pairText(role.range_vendors_see)} />
+        <Field label="Rate-card cap" value={fmtLakhs(role.rate_card_cap)} />
+        <Field label="Total engagement value" value={role.total_engagement_value} />
+        <Field label="Cost centre" value={role.cost_centre} />
+        <Field label="Budget approved" value={role.budget_approved} />
+        <Field label="Budget reference" value={role.budget_reference} />
+        <Field label="Variance approved" value={role.variance_approved} />
+      </div>
+
+      <h4 className="hm-detail-section-title">Work setup</h4>
+      <div className="hm-detail-grid">
+        <Field label="Work mode" value={role.work_mode} />
+        <Field label="Work locations" value={role.work_locations} />
+        <Field label="Working hours" value={role.working_hours} />
+        <Field label="Location / remote policy" value={role.location_remote_policy} />
+        <Field label="Onsite requirement" value={role.onsite_requirement} />
+        <Field label="Equipment provisioning" value={role.equipment_provisioning} />
+      </div>
+
+      <h4 className="hm-detail-section-title">Compliance</h4>
+      <div className="hm-detail-grid">
+        <Field label="Background check" value={role.background_check} />
+        <Field label="Background check required" value={role.background_check_required} />
+        <Field label="NDA / contract type" value={role.nda_contract_type} />
+        <Field label="Work authorization" value={role.work_authorization} />
+        <Field label="Client site access" value={role.client_site_access} />
+        <Field label="Security clearance required" value={role.security_clearance_required} />
+        <Field label="Security clearance notes" value={role.security_clearance_notes} />
+      </div>
+
+      <h4 className="hm-detail-section-title">Process</h4>
+      <div className="hm-detail-grid">
+        <Field label="Hiring manager" value={role.hiring_manager} />
+        <Field label="Submission deadline" value={role.submission_deadline} />
+        <Field label="Priority" value={role.priority} />
+      </div>
+
+      {data.intent && (
+        <>
+          <h4 className="hm-detail-section-title">Intent</h4>
+          <div className="hm-detail-grid">
+            <Field label="Requested title" value={data.intent?.title} />
+            <Field label="Description" value={data.intent?.description} />
+            <Field label="Prompt" value={data.intent?.prompt} />
+            <Field label="Tech stack hint" value={data.intent?.tech_stack_hint} />
+          </div>
+        </>
+      )}
+
+      {data.intake_answers?.length > 0 && (
+        <>
+          <h4 className="hm-detail-section-title">Intake answers</h4>
+          <ul className="log-list">
+            {data.intake_answers.map((a, i) => (
+              <li key={i} className="log-item">
+                <span className="log-index">{i + 1}.</span>
+                {a.question_id}: {a.value}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+
+      <h4 className="hm-detail-section-title">Generated JD</h4>
+      <JdPreview markdown={data.generated_jd_markdown} />
+
+      {data.refinement_log?.length > 0 && (
+        <>
+          <h4 className="hm-detail-section-title">Refinement history</h4>
+          <ul className="log-list">
+            {data.refinement_log.map((entry, i) => (
+              <li key={i} className="log-item">
+                <span className="log-index">{i + 1}.</span>
+                {entry.instruction}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+const SECTION_META = {
+  drafted: {
+    statuses: ['Draft', 'Intake', 'Structuring', 'PendingApproval'],
+    title: 'Drafted',
+    caption: 'Requisitions still in progress — run the agent, answer intake, or approve before publishing.',
+    to: '/dashboard/requisitions/drafted',
+  },
+  published: {
+    statuses: ['Published'],
+    title: 'Published',
+    caption: 'Live requisitions visible to your partner vendors. Cancel to close one and remove it from vendors.',
+    to: '/dashboard/requisitions/published',
+  },
+  completed: {
+    statuses: ['Closed'],
+    title: 'Completed',
+    caption: 'Finished requisitions that have been cancelled or closed.',
+    to: '/dashboard/requisitions/completed',
+  },
+};
+
+export default function RequisitionOverview({ section = 'drafted' }) {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [exporting, setExporting] = useState(false);
+  const [busyId, setBusyId] = useState('');
+  const [expandedId, setExpandedId] = useState(null);
+
+  const meta = SECTION_META[section] || SECTION_META.drafted;
 
   const load = () => {
     setLoading(true);
@@ -62,6 +257,10 @@ export default function RequisitionOverview() {
 
   useEffect(load, [token]);
 
+  useEffect(() => {
+    setExpandedId(null);
+  }, [section]);
+
   const handleExportAll = async () => {
     setExporting(true);
     try {
@@ -78,36 +277,122 @@ export default function RequisitionOverview() {
     downloadJSON(req, `requisition-${req.id}-${new Date().toISOString().split('T')[0]}.json`);
   };
 
-  const counts = {
-    total: requisitions.length,
-    Draft: requisitions.filter((r) => r.status === 'Draft').length,
-    PendingApproval: requisitions.filter((r) => r.status === 'PendingApproval').length,
-    Published: requisitions.filter((r) => r.status === 'Published').length,
+  const handleCancel = async (req) => {
+    if (!window.confirm(`Cancel "${req.title}"? It will be closed and removed from the vendor portal.`)) return;
+    setBusyId(req.id);
+    setError('');
+    setInfo('');
+    try {
+      await request(`/requisitions/${req.id}/close`, { method: 'POST', token });
+      setInfo(`"${req.title}" cancelled — moved to Completed.`);
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId('');
+    }
   };
 
-  const ordered = [...requisitions].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  const handleDelete = async (req) => {
+    if (!window.confirm(`Delete "${req.title}" permanently? This cannot be undone.`)) return;
+    setBusyId(req.id);
+    setError('');
+    setInfo('');
+    try {
+      await request(`/requisitions/${req.id}`, { method: 'DELETE', token });
+      setInfo(`"${req.title}" deleted.`);
+      setExpandedId((prev) => (prev === req.id ? null : prev));
+      load();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const counts = useMemo(() => ({
+    total: requisitions.length,
+    drafted: requisitions.filter((r) => SECTION_META.drafted.statuses.includes(r.status)).length,
+    published: requisitions.filter((r) => r.status === 'Published').length,
+    completed: requisitions.filter((r) => r.status === 'Closed').length,
+  }), [requisitions]);
+
+  const rows = useMemo(
+    () => requisitions
+      .filter((r) => meta.statuses.includes(r.status))
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)),
+    [requisitions, meta]
+  );
+
   const firstName = user?.name?.split(' ')[0] || 'there';
+
+  const Row = ({ r }) => (
+    <div className="hm-row-wrap">
+      <div className="hm-row" onClick={() => setExpandedId((prev) => (prev === r.id ? null : r.id))}>
+        <div className="hm-row-main">
+          <button
+            type="button"
+            className="hm-row-title-link"
+            onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/requisitions/${r.id}`); }}
+            title={`Open the workspace flow for ${r.title || 'this requisition'}`}
+          >
+            {r.title || 'Untitled'}
+          </button>
+          <span className="hm-row-company">{r.company_name}</span>
+        </div>
+        <span className={`hm-row-status ${statusClass(r.status)}`}>
+          <span className="hm-dot" />
+          {r.status || 'Draft'}
+        </span>
+        <span className="hm-row-date">Created {formatDate(r.created_at)}</span>
+        <div className="hm-row-actions">
+          {section === 'published' && (
+            <button
+              type="button"
+              className="ghost-btn hm-row-btn"
+              disabled={busyId === r.id}
+              onClick={(e) => { e.stopPropagation(); handleCancel(r); }}
+              title="Cancel — close this requisition and remove it from vendors"
+            >
+              {busyId === r.id ? '…' : 'Cancel'}
+            </button>
+          )}
+          <button
+            type="button"
+            className="hm-row-export"
+            onClick={(e) => { e.stopPropagation(); handleExportSingle(r); }}
+            title="Export this requisition as JSON"
+          >
+            {Icons.download}
+          </button>
+          <button
+            type="button"
+            className="hm-row-delete"
+            disabled={busyId === r.id}
+            onClick={(e) => { e.stopPropagation(); handleDelete(r); }}
+            title="Delete this requisition permanently"
+          >
+            Delete
+          </button>
+          <span className="hm-row-chevron">{expandedId === r.id ? '▲' : '▼'}</span>
+        </div>
+      </div>
+      {expandedId === r.id && <RequisitionDetails id={r.id} token={token} />}
+    </div>
+  );
 
   return (
     <div className="page hm-page">
       <header className="hm-header">
         <div className="hm-header-left">
           <p className="hm-eyebrow">{greeting()}, {firstName}</p>
-          <h1 className="hm-title">My Requisitions</h1>
-          <p className="hm-description">
-            Create, structure, and publish job requirements with AI assistance — right from this workspace.
-          </p>
+          <h1 className="hm-title">{meta.title} Requisitions</h1>
+          <p className="hm-description">{meta.caption}</p>
           <p className="hm-context">
             Hiring Manager <span>·</span> {user?.tenant_name || 'Term Jobs'}
           </p>
         </div>
         <div className="hm-header-actions">
-          <div className="hm-export-dropdown">
-            <button className="hm-export-btn" onClick={handleExportAll} disabled={exporting}>
-              {Icons.download}
-              <span>{exporting ? 'Exporting...' : 'Export All JSON'}</span>
-            </button>
-          </div>
           <Link to="/dashboard/requisitions/new" className="glow-btn hm-header-cta">
             + New Requisition
           </Link>
@@ -115,74 +400,43 @@ export default function RequisitionOverview() {
       </header>
 
       {error && <div className="alert alert-error">{error}</div>}
+      {info && <div className="alert alert-success">{info}</div>}
 
       <div className="hm-strip">
-        <div className="hm-strip-seg hm-strip-total">
-          <span className="hm-strip-value">{counts.total}</span>
-          <span className="hm-strip-label">Total</span>
-        </div>
-        <div className="hm-strip-seg">
-          <span className="hm-strip-value">{counts.Draft}</span>
-          <span className="hm-strip-label">Draft</span>
-        </div>
-        <div className="hm-strip-seg">
-          <span className="hm-strip-value">{counts.PendingApproval}</span>
-          <span className="hm-strip-label">Pending</span>
-        </div>
-        <div className="hm-strip-seg">
-          <span className="hm-strip-value">{counts.Published}</span>
-          <span className="hm-strip-label">Live</span>
-        </div>
+        {[
+          { key: 'drafted', label: 'Drafted' },
+          { key: 'published', label: 'Published' },
+          { key: 'completed', label: 'Completed' },
+        ].map((s) => (
+          <Link
+            key={s.key}
+            to={SECTION_META[s.key].to}
+            className={`hm-strip-seg ${s.key === section ? 'hm-strip-active' : ''}`}
+          >
+            <span className="hm-strip-value">{counts[s.key]}</span>
+            <span className="hm-strip-label">{s.label}</span>
+          </Link>
+        ))}
       </div>
 
-      <section className="hm-board">
-        <div className="hm-board-head">
-          <div>
-            <h2 className="hm-board-title">Requisition Board</h2>
-            <p className="hm-board-caption">Click any requisition to open its workspace flow. Use the menu to export JSON.</p>
-          </div>
-          <span className="hm-board-count">{ordered.length} total</span>
-        </div>
-
-        {loading ? (
-          <p className="muted">Loading requisitions...</p>
-        ) : requisitions.length === 0 ? (
-          <div className="hm-empty">
-            <div className="hm-empty-icon">{Icons.layers}</div>
-            <h3>No requisitions yet</h3>
-            <p>Create your first requisition and the AI will help structure the role and generate a JD.</p>
+      {loading ? (
+        <p className="muted">Loading requisitions...</p>
+      ) : rows.length === 0 ? (
+        <div className="hm-empty">
+          <div className="hm-empty-icon">{Icons.layers}</div>
+          <h3>Nothing here yet</h3>
+          <p>{meta.caption}</p>
+          {section === 'drafted' && (
             <Link to="/dashboard/requisitions/new" className="glow-btn hm-empty-cta">
               Create Requisition
             </Link>
-          </div>
-        ) : (
-          <div className="hm-board-list">
-            {ordered.map((r) => (
-              <div key={r.id} className="hm-row" onClick={() => navigate(`/dashboard/requisitions/${r.id}`)}>
-                <div className="hm-row-main">
-                  <span className="hm-row-title">{r.title || 'Untitled'}</span>
-                  <span className="hm-row-company">{r.company_name}</span>
-                </div>
-                <span className={`hm-row-status ${statusClass(r.status)}`}>
-                  <span className="hm-dot" />
-                  {r.status || 'Draft'}
-                </span>
-                <span className="hm-row-date">Created {formatDate(r.created_at)}</span>
-                <div className="hm-row-actions">
-                  <button
-                    className="hm-row-export"
-                    onClick={(e) => { e.stopPropagation(); handleExportSingle(r); }}
-                    title="Export this requisition as JSON"
-                  >
-                    {Icons.download}
-                  </button>
-                  <span className="hm-row-chevron">→</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+          )}
+        </div>
+      ) : (
+        <div className="hm-board-list">
+          {rows.map((r) => <Row key={r.id} r={r} />)}
+        </div>
+      )}
     </div>
   );
 }

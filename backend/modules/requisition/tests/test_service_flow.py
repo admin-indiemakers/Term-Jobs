@@ -131,6 +131,55 @@ def test_direct_prompt_mode_skips_intake(service, company_profile, session_facto
         assert role["rate_band"], "rate band should be extracted from the prompt"
 
 
+def test_prefill_is_saved_and_guided_only_asks_real_gaps(service, company_profile, session_factory):
+    profile_id = company_profile(tech_stack=["Python", "FastAPI", "Postgres"])
+    prefill = {
+        "job_title": "Senior Backend Engineer",
+        "job_family": "Engineering / Platform",
+        "must_have_skills": ["Python", "FastAPI", "PostgreSQL"],
+        "seniority": "",
+        "experience": "5-8 years",
+        "headcount": 2,
+        "engagement_type": "Contract",
+        "duration": "6 months",
+        "range_vendors_see_min": 1_700_000,
+        "range_vendors_see_max": 1_950_000,
+        "ceiling_internal": 2_100_000,
+        "rate_card_cap": 1_950_000,
+        "work_locations": ["Bangalore"],
+        "work_mode": "Hybrid",
+        "client_site_access": True,
+        "hiring_manager": "Arun Deshpande",
+        "priority": "High",
+    }
+    req = service.create(
+        profile_id,
+        RoleIntent(title="Senior Backend Engineer", tech_stack_hint=["Python", "FastAPI", "PostgreSQL"]),
+        intake_meta={"intake_mode": "guided", "prefill": prefill},
+    )
+
+    with session_factory() as s:
+        saved = s.get(models.Requisition, req.id)
+        assert saved.structured_role["title"] == "Senior Backend Engineer"
+        assert saved.structured_role["experience"] == "5-8 years"
+        assert saved.structured_role["seniority"] == "Senior"
+        assert saved.structured_role["range_vendors_see"] == [1_700_000, 1_950_000]
+        assert saved.structured_role["client_site_access"] is True
+
+    _, interrupt = service.start_intake(req.id)
+    assert isinstance(interrupt, dict) and interrupt["checkpoint"] == "approval"
+
+    with session_factory() as s:
+        generated = s.get(models.Requisition, req.id)
+        role = generated.structured_role
+        assert generated.generated_jd_markdown
+        assert role["title"] == "Senior Backend Engineer"
+        assert role["experience"] == "5-8 years"
+        assert role["range_vendors_see"] == [1_700_000, 1_950_000]
+        assert role["client_site_access"] is True
+        assert generated.pending_question is None
+
+
 def test_delete_removes_requisition(service, company_profile, session_factory):
     profile_id = company_profile(tech_stack=["Python", "Django"])
     intent = {

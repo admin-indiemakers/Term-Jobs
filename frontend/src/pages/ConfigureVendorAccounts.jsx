@@ -50,7 +50,7 @@ export default function ConfigureVendorAccounts() {
   useEffect(load, [token]);
 
   const openEdit = (u) => {
-    setEdit({ id: u.id, email: u.email, name: u.name || '', password: '' });
+    setEdit({ id: u.id, email: u.email, name: u.name || '', password: '', candidateLimit: u.candidate_limit ?? '' });
     setError('');
     setSuccess('');
   };
@@ -69,6 +69,7 @@ export default function ConfigureVendorAccounts() {
       if (edit.email !== '') payload.email = edit.email;
       if (edit.name !== '') payload.name = edit.name;
       if (edit.password) payload.password = edit.password;
+      if (edit.candidateLimit !== '') payload.candidate_limit = Math.max(1, Math.round(Number(edit.candidateLimit) || 0));
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess('Recruiter account updated.');
       setEdit(null);
@@ -139,6 +140,7 @@ export default function ConfigureVendorAccounts() {
                 <th>Email</th>
                 <th>Role</th>
                 <th>Consultancy</th>
+                <th>Candidate Limit</th>
                 <th>Status</th>
                 <th>Created</th>
                 <th></th>
@@ -151,6 +153,7 @@ export default function ConfigureVendorAccounts() {
                   <td>{u.email}</td>
                   <td>{rolePill(u.role)}</td>
                   <td className="td-company">{u.tenant_name}</td>
+                  <td>{u.candidate_limit != null ? u.candidate_limit : 'Platform default'}</td>
                   <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
                   <td className="td-date">{formatDate(u.created_at)}</td>
                   <td className="td-action">
@@ -211,6 +214,21 @@ export default function ConfigureVendorAccounts() {
                 <div>
                   <label className="form-label">New Password</label>
                   <input type="password" name="password" minLength={4} value={edit.password} onChange={handleEditInput} className="auth-input" placeholder="Leave blank to keep current" />
+                </div>
+                <div>
+                  <label className="form-label">Candidate Submission Limit</label>
+                  <input
+                    type="number"
+                    name="candidateLimit"
+                    min={1}
+                    value={edit.candidateLimit}
+                    onChange={handleEditInput}
+                    className="auth-input"
+                    placeholder="Leave blank for platform default"
+                  />
+                  <div className="muted" style={{ fontSize: '0.72rem', marginTop: 4 }}>
+                    Max candidates this recruiter can submit per requisition.
+                  </div>
                 </div>
               </div>
               <div className="modal-actions">

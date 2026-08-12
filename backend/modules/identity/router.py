@@ -263,6 +263,7 @@ def create_user(
         password_hash=hash_password(body.password),
         role=body.role,
         department=body.department,
+        candidate_limit=body.candidate_limit,
         created_by=current_user.id,
     )
     db.add(user)
@@ -280,6 +281,7 @@ def create_user(
         department=user.department or "",
         created_by=user.created_by,
         is_active=user.is_active,
+        candidate_limit=user.candidate_limit,
     )
 
 
@@ -317,6 +319,7 @@ def list_users(
             is_active=u.is_active,
             created_by=u.created_by,
             created_at=u.created_at.isoformat() if u.created_at else "",
+            candidate_limit=u.candidate_limit,
         )
         for u in users
     ]
@@ -378,6 +381,8 @@ def update_user(
         target.department = body.department
     if body.is_active is not None:
         target.is_active = body.is_active
+    if body.candidate_limit is not None:
+        target.candidate_limit = body.candidate_limit
 
     db.commit()
     db.refresh(target)
@@ -399,6 +404,7 @@ def update_user(
         department=target.department or "",
         created_by=target.created_by,
         is_active=target.is_active,
+        candidate_limit=target.candidate_limit,
     )
 
 

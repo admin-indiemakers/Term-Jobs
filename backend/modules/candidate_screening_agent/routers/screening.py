@@ -217,6 +217,27 @@ async def approve_candidate(req: ApprovalRequest, current_user: User = Depends(g
     old_status = target_cand.get("status", "Screened")
     
     if action == "shortlist":
+        # Enforce how many candidates this vendor can submit for one
+        # requisition. The per-account cap (set in the Super Admin console)
+        # wins; otherwise the platform-wide default (3) applies.
+        from modules.shared.settings import get_max_candidates_per_requisition
+
+        requisition_id = target_cand.get("requisition_id")
+        if requisition_id:
+            limit = current_user.candidate_limit or get_max_candidates_per_requisition()
+            vendor_tenant = current_user.tenant_id
+            already_submitted = [
+                c
+                for c in fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")
+                if c.get("tenant_id") == vendor_tenant
+                and c.get("submission_id") != req.submission_id
+            ]
+            if len(already_submitted) >= limit:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"You have reached the limit of {limit} candidate submissions for this requisition.",
+                )
+
         new_status = "Shortlisted"
         target_cand["status"] = new_status
         target_cand["vendor_name"] = req.vendor_name or target_cand.get("vendor_name", "Vendor A")

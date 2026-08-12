@@ -74,6 +74,9 @@ export default function App() {
         >
           <Route index element={<DashboardIndex />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
+          <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
+          <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
+          <Route path="requisitions/completed" element={<RequisitionOverview section="completed" />} />
           <Route path="requisitions/new" element={<NewRequisition />} />
           <Route path="requisitions/:id" element={<RequisitionDetail />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />

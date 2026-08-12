@@ -7,18 +7,23 @@ export default function RecruiterDashboard() {
   const [requisitions, setRequisitions] = useState([]);
   const [selectedReqId, setSelectedReqId] = useState('');
   const [jdText, setJdText] = useState('');
+  const [fullReq, setFullReq] = useState(null);
   const [files, setFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dbLoading, setDbLoading] = useState(true);
   const [error, setError] = useState('');
   const [screeningResult, setScreeningResult] = useState(null);
   const [shortlistedList, setShortlistedList] = useState([]);
+  const [candidateLimit, setCandidateLimit] = useState(null);
 
   const authToken = token || localStorage.getItem('auth_token');
 
   useEffect(() => {
     loadPublishedRequisitions();
     loadShortlistedCandidates();
+    request('/api/settings/candidate-limit', { token: authToken })
+      .then((res) => setCandidateLimit(res?.limit ?? null))
+      .catch(() => setCandidateLimit(null));
   }, [authToken]);
 
   const formatJdText = (r) => {
@@ -77,6 +82,7 @@ export default function RecruiterDashboard() {
     try {
       const fullReq = await request(`/requisitions/${reqId}`, { token: authToken });
       if (fullReq) {
+        setFullReq(fullReq);
         const formatted = formatJdText(fullReq);
         setJdText(formatted);
       }
@@ -149,6 +155,7 @@ export default function RecruiterDashboard() {
   const handleReqSelect = async (e) => {
     const id = e.target.value;
     setSelectedReqId(id);
+    setFullReq(null);
     const req = requisitions.find((r) => r.id === id);
     if (req) {
       const formatted = formatJdText(req);
@@ -157,6 +164,44 @@ export default function RecruiterDashboard() {
         await fetchFullRequisition(id);
       }
     }
+  };
+
+  const roleDetailRows = () => {
+    if (!fullReq) return [];
+    const sr = fullReq.structured_role || {};
+    const fmtLpa = (v) =>
+      v == null || v === '' ? null : `₹${Number(v).toLocaleString('en-IN')} p.a.`;
+    const range = Array.isArray(sr.range_vendors_see)
+      ? sr.range_vendors_see
+      : [sr.range_vendors_see_min, sr.range_vendors_see_max];
+    return [
+      { label: 'Role title', value: sr.title || fullReq.title },
+      { label: 'Job family', value: sr.job_family },
+      { label: 'Seniority level', value: sr.seniority },
+      { label: 'Experience required', value: sr.experience },
+      { label: 'Headcount', value: sr.headcount },
+      { label: 'Engagement type', value: sr.engagement_type },
+      { label: 'Duration', value: sr.duration || sr.contract_duration },
+      { label: 'Start date', value: sr.start_date },
+      { label: 'Ends on', value: sr.ends_on },
+      { label: 'Extension likely', value: sr.extension_likely ? 'Yes' : sr.extension_likely === false ? 'No' : null },
+      { label: 'Max notice period', value: sr.max_notice_period },
+      { label: 'Rate card (vendor range)', value: range && range[0] != null && range[1] != null ? `${fmtLpa(range[0])} – ${fmtLpa(range[1])}` : null },
+      { label: 'Work mode', value: sr.work_mode },
+      { label: 'Locations', value: Array.isArray(sr.work_locations) && sr.work_locations.length ? sr.work_locations.join(', ') : sr.location },
+      { label: 'Working hours', value: sr.working_hours },
+      { label: 'Remote policy', value: sr.location_remote_policy },
+      { label: 'Onsite requirement', value: sr.onsite_requirement },
+      { label: 'Equipment provisioning', value: sr.equipment_provisioning },
+      { label: 'Background check', value: sr.background_check_required ? sr.background_check || 'Required' : null },
+      { label: 'Contract type', value: sr.nda_contract_type },
+      { label: 'Client site access', value: sr.client_site_access ? 'Yes' : sr.client_site_access === false ? 'No' : null },
+      { label: 'Security clearance', value: sr.security_clearance_required ? sr.security_clearance_notes || 'Required' : null },
+      { label: 'Work authorization', value: sr.work_authorization },
+      { label: 'Hiring manager', value: sr.hiring_manager },
+      { label: 'Submission deadline', value: sr.submission_deadline },
+      { label: 'Priority', value: sr.priority },
+    ].filter((r) => r.value != null && r.value !== '');
   };
 
   const handleFileChange = (e) => {
@@ -289,6 +334,22 @@ export default function RecruiterDashboard() {
                 className="auth-input"
                 style={{ resize: 'vertical' }}
               />
+
+              {roleDetailRows().length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <h3 className="card-title" style={{ fontSize: '1rem', marginBottom: '12px' }}>
+                    📋 Role & Rate Card Details
+                  </h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px' }}>
+                    {roleDetailRows().map((r) => (
+                      <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
+                        <span className="muted" style={{ flex: '0 0 auto' }}>{r.label}</span>
+                        <strong style={{ textAlign: 'right', color: '#0f172a', fontWeight: 700 }}>{r.value}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -298,6 +359,19 @@ export default function RecruiterDashboard() {
           <h2 className="card-title">
             📄 Candidate Resume Upload & Intake
           </h2>
+
+          {candidateLimit !== null && (() => {
+            const submittedForReq = shortlistedList.filter((c) => c.requisition_id === selectedReqId).length;
+            const remaining = Math.max(0, candidateLimit - submittedForReq);
+            const reached = submittedForReq >= candidateLimit;
+            return (
+              <p className="muted" style={{ marginBottom: 12 }}>
+                {reached
+                  ? '⚠️ Submission limit reached for this requisition — further candidates will be blocked.'
+                  : `You can apply up to ${candidateLimit} candidates on this requisition (${remaining} remaining).`}
+              </p>
+            );
+          })()}
 
           <form onSubmit={handleScreenSubmit}>
             <label className="form-label">
@@ -386,6 +460,12 @@ export default function RecruiterDashboard() {
         <h2 className="card-title">
           🏆 Shortlisted Submissions Sent to Company X HR ({shortlistedList.length})
         </h2>
+
+        {candidateLimit !== null && (
+          <p className="muted" style={{ marginBottom: 16 }}>
+            Submission limit per requisition: <strong>{candidateLimit} candidates</strong>
+          </p>
+        )}
 
         {shortlistedList.length === 0 ? (
           <p className="muted">No candidates submitted yet.</p>

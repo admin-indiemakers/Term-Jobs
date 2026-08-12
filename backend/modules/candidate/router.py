@@ -12,8 +12,8 @@ router = APIRouter(prefix="/candidates", tags=["Candidates"])
 
 def _tenant_requisition_ids(session, tenant_id: str) -> set[str]:
     """IDs of all requisitions belonging to a tenant."""
-    rows = session.query(Requisition.id).filter(Requisition.tenant_id == tenant_id).all()
-    return {r[0] for r in rows}
+    rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
+    return {r.id for r in rows}
 
 
 def _candidate_dict(session, row: CandidateSubmission) -> dict:

@@ -14,6 +14,7 @@ const EMPTY_FORM = {
   name: '',
   email: '',
   password: '',
+  candidate_limit: 3,
 };
 
 export default function OnboardVendor() {
@@ -63,6 +64,7 @@ export default function OnboardVendor() {
           password: form.password,
           role: 'Recruiter',
           tenant_id: tenant.id,
+          candidate_limit: Math.max(1, Math.round(Number(form.candidate_limit) || 0)),
         },
       });
       setSuccess(`Vendor "${form.vendor_name}" created with Recruiter account for ${form.email}.`);
@@ -188,6 +190,19 @@ export default function OnboardVendor() {
             <div>
               <label className="form-label">Recruiter Password</label>
               <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
+            </div>
+            <div>
+              <label className="form-label">Candidate Submission Limit</label>
+              <input
+                type="number"
+                name="candidate_limit"
+                min={1}
+                value={form.candidate_limit}
+                onChange={handleInput}
+                className="auth-input"
+                placeholder="e.g. 3"
+              />
+              <p className="field-hint">Max candidates this recruiter can submit per requisition. Defaults to 3.</p>
             </div>
           </div>
           <div className="form-actions" style={{ display: 'flex', gap: 12, marginTop: 18 }}>

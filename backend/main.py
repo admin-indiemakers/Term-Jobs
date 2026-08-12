@@ -137,6 +137,10 @@ class ApproveByIn(BaseModel):
     by: str | None = None
 
 
+class CandidateLimitIn(BaseModel):
+    limit: int = Field(ge=1, le=100)
+
+
 # --- serialization helpers --------------------------------------------------
 def _company_dict(prof: models.CompanyProfile) -> dict:
     return {
@@ -259,6 +263,35 @@ def _require_writable(current_user: User) -> None:
         )
 
 
+def _auto_close_expired() -> None:
+    """Auto-close Published requisitions whose submission deadline has passed.
+
+    Lazily swept on every list/detail read so vendors stop seeing expired roles
+    without a background scheduler. Safe to run repeatedly — idempotent.
+    """
+    import datetime as _dt
+
+    from modules.requisition.domain.state import StateMachine
+
+    with get_session() as session:
+        for req in session.query(models.Requisition).all():
+            if req.status != schemas.RequisitionStatus.PUBLISHED.value:
+                continue
+            deadline = (req.structured_role or {}).get("submission_deadline")
+            if not deadline:
+                continue
+            try:
+                deadline_date = _dt.date.fromisoformat(str(deadline))
+            except ValueError:
+                continue
+            if deadline_date < _dt.date.today():
+                sm = StateMachine(schemas.RequisitionStatus(req.status))
+                sm.transition(schemas.RequisitionStatus.CLOSED)
+                req.status = sm.status.value
+                session.commit()
+                req = None  # release for next iteration
+
+
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
 def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(get_current_user)) -> dict:
@@ -280,6 +313,24 @@ def list_company_profiles(current_user: User = Depends(get_current_user)) -> lis
             query = query.filter(models.CompanyProfile.tenant_id == current_user.tenant_id)
         rows = query.all()
         return [_company_dict(r) for r in rows]
+
+
+# --- platform settings endpoints ---------------------------------------------
+@app.get("/api/settings/candidate-limit")
+def get_candidate_limit(current_user: User = Depends(get_current_user)) -> dict:
+    from modules.shared.settings import get_max_candidates_per_requisition
+
+    return {"limit": get_max_candidates_per_requisition()}
+
+
+@app.put("/api/settings/candidate-limit")
+def set_candidate_limit(body: CandidateLimitIn, current_user: User = Depends(get_current_user)) -> dict:
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admin can change platform settings")
+
+    from modules.shared.settings import set_max_candidates_per_requisition
+
+    return {"limit": set_max_candidates_per_requisition(body.limit)}
 
 
 # --- role template endpoints -------------------------------------------------
@@ -443,6 +494,11 @@ def _normalize_template(payload: dict) -> dict:
         "ceiling_internal": _num(com.get("internal_ceiling")),
         "range_vendors_see": [_num(com.get("vendor_range_min")), _num(com.get("vendor_range_max"))],
         "cost_centre": com.get("cost_centre") or "",
+        "rate_card_cap": _num(com.get("rate_card_cap")),
+        "total_engagement_value": str(com.get("total_engagement_value") or ""),
+        "budget_approved": bool(com.get("budget_approved")),
+        "budget_reference": str(com.get("budget_reference") or ""),
+        "variance_approved": bool(com.get("variance_approved")),
         "work_mode": ws.get("work_mode") or "",
         "onsite_requirement": f"{on_days} days/week on-site" if on_days else "",
         "working_hours": shift,
@@ -450,6 +506,9 @@ def _normalize_template(payload: dict) -> dict:
         "background_check": bg_level,
         "background_check_required": bool(bg_level),
         "nda_contract_type": "NDA-only" if comp.get("nda_required") else "",
+        "client_site_access": bool(comp.get("client_site_access")),
+        "security_clearance_required": bool(comp.get("security_clearance_required")),
+        "work_authorization": str(comp.get("work_authorization") or ""),
         "priority": priority,
         "notes": notes,
     }
@@ -458,10 +517,19 @@ def _normalize_template(payload: dict) -> dict:
 @app.get("/templates")
 def list_templates(current_user: User = Depends(get_current_user)) -> list[dict]:
     with get_session() as session:
-        query = session.query(models.RoleTemplate).order_by(models.RoleTemplate.created_at.desc())
+        # Templates are shared platform config: Super Admin-created templates are
+        # visible to everyone; company-scoped templates only to that tenant.
+        super_admin_ids = {
+            u.id
+            for u in session.query(User).filter(User.role == "Super Admin").all()
+        }
+        rows = session.query(models.RoleTemplate).order_by(models.RoleTemplate.created_at.desc()).all()
         if current_user.role != "Super Admin":
-            query = query.filter(models.RoleTemplate.tenant_id == current_user.tenant_id)
-        rows = query.all()
+            rows = [
+                r
+                for r in rows
+                if r.tenant_id == current_user.tenant_id or r.created_by in super_admin_ids
+            ]
         return [_template_dict(r) for r in rows]
 
 
@@ -521,19 +589,24 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
 def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
+    _auto_close_expired()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
         if current_user.role == "Super Admin":
             pass
         elif current_user.role == "Recruiter":
-            # Vendors only see requisitions from companies that engaged them.
+            # Vendors only see requisitions from companies that engaged them,
+            # and only published requisitions — never drafts or in-progress ones.
             engaged_company_ids = {
                 e.tenant_id
                 for e in session.query(VendorEngagement)
                 .filter(VendorEngagement.vendor_tenant_id == current_user.tenant_id)
                 .all()
             }
-            query = query.filter(models.Requisition.tenant_id.in_(engaged_company_ids or {""}))
+            query = query.filter(
+                models.Requisition.tenant_id.in_(engaged_company_ids or {""}),
+                models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value,
+            )
         else:
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
@@ -560,8 +633,12 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
 
 @app.get("/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
-    _require_tenant(_get_requisition(requisition_id), current_user)
-    return _requisition_dict(requisition_id, for_vendor=current_user.role == "Recruiter")
+    _auto_close_expired()
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+    if current_user.role == "Recruiter" and req.status != schemas.RequisitionStatus.PUBLISHED.value:
+        raise HTTPException(status_code=403, detail="This requisition is not published to vendors yet.")
+    return _requisition_dict(requisition_id, for_vendor=True)
 
 
 @app.post("/requisitions/{requisition_id}/start")

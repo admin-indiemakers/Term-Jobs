@@ -84,31 +84,37 @@ export default function DashboardLayout() {
           {user.role === 'Hiring Manager' ? (
             <>
               <div className="nav-section-label">Requisitions</div>
-              {navItems
-                .filter((i) => i.to === '/dashboard/requisitions' || i.to === '/dashboard/requisitions/new')
-                .map((item) => (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
+              <NavLink
+                to="/dashboard/requisitions/drafted"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Drafted
+              </NavLink>
+              <NavLink
+                to="/dashboard/requisitions/published"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Published
+              </NavLink>
+              <NavLink
+                to="/dashboard/requisitions/completed"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Completed
+              </NavLink>
+              <NavLink
+                to="/dashboard/requisitions/new"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                New Requisition
+              </NavLink>
               <div className="nav-section-label">Candidates</div>
-              {navItems
-                .filter((i) => i.to === '/dashboard/candidates')
-                .map((item) => (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
+              <NavLink
+                to="/dashboard/candidates"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Shortlisted Candidates
+              </NavLink>
               <div className="nav-section-label">HR</div>
               <NavLink
                 to="/dashboard/hr"
