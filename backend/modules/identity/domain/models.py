@@ -63,10 +63,12 @@ class VendorEngagement(Model):
         "id": _uuid,
         "tenant_id": "",  # client company tenant id
         "vendor_tenant_id": "",  # consultancy tenant id
+        "candidate_limit": None,  # per-vendor candidate limit
         "created_at": _utcnow,
     }
 
     id = Column("id")
     tenant_id = Column("tenant_id")
     vendor_tenant_id = Column("vendor_tenant_id")
+    candidate_limit = Column("candidate_limit")
     created_at = Column("created_at")

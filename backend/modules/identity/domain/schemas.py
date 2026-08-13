@@ -32,9 +32,15 @@ class VendorResponse(BaseModel):
     location: str = ""
     specializations: list[str] = Field(default_factory=list)
     engaged: bool = False
+    candidate_limit: int | None = None
+
+class VendorEngagementItem(BaseModel):
+    vendor_tenant_id: str
+    candidate_limit: int | None = Field(None, ge=1, le=100)
 
 class VendorEngagementsIn(BaseModel):
     vendor_tenant_ids: list[str] = Field(default_factory=list)
+    engagements: list[VendorEngagementItem] = Field(default_factory=list)
 
 class UserCreate(BaseModel):
     email: str = Field(..., min_length=3, max_length=255)

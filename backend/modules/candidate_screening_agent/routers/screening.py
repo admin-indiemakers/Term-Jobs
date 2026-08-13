@@ -224,8 +224,27 @@ async def approve_candidate(req: ApprovalRequest, current_user: User = Depends(g
 
         requisition_id = target_cand.get("requisition_id")
         if requisition_id:
-            limit = current_user.candidate_limit or get_max_candidates_per_requisition()
             vendor_tenant = current_user.tenant_id
+            limit = current_user.candidate_limit or get_max_candidates_per_requisition()
+            
+            try:
+                from modules.identity.domain.models import VendorEngagement
+                from modules.requisition.services.requisition_service import fetch_requisition_by_id
+                from modules.shared.db import get_session as get_db_session
+
+                req_doc = fetch_requisition_by_id(requisition_id)
+                client_tenant_id = req_doc.get("tenant_id") if req_doc else None
+                if client_tenant_id:
+                    with get_db_session() as db_sess:
+                        eng = db_sess.query(VendorEngagement).filter(
+                            VendorEngagement.tenant_id == client_tenant_id,
+                            VendorEngagement.vendor_tenant_id == vendor_tenant,
+                        ).first()
+                        if eng and eng.candidate_limit is not None:
+                            limit = eng.candidate_limit
+            except Exception:
+                pass
+
             already_submitted = [
                 c
                 for c in fetch_candidates_from_db(requisition_id=requisition_id, status="Shortlisted")

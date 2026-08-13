@@ -67,10 +67,15 @@ export default function AdminDashboard() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [token]);
-
   const toggleVendor = (id) => {
     setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, engaged: !v.engaged } : v)));
+    setError('');
+    setSuccess('');
+  };
+
+  const setVendorCandidateLimit = (id, val) => {
+    const num = val === '' ? null : Math.max(1, Math.round(Number(val) || 0));
+    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, candidate_limit: num } : v)));
     setError('');
     setSuccess('');
   };
@@ -80,14 +85,21 @@ export default function AdminDashboard() {
     setError('');
     setSuccess('');
     try {
-      const selected = vendors.filter((v) => v.engaged).map((v) => v.id);
+      const selected = vendors.filter((v) => v.engaged);
+      const payload = {
+        vendor_tenant_ids: selected.map((v) => v.id),
+        engagements: selected.map((v) => ({
+          vendor_tenant_id: v.id,
+          candidate_limit: v.candidate_limit != null && v.candidate_limit !== '' ? Number(v.candidate_limit) : null,
+        })),
+      };
       const updated = await request('/api/auth/vendors', {
         method: 'PUT',
         token,
-        body: { vendor_tenant_ids: selected },
+        body: payload,
       });
       setVendors(updated || []);
-      setSuccess(`Vendor partnerships updated — ${updated.length} engaged.`);
+      setSuccess(`Vendor partnerships updated — ${updated.filter((v) => v.engaged).length} engaged.`);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -283,6 +295,27 @@ export default function AdminDashboard() {
                           {v.specializations.slice(0, 4).map((s) => (
                             <span key={s} className="vendor-tag">{s}</span>
                           ))}
+                        </div>
+                      )}
+                      {v.engaged && (
+                        <div
+                          className="vendor-limit-box"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(226, 232, 240, 0.6)' }}
+                        >
+                          <label style={{ fontSize: '0.78rem', color: '#475569', display: 'block', marginBottom: 4, fontWeight: 600 }}>
+                            Candidate Limit / Req
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            placeholder="Default (3)"
+                            value={v.candidate_limit ?? ''}
+                            onChange={(e) => setVendorCandidateLimit(v.id, e.target.value)}
+                            className="auth-input"
+                            style={{ padding: '4px 8px', fontSize: '0.82rem', width: '100%', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff', color: '#0f172a' }}
+                          />
                         </div>
                       )}
                     </div>

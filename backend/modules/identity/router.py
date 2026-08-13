@@ -530,14 +530,14 @@ def create_tenant(
     return TenantResponse(id=tenant.id, name=tenant.name, tenant_type=tenant.tenant_type)
 
 
-def _engaged_vendor_ids(db: Session, client_tenant_id: str) -> set[str]:
-    """Tenant ids of consultancy vendors currently engaged by a client company."""
+def _engaged_vendor_map(db: Session, client_tenant_id: str) -> dict[str, VendorEngagement]:
+    """VendorEngagements currently engaged by a client company."""
     rows = (
         db.query(VendorEngagement)
         .filter(VendorEngagement.tenant_id == client_tenant_id)
         .all()
     )
-    return {r.vendor_tenant_id for r in rows}
+    return {r.vendor_tenant_id: r for r in rows}
 
 
 # --- Vendor management (company Admin selects which vendors it works with) ----
@@ -556,7 +556,7 @@ def list_vendors(
             detail="Only company Admins can list vendors",
         )
 
-    engaged = _engaged_vendor_ids(db, current_user.tenant_id) if current_user.role == "Admin" else set()
+    engaged_map = _engaged_vendor_map(db, current_user.tenant_id) if current_user.role == "Admin" else {}
     vendors = db.query(Tenant).filter(Tenant.tenant_type == "consultancy").all()
     profiles = {
         p.tenant_id: p
@@ -570,7 +570,8 @@ def list_vendors(
             size=(prof.size if (prof := profiles.get(v.id)) else ""),
             location=(prof.location if (prof := profiles.get(v.id)) else ""),
             specializations=(prof.tech_stack or [] if (prof := profiles.get(v.id)) else []),
-            engaged=(v.id in engaged),
+            engaged=(v.id in engaged_map),
+            candidate_limit=(engaged_map[v.id].candidate_limit if v.id in engaged_map else None),
         )
         for v in sorted(vendors, key=lambda t: t.name)
     ]
@@ -589,15 +590,26 @@ def set_vendor_engagements(
             detail="Only company Admins can manage vendor partnerships",
         )
 
+    # Build mapping of vendor_tenant_id -> candidate_limit
+    requested_map: dict[str, int | None] = {}
+    if body.engagements:
+        for item in body.engagements:
+            requested_map[item.vendor_tenant_id] = item.candidate_limit
+    else:
+        for vid in (body.vendor_tenant_ids or []):
+            requested_map[vid] = None
+
+    vendor_ids = list(requested_map.keys())
+
     # Validate requested vendor ids are real consultancy tenants.
     existing = {
         v.id
         for v in db.query(Tenant)
         .filter(Tenant.tenant_type == "consultancy")
-        .filter(Tenant.id.in_(body.vendor_tenant_ids or []))
+        .filter(Tenant.id.in_(vendor_ids))
         .all()
     }
-    invalid = set(body.vendor_tenant_ids or []) - existing
+    invalid = set(vendor_ids) - existing
     if invalid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -609,8 +621,12 @@ def set_vendor_engagements(
     ).all()
     for row in existing_rows:
         db.delete(row)
-    for vid in body.vendor_tenant_ids:
-        db.add(VendorEngagement(tenant_id=current_user.tenant_id, vendor_tenant_id=vid))
+    for vid, cap in requested_map.items():
+        db.add(VendorEngagement(
+            tenant_id=current_user.tenant_id,
+            vendor_tenant_id=vid,
+            candidate_limit=cap,
+        ))
     db.commit()
 
     return list_vendors(current_user=current_user, db=db)
