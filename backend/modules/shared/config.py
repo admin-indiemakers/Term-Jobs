@@ -1,22 +1,32 @@
 """Global config for the backend, loaded once and shared across modules."""
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Ensure .env from backend directory is loaded
+backend_env = Path(__file__).resolve().parent.parent.parent / ".env"
+if backend_env.exists():
+    load_dotenv(dotenv_path=backend_env, override=True)
+else:
+    load_dotenv(override=True)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(env_file=str(backend_env), env_file_encoding="utf-8", extra="ignore")
 
     # MongoDB
-    mongodb_url: str = "mongodb://localhost:27017/termjobs"
-    mongo_db_name: str = "termjobs"
+    mongodb_url: str = os.getenv("MONGODB_URL", "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net")
+    mongo_db_name: str = os.getenv("MONGO_DB_NAME", "termjobs")
 
     # Groq (cloud LLM)
-    groq_api_key: str = ""
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_default_model: str = "llama-3.3-70b-versatile"
+    groq_default_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
     model_tiers: dict[str, str] = {
-        "small": "llama-3.3-70b-versatile",
-        "mid": "llama-3.3-70b-versatile",
-        "large": "llama-3.3-70b-versatile",
+        "small": "openai/gpt-oss-120b",
+        "mid": "openai/gpt-oss-120b",
+        "large": "openai/gpt-oss-120b",
     }
 
     # Agent guardrails

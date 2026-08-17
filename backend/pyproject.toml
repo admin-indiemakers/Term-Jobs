@@ -1,13 +1,13 @@
-[project]
+﻿[project]
 name = "termejobs-backend"
 version = "0.1.0"
 description = "Term Jobs backend - requisition module (AI-generated JDs)"
-requires-python = ">=3.12"
+requires-python = ">=3.12, <3.13"
 dependencies = [
     "pydantic>=2.7.0",
     "pydantic-settings>=2.3.0",
     "langgraph>=0.2.30",
-    "langgraph-checkpoint-mongodb>=2.0.0",
+    "langgraph-checkpoint-mongodb>=0.1.0",
     "rapidfuzz>=3.9.0",
     "httpx>=0.27.0",
     "python-dotenv>=1.0.0",
@@ -46,5 +46,7 @@ ignore = ["B008", "DTZ003"]
 venvPath = "."
 venv = ".venv"
 extraPaths = ["modules/candidate_screening_agent", "modules/candidate", "."]
+
+
 
 
