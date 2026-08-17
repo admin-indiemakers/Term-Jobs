@@ -81,7 +81,10 @@ export default function App() {
           <Route path="requisitions/new" element={<NewRequisition />} />
           <Route path="requisitions/:id" element={<RequisitionDetail />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
-          <Route path="recruiter" element={<RecruiterDashboard />} />
+          <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
+          <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
+          <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
+          <Route path="recruiter/shortlisted" element={<RecruiterDashboard view="shortlisted" />} />
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/directors" element={<ManageDirectors />} />
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
