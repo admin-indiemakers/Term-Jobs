@@ -25,5 +25,16 @@ class Settings(BaseSettings):
     max_refinements: int = 5
     confidence_threshold: float = 0.7
 
+    # Calendar OAuth (Google / Microsoft / Zoho)
+    calendar_redirect_base: str = "http://localhost:8000"          # public URL of the backend (used for OAuth callback)
+    calendar_frontend_url: str = "http://localhost:5173/dashboard/admin"  # where the admin lands after connecting
+
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
+    zoho_client_id: str = ""
+    zoho_client_secret: str = ""
+
 
 settings = Settings()

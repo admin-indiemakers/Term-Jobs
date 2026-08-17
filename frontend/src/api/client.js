@@ -16,11 +16,14 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, { method = 'GET', body, token } = {}) {
+export async function request(path, { method = 'GET', body, token, timeout = 30000 } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
 
   let response;
   try {
@@ -28,9 +31,15 @@ export async function request(path, { method = 'GET', body, token } = {}) {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
+    if (err && err.name === 'AbortError') {
+      throw new ApiError('Request timed out. Please try again.', 0);
+    }
     throw new ApiError('Unable to reach the server. Is the backend running?', 0);
+  } finally {
+    clearTimeout(timer);
   }
 
   if (response.status === 204) {

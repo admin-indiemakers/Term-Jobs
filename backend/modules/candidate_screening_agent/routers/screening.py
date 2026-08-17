@@ -1,5 +1,6 @@
 import os
 import shutil
+import threading
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -144,6 +145,8 @@ async def screen_multiple_candidates(
     existing_db = fetch_candidates_from_db(requisition_id=requisition_id)
     combined_existing = existing_db + CANDIDATE_STORE
 
+    resume_text_by_file = {cd["filename"]: cd["extracted_text"] for cd in candidates_data}
+
     ranking_results = rank_candidates(
         jd=jd,
         candidates=candidates_data,
@@ -158,6 +161,7 @@ async def screen_multiple_candidates(
         cand["status"] = "Screened"
         cand["email_notification_status"] = "Pending HR Shortlist"
         cand["tenant_id"] = current_user.tenant_id
+        cand["resume_text"] = resume_text_by_file.get(cand.get("filename"))
         CANDIDATE_STORE.append(cand)
 
     return {
@@ -197,22 +201,31 @@ async def approve_candidate(req: ApprovalRequest, current_user: User = Depends(g
     if action not in ["shortlist", "reject"]:
         raise HTTPException(status_code=400, detail="Invalid action. Must be 'shortlist' or 'reject'")
 
-    _tenant_id, company_ids = _tenant_filter(current_user)
+    _tenant_id, _company_ids = _tenant_filter(current_user)
     tenant_id = _tenant_id
 
     # Search candidate in memory screening cache
     target_cand = next((c for c in CANDIDATE_STORE if c.get("submission_id") == req.submission_id), None)
 
     if not target_cand:
-        # Search in DB
-        db_candidates = fetch_candidates_from_db(tenant_id=tenant_id, company_tenant_ids=company_ids)
+        # Search in DB by submission id (unfiltered), then enforce tenant access below
+        db_candidates = fetch_candidates_from_db()
         target_cand = next((c for c in db_candidates if c["submission_id"] == req.submission_id), None)
 
     if not target_cand:
         raise HTTPException(status_code=404, detail=f"Submission ID '{req.submission_id}' not found")
 
-    if tenant_id is not None and target_cand.get("tenant_id") not in (None, tenant_id):
-        raise HTTPException(status_code=403, detail="You do not have access to this candidate")
+    if tenant_id is not None:
+        candidate_req_id = target_cand.get("requisition_id")
+        from modules.shared.db import get_session as get_db_session
+        from modules.requisition.domain.models import Requisition
+        with get_db_session() as session:
+            req_ids = {
+                r.id
+                for r in session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
+            }
+        if not candidate_req_id or candidate_req_id not in req_ids:
+            raise HTTPException(status_code=403, detail="You do not have access to this candidate")
 
     old_status = target_cand.get("status", "Screened")
     
@@ -287,20 +300,25 @@ async def approve_candidate(req: ApprovalRequest, current_user: User = Depends(g
         new_status = "Rejected"
         target_cand["status"] = new_status
 
-        # Send rejection email notification
+        # Persist rejection so the candidate leaves the shortlisted queue
+        update_candidate_status_in_db(req.submission_id, "Rejected", req.notes)
+
+        # Send rejection email notification in the background so the request returns fast
         email_result = {"status": "skipped", "reason": "No email found in resume"}
         if target_cand.get("candidate_email"):
-            email_result = send_rejection_notification(
-                candidate_name=target_cand["candidate_name"],
-                candidate_email=target_cand["candidate_email"],
-                job_title="DevOps Position",
-                notes=req.notes
-            )
-        target_cand["email_notification_status"] = email_result.get("message") or email_result.get("error") or email_result.get("reason")
+            def _notify():
+                send_rejection_notification(
+                    candidate_name=target_cand["candidate_name"],
+                    candidate_email=target_cand["candidate_email"],
+                    job_title="DevOps Position",
+                    notes=req.notes
+                )
+            threading.Thread(target=_notify, daemon=True).start()
+            email_result = {"status": "queued", "message": "Rejection email queued and will be sent in the background."}
 
         return {
             "status": "success",
-            "message": f"Candidate REJECTED. State: {old_status} -> {new_status} (Not saved in PostgreSQL)",
+            "message": f"Candidate REJECTED. State: {old_status} -> {new_status}",
             "email_notification": email_result,
             "candidate": target_cand
         }

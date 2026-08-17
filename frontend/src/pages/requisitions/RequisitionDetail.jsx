@@ -40,6 +40,8 @@ export default function RequisitionDetail() {
   const [draftRole, setDraftRole] = useState(null);
   const [busy, setBusy] = useState('');
   const [info, setInfo] = useState('');
+  const [shortlisted, setShortlisted] = useState([]);
+  const [shortlistLoading, setShortlistLoading] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -57,6 +59,14 @@ export default function RequisitionDetail() {
   };
 
   useEffect(load, [id, token, user?.name]);
+
+  useEffect(() => {
+    setShortlistLoading(true);
+    request(`/api/candidates/shortlisted?requisition_id=${encodeURIComponent(id)}`, { token })
+      .then((data) => setShortlisted(data?.shortlisted_candidates || data || []))
+      .catch(() => setShortlisted([]))
+      .finally(() => setShortlistLoading(false));
+  }, [id, token]);
 
   const run = async (path, method, body) => {
     setError('');
@@ -177,7 +187,10 @@ export default function RequisitionDetail() {
       <div className="page-header">
         <div>
           <div className="detail-title-row">
-            <h1 className="page-title">{req.title || 'Untitled Requisition'}</h1>
+            <h1 className="page-title">
+              <span className="req-ref-pill">{req.ref || `REQ-${(id || '').slice(0, 6).toUpperCase()}`}</span>
+              {req.title || 'Untitled Requisition'}
+            </h1>
             <StatusBadge status={normStatus} />
           </div>
           <p className="page-subtitle">
@@ -369,6 +382,32 @@ export default function RequisitionDetail() {
           </ul>
         </div>
       )}
+
+      <div className="glass-panel">
+        <div className="shortlist-head">
+          <h3 className="card-title">Shortlisted Candidates</h3>
+          <span className="muted">{req.ref || `REQ-${(id || '').slice(0, 6).toUpperCase()}`}</span>
+        </div>
+        {shortlistLoading ? (
+          <p className="muted" style={{ padding: 12 }}>Loading shortlisted candidates...</p>
+        ) : shortlisted.length === 0 ? (
+          <p className="muted" style={{ padding: 12 }}>No shortlisted candidates for this requisition yet.</p>
+        ) : (
+          <div className="shortlist-list">
+            {shortlisted.map((c) => (
+              <div key={c.submission_id || c.id} className="shortlist-item">
+                <div className="shortlist-item-main">
+                  <span className="shortlist-name">{c.candidate_name || 'Candidate'}</span>
+                  <span className="muted">{c.vendor_name || 'Vendor A'}</span>
+                </div>
+                <span className="chip chip-primary">
+                  {c.match_score != null ? `${Math.round(c.match_score)}% match` : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

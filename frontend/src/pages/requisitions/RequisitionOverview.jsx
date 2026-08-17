@@ -380,6 +380,7 @@ export default function RequisitionOverview({ section = 'drafted' }) {
               onClick={(e) => { e.stopPropagation(); navigate(`/dashboard/requisitions/${r.id}`); }}
               title={`Open the workspace flow for ${r.title || 'this requisition'}`}
             >
+              <span className="req-ref-pill">{r.ref || `REQ-${(r.id || '').slice(0, 6).toUpperCase()}`}</span>
               {r.title || 'Untitled'}
             </button>
             <span className="hm-row-company">{r.company_name}</span>

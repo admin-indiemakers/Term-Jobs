@@ -20,6 +20,7 @@ class CandidateSubmission(Model):
         "vendor_name": "Vendor A",
         "filename": None,
         "fingerprint": None,
+        "resume_text": None,
         "match_score": None,
         "recommendation": None,
         "status": "Screened",
@@ -39,6 +40,7 @@ class CandidateSubmission(Model):
     vendor_name = Column("vendor_name")
     filename = Column("filename")
     fingerprint = Column("fingerprint")
+    resume_text = Column("resume_text")
     match_score = Column("match_score")
     recommendation = Column("recommendation")
     status = Column("status")

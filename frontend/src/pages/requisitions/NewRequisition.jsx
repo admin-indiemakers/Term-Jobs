@@ -187,25 +187,19 @@ export default function NewRequisition() {
 
   useEffect(loadProfiles, [token, user.tenant_id]);
 
-  // Load requisitions with structured roles + director-uploaded templates for import
+  // Load director-uploaded JSON templates for import
   const loadTemplates = async () => {
     if (!token) return;
     setLoadingTemplates(true);
     try {
-      const [reqs, tpls] = await Promise.all([
-        request('/requisitions', { token }),
-        request('/templates', { token }),
-      ]);
-      const completed = (reqs || [])
-        .filter((r) => r.structured_role)
-        .map((r) => ({ ...r, source: 'requisition' }));
+      const tpls = await request('/templates', { token });
       const roleTpls = (tpls || []).map((t) => ({
         ...t,
         source: 'template',
         status: 'Template',
         company_name: 'Director template',
       }));
-      setTemplates([...roleTpls, ...completed]);
+      setTemplates(roleTpls);
     } catch (err) {
       console.error('Failed to load templates:', err);
     } finally {
@@ -407,7 +401,7 @@ export default function NewRequisition() {
               <div className="intake-section" style={{ marginTop: 24 }}>
                 <div className="intake-section-head">
                   <h2 className="intake-section-title">Import from Template</h2>
-                  <span className="intake-section-caption">Select an existing requisition to pre-fill all fields as a starting point.</span>
+                  <span className="intake-section-caption">Select an uploaded JSON template to pre-fill all fields as a starting point.</span>
                 </div>
                 <div className="template-selector" style={{ marginTop: 12 }}>
                   <label className="form-label">Select Template</label>
@@ -417,10 +411,10 @@ export default function NewRequisition() {
                     onChange={(e) => handleImportTemplate(e.target.value)}
                     disabled={loadingTemplates}
                   >
-                    <option value="">— Choose a requisition to import —</option>
+                    <option value="">— Choose a template to import —</option>
                     {templates.map((t) => (
                       <option key={t.id} value={t.id}>
-                        {t.name || t.title || 'Untitled'} — {t.company_name || 'Unknown'} ({t.status})
+                        {t.name || t.title || 'Untitled'} — {t.company_name || 'Unknown'}
                       </option>
                     ))}
                   </select>
