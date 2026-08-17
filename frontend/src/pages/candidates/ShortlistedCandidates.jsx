@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { request } from '../../api/client';
+import { request, API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, StatCard, WelcomeBanner } from '../../components/Dashboard';
 
@@ -63,7 +63,8 @@ export default function ShortlistedCandidates() {
   useEffect(() => {
     request('/candidates/shortlisted', { token })
       .then((data) => {
-        setCandidates(data || []);
+        const list = Array.isArray(data) ? data : data?.shortlisted_candidates || [];
+        setCandidates(list);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -193,6 +194,33 @@ function CandidateRow({ candidate: c, expanded, onToggle }) {
                   <span>{c.hiring_manager_notes}</span>
                 </div>
               )}
+              <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                  📁 File: <strong>{c.filename || 'resume.pdf'}</strong>
+                </span>
+                <a
+                  href={c.resume_pdf ? `data:application/pdf;base64,${c.resume_pdf}` : `${API_BASE_URL}/candidates/${c.id}/resume-pdf`}
+                  download={c.filename || `${c.candidate_name}_resume.pdf`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    fontSize: '0.82rem',
+                    padding: '6px 14px',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    borderRadius: '8px',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  📄 View / Download Resume PDF
+                </a>
+              </div>
             </div>
           </td>
         </tr>

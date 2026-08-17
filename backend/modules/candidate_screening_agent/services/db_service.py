@@ -66,6 +66,7 @@ def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None =
             "details": cand.get("details", {}),
             "matched_skills": cand.get("matched_skills", []),
             "missing_skills": cand.get("missing_skills", []),
+            "resume_pdf": cand.get("resume_pdf") or cand.get("pdf_base64"),
             "updated_at": _utcnow(),
         }
         db["candidate_submissions"].replace_one(
@@ -101,19 +102,42 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
             query["requisition_id"] = requisition_id
         if status:
             query["status"] = status
-        if company_tenant_ids is not None:
-            query["tenant_id"] = {"$in": company_tenant_ids}
-        elif tenant_id:
-            query["tenant_id"] = tenant_id
+
+        or_conditions = []
+        if tenant_id:
+            or_conditions.append({"tenant_id": tenant_id})
+        if company_tenant_ids:
+            or_conditions.append({"tenant_id": {"$in": company_tenant_ids}})
+
+        if or_conditions:
+            if len(or_conditions) == 1:
+                query.update(or_conditions[0])
+            else:
+                query["$or"] = or_conditions
 
         cursor = db["candidate_submissions"].find(query).sort(
             [("match_score", -1), ("created_at", -1)]
         )
         results = []
         for doc in cursor:
+            req_title = None
+            comp_name = None
+            req_id = doc.get("requisition_id")
+            if req_id:
+                req_doc = db["requisitions"].find_one({"id": req_id})
+                if req_doc:
+                    req_title = req_doc.get("title")
+                    comp_id = req_doc.get("company_profile_id")
+                    if comp_id:
+                        comp_doc = db["company_profiles"].find_one({"id": comp_id})
+                        if comp_doc:
+                            comp_name = comp_doc.get("name")
             results.append({
+                "id": doc.get("id"),
                 "submission_id": doc.get("id"),
-                "requisition_id": doc.get("requisition_id"),
+                "requisition_id": req_id,
+                "requisition_title": req_title,
+                "company_name": comp_name,
                 "tenant_id": doc.get("tenant_id"),
                 "candidate_name": doc.get("candidate_name"),
                 "candidate_email": doc.get("candidate_email"),
@@ -128,7 +152,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                 "matched_skills": doc.get("matched_skills") or [],
                 "missing_skills": doc.get("missing_skills") or [],
                 "hiring_manager_notes": doc.get("hiring_manager_notes"),
-                "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
+                "created_at": doc.get("created_at").isoformat() if hasattr(doc.get("created_at"), 'isoformat') else doc.get("created_at"),
             })
         return results
     except Exception as e:

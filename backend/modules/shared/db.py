@@ -28,8 +28,34 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-client = MongoClient(settings.mongodb_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, maxPoolSize=50)
-db = client[settings.mongo_db_name]
+# Lazy client — defer DNS resolution until first actual DB operation.
+# This prevents startup crash when DNS (mongodb+srv://) is slow or offline.
+_client: "MongoClient | None" = None
+
+def _get_client() -> "MongoClient":
+    global _client
+    if _client is None:
+        _client = MongoClient(
+            settings.mongodb_url,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+            maxPoolSize=50,
+        )
+    return _client
+
+
+class _LazyDB:
+    """Proxy that resolves the real database on first access."""
+    def __getattr__(self, name):
+        return getattr(_get_client()[settings.mongo_db_name], name)
+    def __getitem__(self, key):
+        return _get_client()[settings.mongo_db_name][key]
+    def command(self, *args, **kwargs):
+        return _get_client()[settings.mongo_db_name].command(*args, **kwargs)
+
+
+client = _get_client  # callable — use _get_client() where raw client needed
+db = _LazyDB()
 
 
 class Criterion:
@@ -224,7 +250,9 @@ class Session:
 
     def flush(self) -> None:
         for obj in self._pending:
-            self._coll(type(obj)).insert_one(obj.to_doc())
+            self._coll(type(obj)).replace_one(
+                {"id": obj.id}, obj.to_doc(), upsert=True
+            )
         self._pending = []
 
     def commit(self) -> None:
@@ -254,7 +282,7 @@ def get_session() -> Session:
 
 
 def init_db() -> None:
-    """Create indexes. Idempotent — safe to call on every start."""
+    """Create indexes. Idempotent â€” safe to call on every start."""
     db["users"].create_index("email", unique=True)
     db["users"].create_index("tenant_id")
     db["tenants"].create_index("name")
@@ -264,3 +292,6 @@ def init_db() -> None:
     db["role_templates"].create_index("tenant_id")
     db["decision_records"].create_index("requisition_id")
     db["candidate_submissions"].create_index("requisition_id")
+    db["candidates"].create_index("tenant_id")
+
+

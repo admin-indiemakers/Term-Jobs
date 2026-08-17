@@ -20,6 +20,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -33,11 +36,7 @@ from modules.identity.router import get_current_user
 from modules.identity.router import router as identity_router
 from modules.requisition.domain import models, schemas
 from modules.shared.db import get_session, init_db
-
-# The screening agent package uses top-level `services.*` imports, so its
-# directory must be importable (same layout as its standalone main.py).
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "modules", "candidate_screening_agent"))
-from modules.candidate_screening_agent.routers.screening import router as screening_router
+from modules.resume_screener.router import router as resume_screener_router
 
 app = FastAPI(
     title="TermJobs Requisition API",
@@ -55,7 +54,8 @@ app.add_middleware(
 
 app.include_router(identity_router, prefix="/api/auth")
 app.include_router(candidate_router)
-app.include_router(screening_router, prefix="/api", tags=["Screening"])
+app.include_router(candidate_router, prefix="/api")
+app.include_router(resume_screener_router, prefix="/api", tags=["Resume Screener"])
 
 
 
@@ -265,7 +265,7 @@ def _auto_close_expired() -> None:
     """Auto-close Published requisitions whose submission deadline has passed.
 
     Lazily swept on every list/detail read so vendors stop seeing expired roles
-    without a background scheduler. Safe to run repeatedly — idempotent.
+    without a background scheduler. Safe to run repeatedly â€” idempotent.
     """
     import datetime as _dt
 
@@ -381,7 +381,7 @@ async def upload_template(
             tpl = models.RoleTemplate(
                 tenant_id=current_user.tenant_id,
                 created_by=current_user.id,
-                name=name or f"Template — {title}",
+                name=name or f"Template â€” {title}",
                 description=description or "",
                 structured_role=role,
             )
@@ -615,7 +615,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             pass
         elif current_user.role == "Recruiter":
             # Vendors only see requisitions from companies that engaged them,
-            # and only published requisitions — never drafts or in-progress ones.
+            # and only published requisitions â€” never drafts or in-progress ones.
             engaged_company_ids = {
                 e.tenant_id
                 for e in session.query(VendorEngagement)
@@ -911,3 +911,5 @@ def health() -> dict:
     except Exception:  # noqa: BLE001
         db_status = "degraded"
     return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq"), "db": db_status}
+
+
