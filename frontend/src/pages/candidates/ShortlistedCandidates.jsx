@@ -59,6 +59,7 @@ export default function ShortlistedCandidates() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [expanded, setExpanded] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
 
   useEffect(() => {
     request('/candidates/shortlisted', { token })
@@ -71,23 +72,97 @@ export default function ShortlistedCandidates() {
       .finally(() => setLoading(false));
   }, [token]);
 
+  const handleReject = async (c) => {
+    if (!window.confirm(`Reject ${c.candidate_name}? This will remove them from the shortlist.`)) return;
+    setRejecting(c.id);
+    setError('');
+    try {
+      await request('/api/approve-candidate', {
+        method: 'POST',
+        token,
+        body: { submission_id: c.id, action: 'reject' },
+      });
+      setCandidates((prev) => prev.filter((item) => item.id !== c.id));
+      setExpanded(null);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setRejecting(null);
+    }
+  };
+
+  const handleViewResume = async (c) => {
+    setError('');
+    try {
+      const res = await fetch(`${API_BASE_URL}/candidates/${c.id}/resume`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let msg = `Request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          if (data && data.detail) msg = data.detail;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const requisitions = useMemo(() => {
     const map = {};
     candidates.forEach((c) => {
       if (!c.requisition_id) return;
       if (!map[c.requisition_id]) {
-        map[c.requisition_id] = { id: c.requisition_id, title: c.requisition_title || 'Untitled', count: 0 };
+        map[c.requisition_id] = {
+          id: c.requisition_id,
+          ref: c.requisition_ref || `REQ-${c.requisition_id.slice(0, 6).toUpperCase()}`,
+          title: c.requisition_title || 'Untitled',
+          count: 0,
+        };
       }
       map[c.requisition_id].count += 1;
     });
     return Object.values(map).sort((a, b) => b.count - a.count);
   }, [candidates]);
 
+  const unlinked = useMemo(() => candidates.filter((c) => !c.requisition_id), [candidates]);
+
   const shown = useMemo(() => {
-    if (!filter) return candidates;
-    if (filter === '__none__') return candidates.filter((c) => !c.requisition_id);
-    return candidates.filter((c) => c.requisition_id === filter);
-  }, [candidates, filter]);
+    let list = candidates;
+    if (filter === '__none__') list = candidates.filter((c) => !c.requisition_id);
+    else if (filter) list = candidates.filter((c) => c.requisition_id === filter);
+
+    const grouped = [];
+    const byReq = {};
+    list.forEach((c) => {
+      if (!c.requisition_id) return;
+      if (!byReq[c.requisition_id]) {
+        byReq[c.requisition_id] = {
+          req: requisitions.find((r) => r.id === c.requisition_id) || {
+            id: c.requisition_id,
+            ref: c.requisition_ref || `REQ-${c.requisition_id.slice(0, 6).toUpperCase()}`,
+            title: c.requisition_title || 'Untitled',
+          },
+          candidates: [],
+        };
+      }
+      byReq[c.requisition_id].candidates.push(c);
+    });
+    Object.values(byReq).forEach((g) => {
+      grouped.push({ type: 'req', req: g.req, count: g.candidates.length });
+      g.candidates.forEach((c) => grouped.push({ type: 'cand', c }));
+    });
+    list.forEach((c) => {
+      if (!c.requisition_id) grouped.push({ type: 'cand', c });
+    });
+    return grouped;
+  }, [candidates, filter, requisitions]);
 
   const stats = useMemo(() => {
     const strong = candidates.filter((c) => c.recommendation === 'Strong Match').length;
@@ -100,7 +175,7 @@ export default function ShortlistedCandidates() {
   }, [candidates]);
 
   return (
-    <div className="page">
+    <div className="page page-shortlisted">
       <WelcomeBanner title="Shortlisted Candidates" subtitle="Candidates shortlisted by your hiring managers across all requisitions.">
         <Link to="/dashboard/requisitions" className="ghost-btn-link" style={{ color: '#dbeafe', fontSize: '0.88rem' }}>
           ← Back to requisitions
@@ -122,7 +197,7 @@ export default function ShortlistedCandidates() {
           <select className="auth-input select-sm" value={filter} onChange={(e) => setFilter(e.target.value)}>
             <option value="">All requisitions</option>
             {requisitions.map((r) => (
-              <option key={r.id} value={r.id}>{r.title} ({r.count})</option>
+              <option key={r.id} value={r.id}>{r.ref} · {r.title} ({r.count})</option>
             ))}
             {candidates.some((c) => !c.requisition_id) && <option value="__none__">No requisition linked</option>}
           </select>
@@ -151,9 +226,27 @@ export default function ShortlistedCandidates() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((c) => (
-                <CandidateRow key={c.id} candidate={c} expanded={expanded === c.id} onToggle={() => setExpanded(expanded === c.id ? null : c.id)} />
-              ))}
+              {shown.map((item) =>
+                item.type === 'req' ? (
+                  <tr key={item.req.id} className="req-group-row">
+                    <td colSpan="7" className="req-group-cell">
+                      <span className="req-group-ref">{item.req.ref}</span>
+                      <span className="req-group-title">{item.req.title}</span>
+                      <span className="req-group-count">{item.count} shortlisted</span>
+                    </td>
+                  </tr>
+                ) : (
+                  <CandidateRow
+                    key={item.c.id}
+                    candidate={item.c}
+                    expanded={expanded === item.c.id}
+                    onToggle={() => setExpanded(expanded === item.c.id ? null : item.c.id)}
+                    onReject={() => handleReject(item.c)}
+                    onViewResume={() => handleViewResume(item.c)}
+                    rejecting={rejecting === item.c.id}
+                  />
+                )
+              )}
             </tbody>
           </table>
         )}
@@ -162,7 +255,7 @@ export default function ShortlistedCandidates() {
   );
 }
 
-function CandidateRow({ candidate: c, expanded, onToggle }) {
+function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume, rejecting }) {
   return (
     <>
       <tr className="clickable-row" onClick={onToggle}>
@@ -172,12 +265,25 @@ function CandidateRow({ candidate: c, expanded, onToggle }) {
         </td>
         <td className="td-company">{c.vendor_name || '—'}</td>
         <td className="td-company">
-          {c.requisition_title || <span className="muted">No requisition</span>}
+          {c.requisition_ref
+            ? `${c.requisition_ref}${c.requisition_title ? ` · ${c.requisition_title}` : ''}`
+            : <span className="muted">No requisition</span>}
         </td>
         <td style={{ minWidth: 130 }}><ScoreBar score={c.match_score} /></td>
         <td><RecommendationBadge recommendation={c.recommendation} /></td>
         <td className="td-date">{formatDate(c.created_at)}</td>
-        <td className="td-action"><span className="row-action">{expanded ? 'Hide' : 'Details'}</span></td>
+        <td className="td-action">
+          <div className="row-actions">
+            <span className="row-action" onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</span>
+            <button
+              className="btn-reject"
+              onClick={(e) => { e.stopPropagation(); onReject(); }}
+              disabled={rejecting}
+            >
+              {rejecting ? 'Rejecting…' : 'Reject'}
+            </button>
+          </div>
+        </td>
       </tr>
       {expanded && (
         <tr className="cand-detail-row-tr">
@@ -194,33 +300,39 @@ function CandidateRow({ candidate: c, expanded, onToggle }) {
                   <span>{c.hiring_manager_notes}</span>
                 </div>
               )}
-              <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                  📁 File: <strong>{c.filename || 'resume.pdf'}</strong>
-                </span>
-                <a
-                  href={c.resume_pdf ? `data:application/pdf;base64,${c.resume_pdf}` : `${API_BASE_URL}/candidates/${c.id}/resume-pdf`}
-                  download={c.filename || `${c.candidate_name}_resume.pdf`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                    fontSize: '0.82rem',
-                    padding: '6px 14px',
-                    background: '#2563eb',
-                    color: '#ffffff',
-                    borderRadius: '8px',
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                    boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  📄 View / Download Resume PDF
-                </a>
-              </div>
+                {c.resume_text && (
+                  <div className="cand-detail-row">
+                    <span className="cand-detail-label">Resume</span>
+                    <pre className="cand-resume">{c.resume_text}</pre>
+                  </div>
+                )}
+                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                    📁 File: <strong>{c.filename || 'resume.pdf'}</strong>
+                  </span>
+                  <a
+                    href={c.resume_pdf ? `data:application/pdf;base64,${c.resume_pdf}` : `${API_BASE_URL}/candidates/${c.id}/resume-pdf`}
+                    download={c.filename || `${c.candidate_name}_resume.pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.82rem',
+                      padding: '6px 14px',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      textDecoration: 'none',
+                      fontWeight: 700,
+                      boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    📄 View / Download Resume PDF
+                  </a>
+                </div>
             </div>
           </td>
         </tr>

@@ -385,6 +385,58 @@
   .tint-ink { --stat-from: #1a1a1a; --stat-to: #111111; background: #111111; color: #ffffff; }
   .tint-black { --stat-from: #0a0a0a; --stat-to: #0a0a0a; @apply bg-white text-black; }
 
+  .page-shortlisted .stat-icon {
+    @apply bg-white text-black;
+  }
+
+  .page-shortlisted .stat-card::before {
+    display: none;
+  }
+
+  .req-ref-pill {
+    @apply mr-2 inline-block rounded-md border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[0.72rem] font-semibold tracking-wide text-slate-600;
+  }
+
+  .req-group-row {
+    @apply bg-slate-50;
+  }
+
+  .req-group-cell {
+    @apply px-4 py-2.5;
+  }
+
+  .req-group-ref {
+    @apply mr-2 inline-block rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[0.72rem] font-semibold tracking-wide text-violet-700;
+  }
+
+  .req-group-title {
+    @apply text-sm font-semibold text-slate-800;
+  }
+
+  .req-group-count {
+    @apply ml-2 text-xs text-slate-400;
+  }
+
+  .shortlist-head {
+    @apply mb-3 flex items-center justify-between gap-3;
+  }
+
+  .shortlist-list {
+    @apply flex flex-col gap-2;
+  }
+
+  .shortlist-item {
+    @apply flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2.5;
+  }
+
+  .shortlist-item-main {
+    @apply flex flex-col;
+  }
+
+  .shortlist-name {
+    @apply text-sm font-medium text-slate-800;
+  }
+
   .accent-blue { --stat-from: #3b82f6; --stat-to: #2563eb; @apply bg-blue-600; }
   .accent-slate { --stat-from: #94a3b8; --stat-to: #64748b; @apply bg-slate-400; }
   .accent-amber { --stat-from: #f59e0b; --stat-to: #d97706; @apply bg-amber-600; }
@@ -527,6 +579,10 @@
 
   .row-actions .row-action:hover {
     @apply underline;
+  }
+
+  .btn-reject {
+    @apply cursor-pointer rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[0.8rem] font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60;
   }
 
   /* ============ MODAL ============ */
@@ -866,6 +922,32 @@
     @apply border-blue-200 bg-white text-blue-700;
   }
 
+  /* ============ CALENDAR CONNECT ============ */
+
+  .cal-card {
+    @apply cursor-default;
+  }
+
+  .cal-dot {
+    @apply inline-block h-3.5 w-3.5 shrink-0 rounded-full;
+  }
+
+  .cal-dot-google { @apply bg-emerald-500; }
+  .cal-dot-microsoft { @apply bg-blue-600; }
+  .cal-dot-zoho { @apply bg-rose-500; }
+
+  .cal-connected-badge {
+    @apply shrink-0 border-emerald-500 bg-emerald-500 text-white;
+  }
+
+  .cal-connected-box {
+    @apply rounded-2xl border border-emerald-200 bg-emerald-50/60 p-5;
+  }
+
+  .cal-connected-name {
+    @apply text-base font-extrabold capitalize text-slate-800;
+  }
+
   /* ============ REVIEW / STRUCTURED ROLE ============ */
 
   .review-card {
@@ -1122,6 +1204,19 @@
 
   .cand-detail-label {
     @apply text-[0.72rem] font-bold uppercase tracking-[0.05em] text-slate-400;
+  }
+
+.cand-resume {
+    @apply max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-[0.78rem] leading-relaxed text-slate-700;
+  }
+
+  .resume-download-link {
+    @apply inline-flex items-center gap-1.5 text-[0.82rem] font-semibold text-blue-600 underline decoration-blue-300 underline-offset-2 hover:text-blue-800;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
   }
 }
 

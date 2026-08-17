@@ -42,7 +42,7 @@ def send_email_via_gmail(
     msg.attach(MIMEText(html_content, "html"))
 
     try:
-        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
         server.starttls()
         server.login(sender_email, clean_password)
         server.send_message(msg)

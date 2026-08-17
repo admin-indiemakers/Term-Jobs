@@ -59,6 +59,7 @@ def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None =
             "vendor_name": vendor_name or cand.get("vendor_name", "Vendor A"),
             "filename": cand.get("filename"),
             "fingerprint": cand.get("fingerprint"),
+            "resume_text": cand.get("resume_text"),
             "match_score": cand.get("match_score"),
             "recommendation": cand.get("recommendation"),
             "status": cand.get("status", "Screened"),
@@ -118,6 +119,16 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
         cursor = db["candidate_submissions"].find(query).sort(
             [("match_score", -1), ("created_at", -1)]
         )
+
+        req_ids = {doc.get("requisition_id") for doc in cursor}
+        req_titles: dict[str, str] = {}
+        if req_ids:
+            for rd in db["requisitions"].find({"id": {"$in": list(req_ids)}}):
+                req_titles[rd.get("id")] = rd.get("title") or "Untitled"
+
+        cursor = db["candidate_submissions"].find(query).sort(
+            [("match_score", -1), ("created_at", -1)]
+        )
         results = []
         for doc in cursor:
             req_title = None
@@ -127,16 +138,18 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                 req_doc = db["requisitions"].find_one({"id": req_id})
                 if req_doc:
                     req_title = req_doc.get("title")
-                    comp_id = req_doc.get("company_profile_id")
+                    comp_id = req_doc.get("company_id")
                     if comp_id:
                         comp_doc = db["company_profiles"].find_one({"id": comp_id})
                         if comp_doc:
                             comp_name = comp_doc.get("name")
+
             results.append({
                 "id": doc.get("id"),
                 "submission_id": doc.get("id"),
                 "requisition_id": req_id,
-                "requisition_title": req_title,
+                "requisition_title": req_title or req_titles.get(req_id),
+                "requisition_ref": f"REQ-{str(req_id)[:6].upper()}" if req_id else None,
                 "company_name": comp_name,
                 "tenant_id": doc.get("tenant_id"),
                 "candidate_name": doc.get("candidate_name"),
@@ -144,6 +157,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                 "vendor_name": doc.get("vendor_name") or "Vendor A",
                 "filename": doc.get("filename"),
                 "fingerprint": doc.get("fingerprint"),
+                "resume_text": doc.get("resume_text"),
                 "match_score": float(doc["match_score"]) if doc.get("match_score") is not None else 0.0,
                 "recommendation": doc.get("recommendation"),
                 "status": doc.get("status"),

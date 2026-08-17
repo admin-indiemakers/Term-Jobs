@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { request } from '../api/client';
+import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import { Icons, StatCard, WelcomeBanner } from '../components/Dashboard';
@@ -53,6 +53,9 @@ export default function AdminDashboard() {
   const [changingPwd, setChangingPwd] = useState(false);
   const [edit, setEdit] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [calConfig, setCalConfig] = useState({ provider: null, status: 'disconnected', connected_email: null });
+  const [calProviders, setCalProviders] = useState([]);
+  const [savingCalendar, setSavingCalendar] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -65,6 +68,75 @@ export default function AdminDashboard() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(load, [token]);
+
+  useEffect(() => {
+    Promise.all([
+      request('/api/calendar/config', { token }),
+      request('/api/calendar/providers', { token }),
+    ])
+      .then(([config, providers]) => {
+        setCalConfig(config || { provider: null, status: 'disconnected', connected_email: null });
+        setCalProviders(providers?.providers || []);
+      })
+      .catch(() => {});
+  }, [token]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const cal = params.get('calendar');
+    if (cal === 'connected') {
+      setSuccess('Company calendar connected successfully.');
+    } else if (cal === 'error') {
+      setError('Could not connect the calendar. Please try again.');
+    }
+    if (cal) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  const connectCalendar = async (providerKey) => {
+    setError('');
+    setSuccess('');
+    setSavingCalendar(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/calendar/auth/${providerKey}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        let msg = `Request failed (${res.status})`;
+        try {
+          const data = await res.json();
+          if (data && data.detail) msg = data.detail;
+        } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const data = await res.json();
+      window.location.href = data.auth_url;
+    } catch (err) {
+      setError(err.message);
+      setSavingCalendar(false);
+    }
+  };
+
+  const disconnectCalendar = async () => {
+    setSavingCalendar(true);
+    setError('');
+    setSuccess('');
+    try {
+      const updated = await request('/api/calendar/disconnect', {
+        method: 'POST',
+        token,
+      });
+      setCalConfig(updated || { provider: null, status: 'disconnected', connected_email: null });
+      setSuccess('Company calendar disconnected.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSavingCalendar(false);
+    }
   };
 
   const toggleVendor = (id) => {
@@ -331,6 +403,72 @@ export default function AdminDashboard() {
                 Manage Vendors
               </button>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-panel">
+        <div className="split-card">
+          <div className="split-card-head">
+            <div className="form-panel-head">
+              <div className="form-panel-icon">{Icons.calendar}</div>
+              <div>
+                <div className="form-panel-title">Connect Calendar</div>
+                <div className="form-panel-caption">
+                  Configure your company calendar provider. Connected calendars will be used to schedule interviews and sync candidate interview slots.
+                </div>
+              </div>
+            </div>
+            {calConfig.status === 'connected' && (
+              <span className="vendor-check cal-connected-badge">Connected</span>
+            )}
+          </div>
+          <div className="split-card-body">
+            {calConfig.status === 'connected' ? (
+              <div className="cal-connected-box">
+                <div className="cal-connected-name">
+                  {calProviders.find((p) => p.key === calConfig.provider)?.name || calConfig.provider}
+                </div>
+                <p className="muted" style={{ marginTop: 4 }}>
+                  {calConfig.connected_email || 'Company calendar connected'}
+                  {calConfig.connected_at ? ` · connected ${formatDate(calConfig.connected_at)}` : ''}
+                </p>
+                <button className="danger-btn" onClick={disconnectCalendar} disabled={savingCalendar} style={{ marginTop: 12 }}>
+                  {savingCalendar ? 'Disconnecting...' : 'Disconnect'}
+                </button>
+              </div>
+            ) : (
+              <div className="vendor-grid">
+                {calProviders.map((p) => (
+                  <div key={p.key} className="vendor-card cal-card">
+                    <div className="vendor-card-top">
+                      <span className={`cal-dot cal-dot-${p.key}`} />
+                      <span className="vendor-name">{p.name}</span>
+                    </div>
+                    <div className="vendor-meta">{p.description}</div>
+                    {p.configured ? (
+                      <button
+                        className="glow-btn"
+                        style={{ marginTop: 10, width: '100%' }}
+                        onClick={() => connectCalendar(p.key)}
+                        disabled={savingCalendar}
+                      >
+                        {savingCalendar ? 'Connecting...' : `Connect ${p.name}`}
+                      </button>
+                    ) : (
+                      <button
+                        className="ghost-btn"
+                        style={{ marginTop: 10, width: '100%', cursor: 'not-allowed', opacity: 0.6 }}
+                        disabled
+                        title="OAuth credentials not configured on the backend yet"
+                      >
+                        Not configured
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

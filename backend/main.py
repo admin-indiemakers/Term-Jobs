@@ -33,6 +33,7 @@ from modules.candidate.router import router as candidate_router
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 
+from modules.calendar.router import router as calendar_router
 from modules.identity.router import router as identity_router
 from modules.requisition.domain import models, schemas
 from modules.shared.db import get_session, init_db
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(identity_router, prefix="/api/auth")
 app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")
+app.include_router(calendar_router, prefix="/api", tags=["Calendar"])
 app.include_router(resume_screener_router, prefix="/api", tags=["Resume Screener"])
 
 
@@ -187,6 +189,7 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
                 company = _company_dict(prof)
         return {
             "id": req.id,
+            "ref": f"REQ-{req.id[:6].upper()}",
             "tenant_id": req.tenant_id,
             "company_profile_id": req.company_profile_id,
             "company": company,
@@ -634,6 +637,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         return [
             {
                 "id": r.id,
+                "ref": f"REQ-{r.id[:6].upper()}",
                 "tenant_id": r.tenant_id,
                 "status": r.status,
                 "title": r.title,
