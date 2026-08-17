@@ -64,7 +64,8 @@ export default function ShortlistedCandidates() {
   useEffect(() => {
     request('/candidates/shortlisted', { token })
       .then((data) => {
-        setCandidates(data || []);
+        const list = Array.isArray(data) ? data : data?.shortlisted_candidates || [];
+        setCandidates(list);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -299,24 +300,39 @@ function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume
                   <span>{c.hiring_manager_notes}</span>
                 </div>
               )}
-              {c.resume_text && (
-                <div className="cand-detail-row">
-                  <span className="cand-detail-label">Resume</span>
-                  <pre className="cand-resume">{c.resume_text}</pre>
-                </div>
-              )}
-              {c.filename && (
-                <div className="cand-detail-row">
-                  <span className="cand-detail-label">Resume file</span>
-                  <button
-                    type="button"
-                    className="resume-download-link"
-                    onClick={(e) => { e.stopPropagation(); onViewResume(); }}
+                {c.resume_text && (
+                  <div className="cand-detail-row">
+                    <span className="cand-detail-label">Resume</span>
+                    <pre className="cand-resume">{c.resume_text}</pre>
+                  </div>
+                )}
+                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+                  <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
+                    📁 File: <strong>{c.filename || 'resume.pdf'}</strong>
+                  </span>
+                  <a
+                    href={c.resume_pdf ? `data:application/pdf;base64,${c.resume_pdf}` : `${API_BASE_URL}/candidates/${c.id}/resume-pdf`}
+                    download={c.filename || `${c.candidate_name}_resume.pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      fontSize: '0.82rem',
+                      padding: '6px 14px',
+                      background: '#2563eb',
+                      color: '#ffffff',
+                      borderRadius: '8px',
+                      textDecoration: 'none',
+                      fontWeight: 700,
+                      boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    View original PDF — {c.filename}
-                  </button>
+                    📄 View / Download Resume PDF
+                  </a>
                 </div>
-              )}
             </div>
           </td>
         </tr>

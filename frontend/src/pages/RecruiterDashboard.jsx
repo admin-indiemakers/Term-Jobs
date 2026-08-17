@@ -1,502 +1,1586 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState, Fragment } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { request, API_BASE_URL } from '../api/client';
+import { Icons, StatCard, WelcomeBanner } from '../components/Dashboard';
 
-export default function RecruiterDashboard() {
-  const { user, token } = useAuth();
-  const [requisitions, setRequisitions] = useState([]);
-  const [selectedReqId, setSelectedReqId] = useState('');
-  const [jdText, setJdText] = useState('');
-  const [fullReq, setFullReq] = useState(null);
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [dbLoading, setDbLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [screeningResult, setScreeningResult] = useState(null);
-  const [shortlistedList, setShortlistedList] = useState([]);
-  const [candidateLimit, setCandidateLimit] = useState(null);
+function scoreColor(score) {
+  if (score == null) return '#94a3b8';
+  if (score >= 70) return '#059669';
+  if (score >= 40) return '#d97706';
+  return '#dc2626';
+}
 
-  const authToken = token || localStorage.getItem('auth_token');
-
-  useEffect(() => {
-    loadPublishedRequisitions();
-    loadShortlistedCandidates();
-    request('/api/settings/candidate-limit', { token: authToken })
-      .then((res) => setCandidateLimit(res?.limit ?? null))
-      .catch(() => setCandidateLimit(null));
-  }, [authToken]);
-
-  const formatJdText = (r) => {
-    if (!r) return '';
-    
-    // 1. Direct text or generated markdown
-    if (r.jd_text && typeof r.jd_text === 'string' && r.jd_text.length > 30) {
-      return r.jd_text;
-    }
-    if (r.generated_jd_markdown) {
-      if (typeof r.generated_jd_markdown === 'string' && r.generated_jd_markdown.length > 20) {
-        return r.generated_jd_markdown;
-      }
-    }
-
-    // 2. Structured Role format
-    if (r.structured_role && typeof r.structured_role === 'object') {
-      const sr = r.structured_role;
-      let text = `### ${sr.role_title || r.title || 'Untitled Role'}\n\n`;
-      if (sr.summary) text += `**Summary:**\n${sr.summary}\n\n`;
-      if (sr.must_have_skills && Array.isArray(sr.must_have_skills) && sr.must_have_skills.length) {
-        text += `**Must-Have Skills:**\n- ${sr.must_have_skills.join('\n- ')}\n\n`;
-      }
-      if (sr.nice_to_have_skills && Array.isArray(sr.nice_to_have_skills) && sr.nice_to_have_skills.length) {
-        text += `**Nice-to-Have Skills:**\n- ${sr.nice_to_have_skills.join('\n- ')}\n\n`;
-      }
-      if (sr.responsibilities && Array.isArray(sr.responsibilities) && sr.responsibilities.length) {
-        text += `**Responsibilities:**\n- ${sr.responsibilities.join('\n- ')}\n\n`;
-      }
-      if (sr.location) text += `**Location:** ${sr.location}\n`;
-      if (sr.seniority) text += `**Seniority:** ${sr.seniority}\n`;
-      if (text.length > 40) return text.trim();
-    }
-
-    // 3. Intent description or raw prompt
-    if (r.intent && typeof r.intent === 'object') {
-      let text = `### ${r.title || 'Untitled Role'}\n\n`;
-      if (r.intent.description) text += `**Description:**\n${r.intent.description}\n\n`;
-      if (r.intent.raw_prompt) text += `**Requirements:**\n${r.intent.raw_prompt}\n\n`;
-      if (r.intent.tech_stack_hint && Array.isArray(r.intent.tech_stack_hint) && r.intent.tech_stack_hint.length) {
-        text += `**Required Tech Stack:** ${r.intent.tech_stack_hint.join(', ')}\n`;
-      }
-      if (text.length > 40) return text.trim();
-    }
-
-    if (r.description && r.description.length > 20) {
-      return `### ${r.title}\n\n**Description:**\n${r.description}`;
-    }
-
-    // 4. Smart fallback template if raw requisition was published without AI markdown
-    const roleTitle = r.title || 'Junior Backend Developer';
-    return `### Role: ${roleTitle}\n\n**Required Technical Skills:**\n- Python & FastAPI\n- Database & API Design\n- Docker & REST APIs\n- Git & Version Control\n\n**Responsibilities & Experience:**\n- 1 to 3 years software development experience.\n- Develop scalable backend services and APIs.\n- Collaborate with engineering teams.`;
-  };
-
-  const fetchFullRequisition = async (reqId) => {
-    try {
-      const fullReq = await request(`/requisitions/${reqId}`, { token: authToken });
-      if (fullReq) {
-        setFullReq(fullReq);
-        const formatted = formatJdText(fullReq);
-        setJdText(formatted);
-      }
-    } catch (e) {
-      console.warn('Could not fetch single requisition details', e);
-    }
-  };
-
-  const loadPublishedRequisitions = async () => {
-    setDbLoading(true);
-    let list = [];
-
-    try {
-      // 1. Fetch directly from MongoDB backend (/requisitions)
-      const raw = await request('/requisitions', { token: authToken });
-      if (Array.isArray(raw) && raw.length > 0) {
-        list = raw;
-      } else if (raw && raw.requisitions) {
-        list = raw.requisitions;
-      }
-    } catch (e) {
-      console.warn('GET /requisitions failed, trying /api/requisitions...', e);
-    }
-
-    if (list.length === 0) {
-      try {
-        // 2. Fallback to screening agent endpoint if core endpoint is empty
-        const data = await request('/api/requisitions', { token: authToken });
-        if (data && data.requisitions && data.requisitions.length > 0) {
-          list = data.requisitions;
-        } else if (Array.isArray(data) && data.length > 0) {
-          list = data;
-        }
-      } catch (e) {
-        console.error('Failed to load requisitions from all endpoints', e);
-      }
-    }
-
-    setRequisitions(list);
-
-    if (list.length > 0) {
-      const selected = list.find((r) => r.status === 'Published') || list[0];
-      setSelectedReqId(selected.id);
-      
-      const formatted = formatJdText(selected);
-      setJdText(formatted);
-
-      if (selected.id) {
-        fetchFullRequisition(selected.id);
-      }
-    } else {
-      setSelectedReqId('');
-      setJdText('');
-    }
-
-    setDbLoading(false);
-  };
-
-  const loadShortlistedCandidates = async () => {
-    try {
-      const data = await request('/api/candidates/shortlisted', { token: authToken });
-      if (data && data.shortlisted_candidates) {
-        setShortlistedList(data.shortlisted_candidates);
-      }
-    } catch (err) {
-      console.error('Failed to load shortlisted candidates', err);
-    }
-  };
-
-  const handleReqSelect = async (e) => {
-    const id = e.target.value;
-    setSelectedReqId(id);
-    setFullReq(null);
-    const req = requisitions.find((r) => r.id === id);
-    if (req) {
-      const formatted = formatJdText(req);
-      setJdText(formatted);
-      if (id) {
-        await fetchFullRequisition(id);
-      }
-    }
-  };
-
-  const roleDetailRows = () => {
-    if (!fullReq) return [];
-    const sr = fullReq.structured_role || {};
-    const fmtLpa = (v) => {
-      if (v == null || v === '') return null;
-      const num = Number(v);
-      if (!Number.isFinite(num) || num <= 0) return null;
-      const lakhs = num >= 100000 ? num / 100000 : num >= 100 ? num / 100 : num;
-      return `₹${lakhs % 1 === 0 ? lakhs.toFixed(0) : lakhs.toFixed(1)} L p.a.`;
-    };
-    const range = Array.isArray(sr.range_vendors_see) && sr.range_vendors_see.some(v => v != null && v > 0)
-      ? sr.range_vendors_see
-      : Array.isArray(sr.rate_band) && sr.rate_band.some(v => v != null && v > 0)
-      ? sr.rate_band
-      : [sr.range_vendors_see_min ?? sr.vendor_range_min, sr.range_vendors_see_max ?? sr.vendor_range_max];
-    return [
-      { label: 'Role title', value: sr.title || fullReq.title },
-      { label: 'Job family', value: sr.job_family },
-      { label: 'Seniority level', value: sr.seniority },
-      { label: 'Experience required', value: sr.experience },
-      { label: 'Headcount', value: sr.headcount },
-      { label: 'Engagement type', value: sr.engagement_type },
-      { label: 'Duration', value: sr.duration || sr.contract_duration },
-      { label: 'Start date', value: sr.start_date },
-      { label: 'Ends on', value: sr.ends_on },
-      { label: 'Extension likely', value: sr.extension_likely ? 'Yes' : sr.extension_likely === false ? 'No' : null },
-      { label: 'Max notice period', value: sr.max_notice_period },
-      { label: 'Rate card (vendor range)', value: range && range[0] != null && range[1] != null ? `${fmtLpa(range[0])} – ${fmtLpa(range[1])}` : null },
-      { label: 'Work mode', value: sr.work_mode },
-      { label: 'Locations', value: Array.isArray(sr.work_locations) && sr.work_locations.length ? sr.work_locations.join(', ') : sr.location },
-      { label: 'Working hours', value: sr.working_hours },
-      { label: 'Remote policy', value: sr.location_remote_policy },
-      { label: 'Onsite requirement', value: sr.onsite_requirement },
-      { label: 'Equipment provisioning', value: sr.equipment_provisioning },
-      { label: 'Background check', value: sr.background_check_required ? sr.background_check || 'Required' : null },
-      { label: 'Contract type', value: sr.nda_contract_type },
-      { label: 'Client site access', value: sr.client_site_access ? 'Yes' : sr.client_site_access === false ? 'No' : null },
-      { label: 'Security clearance', value: sr.security_clearance_required ? sr.security_clearance_notes || 'Required' : null },
-      { label: 'Work authorization', value: sr.work_authorization },
-      { label: 'Hiring manager', value: sr.hiring_manager },
-      { label: 'Submission deadline', value: sr.submission_deadline },
-      { label: 'Priority', value: sr.priority },
-    ].filter((r) => r.value != null && r.value !== '');
-  };
-
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setFiles(Array.from(e.target.files));
-    }
-  };
-
-  const handleScreenSubmit = async (e) => {
-    e.preventDefault();
-    if (!jdText) {
-      setError('Please select or enter a Job Description');
-      return;
-    }
-    if (files.length === 0) {
-      setError('Please upload at least 1 candidate resume PDF');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
-    const formData = new FormData();
-    formData.append('jd', jdText);
-    if (selectedReqId) formData.append('requisition_id', selectedReqId);
-    formData.append('vendor_name', user?.tenant_name || user?.name || 'Vendor Partner');
-    files.forEach((f) => formData.append('files', f));
-
-    try {
-      // Direct call to Backend API URL on Port 8000
-      const res = await fetch(`${API_BASE_URL}/api/screen-resumes`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: formData,
-      });
-      const data = await res.json();
-      if (data.status === 'success') {
-        setScreeningResult(data.analysis);
-      } else {
-        setError(data.detail || 'Screening failed');
-      }
-    } catch (err) {
-      setError('Failed to process candidate screening');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleShortlistCandidate = async (submissionId) => {
-    try {
-      const res = await request('/api/approve-candidate', {
-        method: 'POST',
-        token: authToken,
-        body: {
-          submission_id: submissionId,
-          action: 'shortlist',
-          vendor_name: user?.tenant_name || user?.name || 'Vendor Partner',
-          notes: 'Submitted by Recruiter Consultancy Partner',
-        },
-      });
-
-      if (res.status === 'success') {
-        alert(`Candidate successfully Shortlisted & Submitted to Company X HR!\nEmail Status: ${res.email_notification?.message || 'Sent'}`);
-        loadShortlistedCandidates();
-      }
-    } catch (err) {
-      alert('Failed to shortlist candidate');
-    }
-  };
-
+function ScoreBar({ score }) {
+  const color = scoreColor(score);
   return (
-    <div className="page" style={{ paddingBottom: '60px' }}>
-      {/* Header Banner */}
-      <div className="page-header" style={{ marginBottom: '24px' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '6px' }}>
-            <h1 className="page-title">Recruiter Consultancy Dashboard</h1>
-            <span className="status-badge status-published">
-              Consultancy Partner
-            </span>
-          </div>
-          <p className="page-subtitle">
-            Logged in as <strong>{user?.name}</strong> ({user?.email}) &bull; Agency: <strong>{user?.tenant_name || 'Vendor Agency'}</strong>
-          </p>
-        </div>
+    <div className="score-wrap">
+      <div className="score-track">
+        <div className="score-fill" style={{ width: `${score ?? 0}%`, background: color }}></div>
       </div>
+      <span className="score-value" style={{ color }}>{score != null ? `${Math.round(score)}%` : '—'}</span>
+    </div>
+  );
+}
 
-      {/* Main Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '32px' }}>
-        {/* Published Requisitions Card */}
-        <div className="glass-panel">
-          <h2 className="card-title">
-            🏢 Select Published Requisition (Client Company X)
-          </h2>
+function RecommendationBadge({ recommendation }) {
+  const cls =
+    recommendation === 'Strong Match' ? 'rec-strong' : recommendation === 'Moderate Match' ? 'rec-moderate' : 'rec-low';
+  return <span className={`rec-badge ${cls}`}>{recommendation || 'Submitted'}</span>;
+}
 
-          {dbLoading ? (
-            <p className="muted">Loading active requisitions from MongoDB...</p>
-          ) : (
-            <>
-              <label className="form-label">
-                Select Active Job Position ({requisitions.length} Available)
-              </label>
-              <select
-                value={selectedReqId}
-                onChange={handleReqSelect}
-                className="auth-input"
-                style={{ marginBottom: '16px', cursor: 'pointer' }}
-              >
-                {requisitions.length === 0 ? (
-                  <option value="">-- No Requisitions in MongoDB --</option>
-                ) : (
-                  requisitions.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      [{r.status || 'Active'}] {r.title || 'Untitled Role'}
-                    </option>
-                  ))
-                )}
-              </select>
-
-              <label className="form-label">
-                Job Description & Tech Requirements (Editable)
-              </label>
-              <textarea
-                value={jdText}
-                onChange={(e) => setJdText(e.target.value)}
-                placeholder="Select a requisition above or paste job requirements here..."
-                rows={9}
-                className="auth-input"
-                style={{ resize: 'vertical' }}
-              />
-
-              {roleDetailRows().length > 0 && (
-                <div style={{ marginTop: '20px' }}>
-                  <h3 className="card-title" style={{ fontSize: '1rem', marginBottom: '12px' }}>
-                    📋 Role & Rate Card Details
-                  </h3>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px' }}>
-                    {roleDetailRows().map((r) => (
-                      <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', borderBottom: '1px solid #e2e8f0', paddingBottom: '6px' }}>
-                        <span className="muted" style={{ flex: '0 0 auto' }}>{r.label}</span>
-                        <strong style={{ textAlign: 'right', color: '#0f172a', fontWeight: 700 }}>{r.value}</strong>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Upload Resumes & Screen Card */}
-        <div className="glass-panel">
-          <h2 className="card-title">
-            📄 Candidate Resume Upload & Intake
-          </h2>
-
-          {candidateLimit !== null && (() => {
-            const submittedForReq = shortlistedList.filter((c) => c.requisition_id === selectedReqId).length;
-            const remaining = Math.max(0, candidateLimit - submittedForReq);
-            const reached = submittedForReq >= candidateLimit;
-            return (
-              <p className="muted" style={{ marginBottom: 12 }}>
-                {reached
-                  ? '⚠️ Submission limit reached for this requisition — further candidates will be blocked.'
-                  : `You can apply up to ${candidateLimit} candidates on this requisition (${remaining} remaining).`}
-              </p>
-            );
-          })()}
-
-          <form onSubmit={handleScreenSubmit}>
-            <label className="form-label">
-              Upload Candidate Resume PDF(s)
-            </label>
-            <input
-              type="file"
-              accept=".pdf"
-              multiple
-              onChange={handleFileChange}
-              className="auth-input"
-              style={{ marginBottom: '16px', cursor: 'pointer' }}
-            />
-
-            {files.length > 0 && (
-              <div style={{ marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                {files.map((f, i) => (
-                  <span key={i} className="status-badge status-intake">
-                    📄 {f.name}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {error && <div className="alert alert-error" style={{ marginBottom: '16px' }}>{error}</div>}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="glow-btn"
-              style={{ width: '100%', padding: '14px', borderRadius: '10px', fontSize: '1rem' }}
-            >
-              {loading ? 'AI Screening in Progress...' : '⚡ Screen & Match Candidate Resumes'}
-            </button>
-          </form>
-        </div>
-      </div>
-
-      {/* Screening Results Spotlight */}
-      {screeningResult && (
-        <div className="glass-panel" style={{ marginBottom: '32px', border: '2px solid #2563eb' }}>
-          <h2 className="card-title" style={{ fontSize: '1.25rem', color: '#1d4ed8' }}>
-            🎯 AI Candidate Match Leaderboard
-          </h2>
-
-          {screeningResult.ranked_candidates.map((cand, idx) => (
-            <div
-              key={idx}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: '#f8fafc', borderRadius: '10px', marginBottom: '12px', border: '1px solid #e2e8f0' }}
-            >
-              <div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
-                  <span style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a' }}>
-                    #{cand.rank} {cand.candidate_name}
-                  </span>
-                  <span className="status-badge status-published">
-                    {cand.recommendation}
-                  </span>
-                </div>
-                <div className="muted" style={{ marginTop: '4px' }}>
-                  Email: {cand.candidate_email || 'No email extracted'} &bull; File: {cand.filename}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800, color: '#2563eb' }}>{cand.match_score}%</div>
-                  <div className="muted">Match Score</div>
-                </div>
-
-                <button
-                  onClick={() => handleShortlistCandidate(cand.submission_id)}
-                  className="glow-btn"
-                  style={{ background: 'linear-gradient(135deg, #059669, #10b981)', padding: '10px 18px' }}
-                >
-                  ✓ Submit to Company X HR
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Already Shortlisted Submissions in Database */}
-      <div className="glass-panel">
-        <h2 className="card-title">
-          🏆 Shortlisted Submissions Sent to Company X HR ({shortlistedList.length})
-        </h2>
-
-        {candidateLimit !== null && (
-          <p className="muted" style={{ marginBottom: 16 }}>
-            Submission limit per requisition: <strong>{candidateLimit} candidates</strong>
-          </p>
-        )}
-
-        {shortlistedList.length === 0 ? (
-          <p className="muted">No candidates submitted yet.</p>
-        ) : (
-          <div>
-            {shortlistedList.map((c, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #e2e8f0' }}>
-                <div>
-                  <strong style={{ fontSize: '1rem', color: '#0f172a' }}>{c.candidate_name}</strong>
-                  <div className="muted">
-                    Agency: <strong>{c.vendor_name || 'Vendor Partner'}</strong> &bull; Email: {c.candidate_email}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <span style={{ color: '#2563eb', fontWeight: 800, fontSize: '1.05rem' }}>{c.match_score}%</span>
-                  <span className="status-badge status-published">
-                    Shortlisted in Database
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+function ChipList({ label, items, tone }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="cand-detail-row">
+      <span className="cand-detail-label">{label}</span>
+      <div className="chips">
+        {items.map((s, i) => (
+          <span key={i} className={`chip ${tone}`}>{s}</span>
+        ))}
       </div>
     </div>
   );
 }
+
+const role = (req) => req?.structured_role || {};
+const skillsFor = (req) => role(req).must_have_skills || req?.intent?.tech_stack_hint || [];
+const short = (value, fallback = 'Not specified') => value || fallback;
+
+export default function RecruiterDashboard({ view = 'dashboard' }) {
+  const { user, token } = useAuth();
+  const navigate = useNavigate();
+  const authToken = token || localStorage.getItem('auth_token');
+  const [requisitions, setRequisitions] = useState([]);
+  const [selectedReqId, setSelectedReqId] = useState('');
+  const [fullReq, setFullReq] = useState(null);
+  const [jdText, setJdText] = useState('');
+  const [files, setFiles] = useState([]);
+  const [screeningResult, setScreeningResult] = useState(null);
+  const [shortlisted, setShortlisted] = useState([]);
+  const [shortlistedFilter, setShortlistedFilter] = useState('');
+  const [expandedShortlistedId, setExpandedShortlistedId] = useState(null);
+  const [candidateLimit, setCandidateLimit] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [screening, setScreening] = useState(false);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState('');
+  const [bankSearch, setBankSearch] = useState('');
+  const [skillFilter, setSkillFilter] = useState('all');
+  const [showBankUploader, setShowBankUploader] = useState(false);
+  const [expandedCandidate, setExpandedCandidate] = useState(null);
+
+  const [bankCandidates, setBankCandidates] = useState([]);
+  const [parsingBank, setParsingBank] = useState(false);
+  const [selectedMatchCandidate, setSelectedMatchCandidate] = useState(null);
+  const [matchingReqId, setMatchingReqId] = useState('');
+  const [matching, setMatching] = useState(false);
+  const [showResumeModal, setShowResumeModal] = useState(null);
+
+  const [showJdDetails, setShowJdDetails] = useState(false);
+  const [reqCandidateSearch, setReqCandidateSearch] = useState('');
+  const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+
+  const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
+  const [screenedSubmissions, setScreenedSubmissions] = useState([]);
+  const [screeningProgress, setScreeningProgress] = useState({
+    total: 0,
+    processed: 0,
+    pct: 0,
+    stage: 'Extract',
+  });
+  const [newCandName, setNewCandName] = useState('');
+  const [newCandEmail, setNewCandEmail] = useState('');
+  const [newCandPhone, setNewCandPhone] = useState('');
+  const [newCandTitle, setNewCandTitle] = useState('');
+  const [newCandVendor, setNewCandVendor] = useState('');
+  const [newCandFile, setNewCandFile] = useState(null);
+
+  async function handleAddCandidateSubmit(e) {
+    if (e) e.preventDefault();
+    if (!newCandName.trim()) {
+      return setError('Candidate name is required.');
+    }
+    setParsingBank(true);
+    setError('');
+    
+    const form = new FormData();
+    if (newCandName) form.append('name', newCandName.trim());
+    if (newCandEmail) form.append('email', newCandEmail.trim());
+    if (newCandPhone) form.append('phone', newCandPhone.trim());
+    if (newCandVendor) form.append('vendor_company_name', newCandVendor.trim());
+    if (newCandTitle) form.append('candidate_title', newCandTitle.trim());
+    if (newCandFile) form.append('files', newCandFile);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/candidates/bank/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.detail || data.message || 'Could not save candidate.');
+      }
+      const updatedBank = await request('/candidates/bank', { token: authToken });
+      setBankCandidates(updatedBank || []);
+      
+      setShowAddCandidateModal(false);
+      setNewCandName('');
+      setNewCandEmail('');
+      setNewCandPhone('');
+      setNewCandTitle('');
+      setNewCandVendor('');
+      setNewCandFile(null);
+    } catch (err) {
+      setError(err.message || 'Failed to save candidate.');
+    } finally {
+      setParsingBank(false);
+    }
+  }
+
+  const selected = fullReq || requisitions.find((item) => item.id === selectedReqId);
+  const visibleRequisitions = useMemo(() => requisitions.filter((item) =>
+    item.title?.toLowerCase().includes(search.toLowerCase())), [requisitions, search]);
+  const queued = screeningResult?.ranked_candidates || [];
+  const avgScore = shortlisted.length
+    ? Math.round(shortlisted.reduce((sum, candidate) => sum + (candidate.match_score || 0), 0) / shortlisted.length)
+    : null;
+
+  const shortlistedStats = useMemo(() => {
+    const total = shortlisted.length;
+    const strong = shortlisted.filter((c) => c.recommendation === 'Strong Match').length;
+    const moderate = shortlisted.filter((c) => c.recommendation === 'Moderate Match').length;
+    const avg =
+      total > 0
+        ? shortlisted.reduce((s, c) => s + (c.match_score ?? 0), 0) / total
+        : 0;
+    return { total, strong, moderate, avg };
+  }, [shortlisted]);
+
+  const shortlistedReqOptions = useMemo(() => {
+    const map = {};
+    shortlisted.forEach((c) => {
+      if (!c.requisition_id) return;
+      if (!map[c.requisition_id]) {
+        map[c.requisition_id] = { id: c.requisition_id, title: c.requisition_title || 'Untitled', count: 0 };
+      }
+      map[c.requisition_id].count += 1;
+    });
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [shortlisted]);
+
+  const filteredShortlisted = useMemo(() => {
+    if (!shortlistedFilter) return shortlisted;
+    if (shortlistedFilter === '__none__') return shortlisted.filter((c) => !c.requisition_id);
+    return shortlisted.filter((c) => c.requisition_id === shortlistedFilter);
+  }, [shortlisted, shortlistedFilter]);
+
+  const bankSkills = useMemo(() => {
+    return [...new Set((bankCandidates || []).flatMap((candidate) => candidate.skills || []))];
+  }, [bankCandidates]);
+
+  const filteredBankCandidates = useMemo(() => {
+    return (bankCandidates || []).filter((candidate) => {
+      const name = `${candidate.candidate_name || ''} ${candidate.candidate_email || ''} ${candidate.candidate_title || ''}`.toLowerCase();
+      const skills = candidate.skills || [];
+      const matchText = name.includes(bankSearch.toLowerCase());
+      const matchSkill = skillFilter === 'all' || skills.some((skill) => skill.toLowerCase() === skillFilter.toLowerCase());
+      return matchText && matchSkill;
+    });
+  }, [bankCandidates, bankSearch, skillFilter]);
+
+  const filteredReqCandidates = useMemo(() => {
+    return (bankCandidates || []).filter((candidate) => {
+      const name = `${candidate.candidate_name || ''} ${candidate.candidate_email || ''} ${candidate.candidate_title || ''}`.toLowerCase();
+      const skills = (candidate.skills || []).map(s => s.toLowerCase());
+      const searchLower = reqCandidateSearch.toLowerCase();
+      return name.includes(searchLower) || skills.some(s => s.includes(searchLower));
+    });
+  }, [bankCandidates, reqCandidateSearch]);
+
+  const sortedScreenedSubmissions = useMemo(() => {
+    return [...screenedSubmissions].sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
+  }, [screenedSubmissions]);
+
+  const toggleCandidateSelect = (id) => {
+    setSelectedCandidateIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllCandidates = () => {
+    if (selectedCandidateIds.length === filteredReqCandidates.length) {
+      setSelectedCandidateIds([]);
+    } else {
+      setSelectedCandidateIds(filteredReqCandidates.map((c) => c.id));
+    }
+  };
+
+
+  useEffect(() => {
+    loadWorkspace();
+  }, [authToken]);
+
+  async function loadWorkspace() {
+    setLoading(true);
+    try {
+      const [rawRequisitions, candidateData, limitData, bankData] = await Promise.all([
+        request('/requisitions', { token: authToken }),
+        request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] })),
+        request('/api/settings/candidate-limit', { token: authToken }).catch(() => ({ limit: null })),
+        request('/candidates/bank', { token: authToken }).catch(() => []),
+      ]);
+
+      const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
+      setRequisitions(list);
+      const listShortlisted = Array.isArray(candidateData) ? candidateData : candidateData?.shortlisted_candidates || [];
+      setShortlisted(listShortlisted);
+      setCandidateLimit(limitData?.limit ?? null);
+      setBankCandidates(bankData || []);
+      if (list.length) await selectRequisition(list.find((item) => item.status === 'Published')?.id || list[0].id, list);
+    } catch (err) {
+      setError(err.message || 'Unable to load your recruiter workspace.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function uploadToBank(event) {
+    const uploadedFiles = Array.from(event.target.files || []);
+    if (!uploadedFiles.length) return;
+    
+    setParsingBank(true);
+    setError('');
+    
+    const form = new FormData();
+    uploadedFiles.forEach((file) => form.append('files', file));
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/candidates/bank/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authToken}` },
+        body: form,
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.detail || 'Could not parse resumes.');
+      }
+      const updatedBank = await request('/candidates/bank', { token: authToken });
+      setBankCandidates(updatedBank || []);
+    } catch (err) {
+      setError(err.message || 'Failed to upload and parse resumes.');
+    } finally {
+      setParsingBank(false);
+    }
+  }
+
+  async function deleteBankCandidate(candidateId) {
+    if (!window.confirm('Are you sure you want to delete this candidate from the bank?')) return;
+    setError('');
+    try {
+      const data = await request(`/candidates/bank/${candidateId}`, {
+        method: 'DELETE',
+        token: authToken,
+      });
+      if (data.status === 'success') {
+        setBankCandidates((prev) => prev.filter((c) => c.id !== candidateId));
+      } else {
+        throw new Error(data.message || 'Failed to delete candidate.');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to delete candidate.');
+    }
+  }
+
+  async function handleMatchConfirm() {
+    if (!selectedMatchCandidate || !matchingReqId) return;
+    setMatching(true);
+    setError('');
+    try {
+      const response = await request('/candidates/bank/match', {
+        method: 'POST',
+        token: authToken,
+        body: {
+          candidate_id: selectedMatchCandidate.id,
+          requisition_id: matchingReqId,
+        },
+      });
+      if (response.status === 'success') {
+        alert('Candidate matched and screened successfully!');
+        setSelectedMatchCandidate(null);
+        setMatchingReqId('');
+        navigate('/dashboard/recruiter/requisitions');
+      } else {
+        throw new Error(response.message || 'Failed to match candidate.');
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to match candidate.');
+    } finally {
+      setMatching(false);
+    }
+  }
+
+  async function updateCandidateStatus(sub, newStatus) {
+    try {
+      if (newStatus === 'Shortlisted') {
+        const res = await request('/candidates/shortlist', {
+          method: 'POST',
+          token: authToken,
+          body: {
+            requisition_id: selectedReqId,
+            candidate_name: sub.candidate_name,
+            candidate_email: sub.candidate_email,
+            vendor_name: sub.vendor_name,
+            match_score: sub.match_score,
+            recommendation: sub.recommendation,
+            summary: sub.summary,
+            filename: sub.filename,
+          },
+        });
+        if (res.status === 'success') {
+          setScreenedSubmissions((prev) =>
+            prev.map((item) =>
+              (item.candidate_id === sub.candidate_id || item.id === sub.id)
+                ? { ...item, status: 'Shortlisted', id: res.submission_id }
+                : item
+            )
+          );
+          const data = await request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] }));
+          setShortlisted(Array.isArray(data) ? data : data?.shortlisted_candidates || []);
+        } else {
+          throw new Error(res.message || 'Failed to shortlist candidate.');
+        }
+      } else {
+        const subId = sub.id || sub.submission_id;
+        if (subId && !subId.startsWith('temp_')) {
+          await request(`/candidates/${subId}/status`, {
+            method: 'PATCH',
+            token: authToken,
+            body: { status: newStatus },
+          });
+        }
+        setScreenedSubmissions((prev) =>
+          prev.map((item) => ((item.candidate_id === sub.candidate_id || item.id === sub.id) ? { ...item, status: newStatus } : item))
+        );
+      }
+    } catch (err) {
+      setError(err.message || 'Failed to update candidate status.');
+    }
+  }
+
+  async function runBulkScreening() {
+    if (!selectedCandidateIds.length) return setError('Please select at least one candidate.');
+    if (!selectedReqId) return setError('Please select a requisition.');
+    
+    const totalCount = selectedCandidateIds.length;
+    setScreeningProgress({
+      total: totalCount,
+      processed: 0,
+      pct: 5,
+      stage: 'Extract',
+    });
+    setScreening(true);
+    setError('');
+
+    let currentPct = 5;
+    let currentStage = 'Extract';
+    let currentProcessed = 0;
+
+    const progressInterval = setInterval(() => {
+      currentPct = Math.min(92, currentPct + Math.floor(Math.random() * 5) + 3);
+      currentProcessed = Math.min(totalCount - 1, Math.floor((currentPct / 100) * totalCount));
+
+      if (currentPct < 20) {
+        currentStage = 'Extract';
+      } else if (currentPct < 50) {
+        currentStage = 'LLM Structure';
+      } else if (currentPct < 75) {
+        currentStage = 'GitHub Agent';
+      } else if (currentPct < 90) {
+        currentStage = 'Score';
+      } else {
+        currentStage = 'Rank';
+      }
+
+      setScreeningProgress({
+        total: totalCount,
+        processed: currentProcessed,
+        pct: currentPct,
+        stage: currentStage,
+      });
+    }, 900);
+    
+    try {
+      const response = await request('/candidates/bank/match-bulk', {
+        method: 'POST',
+        token: authToken,
+        body: {
+          candidate_ids: selectedCandidateIds,
+          requisition_id: selectedReqId,
+        },
+      });
+      clearInterval(progressInterval);
+      if (response.status === 'success') {
+        setScreeningProgress({
+          total: totalCount,
+          processed: totalCount,
+          pct: 100,
+          stage: 'Rank',
+        });
+        setSelectedCandidateIds([]);
+        if (Array.isArray(response.screened_candidates) && response.screened_candidates.length) {
+          setScreenedSubmissions(response.screened_candidates);
+        } else {
+          const subs = await request(`/candidates?requisition_id=${selectedReqId}`, { token: authToken }).catch(() => []);
+          setScreenedSubmissions(subs || []);
+        }
+      } else {
+        throw new Error(response.message || 'Failed to complete screening.');
+      }
+    } catch (err) {
+      clearInterval(progressInterval);
+      setError(err.message || 'Bulk candidate screening failed.');
+    } finally {
+      setTimeout(() => {
+        setScreening(false);
+      }, 600);
+    }
+  }
+
+  function formatJd(req) {
+    if (req?.generated_jd_markdown) return req.generated_jd_markdown;
+    const data = role(req);
+    return [
+      `# ${data.title || req?.title || 'Untitled role'}`,
+      data.summary,
+      skillsFor(req).length ? `Must-have skills: ${skillsFor(req).join(', ')}` : '',
+      data.experience ? `Experience: ${data.experience}` : '',
+      data.location || data.work_locations?.join(', '),
+    ].filter(Boolean).join('\n\n');
+  }
+
+  async function selectRequisition(id, source = requisitions) {
+    const summary = source.find((item) => item.id === id);
+    setSelectedReqId(id);
+    setFullReq(summary || null);
+    setJdText(formatJd(summary));
+    try {
+      const details = await request(`/requisitions/${id}`, { token: authToken });
+      setFullReq(details);
+      setJdText(formatJd(details));
+    } catch {
+      // The summarized published requisition remains fully usable for screening.
+    }
+    try {
+      const subs = await request(`/candidates?requisition_id=${id}`, { token: authToken }).catch(() => []);
+      setScreenedSubmissions(subs || []);
+    } catch {
+      setScreenedSubmissions([]);
+    }
+  }
+
+  async function screenCandidates(event) {
+    event.preventDefault();
+    if (!selectedReqId || !jdText.trim()) return setError('Select a requisition or add a job description first.');
+    if (!files.length) return setError('Add at least one PDF resume to begin screening.');
+    setError('');
+    setScreening(true);
+    const form = new FormData();
+    form.append('jd', jdText);
+    form.append('requisition_id', selectedReqId);
+    form.append('vendor_name', user?.tenant_name || user?.name || 'Consultancy partner');
+    files.forEach((file) => form.append('files', file));
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/screen-resumes`, {
+        method: 'POST', headers: { Authorization: `Bearer ${authToken}` }, body: form,
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') throw new Error(data.detail || 'Screening could not be completed.');
+      setScreeningResult(data.analysis);
+      setFiles([]);
+    } catch (err) {
+      setError(err.message || 'Candidate screening failed.');
+    } finally {
+      setScreening(false);
+    }
+  }
+
+  async function shortlist(candidate) {
+    try {
+      await request('/api/approve-candidate', {
+        method: 'POST', token: authToken,
+        body: { submission_id: candidate.submission_id, action: 'shortlist', vendor_name: user?.tenant_name || user?.name },
+      });
+      setScreeningResult((result) => ({ ...result, ranked_candidates: result.ranked_candidates.filter((item) => item.submission_id !== candidate.submission_id) }));
+      const data = await request('/api/candidates/shortlisted', { token: authToken });
+      setShortlisted(Array.isArray(data) ? data : data?.shortlisted_candidates || []);
+    } catch (err) {
+      setError(err.message || 'Unable to shortlist this candidate.');
+    }
+  }
+
+  const remaining = candidateLimit == null ? null : Math.max(0, candidateLimit - shortlisted.filter((candidate) => candidate.requisition_id === selectedReqId).length);
+  const detail = role(selected);
+
+  const showDashboard = view === 'dashboard';
+  const showRequisitions = view === 'requisitions';
+  const showCandidates = view === 'candidates';
+  const showShortlisted = view === 'shortlisted';
+
+  return (
+    <div className="page recruiter-page">
+      {showDashboard && <>
+        <WelcomeBanner title="Recruiter Consultancy Portal" subtitle={`Agency: ${user?.tenant_name || 'Your consultancy'} · Manage open roles, screen resume PDFs, and deliver exceptional talent.`}>
+          <a className="recruiter-banner-link" href="/dashboard/recruiter/requisitions">Start candidate screening <span>→</span></a>
+        </WelcomeBanner>
+        <section className="stat-grid recruiter-stats" aria-label="Recruiter summary">
+          <StatCard label="Active job positions" value={requisitions.length} icon={Icons.briefcase} tint="tint-ink" delta="Available for matching" deltaTone="ink" />
+          <StatCard label="Resumes processed" value={queued.length} icon={Icons.layers} tint="tint-blue" delta="AI screening queue" deltaTone="blue" />
+          <StatCard label="Shortlisted to HR" value={shortlisted.length} icon={Icons.check} tint="tint-green" delta="Delivered to client" deltaTone="green" />
+          <StatCard label="Average match score" value={avgScore == null ? '—' : `${avgScore}%`} icon={Icons.shield} tint="tint-violet" delta="Talent quality benchmark" deltaTone="violet" />
+        </section>
+      </>}
+
+      {error && <div className="alert alert-error recruiter-alert">{error}<button onClick={() => setError('')}>Dismiss</button></div>}
+
+      {showRequisitions && (
+        <section className="recruiter-workspace-stacked" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          <article className="recruiter-role-hero" style={{ background: '#111827', borderRadius: '18px', padding: '30px', color: '#ffffff', position: 'relative' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ background: '#10b981', color: '#ffffff', fontSize: '0.72rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Published</span>
+                <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.9rem' }}>{selected?.company_name || selected?.company?.name || 'Bearitt'}</span>
+              </div>
+              <button
+                onClick={() => setShowJdDetails(!showJdDetails)}
+                style={{ background: '#ffffff', color: '#1e293b', border: 0, padding: '8px 18px', borderRadius: '999px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}
+              >
+                👁 View Details
+              </button>
+            </div>
+            
+            <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff', marginBottom: '24px', letterSpacing: '-0.025em' }}>
+              {selected?.title || 'QA Automation Engineer'}
+            </h1>
+            
+            <div className="role-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '20px' }}>
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rate Range</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                  {detail.rate_card_cap || detail.range_vendors_see || 'Rate Card Ceiling'}
+                </strong>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                  {short(detail.duration || detail.contract_duration || detail.engagement_duration, '6 months')}
+                </strong>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Max Notice</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                  {short(detail.max_notice_period || detail.notice_period, '30 Days Max')}
+                </strong>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.88rem', color: '#cbd5e1', lineHeight: '1.6' }}>
+              <div>
+                <strong>Experience & Tech Stack:</strong> {detail.experience || detail.seniority || '3–6 yrs'} • {skillsFor(selected).length ? skillsFor(selected).join(', ') : 'Selenium, Java/Python, Playwright'}
+              </div>
+              <div style={{ marginTop: '8px' }}>
+                <strong>Location & Work Model:</strong> {detail.location || 'Chennai'} • {detail.work_model || 'Hybrid'}
+              </div>
+            </div>
+
+            {/* Collapsible JD Details */}
+            {showJdDetails && (
+              <div style={{ marginTop: '20px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px', padding: '20px', maxHeight: '350px', overflowY: 'auto' }}>
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#fff', marginBottom: '10px' }}>Full Job Description</h3>
+                <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.5' }}>
+                  {jdText}
+                </pre>
+              </div>
+            )}
+          </article>
+
+          <section className="requisition-rail glass-panel" style={{ width: '100%', padding: '20px 24px', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>Open requirements</h2>
+                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '2px 0 0' }}>{requisitions.length} across clients</p>
+              </div>
+              <input
+                className="auth-input recruiter-search"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Filter requirements…"
+                aria-label="Filter requirements"
+                style={{ width: '280px', padding: '9px 14px', fontSize: '0.88rem' }}
+              />
+            </div>
+
+            <div className="requisition-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+              {loading ? (
+                <p className="muted">Loading opportunities…</p>
+              ) : visibleRequisitions.length ? (
+                visibleRequisitions.map((item) => {
+                  const isSelected = item.id === selectedReqId;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => selectRequisition(item.id)}
+                      className={`requisition-item ${isSelected ? 'selected' : ''}`}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '16px 18px',
+                        borderRadius: '12px',
+                        border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                        background: isSelected ? '#eff6ff' : '#ffffff',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: isSelected ? '0 4px 12px rgba(37, 99, 235, 0.12)' : 'none'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ color: isSelected ? '#1e40af' : '#10213d', fontSize: '0.92rem', fontWeight: 700 }}>{item.title || 'Untitled role'}</strong>
+                        <span className="published-status-badge" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>Published</span>
+                      </div>
+                      <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '6px' }}>
+                        {item.company_name || item.company?.name || 'Client'} · Published
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <p className="muted">No published roles found.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="candidate-bank glass-panel" style={{ marginTop: '24px' }}>
+            <div className="recruiter-section-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+              <div>
+                <h2>🏢 Choose Candidate(s) from Candidates Bank</h2>
+                <p>Select existing candidates from your Talent Repository to run AI Screening for this role.</p>
+              </div>
+              <div>
+                <input
+                  className="auth-input"
+                  value={reqCandidateSearch}
+                  onChange={(e) => setReqCandidateSearch(e.target.value)}
+                  placeholder="Search candidates by name or skill..."
+                  style={{ width: '260px', padding: '10px 14px', fontSize: '0.88rem' }}
+                />
+              </div>
+            </div>
+
+            {screening && (
+              <div
+                style={{
+                  background: '#0a0f1d',
+                  border: '1px solid #1e293b',
+                  borderRadius: '16px',
+                  padding: '20px 24px',
+                  marginBottom: '20px',
+                  marginTop: '12px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '12px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: '#f8fafc',
+                      letterSpacing: '-0.01em',
+                    }}
+                  >
+                    {screeningProgress.pct >= 100
+                      ? 'Finalising results...'
+                      : `Processing candidates (${screeningProgress.pct}%)...`}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: '#38bdf8',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {screeningProgress.processed} / {screeningProgress.total}
+                  </span>
+                </div>
+
+                {/* Progress bar track */}
+                <div
+                  style={{
+                    height: '5px',
+                    background: '#1e293b',
+                    borderRadius: '999px',
+                    overflow: 'hidden',
+                    marginBottom: '16px',
+                    width: '100%',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${screeningProgress.pct}%`,
+                      background: 'linear-gradient(90deg, #2563eb 0%, #38bdf8 100%)',
+                      borderRadius: '999px',
+                      transition: 'width 0.4s ease-in-out',
+                    }}
+                  />
+                </div>
+
+                {/* Pipeline stages */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {['Extract', 'LLM Structure', 'GitHub Agent', 'Score', 'Rank'].map((stageName, idx, arr) => {
+                    const isCurrent = screeningProgress.stage === stageName;
+                    const stageOrder = ['Extract', 'LLM Structure', 'GitHub Agent', 'Score', 'Rank'];
+                    const currentIdx = stageOrder.indexOf(screeningProgress.stage);
+                    const isPassed = currentIdx > idx;
+
+                    return (
+                      <Fragment key={stageName}>
+                        <span
+                          style={{
+                            fontSize: '11.5px',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontWeight: 600,
+                            background: isCurrent
+                              ? 'rgba(56, 189, 248, 0.2)'
+                              : isPassed
+                              ? 'rgba(37, 99, 235, 0.15)'
+                              : 'rgba(30, 41, 59, 0.6)',
+                            border: isCurrent
+                              ? '1px solid #38bdf8'
+                              : isPassed
+                              ? '1px solid #2563eb'
+                              : '1px solid #1e293b',
+                            color: isCurrent ? '#38bdf8' : isPassed ? '#93c5fd' : '#64748b',
+                            transition: 'all 0.3s ease',
+                          }}
+                        >
+                          {stageName}
+                        </span>
+                        {idx < arr.length - 1 && (
+                          <span style={{ color: '#475569', fontSize: '12px' }}>→</span>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {filteredReqCandidates.length > 0 ? (
+              <div className="table-container" style={{ marginTop: '16px', overflowX: 'auto' }}>
+                <table className="recruiter-bank-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                      <th style={{ padding: '12px 16px', width: '48px' }}>
+                        <input
+                          type="checkbox"
+                          checked={filteredReqCandidates.length > 0 && selectedCandidateIds.length === filteredReqCandidates.length}
+                          onChange={toggleSelectAllCandidates}
+                          style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                        />
+                      </th>
+                      <th style={{ padding: '12px 16px' }}>CANDIDATE NAME & TITLE</th>
+                      <th style={{ padding: '12px 16px' }}>CONTACT INFO</th>
+                      <th style={{ padding: '12px 16px' }}>SKILLS & TECH STACK</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredReqCandidates.map((candidate) => {
+                      const isSelected = selectedCandidateIds.includes(candidate.id);
+                      return (
+                        <tr
+                          key={candidate.id}
+                          style={{ borderBottom: '1px solid #f1f5f9', background: isSelected ? '#f8fafc' : 'transparent', transition: 'background-color 0.2s' }}
+                        >
+                          <td style={{ padding: '16px' }}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleCandidateSelect(candidate.id)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div className="candidate-avatar" style={{ flexShrink: 0, width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#e0e7ff', color: '#3849a2', fontWeight: 800, fontSize: '0.85rem' }}>
+                                {(candidate.candidate_name || '?').slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>{candidate.candidate_name}</div>
+                                <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '2px' }}>{candidate.candidate_title || 'Software Engineer'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#475569' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ opacity: 0.7 }}>📧</span> {candidate.candidate_email || 'No email'}
+                              </div>
+                              {candidate.candidate_phone && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ opacity: 0.7 }}>📞</span> {candidate.candidate_phone}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {(candidate.skills || []).slice(0, 4).map((skill, idx) => (
+                                <span key={idx} style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
+                                  {skill}
+                                </span>
+                              ))}
+                              {(candidate.skills || []).length > 4 && (
+                                <span style={{ background: '#eff6ff', color: '#2563eb', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
+                                  +{candidate.skills.length - 4} more
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="recruiter-empty" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>No candidates found in bank</h3>
+                <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Go to Candidates Bank tab to upload and parse resume PDFs.</p>
+              </div>
+            )}
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+              <div style={{ fontSize: '0.9rem', color: '#475569', fontWeight: 600 }}>
+                Selected: {selectedCandidateIds.length} candidate(s)
+              </div>
+              <button
+                className="glow-btn"
+                onClick={runBulkScreening}
+                disabled={screening || !selectedCandidateIds.length}
+                style={{ background: '#475569', color: '#fff', border: 0, padding: '12px 24px', borderRadius: '8px', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                ⚡ Run AI Candidate Screening →
+              </button>
+            </div>
+          </section>
+
+          {/* AI Screened Candidates List Section */}
+          <section className="screened-candidates-section glass-panel" style={{ width: '100%', padding: '24px', borderRadius: '16px', marginTop: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1e293b', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  📊 AI Screened Candidates
+                </h2>
+                <p style={{ fontSize: '0.84rem', color: '#64748b', margin: '4px 0 0' }}>
+                  Screened results & AI match scores for <strong>{selected?.title || 'Selected Role'}</strong>
+                </p>
+              </div>
+              <div style={{ background: '#f1f5f9', padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: 700, color: '#475569' }}>
+                Total Screened: {screenedSubmissions.length}
+              </div>
+            </div>
+
+            {sortedScreenedSubmissions.length ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                {sortedScreenedSubmissions.map((sub) => {
+                  const score = sub.match_score || 0;
+                  const scoreColor = score >= 70 ? '#059669' : score >= 50 ? '#2563eb' : '#d97706';
+                  const scoreBg = score >= 70 ? '#ecfdf5' : score >= 50 ? '#eff6ff' : '#fffbe5';
+                  const isShortlisted = sub.status === 'Shortlisted';
+                  const isRejected = sub.status === 'Rejected';
+
+                  return (
+                    <div
+                      key={sub.id}
+                      style={{
+                        background: '#ffffff',
+                        border: isShortlisted ? '2px solid #10b981' : isRejected ? '1px solid #fca5a5' : '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '20px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '14px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: scoreBg, color: scoreColor, fontWeight: 800, fontSize: '1.05rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {(sub.candidate_name || '?').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {sub.candidate_name}
+                              <span style={{ background: scoreBg, color: scoreColor, fontSize: '0.78rem', fontWeight: 800, padding: '4px 10px', borderRadius: '999px', border: `1px solid ${scoreColor}33` }}>
+                                ⚡ {score}% Match
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '4px' }}>
+                              📧 {sub.candidate_email || 'No Email'} · Vendor: <strong>{sub.vendor_name || 'Direct Candidate'}</strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {isShortlisted ? (
+                            <span style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: '0.82rem', fontWeight: 800, padding: '6px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              ✓ Shortlisted (Sent to HR)
+                            </span>
+                          ) : isRejected ? (
+                            <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: '0.82rem', fontWeight: 800, padding: '6px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              ✕ Rejected
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => updateCandidateStatus(sub, 'Shortlisted')}
+                                style={{ background: '#10b981', color: '#ffffff', border: 0, padding: '8px 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)' }}
+                              >
+                                ⭐ Shortlist (Submit to HR)
+                              </button>
+                              <button
+                                onClick={() => updateCandidateStatus(sub, 'Rejected')}
+                                style={{ background: '#ffffff', color: '#dc2626', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                              >
+                                ❌ Reject
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px 16px', fontSize: '0.85rem', color: '#334155', lineHeight: '1.5', border: '1px solid #f1f5f9' }}>
+                        <strong>AI Recommendation:</strong> {sub.recommendation || sub.summary || 'Qualified candidate based on resume evaluation.'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div style={{ padding: '36px 20px', textAlign: 'center', background: '#fafafa', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0 }}>
+                  No candidates screened yet for <strong>{selected?.title || 'this role'}</strong>. Select candidates from the Candidates Bank above and click <strong>⚡ Run AI Candidate Screening</strong>.
+                </p>
+              </div>
+            )}
+          </section>
+        </section>
+      )}
+
+      {showCandidates && (
+        <div className="candidates-bank-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <section className="recruiter-page-heading" style={{ margin: 0 }}>
+            <span>Talent repository</span>
+            <h1>Candidates Bank</h1>
+            <p>Manage company talent repository, upload PDF resumes with local Ollama AI extraction, and preview candidate profiles.</p>
+          </section>
+          <div>
+            <button
+              className="glow-btn"
+              onClick={() => {
+                setNewCandVendor(user?.tenant_name || 'Vendor A');
+                setShowAddCandidateModal(true);
+              }}
+              style={{ cursor: 'pointer', padding: '12px 24px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px', border: 0, background: '#2563eb', color: '#fff' }}
+            >
+              <span>+ Add Candidate</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showCandidates && (
+        <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary" style={{ marginBottom: '24px' }}>
+          <StatCard
+            label="TOTAL CANDIDATES IN BANK"
+            value={bankCandidates.length}
+            icon={Icons.users || Icons.layers}
+            tint="tint-ink"
+            delta="Company Talent Repository"
+            deltaTone="ink"
+          />
+          <StatCard
+            label="TECHNICAL ROLES"
+            value={(() => {
+              const uniqueTitles = [...new Set(bankCandidates.map(c => c.candidate_title || 'Software Engineer').filter(Boolean))];
+              return uniqueTitles.length > 0 ? `${uniqueTitles.length}+` : '0+';
+            })()}
+            icon={Icons.briefcase}
+            tint="tint-blue"
+            delta={(() => {
+              const uniqueTitles = [...new Set(bankCandidates.map(c => c.candidate_title || 'Software Engineer').filter(Boolean))];
+              return uniqueTitles.slice(0, 3).join(', ') || 'Frontend, Backend, Design';
+            })()}
+            deltaTone="blue"
+          />
+          <StatCard
+            label="AUTO-PARSED RESUMES"
+            value={bankCandidates.length}
+            icon={Icons.layers}
+            tint="tint-violet"
+            delta="Ollama LLM (llama3.2:3b) Parsed"
+            deltaTone="violet"
+          />
+          <StatCard
+            label="READY FOR MATCHING"
+            value="100%"
+            icon={Icons.check}
+            tint="tint-green"
+            delta="Available for Requisitions"
+            deltaTone="green"
+          />
+        </section>
+      )}
+
+      {showCandidates && (
+        <section className="recruiter-results glass-panel recruiter-bank-results">
+          <div className="recruiter-section-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+            <div>
+              <h2>🏢 Candidate Talent Pool ({bankCandidates.length})</h2>
+              <p>Click any candidate row to view full resume & profile details.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+              <input
+                className="auth-input recruiter-bank-search"
+                value={bankSearch}
+                onChange={(event) => setBankSearch(event.target.value)}
+                placeholder="Search candidate name"
+                style={{ width: '220px', padding: '10px 14px', fontSize: '0.88rem' }}
+              />
+              <select
+                className="auth-input recruiter-bank-skill-filter"
+                value={skillFilter}
+                onChange={(event) => setSkillFilter(event.target.value)}
+                style={{ width: '180px', padding: '10px 14px', fontSize: '0.88rem', height: '40px' }}
+              >
+                <option value="all">Filter Skill: All</option>
+                {bankSkills.map((skill) => (
+                  <option key={skill} value={skill}>{skill}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {parsingBank && (
+            <div className="bank-parsing-overlay" style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fbff', border: '1.5px dashed #b8c7dd', borderRadius: '12px', marginBottom: '20px', marginTop: '10px' }}>
+              <span className="spinner" style={{ display: 'inline-block', width: '20px', height: '20px', border: '2px solid #ccc', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginRight: '10px', verticalAlign: 'middle' }} />
+              <strong style={{ color: '#29466e' }}>Parsing resumes using Ollama AI extraction...</strong>
+            </div>
+          )}
+
+          {filteredBankCandidates.length > 0 ? (
+            <div className="table-container" style={{ marginTop: '16px', overflowX: 'auto' }}>
+              <table className="recruiter-bank-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.05em' }}>
+                    <th style={{ padding: '12px 16px' }}>CANDIDATE NAME & TITLE</th>
+                    <th style={{ padding: '12px 16px' }}>CONTACT INFO</th>
+                    <th style={{ padding: '12px 16px' }}>VENDOR / COMPANY</th>
+                    <th style={{ padding: '12px 16px' }}>SKILLS & TECH STACK</th>
+                    <th style={{ padding: '12px 16px' }}>ADDED DATE</th>
+                    <th style={{ padding: '12px 16px' }}>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBankCandidates.map((candidate) => {
+                    const isExpanded = expandedCandidate === candidate.id;
+                    return (
+                      <Fragment key={candidate.id}>
+                        <tr
+                          onClick={() => setExpandedCandidate(isExpanded ? null : candidate.id)}
+                          style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }}
+                          className={`candidate-table-row ${isExpanded ? 'row-expanded' : ''}`}
+                        >
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div className="candidate-avatar" style={{ flexShrink: 0, width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#e0e7ff', color: '#3849a2', fontWeight: 800, fontSize: '0.85rem' }}>
+                                {(candidate.candidate_name || '?').slice(0, 2).toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>{candidate.candidate_name}</div>
+                                <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '2px' }}>{candidate.candidate_title || 'Software Engineer'}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#475569' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span style={{ opacity: 0.7 }}>📧</span> {candidate.candidate_email || 'No email'}
+                              </div>
+                              {candidate.candidate_phone && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <span style={{ opacity: 0.7 }}>📞</span> {candidate.candidate_phone}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px', fontSize: '0.85rem' }}>
+                            <span style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              🏢 {candidate.vendor_company_name || user?.tenant_name || 'Vendor A'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '16px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {(candidate.skills || []).slice(0, 4).map((skill, idx) => (
+                                <span key={idx} style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
+                                  {skill}
+                                </span>
+                              ))}
+                              {(candidate.skills || []).length > 4 && (
+                                <span style={{ background: '#eff6ff', color: '#2563eb', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
+                                  +{candidate.skills.length - 4} more
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#64748b' }}>
+                            {candidate.created_at ? candidate.created_at.split('T')[0] : '—'}
+                          </td>
+                          <td style={{ padding: '16px' }} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                              <button
+                                className="view-resume-btn glow-btn"
+                                onClick={() => setShowResumeModal(candidate)}
+                                style={{ background: '#1e293b', padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', cursor: 'pointer', color: '#fff', border: 0 }}
+                              >
+                                View Resume
+                              </button>
+                              <button
+                                className="match-candidate-btn glow-btn"
+                                onClick={() => {
+                                  setSelectedMatchCandidate(candidate);
+                                  setMatchingReqId(requisitions[0]?.id || '');
+                                }}
+                                style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                ⚡ Match
+                              </button>
+                              <button
+                                onClick={() => deleteBankCandidate(candidate.id)}
+                                style={{ background: 'none', border: 0, color: '#ef4444', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="expanded-details-row" style={{ background: '#f8fafc' }}>
+                            <td colSpan="5" style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+                              <div style={{ display: 'grid', gap: '16px' }}>
+                                <div>
+                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Professional Summary</h4>
+                                  <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>{candidate.summary || 'No summary available.'}</p>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.82rem', color: '#475569' }}>
+                                  <div>
+                                    <strong>All Skills:</strong> {(candidate.skills || []).join(', ')}
+                                  </div>
+                                  <div>
+                                    <strong>Resume Filename:</strong> {candidate.filename || 'N/A'}
+                                  </div>
+                                </div>
+                                <div>
+                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Raw Resume Text</h4>
+                                  <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '250px', overflowY: 'auto', background: '#f1f5f9', padding: '16px', borderRadius: '8px', fontSize: '0.75rem', marginTop: '6px', fontFamily: 'monospace', border: '1px solid #e2e8f0', color: '#334155' }}>
+                                    {candidate.extracted_text || 'No text extracted.'}
+                                  </pre>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="recruiter-empty" style={{ padding: '60px 20px', textAlign: 'center' }}>
+              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: '#94a3b8' }}>{Icons.users}</div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>No candidates found</h3>
+              <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Upload resume PDFs to your Candidates Bank to populate your talent repository.</p>
+            </div>
+          )}
+        </section>
+      )}
+
+      {showShortlisted && (
+        <div className="shortlisted-page-content" style={{ display: 'grid', gap: '20px' }}>
+          <WelcomeBanner
+            title="Shortlisted Candidates"
+            subtitle="Candidates submitted to client HR across all requisitions. Connected directly to candidate_submissions database."
+          />
+
+          <div className="stat-grid recruiter-stats" aria-label="Shortlisted summary">
+            <StatCard label="Total Shortlisted" value={shortlistedStats.total} icon={Icons.check} tint="tint-green" />
+            <StatCard label="Strong Matches" value={shortlistedStats.strong} icon={Icons.briefcase} tint="tint-blue" />
+            <StatCard label="Moderate Matches" value={shortlistedStats.moderate} icon={Icons.layers} tint="tint-amber" />
+            <StatCard label="Avg Match Score" value={shortlistedStats.avg ? Math.round(shortlistedStats.avg) + '%' : '—'} icon={Icons.users} tint="tint-violet" />
+          </div>
+
+          {shortlistedReqOptions.length > 0 && (
+            <div className="filter-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#fff', padding: '12px 18px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+              <label className="form-label" style={{ marginBottom: 0, fontSize: '0.85rem', fontWeight: 600, color: '#475569' }}>Filter by Requisition:</label>
+              <select className="auth-input select-sm" style={{ maxWidth: '320px' }} value={shortlistedFilter} onChange={(e) => setShortlistedFilter(e.target.value)}>
+                <option value="">All Requisitions ({shortlisted.length})</option>
+                {shortlistedReqOptions.map((r) => (
+                  <option key={r.id} value={r.id}>{r.title} ({r.count})</option>
+                ))}
+                {shortlisted.some((c) => !c.requisition_id) && <option value="__none__">No requisition linked</option>}
+              </select>
+            </div>
+          )}
+
+          <section className="recruiter-results glass-panel">
+            <div className="recruiter-section-heading">
+              <div>
+                <h2>{queued.length ? 'AI Screening Results' : 'Shortlisted Candidates Queue'}</h2>
+                <p>{queued.length ? 'Review AI-ranked talent and submit the best profiles to HR.' : 'Candidates fetched from database table candidate_submissions.'}</p>
+              </div>
+            </div>
+
+            {queued.length ? (
+              <div className="candidate-result-list">
+                {queued.map((candidate, index) => (
+                  <div className="candidate-result" key={candidate.submission_id || candidate.id || index}>
+                    <div className="candidate-rank">{index + 1}</div>
+                    <div className="candidate-result-main">
+                      <strong>{candidate.candidate_name || candidate.filename}</strong>
+                      <span>{candidate.candidate_email || candidate.filename} · {candidate.recommendation || 'AI reviewed'}</span>
+                    </div>
+                    <div className="candidate-score">
+                      <b>{candidate.match_score ?? '—'}{candidate.match_score != null && '%'}</b>
+                      <span>Match score</span>
+                    </div>
+                    <button className="glow-btn shortlist-btn" onClick={() => shortlist(candidate)}>Submit to HR</button>
+                  </div>
+                ))}
+              </div>
+            ) : filteredShortlisted.length ? (
+              <div className="table-card glass-panel" style={{ overflowX: 'auto', borderRadius: '14px' }}>
+                <table className="data-table cand-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>Candidate</th>
+                      <th>Vendor</th>
+                      <th>Requisition</th>
+                      <th>Company</th>
+                      <th>Match Score</th>
+                      <th>Recommendation</th>
+                      <th>Date</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredShortlisted.map((c) => {
+                      const cid = c.submission_id || c.id;
+                      const isExpanded = expandedShortlistedId === cid;
+                      return (
+                        <Fragment key={cid}>
+                          <tr className="clickable-row" onClick={() => setExpandedShortlistedId(isExpanded ? null : cid)}>
+                            <td className="td-title">
+                              <strong>{c.candidate_name || 'Candidate'}</strong>
+                              {c.candidate_email && <div className="cand-email">{c.candidate_email}</div>}
+                            </td>
+                            <td className="td-company">{c.vendor_name || '—'}</td>
+                            <td className="td-company">{c.requisition_title || <span className="muted">General</span>}</td>
+                            <td className="td-company">{c.company_name || '—'}</td>
+                            <td style={{ minWidth: 130 }}><ScoreBar score={c.match_score} /></td>
+                            <td><RecommendationBadge recommendation={c.recommendation} /></td>
+                            <td className="td-date">{c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}</td>
+                            <td className="td-action"><span className="row-action" style={{ cursor: 'pointer', fontWeight: 600, color: '#3b82f6' }}>{isExpanded ? 'Hide' : 'Details'}</span></td>
+                          </tr>
+                          {isExpanded && (
+                            <tr className="cand-detail-row-tr">
+                              <td colSpan="8" style={{ background: '#f8fafc', padding: '16px 24px', borderBottom: '1px solid #e2e8f0' }}>
+                                <div className="cand-detail" style={{ display: 'grid', gap: '12px' }}>
+                                  {c.summary && <p className="cand-summary" style={{ fontSize: '0.88rem', color: '#334155' }}><strong>AI Summary:</strong> {c.summary}</p>}
+                                  <div className="cand-detail-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <ChipList label="Matched Skills" items={c.matched_skills} tone="chip-primary" />
+                                    <ChipList label="Missing Skills" items={c.missing_skills} tone="chip-neutral" />
+                                  </div>
+                                  {c.hiring_manager_notes && (
+                                    <div className="cand-detail-row" style={{ fontSize: '0.85rem', color: '#475569' }}>
+                                      <span className="cand-detail-label" style={{ fontWeight: 700 }}>Hiring Manager Notes: </span>
+                                      <span>{c.hiring_manager_notes}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="recruiter-empty" style={{ padding: '48px 16px', textAlign: 'center' }}>
+                <div style={{ width: '44px', margin: '0 auto 12px', color: '#94a3b8' }}>{Icons.users}</div>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#172033', marginBottom: '6px' }}>No shortlisted candidates found</h3>
+                <p style={{ color: '#8fa1bb', fontSize: '0.88rem' }}>Run AI screening on a resume PDF, then submit the strongest profiles to HR.</p>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* Match Modal */}
+      {selectedMatchCandidate && (
+        <div className="modal-overlay" onClick={() => setSelectedMatchCandidate(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
+          <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', width: '90%', padding: '24px', background: '#fff', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>Match {selectedMatchCandidate.candidate_name}</h3>
+              <button onClick={() => setSelectedMatchCandidate(null)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
+            </div>
+            <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
+              <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>Select an open job position to screen <strong>{selectedMatchCandidate.candidate_name}</strong> against using AI extraction and ranking.</p>
+              <div>
+                <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '6px' }}>Select Requisition</label>
+                <select
+                  className="auth-input"
+                  value={matchingReqId}
+                  onChange={(e) => setMatchingReqId(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                >
+                  {requisitions.map((req) => (
+                    <option key={req.id} value={req.id}>{req.title} ({req.company_name || 'Client'})</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                <button
+                  onClick={() => setSelectedMatchCandidate(null)}
+                  disabled={matching}
+                  style={{ background: '#f1f5f9', color: '#475569', border: 0, padding: '10px 16px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="glow-btn"
+                  onClick={handleMatchConfirm}
+                  disabled={matching || !matchingReqId}
+                  style={{ background: '#1e293b', color: '#fff', border: 0, padding: '10px 16px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  {matching ? 'Matching...' : '⚡ Confirm Match'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Resume Preview Modal */}
+      {showResumeModal && (
+        <div className="modal-overlay" onClick={() => setShowResumeModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
+          <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%', padding: '28px', background: '#fff', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>Resume Profile: {showResumeModal.candidate_name}</h3>
+              <button onClick={() => setShowResumeModal(null)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
+            </div>
+            <div style={{ marginTop: '20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '8px', display: 'grid', gap: '20px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <div>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Role/Title</span>
+                  <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_title || 'N/A'}</strong>
+                </div>
+                <div>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Vendor Company</span>
+                  <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.vendor_company_name || 'N/A'}</strong>
+                </div>
+                <div>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Email</span>
+                  <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_email || 'N/A'}</strong>
+                </div>
+                {showResumeModal.candidate_phone && (
+                  <div>
+                    <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Phone</span>
+                    <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_phone}</strong>
+                  </div>
+                )}
+              </div>
+              <div>
+                <h4 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Professional Summary</h4>
+                <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>
+                  {showResumeModal.summary || 'No summary extracted.'}
+                </p>
+              </div>
+              <div>
+                <h4 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Extracted Skills</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {(showResumeModal.skills || []).map((skill, idx) => (
+                    <span key={idx} style={{ background: '#edf5ff', color: '#2563eb', fontSize: '0.75rem', fontWeight: 600, padding: '4px 10px', borderRadius: '6px' }}>
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <h4 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Full Resume Text</h4>
+                <pre style={{ whiteSpace: 'pre-wrap', background: '#f1f5f9', padding: '16px', borderRadius: '8px', fontSize: '0.78rem', marginTop: '6px', fontFamily: 'monospace', maxHeight: '250px', overflowY: 'auto', border: '1px solid #e2e8f0', color: '#334155' }}>
+                  {showResumeModal.extracted_text || 'No text extracted.'}
+                </pre>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+                <button
+                  className="glow-btn"
+                  onClick={() => setShowResumeModal(null)}
+                  style={{ background: '#1e293b', color: '#fff', border: 0, padding: '10px 20px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Add Candidate Modal */}
+      {showAddCandidateModal && (
+        <div className="modal-overlay" onClick={() => setShowAddCandidateModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
+          <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', width: '90%', padding: '24px', background: '#fff', borderRadius: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>👤 Add New Candidate</h3>
+              <button onClick={() => setShowAddCandidateModal(false)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
+            </div>
+            
+            <form onSubmit={handleAddCandidateSubmit} style={{ marginTop: '16px', display: 'grid', gap: '14px' }}>
+              <div>
+                <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Candidate Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. John Doe"
+                  value={newCandName}
+                  onChange={(e) => setNewCandName(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Email Address
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="john@example.com"
+                    value={newCandEmail}
+                    onChange={(e) => setNewCandEmail(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Phone Number
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="+1 555-0199"
+                    value={newCandPhone}
+                    onChange={(e) => setNewCandPhone(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Vendor / Company Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Acme Staffing"
+                    value={newCandVendor}
+                    onChange={(e) => setNewCandVendor(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                  />
+                </div>
+
+                <div>
+                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Job Title / Role
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Senior React Developer"
+                    value={newCandTitle}
+                    onChange={(e) => setNewCandTitle(e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Upload Resume (PDF - Optional)
+                </label>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(e) => setNewCandFile(e.target.files?.[0] || null)}
+                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCandidateModal(false)}
+                  disabled={parsingBank}
+                  style={{ background: '#f1f5f9', color: '#475569', border: 0, padding: '10px 16px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="glow-btn"
+                  disabled={parsingBank || !newCandName.trim()}
+                  style={{ background: '#2563eb', color: '#fff', border: 0, padding: '10px 20px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {parsingBank ? 'Saving...' : 'Save Candidate'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RoleMetric({ label, value }) { return <div className="role-metric"><span>{label}</span><b>{value}</b></div>; }

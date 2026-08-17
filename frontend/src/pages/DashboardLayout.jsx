@@ -43,9 +43,12 @@ export default function DashboardLayout() {
           { to: '/dashboard/candidates', label: 'Shortlisted Candidates', end: false },
         ]
       : user.role === 'Recruiter'
-        ? [{ to: '/dashboard/recruiter', label: 'Dashboard', end: true }]
-      : user.role === 'Recruiter'
-        ? [{ to: '/dashboard/recruiter', label: 'Dashboard', end: true }]
+        ? [
+            { to: '/dashboard/recruiter', label: 'Dashboard', end: true },
+            { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true },
+            { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true },
+            { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true },
+          ]
         : user.role === 'Director'
             ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
             : user.role === 'Super Admin'
