@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Cal, { getCalApi } from '@calcom/embed-react';
@@ -362,17 +362,25 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
             </div>
 
             <div style={{ height: '520px', borderRadius: '12px', overflow: 'hidden', border: '1px solid #e2e8f0', background: '#f8fafc' }}>
-              <Cal
-                key={embedLink}
-                calLink={embedLink}
-                style={{ width: '100%', height: '100%', overflow: 'auto' }}
-                config={{
-                  layout: 'month_view',
-                  name: candidate?.candidate_name || '',
-                  email: candidate?.candidate_email || '',
-                  notes: `Interview for ${candidate?.requisition_title || 'Role'}`,
-                }}
-              />
+              {Cal ? (
+                <Cal
+                  key={embedLink}
+                  calLink={embedLink}
+                  style={{ width: '100%', height: '100%', overflow: 'auto' }}
+                  config={{
+                    layout: 'month_view',
+                    name: candidate?.candidate_name || '',
+                    email: candidate?.candidate_email || '',
+                    notes: `Interview for ${candidate?.requisition_title || 'Role'}`,
+                  }}
+                />
+              ) : (
+                <iframe
+                  src={fullUrl}
+                  style={{ width: '100%', height: '100%', border: 0 }}
+                  title="Cal.com Scheduling"
+                />
+              )}
             </div>
           </div>
         ) : (

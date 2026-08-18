@@ -4,6 +4,8 @@ import { request, API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, StatCard, WelcomeBanner } from '../../components/Dashboard';
 
+import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
+
 function formatDate(iso) {
   if (!iso) return '—';
   try {
@@ -72,6 +74,8 @@ export default function RequisitionCandidates() {
   const { token, user } = useAuth();
   const [req, setReq] = useState(null);
   const [candidates, setCandidates] = useState([]);
+  const [interviews, setInterviews] = useState([]);
+  const [schedulingCandidate, setSchedulingCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [expanded, setExpanded] = useState(null);
@@ -85,11 +89,13 @@ export default function RequisitionCandidates() {
     Promise.all([
       request(`/requisitions/${id}`, { token }).catch(() => null),
       request(`/candidates?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
+      request('/api/interviews', { token }).catch(() => []),
     ])
-      .then(([reqData, candData]) => {
+      .then(([reqData, candData, intRes]) => {
         setReq(reqData);
         const list = Array.isArray(candData) ? candData : candData?.candidates || [];
         setCandidates(list);
+        setInterviews(Array.isArray(intRes) ? intRes : intRes?.interviews || []);
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -233,14 +239,17 @@ export default function RequisitionCandidates() {
                 const cid = c.submission_id || c.id;
                 const isExpanded = expanded === cid;
                 const isActing = acting === cid;
+                const interview = interviews.find((inv) => inv.candidate_submission_id === cid || inv.candidate_name === c.candidate_name);
                 return (
                   <CandidateRow
                     key={cid}
                     candidate={c}
+                    interview={interview}
                     expanded={isExpanded}
                     onToggle={() => setExpanded(isExpanded ? null : cid)}
                     onShortlist={() => act(c, 'Shortlisted')}
                     onReject={() => act(c, 'Rejected')}
+                    onSchedule={() => setSchedulingCandidate(c)}
                     onViewResume={() => handleViewResume(c)}
                     acting={isActing}
                     canShortlist={c.status !== 'Shortlisted' && c.status !== 'Error'}
@@ -255,11 +264,21 @@ export default function RequisitionCandidates() {
           </table>
         )}
       </div>
+
+      {schedulingCandidate && (
+        <ScheduleInterviewModal
+          candidate={schedulingCandidate}
+          onClose={() => setSchedulingCandidate(null)}
+          onScheduled={() => {
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function CandidateRow({ candidate: c, expanded, onToggle, onShortlist, onReject, onViewResume, acting, canShortlist, canReject, jdExpanded, onToggleJd, isReadOnly }) {
+function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist, onReject, onSchedule, onViewResume, acting, canShortlist, canReject, jdExpanded, onToggleJd, isReadOnly }) {
   return (
     <>
       <tr className="clickable-row" onClick={onToggle}>
@@ -273,10 +292,48 @@ function CandidateRow({ candidate: c, expanded, onToggle, onShortlist, onReject,
         <td><RecommendationBadge recommendation={c.recommendation} /></td>
         <td className="td-date">{formatDate(c.created_at)}</td>
         <td className="td-action">
-          <div className="row-actions">
+          <div className="row-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end' }}>
             <span className="row-action" onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</span>
             {!isReadOnly && (
               <>
+                {c.status === 'Shortlisted' && (
+                  interview ? (
+                    <span
+                      style={{
+                        background: interview.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#eff6ff',
+                        color: interview.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#2563eb',
+                        border: interview.status === 'CONFIRMED_BY_VENDOR' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        whiteSpace: 'nowrap',
+                      }}
+                      title={interview.status === 'CONFIRMED_BY_VENDOR' ? 'Vendor confirmed interview attendance' : 'Interview proposed to vendor'}
+                    >
+                      {interview.status === 'CONFIRMED_BY_VENDOR' ? '✓ Confirmed' : '⏳ Proposed'}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      style={{
+                        background: '#2563eb',
+                        color: '#ffffff',
+                        border: 0,
+                        fontSize: '0.76rem',
+                        fontWeight: 700,
+                        padding: '5px 10px',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 2px 6px rgba(37,99,235,0.2)'
+                      }}
+                      onClick={(e) => { e.stopPropagation(); onSchedule(); }}
+                    >
+                      📅 Schedule
+                    </button>
+                  )
+                )}
                 {canShortlist && (
                   <button
                     className="btn-shortlist"

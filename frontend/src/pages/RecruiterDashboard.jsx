@@ -896,7 +896,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               />
             </div>
 
-            <div className="requisition-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
+            <div className="requisition-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
               {loading ? (
                 <p className="muted">Loading opportunities…</p>
               ) : visibleRequisitions.length ? (
@@ -904,35 +904,57 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   const isSelected = item.id === selectedReqId;
                   const rawDeadline = item.submission_deadline || item.structured_role?.submission_deadline || item.deadline;
                   const deadlineInfo = getDeadlineInfo(rawDeadline);
+                  const roleData = role(item);
+                  const skills = skillsFor(item);
 
                   return (
-                    <button
+                    <div
                       key={item.id}
                       onClick={() => selectRequisition(item.id)}
                       className={`requisition-item ${isSelected ? 'selected' : ''}`}
                       style={{
-                        display: 'block',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justify: 'space-between',
                         width: '100%',
-                        padding: '16px 18px',
-                        borderRadius: '12px',
+                        padding: '20px',
+                        borderRadius: '14px',
                         border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
                         background: isSelected ? '#eff6ff' : '#ffffff',
                         textAlign: 'left',
                         cursor: 'pointer',
                         transition: 'all 0.2s ease',
-                        boxShadow: isSelected ? '0 4px 12px rgba(37, 99, 235, 0.12)' : 'none'
+                        boxShadow: isSelected ? '0 4px 14px rgba(37, 99, 235, 0.15)' : '0 2px 6px rgba(15,23,42,0.03)'
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong style={{ color: isSelected ? '#1e40af' : '#10213d', fontSize: '0.92rem', fontWeight: 700 }}>{item.title || 'Untitled role'}</strong>
-                        <span className="published-status-badge" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>Published</span>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
+                            {item.company_name || item.company?.name || 'Client'}
+                          </span>
+                          <span className="published-status-badge" style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
+                            Published
+                          </span>
+                        </div>
+
+                        <strong style={{ display: 'block', color: isSelected ? '#1e40af' : '#0f172a', fontSize: '1.05rem', fontWeight: 800, marginBottom: '6px' }}>
+                          {item.title || 'Untitled role'}
+                        </strong>
+
+                        {skills.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '10px', marginBottom: '12px' }}>
+                            {skills.slice(0, 3).map((s) => (
+                              <span key={s} style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.70rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px' }}>
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '6px' }}>
-                        {item.company_name || item.company?.name || 'Client'}
-                      </div>
+
                       {deadlineInfo && (
-                        <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569', fontWeight: 500 }}>
+                        <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: deadlineInfo.isUrgent || deadlineInfo.isExpired ? '#dc2626' : '#d97706' }}>
                               <circle cx="12" cy="12" r="10" />
                               <polyline points="12 6 12 12 16 14" />
@@ -943,7 +965,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             <span style={{
                               fontSize: '0.70rem',
                               fontWeight: 700,
-                              padding: '2px 7px',
+                              padding: '2px 8px',
                               borderRadius: '10px',
                               background: deadlineInfo.isExpired ? '#fef2f2' : deadlineInfo.isUrgent ? '#fff7ed' : '#f0fdf4',
                               color: deadlineInfo.isExpired ? '#dc2626' : deadlineInfo.isUrgent ? '#c2410c' : '#15803d',
@@ -954,7 +976,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                           )}
                         </div>
                       )}
-                    </button>
+                    </div>
                   );
                 })
               ) : (

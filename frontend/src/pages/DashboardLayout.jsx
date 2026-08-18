@@ -39,28 +39,28 @@ export default function DashboardLayout() {
   const navItems =
     user.role === 'Hiring Manager'
       ? [
-          { to: '/dashboard/requisitions', label: 'Requisitions', end: false },
-          { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true },
-          { to: '/dashboard/candidates', label: 'Shortlisted Candidates', end: false },
-        ]
+        { to: '/dashboard/requisitions', label: 'Requisitions', end: false },
+        { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true },
+        { to: '/dashboard/candidates', label: 'Shortlisted Candidates', end: false },
+      ]
       : user.role === 'Recruiter'
         ? [
-            { to: '/dashboard/recruiter', label: 'Dashboard', end: true },
-            { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true },
-            { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true },
-            { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true },
-            { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true },
-          ]
+          { to: '/dashboard/recruiter', label: 'Dashboard', end: true },
+          { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true },
+          { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true },
+          { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true },
+          { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true },
+        ]
         : user.role === 'Director'
-            ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
-            : user.role === 'Super Admin'
-              ? [
-                  { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
-                  { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
-                  { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
-                  { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
-                ]
-              : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
+          ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
+          : user.role === 'Super Admin'
+            ? [
+              { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
+              { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
+              { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
+              { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
+            ]
+            : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
   return (
     <div className={`app-shell ${consoleClass}`}>

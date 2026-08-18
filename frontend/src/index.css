@@ -309,11 +309,11 @@
   /* ============ PAGE ============ */
 
   .page {
-    @apply mx-auto flex max-w-[1100px] flex-col gap-5;
+    @apply mx-auto flex w-full max-w-[1280px] flex-col gap-5;
   }
 
   .page-narrow {
-    @apply max-w-[880px];
+    @apply max-w-[960px];
   }
 
   .page-header {
@@ -624,7 +624,8 @@
   /* ============ DATA TABLE ============ */
 
   .table-card {
-    @apply overflow-hidden p-0;
+    @apply overflow-x-auto p-0 rounded-2xl border border-slate-200/80 bg-white;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
   }
 
   .table-head {

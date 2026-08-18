@@ -157,38 +157,6 @@ export default function ShortlistedCandidates() {
 
   const unlinked = useMemo(() => candidates.filter((c) => !c.requisition_id), [candidates]);
 
-  const shown = useMemo(() => {
-    let list = candidates;
-    if (filter === '__none__') list = candidates.filter((c) => !c.requisition_id);
-    else if (filter) list = candidates.filter((c) => c.requisition_id === filter);
-
-    const grouped = [];
-    const byReq = {};
-    list.forEach((c) => {
-      if (!c.requisition_id) return;
-      if (!byReq[c.requisition_id]) {
-        byReq[c.requisition_id] = {
-          req: requisitions.find((r) => r.id === c.requisition_id) || {
-            id: c.requisition_id,
-            ref: c.requisition_ref || `REQ-${c.requisition_id.slice(0, 6).toUpperCase()}`,
-            title: c.requisition_title || 'Untitled',
-          },
-          candidates: [],
-        };
-      }
-      byReq[c.requisition_id].candidates.push(c);
-    });
-    Object.values(byReq).forEach((g) => {
-      const vendorCount = new Set(g.candidates.map((x) => x.vendor_name)).size;
-      grouped.push({ type: 'req', req: g.req, count: g.candidates.length, vendorCount });
-      g.candidates.forEach((c) => grouped.push({ type: 'cand', c }));
-    });
-    list.forEach((c) => {
-      if (!c.requisition_id) grouped.push({ type: 'cand', c });
-    });
-    return grouped;
-  }, [candidates, filter, requisitions]);
-
   const stats = useMemo(() => {
     const strong = candidates.filter((c) => c.recommendation === 'Strong Match').length;
     const moderate = candidates.filter((c) => c.recommendation === 'Moderate Match').length;
@@ -229,58 +197,79 @@ export default function ShortlistedCandidates() {
         </div>
       )}
 
-      <div className="glass-panel table-card">
+      <div className="glass-panel" style={{ padding: '24px' }}>
         {loading ? (
-          <p className="muted" style={{ padding: 24 }}>Loading candidates...</p>
-        ) : shown.length === 0 ? (
+          <p className="muted" style={{ padding: 24 }}>Loading requisitions...</p>
+        ) : requisitions.length === 0 ? (
           <div className="empty-state">
-            <h3>No shortlisted candidates yet</h3>
-            <p>Shortlisted candidates from vendor submissions will appear here.</p>
+            <h3>No requisitions with shortlisted candidates</h3>
+            <p>Shortlisted candidates from vendor submissions will appear under their respective requisitions.</p>
           </div>
         ) : (
-          <table className="data-table cand-table">
-            <thead>
-              <tr>
-                <th>Candidate</th>
-                <th>Vendor</th>
-                <th>Requisition</th>
-                <th>Match Score</th>
-                <th>Recommendation</th>
-                <th>Date</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-{shown.map((item) =>
-                item.type === 'req' ? (
-                  <tr key={item.req.id} className="req-group-row">
-                    <td colSpan="7" className="req-group-cell">
-                      <span className="req-group-ref">{item.req.ref}</span>
-                      <span className="req-group-title">{item.req.title}</span>
-                      <span className="req-group-count">{item.count} shortlisted</span>
-                      {item.vendorCount > 1 && (
-                        <span className="req-group-vendors">{item.vendorCount} vendors competing</span>
-                      )}
-                      <Link to={`/dashboard/requisitions/${item.req.id}/candidates`} className="req-group-shortlist-link">📋 Review JD Candidates →</Link>
-                    </td>
-                  </tr>
-                ) : (
-                  <CandidateRow
-                    key={item.c.id}
-                    candidate={item.c}
-                    interview={interviews.find((inv) => inv.candidate_submission_id === item.c.id || inv.candidate_name === item.c.candidate_name)}
-                    expanded={expanded === item.c.id}
-                    onToggle={() => setExpanded(expanded === item.c.id ? null : item.c.id)}
-                    onReject={() => handleReject(item.c)}
-                    onSchedule={() => setSchedulingCandidate(item.c)}
-                    onViewResume={() => handleViewResume(item.c)}
-                    rejecting={rejecting === item.c.id}
-                    jdExpanded={jdExpanded === item.c.id}
-                    onToggleJd={() => setJdExpanded(jdExpanded === item.c.id ? null : item.c.id)}
-                  />
-                ))}
-            </tbody>
-          </table>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+            {requisitions.map((reqItem) => (
+              <div
+                key={reqItem.id}
+                style={{
+                  background: '#ffffff',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '14px',
+                  padding: '20px',
+                  boxShadow: '0 4px 12px rgba(15, 23, 42, 0.03)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justify: 'space-between',
+                  gap: '16px',
+                  transition: 'all 0.2s ease'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '10px' }}>
+                    <span style={{ background: '#e0e7ff', color: '#4338ca', fontSize: '0.74rem', fontWeight: 800, padding: '3px 8px', borderRadius: '6px', border: '1px solid #c7d2fe' }}>
+                      {reqItem.ref}
+                    </span>
+                    <span style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.72rem', fontWeight: 700, padding: '3px 9px', borderRadius: '12px', border: '1px solid #a7f3d0' }}>
+                      {reqItem.count} Shortlisted
+                    </span>
+                  </div>
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: '0 0 6px 0' }}>
+                    {reqItem.title}
+                  </h3>
+                  <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                    Click below to view candidate profiles and schedule interviews.
+                  </p>
+                </div>
+
+                <Link
+                  to={`/dashboard/requisitions/${reqItem.id}/candidates`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justify: 'center',
+                    gap: '8px',
+                    background: '#2563eb',
+                    color: '#ffffff',
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                    <polyline points="10 9 9 9 8 9" />
+                  </svg>
+                  Review JD Candidates →
+                </Link>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -297,166 +286,27 @@ export default function ShortlistedCandidates() {
   );
 }
 
-function CandidateRow({ candidate: c, interview, expanded, onToggle, onReject, onSchedule, onViewResume, rejecting, jdExpanded, onToggleJd }) {
+function CandidateRow({ candidate: c, interview }) {
   return (
-    <>
-      <tr className="clickable-row" onClick={onToggle}>
-        <td className="td-title">
-          {c.candidate_name}
-          {c.candidate_email && <div className="cand-email">{c.candidate_email}</div>}
-        </td>
-        <td className="td-company">{c.vendor_name || '—'}</td>
-        <td className="td-company">
-          {c.requisition_ref
-            ? `${c.requisition_ref}${c.requisition_title ? ` · ${c.requisition_title}` : ''}`
-            : <span className="muted">No requisition</span>}
-        </td>
-        <td style={{ minWidth: 130 }}><ScoreBar score={c.match_score} /></td>
-        <td><RecommendationBadge recommendation={c.recommendation} /></td>
-        <td className="td-date">{formatDate(c.created_at)}</td>
-        <td className="td-action">
-          <div className="row-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {interview ? (
-              <span
-                style={{
-                  background: interview.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#eff6ff',
-                  color: interview.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#2563eb',
-                  border: interview.status === 'CONFIRMED_BY_VENDOR' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
-                  fontSize: '0.72rem',
-                  fontWeight: 800,
-                  padding: '4px 8px',
-                  borderRadius: '6px',
-                  whiteSpace: 'nowrap',
-                }}
-                title={interview.status === 'CONFIRMED_BY_VENDOR' ? 'Vendor confirmed interview attendance' : 'Interview proposed to vendor'}
-              >
-                {interview.status === 'CONFIRMED_BY_VENDOR' ? '✓ Confirmed' : '⏳ Proposed'}
-              </span>
-            ) : (
-              <button
-                type="button"
-                style={{
-                  background: '#2563eb',
-                  color: '#ffffff',
-                  border: 0,
-                  fontSize: '0.76rem',
-                  fontWeight: 700,
-                  padding: '5px 10px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                  boxShadow: '0 2px 6px rgba(37,99,235,0.2)'
-                }}
-                onClick={(e) => { e.stopPropagation(); onSchedule(); }}
-              >
-                📅 Schedule
-              </button>
-            )}
-            <span className="row-action" onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</span>
-            <button
-              className="btn-reject"
-              onClick={(e) => { e.stopPropagation(); onReject(); }}
-              disabled={rejecting}
-            >
-              {rejecting ? 'Rejecting...' : 'Reject'}
-            </button>
+    <tr className="clickable-row">
+      <td className="td-title" style={{ whiteSpace: 'nowrap' }}>
+        {c.candidate_name}
+        {c.candidate_email && <div className="cand-email" style={{ fontSize: '0.76rem', color: '#64748b', fontWeight: 400 }}>{c.candidate_email}</div>}
+      </td>
+      <td className="td-company" style={{ whiteSpace: 'nowrap' }}>{c.vendor_name || '—'}</td>
+      <td className="td-company" style={{ maxWidth: '200px' }}>
+        {c.requisition_ref ? (
+          <div style={{ lineHeight: '1.3' }}>
+            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.80rem' }}>{c.requisition_ref}</span>
+            {c.requisition_title && <div style={{ fontSize: '0.78rem', color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.requisition_title}</div>}
           </div>
-        </td>
-      </tr>
-      {expanded && (
-        <tr className="cand-detail-row-tr">
-          <td colSpan="7">
-            <div className="cand-detail">
-              {c.summary && <p className="cand-summary">{c.summary}</p>}
-              {interview && (
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px', marginBottom: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '1.1rem' }}>📅</span>
-                      <strong style={{ fontSize: '0.92rem', color: '#1e293b' }}>{interview.interview_round || 'Interview Scheduled'}</strong>
-                      <span style={{ background: interview.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#fef3c7', color: interview.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#d97706', fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
-                        {interview.status === 'CONFIRMED_BY_VENDOR' ? 'VENDOR CONFIRMED' : 'AWAITING VENDOR CONFIRMATION'}
-                      </span>
-                    </div>
-                    {interview.meeting_link && (
-                      <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                        🎥 Open Meeting Link ↗
-                      </a>
-                    )}
-                  </div>
-                  <div style={{ fontSize: '0.82rem', color: '#64748b', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-                    <span>🕒 <strong>Slot:</strong> {interview.confirmed_slot?.date || (interview.proposed_slots && interview.proposed_slots[0]?.date)} ({interview.confirmed_slot?.start_time || (interview.proposed_slots && interview.proposed_slots[0]?.start_time)} - {interview.confirmed_slot?.end_time || (interview.proposed_slots && interview.proposed_slots[0]?.end_time)})</span>
-                    <span>👤 <strong>Interviewer:</strong> {interview.interviewer_name || 'Hiring Team'}</span>
-                  </div>
-                  {interview.calendar_links && (
-                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>1-Click Sync:</span>
-                      <a href={interview.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🟢 Google</a>
-                      <a href={interview.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🔵 Outlook</a>
-                      <a href={`/api/interviews/${interview.id}/invite.ics`} download style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>⚪ .ICS File</a>
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="cand-detail-grid">
-                <ChipList label="Matched skills" items={c.matched_skills} tone="chip-primary" />
-                <ChipList label="Missing skills" items={c.missing_skills} tone="chip-neutral" />
-              </div>
-              {c.hiring_manager_notes && (
-                <div className="cand-detail-row">
-                  <span className="cand-detail-label">Hiring manager notes</span>
-                  <span>{c.hiring_manager_notes}</span>
-                </div>
-              )}
-                {c.resume_text && (
-                  <div className="cand-detail-row">
-                    <span className="cand-detail-label">Resume</span>
-                    <pre className="cand-resume">{c.resume_text}</pre>
-                  </div>
-                )}
-                <div className="cand-jd-block">
-                  <div
-                    className="cand-jd-toggle"
-                    onClick={(e) => { e.stopPropagation(); onToggleJd(); }}
-                  >
-                    <span>📋 JD Applied</span>
-                    <span className="row-action">{jdExpanded ? 'Hide' : 'View'}</span>
-                  </div>
-                  {jdExpanded && (
-                    <pre className="cand-jd-text">{c.jd_text || 'No JD recorded for this submission.'}</pre>
-                  )}
-                </div>
-                <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                  <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
-                    📁 File: <strong>{c.filename || 'resume.pdf'}</strong>
-                  </span>
-                  <a
-                    href={c.resume_pdf ? `data:application/pdf;base64,${c.resume_pdf}` : `${API_BASE_URL}/candidates/${c.id}/resume-pdf`}
-                    download={c.filename || `${c.candidate_name}_resume.pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '0.82rem',
-                      padding: '6px 14px',
-                      background: '#2563eb',
-                      color: '#ffffff',
-                      borderRadius: '8px',
-                      textDecoration: 'none',
-                      fontWeight: 700,
-                      boxShadow: '0 2px 6px rgba(37,99,235,0.25)'
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    📄 View / Download Resume PDF
-                  </a>
-                </div>
-            </div>
-          </td>
-        </tr>
-      )}
-    </>
+        ) : (
+          <span className="muted">No requisition</span>
+        )}
+      </td>
+      <td style={{ minWidth: 140 }}><ScoreBar score={c.match_score} /></td>
+      <td style={{ whiteSpace: 'nowrap' }}><RecommendationBadge recommendation={c.recommendation} /></td>
+      <td className="td-date" style={{ whiteSpace: 'nowrap' }}>{formatDate(c.created_at)}</td>
+    </tr>
   );
 }
