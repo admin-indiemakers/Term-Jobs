@@ -9,6 +9,7 @@ import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import ManageDirectors from './pages/ManageDirectors';
 import ManageHiringManagers from './pages/ManageHiringManagers';
+import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import DirectorDashboard from './pages/DirectorDashboard';
 import OnboardCompany from './pages/OnboardCompany';
@@ -92,6 +93,7 @@ export default function App() {
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/directors" element={<ManageDirectors />} />
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
+          <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="director" element={<DirectorDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />

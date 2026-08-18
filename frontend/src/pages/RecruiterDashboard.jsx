@@ -55,6 +55,41 @@ const role = (req) => {
 const skillsFor = (req) => role(req).must_have_skills || req?.intent?.tech_stack_hint || [];
 const short = (value, fallback = 'Not specified') => value || fallback;
 
+function getDeadlineInfo(deadlineStr) {
+  if (!deadlineStr) return null;
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) {
+    return { formattedDate: deadlineStr, daysLeftText: null, isExpired: false, isUrgent: false };
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(deadlineDate);
+  target.setHours(0, 0, 0, 0);
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  let daysLeftText = '';
+  let isExpired = false;
+  let isUrgent = false;
+
+  if (diffDays < 0) {
+    daysLeftText = 'Expired';
+    isExpired = true;
+  } else if (diffDays === 0) {
+    daysLeftText = 'Due today';
+    isUrgent = true;
+  } else if (diffDays === 1) {
+    daysLeftText = '1 day left';
+    isUrgent = true;
+  } else {
+    daysLeftText = `${diffDays} days left`;
+    if (diffDays <= 3) isUrgent = true;
+  }
+
+  const formattedDate = deadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return { formattedDate, daysLeftText, isExpired, isUrgent, diffDays };
+}
+
 export default function RecruiterDashboard({ view = 'dashboard' }) {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -122,7 +157,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     }
     setParsingBank(true);
     setError('');
-    
+
     const form = new FormData();
     if (newCandName) form.append('name', newCandName.trim());
     if (newCandEmail) form.append('email', newCandEmail.trim());
@@ -143,7 +178,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       }
       const updatedBank = await request('/candidates/bank', { token: authToken });
       setBankCandidates(updatedBank || []);
-      
+
       setShowAddCandidateModal(false);
       setNewCandName('');
       setNewCandEmail('');
@@ -197,6 +232,21 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
   const bankSkills = useMemo(() => {
     return [...new Set((bankCandidates || []).flatMap((candidate) => candidate.skills || []))];
+  }, [bankCandidates]);
+
+  const bankStats = useMemo(() => {
+    const list = bankCandidates || [];
+    const parsed = list.filter((c) => (c.extracted_text || '').trim().length > 0);
+    const ready = list.filter((c) => (c.candidate_email || '').trim() && (c.skills || []).length > 0);
+    const titles = [...new Set(list.map((c) => (c.candidate_title || '').trim()).filter(Boolean))];
+    return {
+      total: list.length,
+      parsed: parsed.length,
+      ready: ready.length,
+      readyPct: list.length ? Math.round((ready.length / list.length) * 100) : 0,
+      titles,
+      titleCount: titles.length,
+    };
   }, [bankCandidates]);
 
   const filteredBankCandidates = useMemo(() => {
@@ -305,13 +355,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   async function uploadToBank(event) {
     const uploadedFiles = Array.from(event.target.files || []);
     if (!uploadedFiles.length) return;
-    
+
     setParsingBank(true);
     setError('');
-    
+
     const form = new FormData();
     uploadedFiles.forEach((file) => form.append('files', file));
-    
+
     try {
       const response = await fetch(`${API_BASE_URL}/candidates/bank/upload`, {
         method: 'POST',
@@ -428,7 +478,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   async function runBulkScreening() {
     if (!selectedCandidateIds.length) return setError('Please select at least one candidate.');
     if (!selectedReqId) return setError('Please select a requisition.');
-    
+
     const totalCount = selectedCandidateIds.length;
     setScreeningProgress({
       total: totalCount,
@@ -466,7 +516,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         stage: currentStage,
       });
     }, 900);
-    
+
     try {
       const response = await request('/candidates/bank/match-bulk', {
         method: 'POST',
@@ -582,7 +632,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
   return (
     <div className="page recruiter-page">
-            {showDashboard && (
+      {showDashboard && (
         <div style={{ display: 'grid', gap: '24px' }}>
           <WelcomeBanner
             title="Recruiter Consultancy Portal"
@@ -778,37 +828,37 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 👁 View Details
               </button>
             </div>
-            
+
             <h1 style={{ fontSize: '2rem', fontWeight: 800, color: '#ffffff', marginBottom: '24px', letterSpacing: '-0.025em' }}>
               {selected?.title || 'QA Automation Engineer'}
             </h1>
-            
+
             <div className="role-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px', marginBottom: '20px' }}>
-                <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rate Range</span>
-                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
-                    {detail.rate_card_cap || detail.range_vendors_see || 'Rate Card Ceiling'}
-                  </strong>
-                </div>
-                <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</span>
-                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
-                    {short(detail.duration || detail.contract_duration || detail.engagement_duration, '6 months')}
-                  </strong>
-                </div>
-                <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Max Notice</span>
-                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
-                    {short(detail.max_notice_period || detail.notice_period, '30 Days Max')}
-                  </strong>
-                </div>
-                <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', padding: '14px 18px' }}>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Submission Deadline</span>
-                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#fca5a5', fontWeight: 700 }}>
-                    {short(detail.submission_deadline || detail.deadline, 'Open')}
-                  </strong>
-                </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rate Range</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                  {detail.rate_card_cap || detail.range_vendors_see || 'Rate Card Ceiling'}
+                </strong>
               </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                  {short(detail.duration || detail.contract_duration || detail.engagement_duration, '6 months')}
+                </strong>
+              </div>
+              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Max Notice</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                  {short(detail.max_notice_period || detail.notice_period, '30 Days Max')}
+                </strong>
+              </div>
+              <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', padding: '14px 18px' }}>
+                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Submission Deadline</span>
+                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#fca5a5', fontWeight: 700 }}>
+                  {short(detail.submission_deadline || detail.deadline, 'Open')}
+                </strong>
+              </div>
+            </div>
 
             <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.88rem', color: '#cbd5e1', lineHeight: '1.6' }}>
               <div>
@@ -852,6 +902,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               ) : visibleRequisitions.length ? (
                 visibleRequisitions.map((item) => {
                   const isSelected = item.id === selectedReqId;
+                  const rawDeadline = item.submission_deadline || item.structured_role?.submission_deadline || item.deadline;
+                  const deadlineInfo = getDeadlineInfo(rawDeadline);
+
                   return (
                     <button
                       key={item.id}
@@ -874,14 +927,33 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         <strong style={{ color: isSelected ? '#1e40af' : '#10213d', fontSize: '0.92rem', fontWeight: 700 }}>{item.title || 'Untitled role'}</strong>
                         <span className="published-status-badge" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>Published</span>
                       </div>
-                      <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <span>{item.company_name || item.company?.name || 'Client'} · Published</span>
-                        {(item.structured_role?.submission_deadline || item.submission_deadline) && (
-                          <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.72rem' }}>
-                            ⏳ Due {item.structured_role?.submission_deadline || item.submission_deadline}
-                          </span>
-                        )}
+                      <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '6px' }}>
+                        {item.company_name || item.company?.name || 'Client'}
                       </div>
+                      {deadlineInfo && (
+                        <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569', fontWeight: 500 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: deadlineInfo.isUrgent || deadlineInfo.isExpired ? '#dc2626' : '#d97706' }}>
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            {deadlineInfo.formattedDate}
+                          </span>
+                          {deadlineInfo.daysLeftText && (
+                            <span style={{
+                              fontSize: '0.70rem',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '10px',
+                              background: deadlineInfo.isExpired ? '#fef2f2' : deadlineInfo.isUrgent ? '#fff7ed' : '#f0fdf4',
+                              color: deadlineInfo.isExpired ? '#dc2626' : deadlineInfo.isUrgent ? '#c2410c' : '#15803d',
+                              border: `1px solid ${deadlineInfo.isExpired ? '#fecaca' : deadlineInfo.isUrgent ? '#ffedd5' : '#dcfce7'}`
+                            }}>
+                              {deadlineInfo.daysLeftText}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </button>
                   );
                 })
@@ -1000,13 +1072,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             background: isCurrent
                               ? 'rgba(56, 189, 248, 0.2)'
                               : isPassed
-                              ? 'rgba(37, 99, 235, 0.15)'
-                              : 'rgba(30, 41, 59, 0.6)',
+                                ? 'rgba(37, 99, 235, 0.15)'
+                                : 'rgba(30, 41, 59, 0.6)',
                             border: isCurrent
                               ? '1px solid #38bdf8'
                               : isPassed
-                              ? '1px solid #2563eb'
-                              : '1px solid #1e293b',
+                                ? '1px solid #2563eb'
+                                : '1px solid #1e293b',
                             color: isCurrent ? '#38bdf8' : isPassed ? '#93c5fd' : '#64748b',
                             transition: 'all 0.3s ease',
                           }}
@@ -1106,7 +1178,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Go to Candidates Bank tab to upload and parse resume PDFs.</p>
               </div>
             )}
-            
+
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
               <div style={{ fontSize: '0.9rem', color: '#475569', fontWeight: 600 }}>
                 Selected: {selectedCandidateIds.length} candidate(s)
@@ -1226,65 +1298,57 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       )}
 
       {showCandidates && (
-        <div className="candidates-bank-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <section className="recruiter-page-heading" style={{ margin: 0 }}>
+        <div className="candidates-bank-header-row">
+          <section className="recruiter-page-heading">
             <span>Talent repository</span>
             <h1>Candidates Bank</h1>
             <p>Manage company talent repository, upload PDF resumes with local Ollama AI extraction, and preview candidate profiles.</p>
           </section>
-          <div>
-            <button
-              className="glow-btn"
-              onClick={() => {
-                setNewCandVendor(user?.tenant_name || 'Vendor A');
-                setShowAddCandidateModal(true);
-              }}
-              style={{ cursor: 'pointer', padding: '12px 24px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px', border: 0, background: '#2563eb', color: '#fff' }}
-            >
-              <span>+ Add Candidate</span>
-            </button>
-          </div>
+          <button
+            className="bank-add-btn"
+            onClick={() => {
+              setNewCandVendor(user?.tenant_name || 'Vendor A');
+              setShowAddCandidateModal(true);
+            }}
+          >
+            <span className="bank-add-icon">{Icons.plus}</span>
+            Add Candidate
+          </button>
         </div>
       )}
 
       {showCandidates && (
-        <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary" style={{ marginBottom: '24px' }}>
+        <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary">
           <StatCard
             label="TOTAL CANDIDATES IN BANK"
-            value={bankCandidates.length}
-            icon={Icons.users || Icons.layers}
+            value={bankStats.total}
+            icon={Icons.users}
             tint="tint-ink"
             delta="Company Talent Repository"
             deltaTone="ink"
           />
           <StatCard
             label="TECHNICAL ROLES"
-            value={(() => {
-              const uniqueTitles = [...new Set(bankCandidates.map(c => c.candidate_title || 'Software Engineer').filter(Boolean))];
-              return uniqueTitles.length > 0 ? `${uniqueTitles.length}+` : '0+';
-            })()}
+            value={bankStats.titleCount > 0 ? `${bankStats.titleCount}+` : '0+'}
             icon={Icons.briefcase}
             tint="tint-blue"
-            delta={(() => {
-              const uniqueTitles = [...new Set(bankCandidates.map(c => c.candidate_title || 'Software Engineer').filter(Boolean))];
-              return uniqueTitles.slice(0, 3).join(', ') || 'Frontend, Backend, Design';
-            })()}
+            delta={bankStats.titles.slice(0, 3).join(', ') || 'Frontend, Backend, Design'}
             deltaTone="blue"
           />
           <StatCard
             label="AUTO-PARSED RESUMES"
-            value={bankCandidates.length}
+            value={bankStats.parsed}
             icon={Icons.layers}
             tint="tint-violet"
-            delta="Ollama LLM (llama3.2:3b) Parsed"
+            delta={bankStats.parsed ? 'Ollama LLM (llama3.2:3b) Parsed' : 'Awaiting PDF upload'}
             deltaTone="violet"
           />
           <StatCard
             label="READY FOR MATCHING"
-            value="100%"
+            value={`${bankStats.readyPct}%`}
             icon={Icons.check}
             tint="tint-green"
-            delta="Available for Requisitions"
+            delta={bankStats.total ? `${bankStats.ready} of ${bankStats.total} candidates ready` : 'No candidates yet'}
             deltaTone="green"
           />
         </section>
@@ -1292,24 +1356,25 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
       {showCandidates && (
         <section className="recruiter-results glass-panel recruiter-bank-results">
-          <div className="recruiter-section-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div className="recruiter-section-heading bank-section-head">
             <div>
-              <h2>🏢 Candidate Talent Pool ({bankCandidates.length})</h2>
-              <p>Click any candidate row to view full resume & profile details.</p>
+              <h2>Candidate Talent Pool</h2>
+              <p>Click any candidate row to view full resume &amp; profile details.</p>
             </div>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <input
-                className="auth-input recruiter-bank-search"
-                value={bankSearch}
-                onChange={(event) => setBankSearch(event.target.value)}
-                placeholder="Search candidate name"
-                style={{ width: '220px', padding: '10px 14px', fontSize: '0.88rem' }}
-              />
+            <div className="bank-toolbar">
+              <div className="bank-search-box">
+                <span className="bank-search-icon">{Icons.search}</span>
+                <input
+                  className="auth-input recruiter-bank-search"
+                  value={bankSearch}
+                  onChange={(event) => setBankSearch(event.target.value)}
+                  placeholder="Search candidate name"
+                />
+              </div>
               <select
                 className="auth-input recruiter-bank-skill-filter"
                 value={skillFilter}
                 onChange={(event) => setSkillFilter(event.target.value)}
-                style={{ width: '180px', padding: '10px 14px', fontSize: '0.88rem', height: '40px' }}
               >
                 <option value="all">Filter Skill: All</option>
                 {bankSkills.map((skill) => (
@@ -1319,88 +1384,95 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             </div>
           </div>
 
+          <div className="bank-count-row">
+            <span className="bank-count-pill">{filteredBankCandidates.length} {filteredBankCandidates.length === 1 ? 'candidate' : 'candidates'}</span>
+            {bankSearch && <span className="bank-filter-hint">matching “{bankSearch}”</span>}
+            {skillFilter !== 'all' && <span className="bank-filter-hint">skill: {skillFilter}</span>}
+          </div>
+
           {parsingBank && (
-            <div className="bank-parsing-overlay" style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fbff', border: '1.5px dashed #b8c7dd', borderRadius: '12px', marginBottom: '20px', marginTop: '10px' }}>
-              <span className="spinner" style={{ display: 'inline-block', width: '20px', height: '20px', border: '2px solid #ccc', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginRight: '10px', verticalAlign: 'middle' }} />
-              <strong style={{ color: '#29466e' }}>Parsing resumes using Ollama AI extraction...</strong>
+            <div className="bank-parsing-overlay">
+              <span className="spinner" />
+              <strong>Parsing resumes using Ollama AI extraction...</strong>
             </div>
           )}
 
           {filteredBankCandidates.length > 0 ? (
-            <div className="table-container" style={{ marginTop: '16px', overflowX: 'auto' }}>
-              <table className="recruiter-bank-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="table-container bank-table-wrap">
+              <table className="recruiter-bank-table">
                 <thead>
-                  <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.05em' }}>
-                    <th style={{ padding: '12px 16px' }}>CANDIDATE NAME & TITLE</th>
-                    <th style={{ padding: '12px 16px' }}>CONTACT INFO</th>
-                    <th style={{ padding: '12px 16px' }}>VENDOR / COMPANY</th>
-                    <th style={{ padding: '12px 16px' }}>SKILLS & TECH STACK</th>
-                    <th style={{ padding: '12px 16px' }}>ADDED DATE</th>
-                    <th style={{ padding: '12px 16px' }}>ACTIONS</th>
+                  <tr>
+                    <th>CANDIDATE NAME &amp; TITLE</th>
+                    <th>CONTACT INFO</th>
+                    <th>VENDOR / COMPANY</th>
+                    <th>SKILLS &amp; TECH STACK</th>
+                    <th>ADDED DATE</th>
+                    <th>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBankCandidates.map((candidate) => {
                     const isExpanded = expandedCandidate === candidate.id;
+                    const vendor = candidate.vendor_company_name || user?.tenant_name || 'Vendor A';
                     return (
                       <Fragment key={candidate.id}>
                         <tr
                           onClick={() => setExpandedCandidate(isExpanded ? null : candidate.id)}
-                          style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }}
                           className={`candidate-table-row ${isExpanded ? 'row-expanded' : ''}`}
                         >
-                          <td style={{ padding: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <div className="candidate-avatar" style={{ flexShrink: 0, width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#e0e7ff', color: '#3849a2', fontWeight: 800, fontSize: '0.85rem' }}>
+                          <td>
+                            <div className="cand-cell-name">
+                              <div className="candidate-avatar">
                                 {(candidate.candidate_name || '?').slice(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>{candidate.candidate_name}</div>
-                                <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '2px' }}>{candidate.candidate_title || 'Software Engineer'}</div>
+                                <div className="cand-cell-fullname">{candidate.candidate_name}</div>
+                                <div className="cand-cell-title">{candidate.candidate_title || 'Software Engineer'}</div>
                               </div>
                             </div>
                           </td>
-                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#475569' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ opacity: 0.7 }}>📧</span> {candidate.candidate_email || 'No email'}
+                          <td>
+                            <div className="cand-cell-contact">
+                              <div className="cand-contact-row">
+                                <span className="cand-contact-icon">{Icons.mail}</span>
+                                <span>{candidate.candidate_email || 'No email'}</span>
                               </div>
                               {candidate.candidate_phone && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{ opacity: 0.7 }}>📞</span> {candidate.candidate_phone}
+                                <div className="cand-contact-row">
+                                  <span className="cand-contact-icon">{Icons.phone}</span>
+                                  <span>{candidate.candidate_phone}</span>
                                 </div>
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '16px', fontSize: '0.85rem' }}>
-                            <span style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              🏢 {candidate.vendor_company_name || user?.tenant_name || 'Vendor A'}
+                          <td>
+                            <span className="cand-vendor-pill">
+                              <span className="cand-vendor-icon">{Icons.building}</span>
+                              {vendor}
                             </span>
                           </td>
-                          <td style={{ padding: '16px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          <td>
+                            <div className="cand-skills">
                               {(candidate.skills || []).slice(0, 4).map((skill, idx) => (
-                                <span key={idx} style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
-                                  {skill}
-                                </span>
+                                <span key={idx} className="skill-pill">{skill}</span>
                               ))}
                               {(candidate.skills || []).length > 4 && (
-                                <span style={{ background: '#eff6ff', color: '#2563eb', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
-                                  +{candidate.skills.length - 4} more
-                                </span>
+                                <span className="skill-pill-more">+{candidate.skills.length - 4} more</span>
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#64748b' }}>
-                            {candidate.created_at ? candidate.created_at.split('T')[0] : '—'}
+                          <td>
+                            <span className="cand-date">
+                              {candidate.created_at ? candidate.created_at.split('T')[0] : '—'}
+                            </span>
                           </td>
-                          <td style={{ padding: '16px' }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <div className="cand-actions">
                               <button
                                 className="view-resume-btn glow-btn"
                                 onClick={() => setShowResumeModal(candidate)}
-                                style={{ background: '#1e293b', padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', cursor: 'pointer', color: '#fff', border: 0 }}
                               >
+                                <span className="btn-icon">{Icons.fileText}</span>
                                 View Resume
                               </button>
                               <button
@@ -1409,28 +1481,29 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   setSelectedMatchCandidate(candidate);
                                   setMatchingReqId(requisitions[0]?.id || '');
                                 }}
-                                style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                               >
-                                ⚡ Match
+                                <span className="btn-icon">{Icons.zap}</span>
+                                Match
                               </button>
                               <button
+                                className="delete-candidate-link"
                                 onClick={() => deleteBankCandidate(candidate.id)}
-                                style={{ background: 'none', border: 0, color: '#ef4444', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
                               >
+                                <span className="btn-icon">{Icons.trash}</span>
                                 Delete
                               </button>
                             </div>
                           </td>
                         </tr>
                         {isExpanded && (
-                          <tr className="expanded-details-row" style={{ background: '#f8fafc' }}>
-                            <td colSpan="5" style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
-                              <div style={{ display: 'grid', gap: '16px' }}>
+                          <tr className="expanded-details-row">
+                            <td colSpan="6">
+                              <div className="cand-details-expanded">
                                 <div>
-                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Professional Summary</h4>
-                                  <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>{candidate.summary || 'No summary available.'}</p>
+                                  <h4>Professional Summary</h4>
+                                  <p>{candidate.summary || 'No summary available.'}</p>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.82rem', color: '#475569' }}>
+                                <div className="cand-details-meta">
                                   <div>
                                     <strong>All Skills:</strong> {(candidate.skills || []).join(', ')}
                                   </div>
@@ -1439,8 +1512,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   </div>
                                 </div>
                                 <div>
-                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Raw Resume Text</h4>
-                                  <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '250px', overflowY: 'auto', background: '#f1f5f9', padding: '16px', borderRadius: '8px', fontSize: '0.75rem', marginTop: '6px', fontFamily: 'monospace', border: '1px solid #e2e8f0', color: '#334155' }}>
+                                  <h4>Raw Resume Text</h4>
+                                  <pre>
                                     {candidate.extracted_text || 'No text extracted.'}
                                   </pre>
                                 </div>
@@ -1455,10 +1528,14 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               </table>
             </div>
           ) : (
-            <div className="recruiter-empty" style={{ padding: '60px 20px', textAlign: 'center' }}>
-              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: '#94a3b8' }}>{Icons.users}</div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>No candidates found</h3>
-              <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Upload resume PDFs to your Candidates Bank to populate your talent repository.</p>
+            <div className="recruiter-empty bank-empty">
+              <div className="bank-empty-icon">{Icons.users}</div>
+              <h3>{bankSearch || skillFilter !== 'all' ? 'No candidates found' : 'No candidates yet'}</h3>
+              <p>
+                {bankSearch || skillFilter !== 'all'
+                  ? 'Try clearing your search or skill filter.'
+                  : 'Upload resume PDFs to your Candidates Bank to populate your talent repository.'}
+              </p>
             </div>
           )}
         </section>
@@ -1623,7 +1700,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   disabled={matching || !matchingReqId}
                   style={{ background: '#1e293b', color: '#fff', border: 0, padding: '10px 16px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
                 >
-                  {matching ? 'Matching...' : '⚡ Confirm Match'}
+                  {matching ? 'Matching...' : 'Confirm Match'}
                 </button>
               </div>
             </div>
@@ -1700,10 +1777,10 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         <div className="modal-overlay" onClick={() => setShowAddCandidateModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
           <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', width: '90%', padding: '24px', background: '#fff', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>👤 Add New Candidate</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>Add New Candidate</h3>
               <button onClick={() => setShowAddCandidateModal(false)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
             </div>
-            
+
             <form onSubmit={handleAddCandidateSubmit} style={{ marginTop: '16px', display: 'grid', gap: '14px' }}>
               <div>
                 <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
@@ -1810,235 +1887,235 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         </div>
       )}
 
-        {showInterviews && (
-          <div className="interviews-page-content" style={{ display: 'grid', gap: '20px' }}>
-            <WelcomeBanner
-              title="Interview Requests & Cal.com Scheduling"
-              subtitle="Incoming interview proposals from client hiring managers. Confirm candidate availability and access 1-click Cal.com booking sync."
+      {showInterviews && (
+        <div className="interviews-page-content" style={{ display: 'grid', gap: '20px' }}>
+          <WelcomeBanner
+            title="Interview Requests & Cal.com Scheduling"
+            subtitle="Incoming interview proposals from client hiring managers. Confirm candidate availability and access 1-click Cal.com booking sync."
+          />
+
+          <div className="stat-grid recruiter-stats" aria-label="Interviews summary">
+            <StatCard
+              label="TOTAL INTERVIEW REQUESTS"
+              value={interviews.length}
+              icon={Icons.calendar || Icons.briefcase}
+              tint="tint-blue"
             />
+            <StatCard
+              label="PENDING CONFIRMATION"
+              value={interviews.filter((i) => i.status === 'PROPOSED_BY_COMPANY').length}
+              icon={Icons.layers}
+              tint="tint-amber"
+            />
+            <StatCard
+              label="CONFIRMED INTERVIEWS"
+              value={interviews.filter((i) => i.status === 'CONFIRMED_BY_VENDOR').length}
+              icon={Icons.check}
+              tint="tint-green"
+            />
+          </div>
 
-            <div className="stat-grid recruiter-stats" aria-label="Interviews summary">
-              <StatCard
-                label="TOTAL INTERVIEW REQUESTS"
-                value={interviews.length}
-                icon={Icons.calendar || Icons.briefcase}
-                tint="tint-blue"
-              />
-              <StatCard
-                label="PENDING CONFIRMATION"
-                value={interviews.filter((i) => i.status === 'PROPOSED_BY_COMPANY').length}
-                icon={Icons.layers}
-                tint="tint-amber"
-              />
-              <StatCard
-                label="CONFIRMED INTERVIEWS"
-                value={interviews.filter((i) => i.status === 'CONFIRMED_BY_VENDOR').length}
-                icon={Icons.check}
-                tint="tint-green"
-              />
+          {/* Filter and search bar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: '#ffffff', padding: '14px 20px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {['ALL', 'PENDING', 'CONFIRMED'].map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setInterviewFilter(tab)}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: '8px',
+                    border: 0,
+                    background: interviewFilter === tab ? '#0f172a' : '#f1f5f9',
+                    color: interviewFilter === tab ? '#ffffff' : '#64748b',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : 'Confirmed'}
+                </button>
+              ))}
             </div>
 
-            {/* Filter and search bar */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: '#ffffff', padding: '14px 20px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                {['ALL', 'PENDING', 'CONFIRMED'].map((tab) => (
-                  <button
-                    key={tab}
-                    type="button"
-                    onClick={() => setInterviewFilter(tab)}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: '8px',
-                      border: 0,
-                      background: interviewFilter === tab ? '#0f172a' : '#f1f5f9',
-                      color: interviewFilter === tab ? '#ffffff' : '#64748b',
-                      fontSize: '0.8rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : 'Confirmed'}
-                  </button>
-                ))}
-              </div>
+            <input
+              type="text"
+              placeholder="Search candidate, role, or company..."
+              value={interviewSearch}
+              onChange={(e) => setInterviewSearch(e.target.value)}
+              style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '260px' }}
+            />
+          </div>
 
-              <input
-                type="text"
-                placeholder="Search candidate, role, or company..."
-                value={interviewSearch}
-                onChange={(e) => setInterviewSearch(e.target.value)}
-                style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '260px' }}
-              />
-            </div>
+          {/* Interviews List */}
+          {loadingInterviews ? (
+            <p className="muted" style={{ padding: 24 }}>Loading interview requests...</p>
+          ) : (
+            (() => {
+              let filtered = interviews;
+              if (interviewFilter === 'PENDING') filtered = filtered.filter((i) => i.status === 'PROPOSED_BY_COMPANY');
+              if (interviewFilter === 'CONFIRMED') filtered = filtered.filter((i) => i.status === 'CONFIRMED_BY_VENDOR');
+              if (interviewSearch.trim()) {
+                const q = interviewSearch.toLowerCase();
+                filtered = filtered.filter(
+                  (i) =>
+                    (i.candidate_name && i.candidate_name.toLowerCase().includes(q)) ||
+                    (i.requisition_title && i.requisition_title.toLowerCase().includes(q)) ||
+                    (i.company_name && i.company_name.toLowerCase().includes(q))
+                );
+              }
 
-            {/* Interviews List */}
-            {loadingInterviews ? (
-              <p className="muted" style={{ padding: 24 }}>Loading interview requests...</p>
-            ) : (
-              (() => {
-                let filtered = interviews;
-                if (interviewFilter === 'PENDING') filtered = filtered.filter((i) => i.status === 'PROPOSED_BY_COMPANY');
-                if (interviewFilter === 'CONFIRMED') filtered = filtered.filter((i) => i.status === 'CONFIRMED_BY_VENDOR');
-                if (interviewSearch.trim()) {
-                  const q = interviewSearch.toLowerCase();
-                  filtered = filtered.filter(
-                    (i) =>
-                      (i.candidate_name && i.candidate_name.toLowerCase().includes(q)) ||
-                      (i.requisition_title && i.requisition_title.toLowerCase().includes(q)) ||
-                      (i.company_name && i.company_name.toLowerCase().includes(q))
-                  );
-                }
-
-                if (filtered.length === 0) {
-                  return (
-                    <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                      <span style={{ fontSize: '2.5rem' }}>📅</span>
-                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '10px 0 4px 0' }}>
-                        No Interview Requests Found
-                      </h3>
-                      <p style={{ fontSize: '0.86rem', color: '#64748b', margin: 0 }}>
-                        When client hiring managers shortlist candidates and propose interview slots, they will appear here.
-                      </p>
-                    </div>
-                  );
-                }
-
+              if (filtered.length === 0) {
                 return (
-                  <div style={{ display: 'grid', gap: '16px' }}>
-                    {filtered.map((inv) => {
-                      const isConfirmed = inv.status === 'CONFIRMED_BY_VENDOR';
-                      const slot = inv.confirmed_slot || (inv.proposed_slots && inv.proposed_slots[0]) || {};
-                      return (
-                        <div
-                          key={inv.id}
-                          className="glass-panel"
-                          style={{
-                            background: '#ffffff',
-                            borderRadius: '16px',
-                            border: isConfirmed ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
-                            padding: '22px',
-                            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
-                            <div>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-                                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                                  {inv.candidate_name}
-                                </h3>
-                                <span
-                                  style={{
-                                    background: isConfirmed ? '#ecfdf5' : '#fef3c7',
-                                    color: isConfirmed ? '#059669' : '#d97706',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 800,
-                                    padding: '3px 8px',
-                                    borderRadius: '6px',
-                                  }}
-                                >
-                                  {isConfirmed ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION'}
-                                </span>
-                              </div>
-                              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
-                                Role: <strong style={{ color: '#1e293b' }}>{inv.requisition_title}</strong> • Client: <strong style={{ color: '#1e293b' }}>{inv.company_name || 'Client HR'}</strong>
-                              </p>
-                            </div>
+                  <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                    <span style={{ fontSize: '2.5rem' }}>📅</span>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '10px 0 4px 0' }}>
+                      No Interview Requests Found
+                    </h3>
+                    <p style={{ fontSize: '0.86rem', color: '#64748b', margin: 0 }}>
+                      When client hiring managers shortlist candidates and propose interview slots, they will appear here.
+                    </p>
+                  </div>
+                );
+              }
 
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              {!isConfirmed && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleConfirmInterview(inv.id, inv.candidate_name)}
-                                  disabled={confirmingId === inv.id}
-                                  style={{
-                                    background: '#059669',
-                                    color: '#ffffff',
-                                    border: 0,
-                                    padding: '9px 18px',
-                                    borderRadius: '10px',
-                                    fontSize: '0.82rem',
-                                    fontWeight: 700,
-                                    cursor: 'pointer',
-                                    boxShadow: '0 4px 12px rgba(5,150,105,0.25)',
-                                  }}
-                                >
-                                  {confirmingId === inv.id ? 'Confirming...' : '🟢 Confirm Slot with Candidate'}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Meeting Details Grid */}
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', marginBottom: '14px', fontSize: '0.82rem', color: '#475569' }}>
-                            <div>
-                              <strong style={{ color: '#1e293b' }}>🎯 Round:</strong> {inv.interview_round || 'Round 1'}
-                            </div>
-                            <div>
-                              <strong style={{ color: '#1e293b' }}>🕒 Slot:</strong> {slot.date} ({slot.start_time} - {slot.end_time} {slot.timezone || 'IST'})
-                            </div>
-                            <div>
-                              <strong style={{ color: '#1e293b' }}>👤 Interviewer:</strong> {inv.interviewer_name || 'Hiring Team'} ({inv.interviewer_email || 'HR'})
-                            </div>
-                            {inv.meeting_link && (
-                              <div>
-                                <strong style={{ color: '#1e293b' }}>🎥 Platform:</strong>{' '}
-                                <a href={inv.meeting_link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                                  Join Meeting ↗
-                                </a>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Notes */}
-                          {inv.notes && (
-                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '12px', background: '#ffffff', border: '1px dashed #cbd5e1', padding: '8px 12px', borderRadius: '8px' }}>
-                              📝 <strong>Client Notes:</strong> {inv.notes}
-                            </div>
-                          )}
-
-                          {/* Action Links & 1-Click Sync Bar */}
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                            {inv.calendar_links?.cal_booking_url && (
-                              <a
-                                href={inv.calendar_links.cal_booking_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
+              return (
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  {filtered.map((inv) => {
+                    const isConfirmed = inv.status === 'CONFIRMED_BY_VENDOR';
+                    const slot = inv.confirmed_slot || (inv.proposed_slots && inv.proposed_slots[0]) || {};
+                    return (
+                      <div
+                        key={inv.id}
+                        className="glass-panel"
+                        style={{
+                          background: '#ffffff',
+                          borderRadius: '16px',
+                          border: isConfirmed ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                          padding: '22px',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                                {inv.candidate_name}
+                              </h3>
+                              <span
                                 style={{
-                                  fontSize: '0.8rem',
-                                  fontWeight: 700,
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
+                                  background: isConfirmed ? '#ecfdf5' : '#fef3c7',
+                                  color: isConfirmed ? '#059669' : '#d97706',
+                                  fontSize: '0.72rem',
+                                  fontWeight: 800,
+                                  padding: '3px 8px',
+                                  borderRadius: '6px',
                                 }}
                               >
-                                🔗 Open Cal.com Live Booking Link ↗
-                              </a>
-                            )}
+                                {isConfirmed ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION'}
+                              </span>
+                            </div>
+                            <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
+                              Role: <strong style={{ color: '#1e293b' }}>{inv.requisition_title}</strong> • Client: <strong style={{ color: '#1e293b' }}>{inv.company_name || 'Client HR'}</strong>
+                            </p>
+                          </div>
 
-                            {inv.calendar_links && (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>1-Click Sync:</span>
-                                {inv.calendar_links.google && (
-                                  <a href={inv.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🟢 Google</a>
-                                )}
-                                {inv.calendar_links.outlook && (
-                                  <a href={inv.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🔵 Outlook</a>
-                                )}
-                                <a href={`/api/interviews/${inv.id}/invite.ics`} download style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>⚪ .ICS File</a>
-                              </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            {!isConfirmed && (
+                              <button
+                                type="button"
+                                onClick={() => handleConfirmInterview(inv.id, inv.candidate_name)}
+                                disabled={confirmingId === inv.id}
+                                style={{
+                                  background: '#059669',
+                                  color: '#ffffff',
+                                  border: 0,
+                                  padding: '9px 18px',
+                                  borderRadius: '10px',
+                                  fontSize: '0.82rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                  boxShadow: '0 4px 12px rgba(5,150,105,0.25)',
+                                }}
+                              >
+                                {confirmingId === inv.id ? 'Confirming...' : '🟢 Confirm Slot with Candidate'}
+                              </button>
                             )}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()
-            )}
-          </div>
-        )}
+
+                        {/* Meeting Details Grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', marginBottom: '14px', fontSize: '0.82rem', color: '#475569' }}>
+                          <div>
+                            <strong style={{ color: '#1e293b' }}>🎯 Round:</strong> {inv.interview_round || 'Round 1'}
+                          </div>
+                          <div>
+                            <strong style={{ color: '#1e293b' }}>🕒 Slot:</strong> {slot.date} ({slot.start_time} - {slot.end_time} {slot.timezone || 'IST'})
+                          </div>
+                          <div>
+                            <strong style={{ color: '#1e293b' }}>👤 Interviewer:</strong> {inv.interviewer_name || 'Hiring Team'} ({inv.interviewer_email || 'HR'})
+                          </div>
+                          {inv.meeting_link && (
+                            <div>
+                              <strong style={{ color: '#1e293b' }}>🎥 Platform:</strong>{' '}
+                              <a href={inv.meeting_link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                                Join Meeting ↗
+                              </a>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Notes */}
+                        {inv.notes && (
+                          <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '12px', background: '#ffffff', border: '1px dashed #cbd5e1', padding: '8px 12px', borderRadius: '8px' }}>
+                            📝 <strong>Client Notes:</strong> {inv.notes}
+                          </div>
+                        )}
+
+                        {/* Action Links & 1-Click Sync Bar */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                          {inv.calendar_links?.cal_booking_url && (
+                            <a
+                              href={inv.calendar_links.cal_booking_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                fontSize: '0.8rem',
+                                fontWeight: 700,
+                                color: '#2563eb',
+                                textDecoration: 'none',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                              }}
+                            >
+                              🔗 Open Cal.com Live Booking Link ↗
+                            </a>
+                          )}
+
+                          {inv.calendar_links && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>1-Click Sync:</span>
+                              {inv.calendar_links.google && (
+                                <a href={inv.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🟢 Google</a>
+                              )}
+                              {inv.calendar_links.outlook && (
+                                <a href={inv.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🔵 Outlook</a>
+                              )}
+                              <a href={`/api/interviews/${inv.id}/invite.ics`} download style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>⚪ .ICS File</a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          )}
+        </div>
+      )}
     </div>
   );
 }

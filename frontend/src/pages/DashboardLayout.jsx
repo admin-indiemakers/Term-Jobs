@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from '../components/NotificationBell';
 
 function initials(name) {
   if (!name) return 'TJ';
@@ -185,6 +186,12 @@ export default function DashboardLayout() {
               >
                 Directors
               </NavLink>
+              <NavLink
+                to="/dashboard/admin/partner-vendors"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Partner Vendors
+              </NavLink>
             </>
           ) : (
             <>
@@ -237,6 +244,7 @@ export default function DashboardLayout() {
             {!highlightRole && <span className="topbar-org-label">· {user.role}</span>}
           </div>
           <div className="topbar-right">
+            <NotificationBell />
             <span className="session-pill">Verified Session</span>
           </div>
         </header>

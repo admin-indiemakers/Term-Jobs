@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from modules.candidate.domain.models import CandidateSubmission, Candidate
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
+from modules.notifications.services.notification_service import notify_candidate_shortlisted, notify_candidate_status
 from modules.requisition.domain.models import CompanyProfile, Requisition
 from modules.shared.db import get_session
 
@@ -214,12 +215,36 @@ def update_submission_status(
         sub.updated_at = datetime.now(timezone.utc)
         session.add(sub)
         session.commit()
-        return {
-            "status": "success",
-            "message": f"Candidate status updated to {new_status}",
-            "submission_id": submission_id,
-            "new_status": new_status
-        }
+
+    # Notify the opposite party: company actions reach the vendor recruiters,
+    # recruiter shortlist actions reach the company side.
+    try:
+        vendor_tenant_id = getattr(sub, "tenant_id", None) or ""
+        is_company_actor = current_user.role in ("Admin", "HR", "Hiring Manager", "Director")
+        if is_company_actor:
+            notify_candidate_status(
+                requisition_id=sub.requisition_id,
+                candidate_name=sub.candidate_name,
+                new_status=new_status,
+                vendor_tenant_id=vendor_tenant_id,
+                match_score=sub.match_score,
+            )
+        elif new_status == "Shortlisted":
+            notify_candidate_shortlisted(
+                requisition_id=sub.requisition_id,
+                candidate_name=sub.candidate_name,
+                vendor_name=current_user.tenant_name or sub.vendor_name or "Vendor A",
+                match_score=sub.match_score,
+            )
+    except Exception:  # noqa: BLE001
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Candidate status updated to {new_status}",
+        "submission_id": submission_id,
+        "new_status": new_status
+    }
 
 
 @router.post("/bank/upload")
@@ -657,6 +682,12 @@ def shortlist_candidate(
             session.add(new_sub)
             
         session.commit()
+        notify_candidate_shortlisted(
+            requisition_id=requisition_id,
+            candidate_name=candidate_name,
+            vendor_name=vendor_name or current_user.tenant_name or "Vendor A",
+            match_score=match_score,
+        )
         return {
             "status": "success",
             "message": f"Candidate {candidate_name} shortlisted and saved to candidate_submissions table",
