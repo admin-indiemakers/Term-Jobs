@@ -47,6 +47,41 @@ const role = (req) => req?.structured_role || {};
 const skillsFor = (req) => role(req).must_have_skills || req?.intent?.tech_stack_hint || [];
 const short = (value, fallback = 'Not specified') => value || fallback;
 
+function getDeadlineInfo(deadlineStr) {
+  if (!deadlineStr) return null;
+  const deadlineDate = new Date(deadlineStr);
+  if (isNaN(deadlineDate.getTime())) {
+    return { formattedDate: deadlineStr, daysLeftText: null, isExpired: false, isUrgent: false };
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(deadlineDate);
+  target.setHours(0, 0, 0, 0);
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  let daysLeftText = '';
+  let isExpired = false;
+  let isUrgent = false;
+
+  if (diffDays < 0) {
+    daysLeftText = 'Expired';
+    isExpired = true;
+  } else if (diffDays === 0) {
+    daysLeftText = 'Due today';
+    isUrgent = true;
+  } else if (diffDays === 1) {
+    daysLeftText = '1 day left';
+    isUrgent = true;
+  } else {
+    daysLeftText = `${diffDays} days left`;
+    if (diffDays <= 3) isUrgent = true;
+  }
+
+  const formattedDate = deadlineDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return { formattedDate, daysLeftText, isExpired, isUrgent, diffDays };
+}
+
 export default function RecruiterDashboard({ view = 'dashboard' }) {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -178,6 +213,21 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
   const bankSkills = useMemo(() => {
     return [...new Set((bankCandidates || []).flatMap((candidate) => candidate.skills || []))];
+  }, [bankCandidates]);
+
+  const bankStats = useMemo(() => {
+    const list = bankCandidates || [];
+    const parsed = list.filter((c) => (c.extracted_text || '').trim().length > 0);
+    const ready = list.filter((c) => (c.candidate_email || '').trim() && (c.skills || []).length > 0);
+    const titles = [...new Set(list.map((c) => (c.candidate_title || '').trim()).filter(Boolean))];
+    return {
+      total: list.length,
+      parsed: parsed.length,
+      ready: ready.length,
+      readyPct: list.length ? Math.round((ready.length / list.length) * 100) : 0,
+      titles,
+      titleCount: titles.length,
+    };
   }, [bankCandidates]);
 
   const filteredBankCandidates = useMemo(() => {
@@ -627,6 +677,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               ) : visibleRequisitions.length ? (
                 visibleRequisitions.map((item) => {
                   const isSelected = item.id === selectedReqId;
+                  const rawDeadline = item.submission_deadline || item.structured_role?.submission_deadline || item.deadline;
+                  const deadlineInfo = getDeadlineInfo(rawDeadline);
+
                   return (
                     <button
                       key={item.id}
@@ -650,8 +703,32 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         <span className="published-status-badge" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>Published</span>
                       </div>
                       <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '6px' }}>
-                        {item.company_name || item.company?.name || 'Client'} · Published
+                        {item.company_name || item.company?.name || 'Client'}
                       </div>
+                      {deadlineInfo && (
+                        <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569', fontWeight: 500 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: deadlineInfo.isUrgent || deadlineInfo.isExpired ? '#dc2626' : '#d97706' }}>
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="12 6 12 12 16 14" />
+                            </svg>
+                            {deadlineInfo.formattedDate}
+                          </span>
+                          {deadlineInfo.daysLeftText && (
+                            <span style={{
+                              fontSize: '0.70rem',
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: '10px',
+                              background: deadlineInfo.isExpired ? '#fef2f2' : deadlineInfo.isUrgent ? '#fff7ed' : '#f0fdf4',
+                              color: deadlineInfo.isExpired ? '#dc2626' : deadlineInfo.isUrgent ? '#c2410c' : '#15803d',
+                              border: `1px solid ${deadlineInfo.isExpired ? '#fecaca' : deadlineInfo.isUrgent ? '#ffedd5' : '#dcfce7'}`
+                            }}>
+                              {deadlineInfo.daysLeftText}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </button>
                   );
                 })
@@ -996,65 +1073,57 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       )}
 
       {showCandidates && (
-        <div className="candidates-bank-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-          <section className="recruiter-page-heading" style={{ margin: 0 }}>
+        <div className="candidates-bank-header-row">
+          <section className="recruiter-page-heading">
             <span>Talent repository</span>
             <h1>Candidates Bank</h1>
             <p>Manage company talent repository, upload PDF resumes with local Ollama AI extraction, and preview candidate profiles.</p>
           </section>
-          <div>
-            <button
-              className="glow-btn"
-              onClick={() => {
-                setNewCandVendor(user?.tenant_name || 'Vendor A');
-                setShowAddCandidateModal(true);
-              }}
-              style={{ cursor: 'pointer', padding: '12px 24px', borderRadius: '10px', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '8px', border: 0, background: '#2563eb', color: '#fff' }}
-            >
-              <span>+ Add Candidate</span>
-            </button>
-          </div>
+          <button
+            className="bank-add-btn"
+            onClick={() => {
+              setNewCandVendor(user?.tenant_name || 'Vendor A');
+              setShowAddCandidateModal(true);
+            }}
+          >
+            <span className="bank-add-icon">{Icons.plus}</span>
+            Add Candidate
+          </button>
         </div>
       )}
 
       {showCandidates && (
-        <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary" style={{ marginBottom: '24px' }}>
+        <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary">
           <StatCard
             label="TOTAL CANDIDATES IN BANK"
-            value={bankCandidates.length}
-            icon={Icons.users || Icons.layers}
+            value={bankStats.total}
+            icon={Icons.users}
             tint="tint-ink"
             delta="Company Talent Repository"
             deltaTone="ink"
           />
           <StatCard
             label="TECHNICAL ROLES"
-            value={(() => {
-              const uniqueTitles = [...new Set(bankCandidates.map(c => c.candidate_title || 'Software Engineer').filter(Boolean))];
-              return uniqueTitles.length > 0 ? `${uniqueTitles.length}+` : '0+';
-            })()}
+            value={bankStats.titleCount > 0 ? `${bankStats.titleCount}+` : '0+'}
             icon={Icons.briefcase}
             tint="tint-blue"
-            delta={(() => {
-              const uniqueTitles = [...new Set(bankCandidates.map(c => c.candidate_title || 'Software Engineer').filter(Boolean))];
-              return uniqueTitles.slice(0, 3).join(', ') || 'Frontend, Backend, Design';
-            })()}
+            delta={bankStats.titles.slice(0, 3).join(', ') || 'Frontend, Backend, Design'}
             deltaTone="blue"
           />
           <StatCard
             label="AUTO-PARSED RESUMES"
-            value={bankCandidates.length}
+            value={bankStats.parsed}
             icon={Icons.layers}
             tint="tint-violet"
-            delta="Ollama LLM (llama3.2:3b) Parsed"
+            delta={bankStats.parsed ? 'Ollama LLM (llama3.2:3b) Parsed' : 'Awaiting PDF upload'}
             deltaTone="violet"
           />
           <StatCard
             label="READY FOR MATCHING"
-            value="100%"
+            value={`${bankStats.readyPct}%`}
             icon={Icons.check}
             tint="tint-green"
-            delta="Available for Requisitions"
+            delta={bankStats.total ? `${bankStats.ready} of ${bankStats.total} candidates ready` : 'No candidates yet'}
             deltaTone="green"
           />
         </section>
@@ -1062,24 +1131,25 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
       {showCandidates && (
         <section className="recruiter-results glass-panel recruiter-bank-results">
-          <div className="recruiter-section-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div className="recruiter-section-heading bank-section-head">
             <div>
-              <h2>🏢 Candidate Talent Pool ({bankCandidates.length})</h2>
-              <p>Click any candidate row to view full resume & profile details.</p>
+              <h2>Candidate Talent Pool</h2>
+              <p>Click any candidate row to view full resume &amp; profile details.</p>
             </div>
-            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-              <input
-                className="auth-input recruiter-bank-search"
-                value={bankSearch}
-                onChange={(event) => setBankSearch(event.target.value)}
-                placeholder="Search candidate name"
-                style={{ width: '220px', padding: '10px 14px', fontSize: '0.88rem' }}
-              />
+            <div className="bank-toolbar">
+              <div className="bank-search-box">
+                <span className="bank-search-icon">{Icons.search}</span>
+                <input
+                  className="auth-input recruiter-bank-search"
+                  value={bankSearch}
+                  onChange={(event) => setBankSearch(event.target.value)}
+                  placeholder="Search candidate name"
+                />
+              </div>
               <select
                 className="auth-input recruiter-bank-skill-filter"
                 value={skillFilter}
                 onChange={(event) => setSkillFilter(event.target.value)}
-                style={{ width: '180px', padding: '10px 14px', fontSize: '0.88rem', height: '40px' }}
               >
                 <option value="all">Filter Skill: All</option>
                 {bankSkills.map((skill) => (
@@ -1089,88 +1159,95 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             </div>
           </div>
 
+          <div className="bank-count-row">
+            <span className="bank-count-pill">{filteredBankCandidates.length} {filteredBankCandidates.length === 1 ? 'candidate' : 'candidates'}</span>
+            {bankSearch && <span className="bank-filter-hint">matching “{bankSearch}”</span>}
+            {skillFilter !== 'all' && <span className="bank-filter-hint">skill: {skillFilter}</span>}
+          </div>
+
           {parsingBank && (
-            <div className="bank-parsing-overlay" style={{ textAlign: 'center', padding: '40px 20px', background: '#f8fbff', border: '1.5px dashed #b8c7dd', borderRadius: '12px', marginBottom: '20px', marginTop: '10px' }}>
-              <span className="spinner" style={{ display: 'inline-block', width: '20px', height: '20px', border: '2px solid #ccc', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite', marginRight: '10px', verticalAlign: 'middle' }} />
-              <strong style={{ color: '#29466e' }}>Parsing resumes using Ollama AI extraction...</strong>
+            <div className="bank-parsing-overlay">
+              <span className="spinner" />
+              <strong>Parsing resumes using Ollama AI extraction...</strong>
             </div>
           )}
 
           {filteredBankCandidates.length > 0 ? (
-            <div className="table-container" style={{ marginTop: '16px', overflowX: 'auto' }}>
-              <table className="recruiter-bank-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+            <div className="table-container bank-table-wrap">
+              <table className="recruiter-bank-table">
                 <thead>
-                  <tr style={{ borderBottom: '2px solid #e2e8f0', color: '#64748b', fontSize: '0.78rem', fontWeight: 700, letterSpacing: '0.05em' }}>
-                    <th style={{ padding: '12px 16px' }}>CANDIDATE NAME & TITLE</th>
-                    <th style={{ padding: '12px 16px' }}>CONTACT INFO</th>
-                    <th style={{ padding: '12px 16px' }}>VENDOR / COMPANY</th>
-                    <th style={{ padding: '12px 16px' }}>SKILLS & TECH STACK</th>
-                    <th style={{ padding: '12px 16px' }}>ADDED DATE</th>
-                    <th style={{ padding: '12px 16px' }}>ACTIONS</th>
+                  <tr>
+                    <th>CANDIDATE NAME &amp; TITLE</th>
+                    <th>CONTACT INFO</th>
+                    <th>VENDOR / COMPANY</th>
+                    <th>SKILLS &amp; TECH STACK</th>
+                    <th>ADDED DATE</th>
+                    <th>ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBankCandidates.map((candidate) => {
                     const isExpanded = expandedCandidate === candidate.id;
+                    const vendor = candidate.vendor_company_name || user?.tenant_name || 'Vendor A';
                     return (
                       <Fragment key={candidate.id}>
                         <tr
                           onClick={() => setExpandedCandidate(isExpanded ? null : candidate.id)}
-                          style={{ cursor: 'pointer', borderBottom: '1px solid #f1f5f9', transition: 'background-color 0.2s' }}
                           className={`candidate-table-row ${isExpanded ? 'row-expanded' : ''}`}
                         >
-                          <td style={{ padding: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                              <div className="candidate-avatar" style={{ flexShrink: 0, width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', background: '#e0e7ff', color: '#3849a2', fontWeight: 800, fontSize: '0.85rem' }}>
+                          <td>
+                            <div className="cand-cell-name">
+                              <div className="candidate-avatar">
                                 {(candidate.candidate_name || '?').slice(0, 2).toUpperCase()}
                               </div>
                               <div>
-                                <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.95rem' }}>{candidate.candidate_name}</div>
-                                <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '2px' }}>{candidate.candidate_title || 'Software Engineer'}</div>
+                                <div className="cand-cell-fullname">{candidate.candidate_name}</div>
+                                <div className="cand-cell-title">{candidate.candidate_title || 'Software Engineer'}</div>
                               </div>
                             </div>
                           </td>
-                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#475569' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ opacity: 0.7 }}>📧</span> {candidate.candidate_email || 'No email'}
+                          <td>
+                            <div className="cand-cell-contact">
+                              <div className="cand-contact-row">
+                                <span className="cand-contact-icon">{Icons.mail}</span>
+                                <span>{candidate.candidate_email || 'No email'}</span>
                               </div>
                               {candidate.candidate_phone && (
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  <span style={{ opacity: 0.7 }}>📞</span> {candidate.candidate_phone}
+                                <div className="cand-contact-row">
+                                  <span className="cand-contact-icon">{Icons.phone}</span>
+                                  <span>{candidate.candidate_phone}</span>
                                 </div>
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '16px', fontSize: '0.85rem' }}>
-                            <span style={{ background: '#f8fafc', border: '1px solid #e2e8f0', color: '#334155', padding: '4px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                              🏢 {candidate.vendor_company_name || user?.tenant_name || 'Vendor A'}
+                          <td>
+                            <span className="cand-vendor-pill">
+                              <span className="cand-vendor-icon">{Icons.building}</span>
+                              {vendor}
                             </span>
                           </td>
-                          <td style={{ padding: '16px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          <td>
+                            <div className="cand-skills">
                               {(candidate.skills || []).slice(0, 4).map((skill, idx) => (
-                                <span key={idx} style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
-                                  {skill}
-                                </span>
+                                <span key={idx} className="skill-pill">{skill}</span>
                               ))}
                               {(candidate.skills || []).length > 4 && (
-                                <span style={{ background: '#eff6ff', color: '#2563eb', fontSize: '0.72rem', fontWeight: 600, padding: '4px 8px', borderRadius: '6px' }}>
-                                  +{candidate.skills.length - 4} more
-                                </span>
+                                <span className="skill-pill-more">+{candidate.skills.length - 4} more</span>
                               )}
                             </div>
                           </td>
-                          <td style={{ padding: '16px', fontSize: '0.85rem', color: '#64748b' }}>
-                            {candidate.created_at ? candidate.created_at.split('T')[0] : '—'}
+                          <td>
+                            <span className="cand-date">
+                              {candidate.created_at ? candidate.created_at.split('T')[0] : '—'}
+                            </span>
                           </td>
-                          <td style={{ padding: '16px' }} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <div className="cand-actions">
                               <button
                                 className="view-resume-btn glow-btn"
                                 onClick={() => setShowResumeModal(candidate)}
-                                style={{ background: '#1e293b', padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', cursor: 'pointer', color: '#fff', border: 0 }}
                               >
+                                <span className="btn-icon">{Icons.fileText}</span>
                                 View Resume
                               </button>
                               <button
@@ -1179,28 +1256,29 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   setSelectedMatchCandidate(candidate);
                                   setMatchingReqId(requisitions[0]?.id || '');
                                 }}
-                                style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', padding: '6px 12px', fontSize: '0.78rem', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
                               >
-                                ⚡ Match
+                                <span className="btn-icon">{Icons.zap}</span>
+                                Match
                               </button>
                               <button
+                                className="delete-candidate-link"
                                 onClick={() => deleteBankCandidate(candidate.id)}
-                                style={{ background: 'none', border: 0, color: '#ef4444', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
                               >
+                                <span className="btn-icon">{Icons.trash}</span>
                                 Delete
                               </button>
                             </div>
                           </td>
                         </tr>
                         {isExpanded && (
-                          <tr className="expanded-details-row" style={{ background: '#f8fafc' }}>
-                            <td colSpan="5" style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
-                              <div style={{ display: 'grid', gap: '16px' }}>
+                          <tr className="expanded-details-row">
+                            <td colSpan="6">
+                              <div className="cand-details-expanded">
                                 <div>
-                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Professional Summary</h4>
-                                  <p style={{ fontSize: '0.85rem', color: '#475569', lineHeight: 1.5 }}>{candidate.summary || 'No summary available.'}</p>
+                                  <h4>Professional Summary</h4>
+                                  <p>{candidate.summary || 'No summary available.'}</p>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '0.82rem', color: '#475569' }}>
+                                <div className="cand-details-meta">
                                   <div>
                                     <strong>All Skills:</strong> {(candidate.skills || []).join(', ')}
                                   </div>
@@ -1209,8 +1287,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   </div>
                                 </div>
                                 <div>
-                                  <h4 style={{ fontSize: '0.88rem', fontWeight: 700, color: '#1e293b', marginBottom: '6px' }}>Raw Resume Text</h4>
-                                  <pre style={{ whiteSpace: 'pre-wrap', maxHeight: '250px', overflowY: 'auto', background: '#f1f5f9', padding: '16px', borderRadius: '8px', fontSize: '0.75rem', marginTop: '6px', fontFamily: 'monospace', border: '1px solid #e2e8f0', color: '#334155' }}>
+                                  <h4>Raw Resume Text</h4>
+                                  <pre>
                                     {candidate.extracted_text || 'No text extracted.'}
                                   </pre>
                                 </div>
@@ -1225,10 +1303,14 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               </table>
             </div>
           ) : (
-            <div className="recruiter-empty" style={{ padding: '60px 20px', textAlign: 'center' }}>
-              <div style={{ width: '48px', height: '48px', margin: '0 auto 16px', color: '#94a3b8' }}>{Icons.users}</div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#1e293b', marginBottom: '8px' }}>No candidates found</h3>
-              <p style={{ color: '#64748b', fontSize: '0.88rem' }}>Upload resume PDFs to your Candidates Bank to populate your talent repository.</p>
+            <div className="recruiter-empty bank-empty">
+              <div className="bank-empty-icon">{Icons.users}</div>
+              <h3>{bankSearch || skillFilter !== 'all' ? 'No candidates found' : 'No candidates yet'}</h3>
+              <p>
+                {bankSearch || skillFilter !== 'all'
+                  ? 'Try clearing your search or skill filter.'
+                  : 'Upload resume PDFs to your Candidates Bank to populate your talent repository.'}
+              </p>
             </div>
           )}
         </section>
@@ -1393,7 +1475,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   disabled={matching || !matchingReqId}
                   style={{ background: '#1e293b', color: '#fff', border: 0, padding: '10px 16px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
                 >
-                  {matching ? 'Matching...' : '⚡ Confirm Match'}
+                  {matching ? 'Matching...' : 'Confirm Match'}
                 </button>
               </div>
             </div>
@@ -1470,7 +1552,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         <div className="modal-overlay" onClick={() => setShowAddCandidateModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
           <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', width: '90%', padding: '24px', background: '#fff', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>👤 Add New Candidate</h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>Add New Candidate</h3>
               <button onClick={() => setShowAddCandidateModal(false)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
             </div>
             

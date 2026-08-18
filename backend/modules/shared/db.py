@@ -293,5 +293,7 @@ def init_db() -> None:
     db["decision_records"].create_index("requisition_id")
     db["candidate_submissions"].create_index("requisition_id")
     db["candidates"].create_index("tenant_id")
+    db["notifications"].create_index("user_id")
+    db["notifications"].create_index("created_at")
 
 

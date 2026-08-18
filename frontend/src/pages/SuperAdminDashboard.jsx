@@ -92,7 +92,7 @@ export default function SuperAdminDashboard() {
         </Link>
       </WelcomeBanner>
 
-      <div className="stat-grid">
+      <div className="stat-grid" style={{ marginTop: '16px', marginBottom: '24px' }}>
         <StatCard label="Companies" value={tenants.length} icon={Icons.building} tint="tint-black" delta={totalTenants === 0 ? 'No tenants' : '100% of all'} deltaTone="ink" />
         <StatCard label="Client (Buyer)" value={clientTenants.length} icon={Icons.briefcase} tint="tint-black" delta={`${buyerShare}% of tenants`} deltaTone="ink" />
         <StatCard label="Consultancies (Vendor)" value={consultancyTenants.length} icon={Icons.layers} tint="tint-black" delta={`${vendorShare}% of tenants`} deltaTone="ink" />
@@ -103,21 +103,21 @@ export default function SuperAdminDashboard() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
-      <div className="glass-panel table-card" style={{ marginBottom: 24 }}>
-        <div className="table-head">
+      <div className="glass-panel table-card" style={{ marginBottom: 24, padding: '20px 24px' }}>
+        <div className="table-head" style={{ padding: 0, marginBottom: '16px' }}>
           <div>
             <h2 className="card-title">Platform Settings</h2>
             <p className="muted" style={{ fontSize: '0.82rem' }}>Platform-wide defaults applied to all vendors and requisitions.</p>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 24, flexWrap: 'wrap', padding: '16px 4px' }}>
-          <div style={{ minWidth: 280 }}>
-            <p className="card-title" style={{ fontSize: '0.95rem', marginBottom: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 280 }}>
+            <p className="card-title" style={{ fontSize: '0.95rem', marginBottom: 4, fontWeight: 700 }}>
               Max candidate submissions per requisition
             </p>
-            <p className="muted" style={{ fontSize: '0.8rem', lineHeight: 1.5 }}>
+            <p className="muted" style={{ fontSize: '0.8rem', lineHeight: 1.5, margin: 0 }}>
               How many candidates a single vendor can apply to one published requisition.
-              Currently <strong>{candidateLimit}</strong>.
+              Currently <strong style={{ color: '#1e293b' }}>{candidateLimit}</strong>.
             </p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -127,7 +127,7 @@ export default function SuperAdminDashboard() {
               value={limitInput}
               onChange={(e) => setLimitInput(e.target.value)}
               className="auth-input"
-              style={{ width: 90 }}
+              style={{ width: 90, textAlign: 'center' }}
               disabled={limitSaving}
             />
             <button type="button" className="glow-btn" onClick={handleSaveLimit} disabled={limitSaving}>
@@ -142,7 +142,7 @@ export default function SuperAdminDashboard() {
       ) : (
         <>
           <div className="glass-panel table-card">
-            <div className="table-head">
+            <div className="table-head" style={{ padding: '18px 24px' }}>
               <div>
                 <h2 className="card-title">Companies</h2>
                 <p className="muted" style={{ fontSize: '0.82rem' }}>{tenants.length} total</p>

@@ -323,88 +323,22 @@ export default function AdminDashboard() {
       {error && <div className="alert alert-error">{error}</div>}
       {success && <div className="alert alert-success">{success}</div>}
 
-      <div className="glass-panel">
-        <div className="split-card">
-          <div className="split-card-head">
-            <div className="form-panel-head">
-              <div className="form-panel-icon">{Icons.users}</div>
-              <div>
-                <div className="form-panel-title">Partner Vendors</div>
-                <div className="form-panel-caption">
-                  Select which consultancy vendors your Hiring Managers work with. Only engaged vendors can see your company's published requisitions and submit screened candidates.
-                </div>
-              </div>
+      <div className="glass-panel" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div className="form-panel-icon" style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {Icons.users}
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Partner Vendors</h3>
+              <p className="muted" style={{ fontSize: '0.84rem', margin: '3px 0 0' }}>
+                {vendors.filter((v) => v.engaged).length} of {vendors.length} consultancy vendors engaged.
+              </p>
             </div>
           </div>
-          <div className="split-card-body">
-            {loading ? (
-              <p className="muted">Loading vendors...</p>
-            ) : vendors.length === 0 ? (
-              <div className="empty-box">
-                <strong>No vendor consultancies onboarded yet.</strong>
-                <br />
-                Ask the Super Admin to onboard vendors before you can partner with them.
-              </div>
-            ) : (
-              <div id="vendor-grid">
-                <div className="vendor-grid">
-                  {vendors.map((v) => (
-                    <div
-                      key={v.id}
-                      className={`vendor-card ${v.engaged ? 'vendor-card-selected' : ''}`}
-                      onClick={() => toggleVendor(v.id)}
-                    >
-                      <div className="vendor-card-top">
-                        <span className="vendor-check">{v.engaged ? '✓' : ''}</span>
-                        <span className="vendor-name">{v.name}</span>
-                      </div>
-                      <div className="vendor-meta">
-                        {v.location && <span>{v.location}</span>}
-                        {v.industry && <span>{v.industry}</span>}
-                        {v.size && <span>{v.size}</span>}
-                      </div>
-                      {v.specializations.length > 0 && (
-                        <div className="vendor-tags">
-                          {v.specializations.slice(0, 4).map((s) => (
-                            <span key={s} className="vendor-tag">{s}</span>
-                          ))}
-                        </div>
-                      )}
-                      {v.engaged && (
-                        <div
-                          className="vendor-limit-box"
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid rgba(226, 232, 240, 0.6)' }}
-                        >
-                          <label style={{ fontSize: '0.78rem', color: '#475569', display: 'block', marginBottom: 4, fontWeight: 600 }}>
-                            Candidate Limit / Req
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            placeholder="Default (3)"
-                            value={v.candidate_limit ?? ''}
-                            onChange={(e) => setVendorCandidateLimit(v.id, e.target.value)}
-                            className="auth-input"
-                            style={{ padding: '4px 8px', fontSize: '0.82rem', width: '100%', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff', color: '#0f172a' }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <button className="ghost-btn" style={{ marginTop: 12 }} onClick={saveVendors} disabled={savingVendors}>
-                  {savingVendors ? 'Saving...' : 'Save Vendor Partnerships'}
-                </button>
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
-              <button className="glow-btn" onClick={scrollToVendors} disabled={vendors.length === 0}>
-                Manage Vendors
-              </button>
-            </div>
-          </div>
+          <button className="glow-btn" onClick={() => navigate('/dashboard/admin/partner-vendors')}>
+            Manage Vendors & Partnerships →
+          </button>
         </div>
       </div>
 
