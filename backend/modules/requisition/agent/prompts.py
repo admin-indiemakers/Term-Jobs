@@ -24,8 +24,10 @@ _CONTRACT_SECTION = (
 
 JD_SECTIONS = (
     "Write sections: About the role, What you will do, Requirements (must-have), "
-    "Nice to have, Experience and compensation, "
+    "Nice to have, Experience requirements, "
     "Contract duration / engagement, How to apply. "
+    "Do NOT include salary, rate, budget, compensation, or engagement-value "
+    "figures anywhere in the job description — payment details stay internal. "
     "The \"Contract duration / engagement\" section is MANDATORY: always write it "
     "using the contract duration from the structured role ({contract_duration}); "
     "if none is known write \"To be confirmed\". Keep it concise."
@@ -86,6 +88,9 @@ feedback while keeping the parts that were not asked to change. {sections}
 
 JD_GENERATION_PROMPT = """You are a senior technical recruiter. Write a clear,
 engaging job description in Markdown for the following role.
+
+Return ONLY the Markdown document itself. Do NOT wrap it in JSON, do NOT add
+code fences, and do NOT prefix it with a key such as "job_description".
 
 Company profile:
 {profile}

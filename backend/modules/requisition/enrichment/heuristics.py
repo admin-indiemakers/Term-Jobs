@@ -36,6 +36,14 @@ LOCATIONS = [
     "coimbatore", "mysuru", "mysore", "jaipur", "lucknow", "indore", "surat",
     "nagpur", "bhubaneswar", "visakhapatnam", "vijayawada", "guwahati", "patna",
     "vadodara", "chandigarh", "dehradun", "goa", "kerala", "tamil nadu",
+    "london", "new york", "manhattan", "brooklyn", "los angeles", "san francisco",
+    "seattle", "chicago", "austin", "boston", "denver", "atlanta", "toronto",
+    "vancouver", "montreal", "sydney", "melbourne", "singapore", "dubai", "abu dhabi",
+    "berlin", "munich", "frankfurt", "paris", "amsterdam", "madrid", "barcelona",
+    "lisbon", "zurich", "geneva", "stockholm", "copenhagen", "oslo", "helsinki",
+    "dublin", "warsaw", "prague", "tel aviv", "tokyo", "hong kong", "shanghai",
+    "beijing", "seoul", "bangkok", "kuala lumpur", "jakarta", "manila", "sao paulo",
+    "mexico city", "new delhi", "ncr", "remote - india", "hybrid", "on-site", "onsite",
 ]
 
 _SENIORITY_KEYWORDS = [

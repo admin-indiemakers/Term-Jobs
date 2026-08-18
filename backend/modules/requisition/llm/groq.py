@@ -28,6 +28,22 @@ _DEFAULT_MESSAGES = [
 ]
 
 
+def _unwrap_json_string(content: str) -> str:
+    """Return the raw string if the model wrapped free-text in a JSON object."""
+    text = content.strip()
+    if not text.startswith("{") or not text.endswith("}"):
+        return content
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        return content
+    if isinstance(parsed, dict) and len(parsed) == 1:
+        value = next(iter(parsed.values()))
+        if isinstance(value, str):
+            return value
+    return content
+
+
 class _Schema(BaseModel):
     pass
 
@@ -74,17 +90,19 @@ class GroqClient(LLMClient):
                 time.sleep(min(2 ** attempt, 30))
         raise RuntimeError(f"Groq request failed after {max_retries} attempts: {last_exc}") from last_exc
 
-    def chat(self, messages: list[dict[str, str]], tier: str = "small") -> str:
+    def chat(self, messages: list[dict[str, str]], tier: str = "small", system: str | None = None) -> str:
+        system = system if system is not None else _DEFAULT_MESSAGES[0]["content"]
         payload = {
             "model": self._resolve_model(tier),
-            "messages": _DEFAULT_MESSAGES + messages,
+            "messages": [{"role": "system", "content": system}] + messages,
             "stream": False,
         }
         data = self._post(payload)
         return data["choices"][0]["message"]["content"]
 
     def generate_text(self, prompt: str, tier: str = "small") -> str:
-        return self.chat([{"role": "user", "content": prompt}], tier=tier)
+        content = self.chat([{"role": "user", "content": prompt}], tier=tier, system=None)
+        return _unwrap_json_string(content)
 
     def generate_structured(self, prompt: str, schema: type[BaseModel], tier: str = "mid") -> dict:
         """Request JSON conforming to `schema` and parse it (without strict validation)."""

@@ -285,7 +285,7 @@ def _auto_close_expired() -> None:
                 deadline_date = _dt.date.fromisoformat(str(deadline))
             except ValueError:
                 continue
-            if deadline_date < _dt.date.today():
+            if deadline_date <= _dt.date.today():
                 sm = StateMachine(schemas.RequisitionStatus(req.status))
                 sm.transition(schemas.RequisitionStatus.CLOSED)
                 req.status = sm.status.value

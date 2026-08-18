@@ -119,7 +119,12 @@ export default function RequisitionDetail() {
       };
     }
     const ok = await run('/approve', 'POST', { ...body, reviewer: user.id });
-    if (ok) setInfo('Role approved.');
+    if (!ok) {
+      setBusy('');
+      return;
+    }
+    const published = await run('/publish', 'POST', { by: user.id });
+    setInfo(published ? 'Role approved and published.' : 'Role approved. Publish failed.');
     setBusy('');
   };
 
@@ -299,7 +304,7 @@ export default function RequisitionDetail() {
               Reject
             </button>
             <button className="glow-btn" onClick={handleApprove} disabled={busy === 'approve'}>
-              {busy === 'approve' ? 'Approving...' : 'Approve'}
+              {busy === 'approve' ? 'Approving & publishing...' : 'Approve & Publish'}
             </button>
           </div>
         </div>
@@ -307,14 +312,14 @@ export default function RequisitionDetail() {
 
       {!isReadOnly && normStatus === 'PendingApproval' && (
         <div className="glass-panel action-card">
-          <h3 className="card-title">Approved — ready to publish</h3>
-          <p className="card-text">Publish this requisition to share it with your consultancy partners.</p>
+          <h3 className="card-title">Approved — publishing</h3>
+          <p className="card-text">This requisition is being published to your consultancy partners.</p>
           <div className="approval-actions">
             <button className="danger-btn" onClick={handleReject} disabled={busy === 'reject'}>
               Reject
             </button>
             <button className="glow-btn" onClick={handlePublish} disabled={busy === 'publish'}>
-              {busy === 'publish' ? 'Publishing...' : 'Publish'}
+              {busy === 'publish' ? 'Publishing...' : 'Retry Publish'}
             </button>
           </div>
         </div>

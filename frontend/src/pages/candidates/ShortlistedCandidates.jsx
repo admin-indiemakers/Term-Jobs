@@ -59,6 +59,7 @@ export default function ShortlistedCandidates() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('');
   const [expanded, setExpanded] = useState(null);
+  const [jdExpanded, setJdExpanded] = useState(null);
   const [rejecting, setRejecting] = useState(null);
 
   useEffect(() => {
@@ -155,7 +156,8 @@ export default function ShortlistedCandidates() {
       byReq[c.requisition_id].candidates.push(c);
     });
     Object.values(byReq).forEach((g) => {
-      grouped.push({ type: 'req', req: g.req, count: g.candidates.length });
+      const vendorCount = new Set(g.candidates.map((x) => x.vendor_name)).size;
+      grouped.push({ type: 'req', req: g.req, count: g.candidates.length, vendorCount });
       g.candidates.forEach((c) => grouped.push({ type: 'cand', c }));
     });
     list.forEach((c) => {
@@ -226,13 +228,16 @@ export default function ShortlistedCandidates() {
               </tr>
             </thead>
             <tbody>
-              {shown.map((item) =>
+{shown.map((item) =>
                 item.type === 'req' ? (
                   <tr key={item.req.id} className="req-group-row">
                     <td colSpan="7" className="req-group-cell">
                       <span className="req-group-ref">{item.req.ref}</span>
                       <span className="req-group-title">{item.req.title}</span>
                       <span className="req-group-count">{item.count} shortlisted</span>
+                      {item.vendorCount > 1 && (
+                        <span className="req-group-vendors">{item.vendorCount} vendors competing</span>
+                      )}
                     </td>
                   </tr>
                 ) : (
@@ -244,9 +249,10 @@ export default function ShortlistedCandidates() {
                     onReject={() => handleReject(item.c)}
                     onViewResume={() => handleViewResume(item.c)}
                     rejecting={rejecting === item.c.id}
+                    jdExpanded={jdExpanded === item.c.id}
+                    onToggleJd={() => setJdExpanded(jdExpanded === item.c.id ? null : item.c.id)}
                   />
-                )
-              )}
+                )}
             </tbody>
           </table>
         )}
@@ -255,7 +261,7 @@ export default function ShortlistedCandidates() {
   );
 }
 
-function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume, rejecting }) {
+function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume, rejecting, jdExpanded, onToggleJd }) {
   return (
     <>
       <tr className="clickable-row" onClick={onToggle}>
@@ -306,6 +312,18 @@ function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume
                     <pre className="cand-resume">{c.resume_text}</pre>
                   </div>
                 )}
+                <div className="cand-jd-block">
+                  <div
+                    className="cand-jd-toggle"
+                    onClick={(e) => { e.stopPropagation(); onToggleJd(); }}
+                  >
+                    <span>📋 JD Applied</span>
+                    <span className="row-action">{jdExpanded ? 'Hide' : 'View'}</span>
+                  </div>
+                  {jdExpanded && (
+                    <pre className="cand-jd-text">{c.jd_text || 'No JD recorded for this submission.'}</pre>
+                  )}
+                </div>
                 <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
                   <span style={{ fontSize: '0.84rem', color: '#64748b' }}>
                     📁 File: <strong>{c.filename || 'resume.pdf'}</strong>

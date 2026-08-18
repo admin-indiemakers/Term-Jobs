@@ -162,6 +162,7 @@ async def screen_multiple_candidates(
         cand["email_notification_status"] = "Pending HR Shortlist"
         cand["tenant_id"] = current_user.tenant_id
         cand["resume_text"] = resume_text_by_file.get(cand.get("filename"))
+        cand["jd_text"] = jd
         CANDIDATE_STORE.append(cand)
 
     return {

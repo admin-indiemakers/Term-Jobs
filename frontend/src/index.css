@@ -417,6 +417,10 @@
     @apply ml-2 text-xs text-slate-400;
   }
 
+  .req-group-vendors {
+    @apply ml-2 inline-block rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[0.72rem] font-semibold text-amber-700;
+  }
+
   .shortlist-head {
     @apply mb-3 flex items-center justify-between gap-3;
   }
@@ -639,6 +643,7 @@
 
   .required {
     @apply text-red-600;
+    color: #dc2626;
   }
 
   .form-optional {
@@ -1208,6 +1213,18 @@
 
 .cand-resume {
     @apply max-h-64 overflow-auto whitespace-pre-wrap rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-[0.78rem] leading-relaxed text-slate-700;
+  }
+
+  .cand-jd-block {
+    @apply mt-3.5 rounded-lg border border-blue-200 bg-blue-50/40 p-3;
+  }
+
+  .cand-jd-toggle {
+    @apply flex cursor-pointer items-center justify-between gap-3;
+  }
+
+  .cand-jd-text {
+    @apply mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg border border-blue-100 bg-white p-3 font-mono text-[0.78rem] leading-relaxed text-slate-700;
   }
 
   .resume-download-link {

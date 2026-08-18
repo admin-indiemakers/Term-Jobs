@@ -300,7 +300,7 @@ export default function NewRequisition() {
   };
 
   const roleTitle = prefill.job_title.trim();
-  const canSubmit = Boolean(companyProfileId) && roleTitle.length > 0;
+  const canSubmit = Boolean(companyProfileId) && roleTitle.length > 0 && Boolean(prefill.submission_deadline);
 
   const handlePrefillChange = (section, field, value) => {
     setPrefill((prev) => ({
@@ -615,7 +615,7 @@ export default function NewRequisition() {
                 <Field label="Hiring Manager" hint="e.g. Arjun Mehta">
                   <TextInput value={prefill.hiring_manager} onChange={(v) => handlePrefillChange('process', 'hiring_manager', v)} placeholder="Arjun Mehta" />
                 </Field>
-                <Field label="Submission Deadline">
+                <Field label="Submission Deadline" required>
                   <TextInput type="date" value={prefill.submission_deadline} onChange={(v) => handlePrefillChange('process', 'submission_deadline', v)} />
                 </Field>
                 <Field label="Priority">

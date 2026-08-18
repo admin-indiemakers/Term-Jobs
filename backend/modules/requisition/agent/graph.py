@@ -11,6 +11,7 @@ Graph (each intake turn and the approval checkpoint is a persisted graph pause):
 The checkpointer (MemorySaver for tests, PostgresSaver in prod) persists graph
 state across the pauses, matching the MVP's "graph pause persisted to Postgres".
 """
+import json
 import re
 from typing import Any, TypedDict
 
@@ -20,7 +21,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
 
 from ...shared.config import settings
-from ...shared.db import client as mongo_client
+from ...shared.db import client as _mongo_client_fn
 from ..domain import models, schemas
 from ..domain.state import StateMachine
 from ..enrichment import heuristics, skills
@@ -37,7 +38,7 @@ def make_checkpointer():
     """
     try:
         return MongoDBSaver(
-            mongo_client,
+            _mongo_client_fn(),
             db_name=settings.mongo_db_name,
             checkpoint_collection_name="graph_checkpoints",
             writes_collection_name="graph_checkpoint_writes",
@@ -79,14 +80,46 @@ def _jd_sections(contract_duration: str) -> str:
     return prompts.JD_SECTIONS.format(contract_duration=contract_duration or "To be confirmed")
 
 
+_PAYMENT_FIELDS = (
+    "rate_band",
+    "ceiling_internal",
+    "range_vendors_see",
+    "rate_card_cap",
+    "total_engagement_value",
+    "budget_approved",
+    "budget_reference",
+    "variance_approved",
+)
+
+
+def _role_for_jd(role: schemas.StructuredRole) -> str:
+    """Serialize the role for JD generation WITHOUT any payment/compensation
+    fields, so the JD never leaks rates, ceilings, or engagement value."""
+    data = role.model_dump()
+    for field in _PAYMENT_FIELDS:
+        data.pop(field, None)
+    return json.dumps(data)
+
+
 def _sanitize_role(raw: dict) -> None:
     """Coerce small-model JSON quirks before strict schema validation."""
-    rate_band = raw.get("rate_band")
-    if rate_band is not None and (
-        not isinstance(rate_band, (list, tuple)) or len(rate_band) != 2
-    ):
-        # e.g. a single value -> drop so the parsed intake answer fills it.
-        raw.pop("rate_band", None)
+    for field in ("rate_band", "range_vendors_see"):
+        value = raw.get(field)
+        if value is not None and (
+            not isinstance(value, (list, tuple)) or len(value) != 2
+        ):
+            # e.g. a single value -> drop so the parsed intake answer fills it.
+            raw.pop(field, None)
+    for field in ("ceiling_internal", "rate_card_cap"):
+        value = raw.get(field)
+        if isinstance(value, (list, tuple)):
+            # LLM sometimes emits a range as a 2-tuple; keep the upper bound.
+            raw[field] = value[-1] if value else None
+        elif value is not None:
+            try:
+                raw[field] = int(value)
+            except (TypeError, ValueError):
+                raw.pop(field, None)
     confidence = raw.get("confidence")
     if confidence is not None:
         try:
@@ -454,7 +487,7 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
                 jd_prompt = prompts.JD_REFINE_PROMPT.format(
                     profile=profile.model_dump_json(),
                     jd=current_jd,
-                    role=role.model_dump_json(),
+                    role=_role_for_jd(role),
                     instruction=instruction,
                     sections=_jd_sections(role.contract_duration),
                 )
@@ -536,7 +569,7 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             jd_prompt = prompts.JD_GENERATION_PROMPT.format(
                 profile=profile.model_dump_json(),
                 intent=intent.model_dump_json(),
-                role=role.model_dump_json(),
+                role=_role_for_jd(role),
                 sections=_jd_sections(role.contract_duration),
             )
             jd_markdown = _ensure_contract_section(
@@ -707,6 +740,14 @@ class JobRequirementAgent:
             initial["parsed"] = _parse_prompt(prompt)
             initial["status"] = schemas.RequisitionStatus.STRUCTURING.value
         config = self._config(requisition_id)
+        persisted = self.graph.get_state(config)
+        if resume is not None and "requisition_id" not in (persisted.values or {}):
+            # No persisted thread state for this requisition (e.g. intake was
+            # started under an older/restarted server before checkpoints
+            # existed, or a prior run crashed before saving state). A resume
+            # on an empty thread would run the graph with no state and crash;
+            # restart from the seeded initial state instead.
+            resume = None
         result = self.graph.stream(
             Command(resume=resume) if resume is not None else dict(initial),
             config=config,

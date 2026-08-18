@@ -60,6 +60,7 @@ def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None =
             "filename": cand.get("filename"),
             "fingerprint": cand.get("fingerprint"),
             "resume_text": cand.get("resume_text"),
+            "jd_text": cand.get("jd_text"),
             "match_score": cand.get("match_score"),
             "recommendation": cand.get("recommendation"),
             "status": cand.get("status", "Screened"),
@@ -134,10 +135,12 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
             req_title = None
             comp_name = None
             req_id = doc.get("requisition_id")
+            req_jd = None
             if req_id:
                 req_doc = db["requisitions"].find_one({"id": req_id})
                 if req_doc:
                     req_title = req_doc.get("title")
+                    req_jd = req_doc.get("generated_jd_markdown")
                     comp_id = req_doc.get("company_id")
                     if comp_id:
                         comp_doc = db["company_profiles"].find_one({"id": comp_id})
@@ -158,6 +161,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                 "filename": doc.get("filename"),
                 "fingerprint": doc.get("fingerprint"),
                 "resume_text": doc.get("resume_text"),
+                "jd_text": doc.get("jd_text") or req_jd or "",
                 "match_score": float(doc["match_score"]) if doc.get("match_score") is not None else 0.0,
                 "recommendation": doc.get("recommendation"),
                 "status": doc.get("status"),
