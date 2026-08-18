@@ -233,6 +233,7 @@ export default function AdminDashboard() {
     setPwdForm({ ...pwdForm, [e.target.name]: e.target.value });
     setError('');
     setSuccess('');
+    
   };
 
   const openEdit = (u) => {

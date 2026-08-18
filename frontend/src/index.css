@@ -421,6 +421,10 @@
     @apply ml-2 inline-block rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[0.72rem] font-semibold text-amber-700;
   }
 
+  .req-group-shortlist-link {
+    @apply ml-2 inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-[0.72rem] font-semibold text-blue-700 no-underline transition-colors hover:bg-blue-100;
+  }
+
   .shortlist-head {
     @apply mb-3 flex items-center justify-between gap-3;
   }
@@ -587,6 +591,14 @@
 
   .btn-reject {
     @apply cursor-pointer rounded-md border border-red-200 bg-red-50 px-2 py-0.5 text-[0.8rem] font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-shortlist {
+    @apply cursor-pointer rounded-md border border-green-200 bg-green-50 px-2 py-0.5 text-[0.8rem] font-semibold text-green-700 transition-colors hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .shortlist-actions {
+    @apply mb-3;
   }
 
   /* ============ MODAL ============ */

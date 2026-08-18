@@ -19,6 +19,7 @@ import RequisitionOverview from './pages/requisitions/RequisitionOverview';
 import NewRequisition from './pages/requisitions/NewRequisition';
 import RequisitionDetail from './pages/requisitions/RequisitionDetail';
 import ShortlistedCandidates from './pages/candidates/ShortlistedCandidates';
+import RequisitionCandidates from './pages/candidates/RequisitionCandidates';
 
 function FullScreenLoader() {
   return (
@@ -80,6 +81,7 @@ export default function App() {
           <Route path="requisitions/history" element={<RequisitionOverview section="history" />} />
           <Route path="requisitions/new" element={<NewRequisition />} />
           <Route path="requisitions/:id" element={<RequisitionDetail />} />
+          <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />

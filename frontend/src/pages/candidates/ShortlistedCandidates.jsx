@@ -238,6 +238,7 @@ export default function ShortlistedCandidates() {
                       {item.vendorCount > 1 && (
                         <span className="req-group-vendors">{item.vendorCount} vendors competing</span>
                       )}
+                      <Link to={`/dashboard/requisitions/${item.req.id}/candidates`} className="req-group-shortlist-link">📋 Review JD Candidates →</Link>
                     </td>
                   </tr>
                 ) : (
@@ -252,7 +253,7 @@ export default function ShortlistedCandidates() {
                     jdExpanded={jdExpanded === item.c.id}
                     onToggleJd={() => setJdExpanded(jdExpanded === item.c.id ? null : item.c.id)}
                   />
-                )}
+                ))}
             </tbody>
           </table>
         )}

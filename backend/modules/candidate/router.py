@@ -48,6 +48,7 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         "vendor_name": row.vendor_name,
         "filename": row.filename,
         "resume_text": row.resume_text,
+        "jd_text": getattr(row, "jd_text", None) or (req.generated_jd_markdown if req else None),
         "match_score": float(row.match_score) if row.match_score is not None else None,
         "recommendation": row.recommendation,
         "status": row.status,

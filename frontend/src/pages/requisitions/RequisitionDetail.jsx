@@ -393,6 +393,11 @@ export default function RequisitionDetail() {
           <h3 className="card-title">Shortlisted Candidates</h3>
           <span className="muted">{req.ref || `REQ-${(id || '').slice(0, 6).toUpperCase()}`}</span>
         </div>
+        <div className="shortlist-actions">
+          <Link to={`/dashboard/requisitions/${id}/candidates`} className="btn-secondary-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem', borderRadius: '8px', background: '#2563eb', color: '#ffffff', textDecoration: 'none', fontWeight: 700, boxShadow: '0 2px 6px rgba(37,99,235,0.25)' }}>
+            📋 Review & Shortlist Candidates
+          </Link>
+        </div>
         {shortlistLoading ? (
           <p className="muted" style={{ padding: 12 }}>Loading shortlisted candidates...</p>
         ) : shortlisted.length === 0 ? (

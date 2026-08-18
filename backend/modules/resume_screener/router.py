@@ -140,6 +140,63 @@ def _build_summary(structured, matched, missing, score) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Helper: persist screened candidates so Hiring Managers can review & shortlist
+# ---------------------------------------------------------------------------
+
+def _persist_screened_candidates(results, requisition_id, jd_text, vendor_name, tenant_id):
+    """Save Screened candidates to candidate_submissions (skipping ones already submitted).
+
+    Only candidates that are not already on record for this requisition (matched
+    by email or name) are inserted, so we never overwrite an existing
+    Shortlisted/Rejected decision.
+    """
+    try:
+        from modules.candidate_screening_agent.services.db_service import (
+            fetch_candidates_from_db,
+            save_candidate_submission,
+        )
+    except Exception:
+        return
+
+    existing_keys = set()
+    for c in fetch_candidates_from_db(requisition_id=requisition_id):
+        email = (c.get("candidate_email") or "").strip().lower()
+        name = (c.get("candidate_name") or "").strip().lower()
+        if email:
+            existing_keys.add(("email", email))
+        if name:
+            existing_keys.add(("name", name))
+
+    for r in results:
+        if r.get("error") or r.get("status") == "Error":
+            continue
+        name = (r.get("candidate_name") or "").strip().lower()
+        email = (r.get("candidate_email") or "").strip().lower()
+        if (email and ("email", email) in existing_keys) or (name and ("name", name) in existing_keys):
+            continue
+        doc = {
+            "candidate_name": r.get("candidate_name") or "",
+            "candidate_email": r.get("candidate_email") or None,
+            "vendor_name": vendor_name,
+            "filename": r.get("filename"),
+            "jd_text": jd_text,
+            "match_score": r.get("match_score"),
+            "recommendation": r.get("recommendation"),
+            "status": "Screened",
+            "summary": r.get("summary"),
+            "details": r.get("score_breakdown") or {},
+            "matched_skills": r.get("matched_skills") or [],
+            "missing_skills": r.get("missing_skills") or [],
+            "resume_pdf": r.get("resume_pdf"),
+        }
+        try:
+            save_candidate_submission(doc, requisition_id=requisition_id, vendor_name=vendor_name, tenant_id=tenant_id)
+            existing_keys.add(("email", email) if email else ("name", name))
+        except Exception as e:
+            logger.warning(f"Could not persist screened candidate {name}: {e}")
+
+
+# ---------------------------------------------------------------------------
 # POST /api/screen-resumes
 # ---------------------------------------------------------------------------
 
@@ -217,6 +274,15 @@ async def screen_resumes(
     results.sort(key=lambda x: x["match_score"], reverse=True)
     for rank, r in enumerate(results, 1):
         r["rank"] = rank
+
+    # Persist Screened candidates so Hiring Managers can review and shortlist
+    _persist_screened_candidates(
+        results,
+        requisition_id=requisition_id,
+        jd_text=jd_text,
+        vendor_name=current_user.tenant_name or "Vendor A",
+        tenant_id=current_user.tenant_id,
+    )
 
     return {
         "status": "success",

@@ -21,6 +21,7 @@ class CandidateSubmission(Model):
         "filename": None,
         "fingerprint": None,
         "resume_text": None,
+        "jd_text": None,
         "match_score": None,
         "recommendation": None,
         "status": "Screened",
@@ -42,6 +43,7 @@ class CandidateSubmission(Model):
     filename = Column("filename")
     fingerprint = Column("fingerprint")
     resume_text = Column("resume_text")
+    jd_text = Column("jd_text")
     match_score = Column("match_score")
     recommendation = Column("recommendation")
     status = Column("status")
