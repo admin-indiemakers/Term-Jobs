@@ -1,3 +1,4 @@
+import ScheduleInterviewModal from "../../components/ScheduleInterviewModal";
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { request, API_BASE_URL } from '../../api/client';
@@ -48,6 +49,16 @@ function ChipList({ label, items, tone }) {
           <span key={i} className={`chip ${tone}`}>{s}</span>
         ))}
       </div>
+
+      {schedulingCandidate && (
+        <ScheduleInterviewModal
+          candidate={schedulingCandidate}
+          onClose={() => setSchedulingCandidate(null)}
+          onScheduled={() => {
+            loadCandidatesAndInterviews();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -62,15 +73,27 @@ export default function ShortlistedCandidates() {
   const [jdExpanded, setJdExpanded] = useState(null);
   const [rejecting, setRejecting] = useState(null);
 
-  useEffect(() => {
-    request('/candidates/shortlisted', { token })
-      .then((data) => {
+  const [schedulingCandidate, setSchedulingCandidate] = useState(null);
+  const [interviews, setInterviews] = useState([]);
+
+  const loadCandidatesAndInterviews = () => {
+    setLoading(true);
+    Promise.all([
+      request('/candidates/shortlisted', { token }),
+      request('/api/interviews/company', { token }).catch(() => []),
+    ])
+      .then(([data, invs]) => {
         const list = Array.isArray(data) ? data : data?.shortlisted_candidates || [];
         setCandidates(list);
+        setInterviews(invs || []);
         setError('');
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadCandidatesAndInterviews();
   }, [token]);
 
   const handleReject = async (c) => {
@@ -245,9 +268,11 @@ export default function ShortlistedCandidates() {
                   <CandidateRow
                     key={item.c.id}
                     candidate={item.c}
+                    interview={interviews.find((inv) => inv.candidate_submission_id === item.c.id || inv.candidate_name === item.c.candidate_name)}
                     expanded={expanded === item.c.id}
                     onToggle={() => setExpanded(expanded === item.c.id ? null : item.c.id)}
                     onReject={() => handleReject(item.c)}
+                    onSchedule={() => setSchedulingCandidate(item.c)}
                     onViewResume={() => handleViewResume(item.c)}
                     rejecting={rejecting === item.c.id}
                     jdExpanded={jdExpanded === item.c.id}
@@ -258,11 +283,21 @@ export default function ShortlistedCandidates() {
           </table>
         )}
       </div>
+
+      {schedulingCandidate && (
+        <ScheduleInterviewModal
+          candidate={schedulingCandidate}
+          onClose={() => setSchedulingCandidate(null)}
+          onScheduled={() => {
+            loadCandidatesAndInterviews();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume, rejecting, jdExpanded, onToggleJd }) {
+function CandidateRow({ candidate: c, interview, expanded, onToggle, onReject, onSchedule, onViewResume, rejecting, jdExpanded, onToggleJd }) {
   return (
     <>
       <tr className="clickable-row" onClick={onToggle}>
@@ -280,14 +315,50 @@ function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume
         <td><RecommendationBadge recommendation={c.recommendation} /></td>
         <td className="td-date">{formatDate(c.created_at)}</td>
         <td className="td-action">
-          <div className="row-actions">
+          <div className="row-actions" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            {interview ? (
+              <span
+                style={{
+                  background: interview.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#eff6ff',
+                  color: interview.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#2563eb',
+                  border: interview.status === 'CONFIRMED_BY_VENDOR' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                  fontSize: '0.72rem',
+                  fontWeight: 800,
+                  padding: '4px 8px',
+                  borderRadius: '6px',
+                  whiteSpace: 'nowrap',
+                }}
+                title={interview.status === 'CONFIRMED_BY_VENDOR' ? 'Vendor confirmed interview attendance' : 'Interview proposed to vendor'}
+              >
+                {interview.status === 'CONFIRMED_BY_VENDOR' ? '✓ Confirmed' : '⏳ Proposed'}
+              </span>
+            ) : (
+              <button
+                type="button"
+                style={{
+                  background: '#2563eb',
+                  color: '#ffffff',
+                  border: 0,
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  padding: '5px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                  boxShadow: '0 2px 6px rgba(37,99,235,0.2)'
+                }}
+                onClick={(e) => { e.stopPropagation(); onSchedule(); }}
+              >
+                📅 Schedule
+              </button>
+            )}
             <span className="row-action" onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</span>
             <button
               className="btn-reject"
               onClick={(e) => { e.stopPropagation(); onReject(); }}
               disabled={rejecting}
             >
-              {rejecting ? 'Rejecting…' : 'Reject'}
+              {rejecting ? 'Rejecting...' : 'Reject'}
             </button>
           </div>
         </td>
@@ -297,6 +368,36 @@ function CandidateRow({ candidate: c, expanded, onToggle, onReject, onViewResume
           <td colSpan="7">
             <div className="cand-detail">
               {c.summary && <p className="cand-summary">{c.summary}</p>}
+              {interview && (
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px', marginBottom: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '1.1rem' }}>📅</span>
+                      <strong style={{ fontSize: '0.92rem', color: '#1e293b' }}>{interview.interview_round || 'Interview Scheduled'}</strong>
+                      <span style={{ background: interview.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#fef3c7', color: interview.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#d97706', fontSize: '0.72rem', fontWeight: 800, padding: '2px 8px', borderRadius: '4px' }}>
+                        {interview.status === 'CONFIRMED_BY_VENDOR' ? 'VENDOR CONFIRMED' : 'AWAITING VENDOR CONFIRMATION'}
+                      </span>
+                    </div>
+                    {interview.meeting_link && (
+                      <a href={interview.meeting_link} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.8rem', color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                        🎥 Open Meeting Link ↗
+                      </a>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: '#64748b', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                    <span>🕒 <strong>Slot:</strong> {interview.confirmed_slot?.date || (interview.proposed_slots && interview.proposed_slots[0]?.date)} ({interview.confirmed_slot?.start_time || (interview.proposed_slots && interview.proposed_slots[0]?.start_time)} - {interview.confirmed_slot?.end_time || (interview.proposed_slots && interview.proposed_slots[0]?.end_time)})</span>
+                    <span>👤 <strong>Interviewer:</strong> {interview.interviewer_name || 'Hiring Team'}</span>
+                  </div>
+                  {interview.calendar_links && (
+                    <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>1-Click Sync:</span>
+                      <a href={interview.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🟢 Google</a>
+                      <a href={interview.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🔵 Outlook</a>
+                      <a href={`/api/interviews/${interview.id}/invite.ics`} download style={{ fontSize: '0.75rem', fontWeight: 700, padding: '3px 8px', background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>⚪ .ICS File</a>
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="cand-detail-grid">
                 <ChipList label="Matched skills" items={c.matched_skills} tone="chip-primary" />
                 <ChipList label="Missing skills" items={c.missing_skills} tone="chip-neutral" />

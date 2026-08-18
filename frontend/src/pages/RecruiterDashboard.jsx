@@ -43,7 +43,15 @@ function ChipList({ label, items, tone }) {
   );
 }
 
-const role = (req) => req?.structured_role || {};
+const role = (req) => {
+  const sr = req?.structured_role || {};
+  const ia = req?.intake_answers || {};
+  return {
+    ...sr,
+    submission_deadline: sr.submission_deadline || req?.submission_deadline || ia.submission_deadline || sr.deadline || sr.ends_on || '',
+    rate_card_cap: sr.rate_card_cap || (Array.isArray(sr.rate_band) ? `${sr.rate_band[0]} - ${sr.rate_band[1]}` : sr.rate_band) || sr.range_vendors_see || '',
+  };
+};
 const skillsFor = (req) => role(req).must_have_skills || req?.intent?.tech_stack_hint || [];
 const short = (value, fallback = 'Not specified') => value || fallback;
 
@@ -51,6 +59,12 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const { user, token } = useAuth();
   const navigate = useNavigate();
   const authToken = token || localStorage.getItem('auth_token');
+  const showDashboard = view === 'dashboard';
+  const showRequisitions = view === 'requisitions';
+  const showCandidates = view === 'candidates';
+  const showShortlisted = view === 'shortlisted';
+  const showInterviews = view === 'interviews';
+
   const [requisitions, setRequisitions] = useState([]);
   const [selectedReqId, setSelectedReqId] = useState('');
   const [fullReq, setFullReq] = useState(null);
@@ -59,6 +73,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [screeningResult, setScreeningResult] = useState(null);
   const [shortlisted, setShortlisted] = useState([]);
   const [shortlistedFilter, setShortlistedFilter] = useState('');
+  const [interviews, setInterviews] = useState([]);
+  const [loadingInterviews, setLoadingInterviews] = useState(false);
+  const [confirmingId, setConfirmingId] = useState(null);
+  const [interviewFilter, setInterviewFilter] = useState('ALL');
+  const [interviewSearch, setInterviewSearch] = useState('');
   const [expandedShortlistedId, setExpandedShortlistedId] = useState(null);
   const [candidateLimit, setCandidateLimit] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -222,14 +241,50 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     loadWorkspace();
   }, [authToken]);
 
+  const fetchInterviews = async () => {
+    setLoadingInterviews(true);
+    try {
+      const invs = await request('/api/interviews/vendor', { token: authToken });
+      setInterviews(Array.isArray(invs) ? invs : []);
+    } catch (err) {
+      console.error('Failed to fetch vendor interviews:', err);
+    } finally {
+      setLoadingInterviews(false);
+    }
+  };
+
+  const handleConfirmInterview = async (invId, candName) => {
+    if (!window.confirm(`Confirm candidate availability for ${candName}?`)) return;
+    setConfirmingId(invId);
+    try {
+      await request(`/api/interviews/${invId}/vendor-confirm`, {
+        method: 'POST',
+        token: authToken,
+        body: { action: 'confirm', vendor_notes: 'Confirmed candidate availability' },
+      });
+      await fetchInterviews();
+    } catch (err) {
+      alert(err.message || 'Failed to confirm interview slot.');
+    } finally {
+      setConfirmingId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (showInterviews) {
+      fetchInterviews();
+    }
+  }, [showInterviews, authToken]);
+
   async function loadWorkspace() {
     setLoading(true);
     try {
-      const [rawRequisitions, candidateData, limitData, bankData] = await Promise.all([
+      const [rawRequisitions, candidateData, limitData, bankData, interviewData] = await Promise.all([
         request('/requisitions', { token: authToken }),
         request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] })),
         request('/api/settings/candidate-limit', { token: authToken }).catch(() => ({ limit: null })),
         request('/candidates/bank', { token: authToken }).catch(() => []),
+        request('/api/interviews/vendor', { token: authToken }).catch(() => []),
       ]);
 
       const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
@@ -238,6 +293,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setShortlisted(listShortlisted);
       setCandidateLimit(limitData?.limit ?? null);
       setBankCandidates(bankData || []);
+      setInterviews(Array.isArray(interviewData) ? interviewData : []);
       if (list.length) await selectRequisition(list.find((item) => item.status === 'Published')?.id || list[0].id, list);
     } catch (err) {
       setError(err.message || 'Unable to load your recruiter workspace.');
@@ -523,24 +579,187 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const remaining = candidateLimit == null ? null : Math.max(0, candidateLimit - shortlisted.filter((candidate) => candidate.requisition_id === selectedReqId).length);
   const detail = role(selected);
 
-  const showDashboard = view === 'dashboard';
-  const showRequisitions = view === 'requisitions';
-  const showCandidates = view === 'candidates';
-  const showShortlisted = view === 'shortlisted';
 
   return (
     <div className="page recruiter-page">
-      {showDashboard && <>
-        <WelcomeBanner title="Recruiter Consultancy Portal" subtitle={`Agency: ${user?.tenant_name || 'Your consultancy'} · Manage open roles, screen resume PDFs, and deliver exceptional talent.`}>
-          <a className="recruiter-banner-link" href="/dashboard/recruiter/requisitions">Start candidate screening <span>→</span></a>
-        </WelcomeBanner>
-        <section className="stat-grid recruiter-stats" aria-label="Recruiter summary">
-          <StatCard label="Active job positions" value={requisitions.length} icon={Icons.briefcase} tint="tint-ink" delta="Available for matching" deltaTone="ink" />
-          <StatCard label="Resumes processed" value={queued.length} icon={Icons.layers} tint="tint-blue" delta="AI screening queue" deltaTone="blue" />
-          <StatCard label="Shortlisted to HR" value={shortlisted.length} icon={Icons.check} tint="tint-green" delta="Delivered to client" deltaTone="green" />
-          <StatCard label="Average match score" value={avgScore == null ? '—' : `${avgScore}%`} icon={Icons.shield} tint="tint-violet" delta="Talent quality benchmark" deltaTone="violet" />
-        </section>
-      </>}
+            {showDashboard && (
+        <div style={{ display: 'grid', gap: '24px' }}>
+          <WelcomeBanner
+            title="Recruiter Consultancy Portal"
+            subtitle={`Agency: ${user?.tenant_name || 'Your Consultancy'} • Match talent bank profiles, run AI screening, and manage client interview requests.`}
+          >
+            <a className="recruiter-banner-link" href="/dashboard/recruiter/requisitions">
+              Start Candidate Screening <span>→</span>
+            </a>
+          </WelcomeBanner>
+
+          <section className="stat-grid recruiter-stats" aria-label="Recruiter summary">
+            <StatCard label="Active Job Roles" value={requisitions.length} icon={Icons.briefcase} tint="tint-ink" delta="Published by clients" deltaTone="ink" />
+            <StatCard label="Talent Bank Profiles" value={bankCandidates.length} icon={Icons.users} tint="tint-blue" delta="Available in repository" deltaTone="blue" />
+            <StatCard label="Shortlisted to HR" value={shortlisted.length} icon={Icons.check} tint="tint-green" delta="Delivered to clients" deltaTone="green" />
+            <StatCard label="Interview Requests" value={interviews.length} icon={Icons.layers} tint="tint-amber" delta="Cal.com scheduling" deltaTone="amber" />
+          </section>
+
+          {/* Active Job Requisitions Grid */}
+          <div style={{ background: '#ffffff', borderRadius: '18px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Active Client Requisitions
+                </h2>
+                <p style={{ fontSize: '0.86rem', color: '#64748b', margin: '4px 0 0 0' }}>
+                  Open roles published by client companies currently open for candidate submissions.
+                </p>
+              </div>
+              <a
+                href="/dashboard/recruiter/requisitions"
+                style={{ fontSize: '0.84rem', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}
+              >
+                View Requisitions Workspace →
+              </a>
+            </div>
+
+            {requisitions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                No active requisitions published yet.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                {requisitions.map((req) => {
+                  const roleData = role(req);
+                  const skills = skillsFor(req);
+                  return (
+                    <div
+                      key={req.id}
+                      style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        background: '#f8fafc',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px' }}>
+                            {req.company_name || 'Client HR'}
+                          </span>
+                          <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                            {roleData.location || 'Hybrid'}
+                          </span>
+                        </div>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
+                          {req.title || roleData.title || 'Software Role'}
+                        </h3>
+                        <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 10px 0', lineHeight: '1.4' }}>
+                          {roleData.summary ? roleData.summary.slice(0, 110) + '...' : 'Client requirement looking for skilled professionals.'}
+                        </p>
+                        {skills.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {skills.slice(0, 4).map((s) => (
+                              <span key={s} style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>
+                                {s}
+                              </span>
+                            ))}
+                            {skills.length > 4 && (
+                              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, alignSelf: 'center' }}>
+                                +{skills.length - 4} more
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <a
+                        href={`/dashboard/recruiter/requisitions`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '6px',
+                          background: '#0f172a',
+                          color: '#ffffff',
+                          padding: '10px',
+                          borderRadius: '10px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          textDecoration: 'none',
+                        }}
+                      >
+                        ⚡ Match & Screen Candidates →
+                      </a>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Quick Nav Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+            <a
+              href="/dashboard/recruiter/candidates"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '20px',
+                textDecoration: 'none',
+                color: 'inherit',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+              }}
+            >
+              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>📁</div>
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Candidates Bank</h4>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                Upload resume PDFs and manage talent profiles.
+              </p>
+            </a>
+
+            <a
+              href="/dashboard/recruiter/shortlisted"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '20px',
+                textDecoration: 'none',
+                color: 'inherit',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+              }}
+            >
+              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🏆</div>
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Shortlisted Talent</h4>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                Track candidates submitted to client hiring teams.
+              </p>
+            </a>
+
+            <a
+              href="/dashboard/recruiter/interviews"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '20px',
+                textDecoration: 'none',
+                color: 'inherit',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+              }}
+            >
+              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🗓️</div>
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Interview Requests</h4>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                Confirm client interview proposals & Cal.com slots.
+              </p>
+            </a>
+          </div>
+        </div>
+      )}
 
       {error && <div className="alert alert-error recruiter-alert">{error}<button onClick={() => setError('')}>Dismiss</button></div>}
 
@@ -564,26 +783,32 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               {selected?.title || 'QA Automation Engineer'}
             </h1>
             
-            <div className="role-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '20px' }}>
-              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
-                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rate Range</span>
-                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
-                  {detail.rate_card_cap || detail.range_vendors_see || 'Rate Card Ceiling'}
-                </strong>
+            <div className="role-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+                <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Rate Range</span>
+                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                    {detail.rate_card_cap || detail.range_vendors_see || 'Rate Card Ceiling'}
+                  </strong>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</span>
+                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                    {short(detail.duration || detail.contract_duration || detail.engagement_duration, '6 months')}
+                  </strong>
+                </div>
+                <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Max Notice</span>
+                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
+                    {short(detail.max_notice_period || detail.notice_period, '30 Days Max')}
+                  </strong>
+                </div>
+                <div style={{ background: 'rgba(239, 68, 68, 0.12)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '12px', padding: '14px 18px' }}>
+                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Submission Deadline</span>
+                  <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#fca5a5', fontWeight: 700 }}>
+                    {short(detail.submission_deadline || detail.deadline, 'Open')}
+                  </strong>
+                </div>
               </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
-                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Duration</span>
-                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
-                  {short(detail.duration || detail.contract_duration || detail.engagement_duration, '6 months')}
-                </strong>
-              </div>
-              <div style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
-                <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Max Notice</span>
-                <strong style={{ display: 'block', marginTop: '6px', fontSize: '1.05rem', color: '#ffffff', fontWeight: 700 }}>
-                  {short(detail.max_notice_period || detail.notice_period, '30 Days Max')}
-                </strong>
-              </div>
-            </div>
 
             <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '12px', padding: '16px 20px', fontSize: '0.88rem', color: '#cbd5e1', lineHeight: '1.6' }}>
               <div>
@@ -649,8 +874,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         <strong style={{ color: isSelected ? '#1e40af' : '#10213d', fontSize: '0.92rem', fontWeight: 700 }}>{item.title || 'Untitled role'}</strong>
                         <span className="published-status-badge" style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>Published</span>
                       </div>
-                      <div style={{ color: '#64748b', fontSize: '0.78rem', marginTop: '6px' }}>
-                        {item.company_name || item.company?.name || 'Client'} · Published
+                      <div style={{ color: "#64748b", fontSize: "0.78rem", marginTop: "6px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span>{item.company_name || item.company?.name || 'Client'} · Published</span>
+                        {(item.structured_role?.submission_deadline || item.submission_deadline) && (
+                          <span style={{ color: '#ef4444', fontWeight: 600, fontSize: '0.72rem' }}>
+                            ⏳ Due {item.structured_role?.submission_deadline || item.submission_deadline}
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -1579,6 +1809,236 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           </div>
         </div>
       )}
+
+        {showInterviews && (
+          <div className="interviews-page-content" style={{ display: 'grid', gap: '20px' }}>
+            <WelcomeBanner
+              title="Interview Requests & Cal.com Scheduling"
+              subtitle="Incoming interview proposals from client hiring managers. Confirm candidate availability and access 1-click Cal.com booking sync."
+            />
+
+            <div className="stat-grid recruiter-stats" aria-label="Interviews summary">
+              <StatCard
+                label="TOTAL INTERVIEW REQUESTS"
+                value={interviews.length}
+                icon={Icons.calendar || Icons.briefcase}
+                tint="tint-blue"
+              />
+              <StatCard
+                label="PENDING CONFIRMATION"
+                value={interviews.filter((i) => i.status === 'PROPOSED_BY_COMPANY').length}
+                icon={Icons.layers}
+                tint="tint-amber"
+              />
+              <StatCard
+                label="CONFIRMED INTERVIEWS"
+                value={interviews.filter((i) => i.status === 'CONFIRMED_BY_VENDOR').length}
+                icon={Icons.check}
+                tint="tint-green"
+              />
+            </div>
+
+            {/* Filter and search bar */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', background: '#ffffff', padding: '14px 20px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {['ALL', 'PENDING', 'CONFIRMED'].map((tab) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() => setInterviewFilter(tab)}
+                    style={{
+                      padding: '6px 14px',
+                      borderRadius: '8px',
+                      border: 0,
+                      background: interviewFilter === tab ? '#0f172a' : '#f1f5f9',
+                      color: interviewFilter === tab ? '#ffffff' : '#64748b',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {tab === 'ALL' ? 'All Requests' : tab === 'PENDING' ? 'Pending' : 'Confirmed'}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="text"
+                placeholder="Search candidate, role, or company..."
+                value={interviewSearch}
+                onChange={(e) => setInterviewSearch(e.target.value)}
+                style={{ padding: '8px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', width: '260px' }}
+              />
+            </div>
+
+            {/* Interviews List */}
+            {loadingInterviews ? (
+              <p className="muted" style={{ padding: 24 }}>Loading interview requests...</p>
+            ) : (
+              (() => {
+                let filtered = interviews;
+                if (interviewFilter === 'PENDING') filtered = filtered.filter((i) => i.status === 'PROPOSED_BY_COMPANY');
+                if (interviewFilter === 'CONFIRMED') filtered = filtered.filter((i) => i.status === 'CONFIRMED_BY_VENDOR');
+                if (interviewSearch.trim()) {
+                  const q = interviewSearch.toLowerCase();
+                  filtered = filtered.filter(
+                    (i) =>
+                      (i.candidate_name && i.candidate_name.toLowerCase().includes(q)) ||
+                      (i.requisition_title && i.requisition_title.toLowerCase().includes(q)) ||
+                      (i.company_name && i.company_name.toLowerCase().includes(q))
+                  );
+                }
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: '2.5rem' }}>📅</span>
+                      <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '10px 0 4px 0' }}>
+                        No Interview Requests Found
+                      </h3>
+                      <p style={{ fontSize: '0.86rem', color: '#64748b', margin: 0 }}>
+                        When client hiring managers shortlist candidates and propose interview slots, they will appear here.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div style={{ display: 'grid', gap: '16px' }}>
+                    {filtered.map((inv) => {
+                      const isConfirmed = inv.status === 'CONFIRMED_BY_VENDOR';
+                      const slot = inv.confirmed_slot || (inv.proposed_slots && inv.proposed_slots[0]) || {};
+                      return (
+                        <div
+                          key={inv.id}
+                          className="glass-panel"
+                          style={{
+                            background: '#ffffff',
+                            borderRadius: '16px',
+                            border: isConfirmed ? '1px solid #a7f3d0' : '1px solid #e2e8f0',
+                            padding: '22px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
+                            <div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+                                <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                                  {inv.candidate_name}
+                                </h3>
+                                <span
+                                  style={{
+                                    background: isConfirmed ? '#ecfdf5' : '#fef3c7',
+                                    color: isConfirmed ? '#059669' : '#d97706',
+                                    fontSize: '0.72rem',
+                                    fontWeight: 800,
+                                    padding: '3px 8px',
+                                    borderRadius: '6px',
+                                  }}
+                                >
+                                  {isConfirmed ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION'}
+                                </span>
+                              </div>
+                              <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
+                                Role: <strong style={{ color: '#1e293b' }}>{inv.requisition_title}</strong> • Client: <strong style={{ color: '#1e293b' }}>{inv.company_name || 'Client HR'}</strong>
+                              </p>
+                            </div>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              {!isConfirmed && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleConfirmInterview(inv.id, inv.candidate_name)}
+                                  disabled={confirmingId === inv.id}
+                                  style={{
+                                    background: '#059669',
+                                    color: '#ffffff',
+                                    border: 0,
+                                    padding: '9px 18px',
+                                    borderRadius: '10px',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 4px 12px rgba(5,150,105,0.25)',
+                                  }}
+                                >
+                                  {confirmingId === inv.id ? 'Confirming...' : '🟢 Confirm Slot with Candidate'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Meeting Details Grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', marginBottom: '14px', fontSize: '0.82rem', color: '#475569' }}>
+                            <div>
+                              <strong style={{ color: '#1e293b' }}>🎯 Round:</strong> {inv.interview_round || 'Round 1'}
+                            </div>
+                            <div>
+                              <strong style={{ color: '#1e293b' }}>🕒 Slot:</strong> {slot.date} ({slot.start_time} - {slot.end_time} {slot.timezone || 'IST'})
+                            </div>
+                            <div>
+                              <strong style={{ color: '#1e293b' }}>👤 Interviewer:</strong> {inv.interviewer_name || 'Hiring Team'} ({inv.interviewer_email || 'HR'})
+                            </div>
+                            {inv.meeting_link && (
+                              <div>
+                                <strong style={{ color: '#1e293b' }}>🎥 Platform:</strong>{' '}
+                                <a href={inv.meeting_link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
+                                  Join Meeting ↗
+                                </a>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Notes */}
+                          {inv.notes && (
+                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '12px', background: '#ffffff', border: '1px dashed #cbd5e1', padding: '8px 12px', borderRadius: '8px' }}>
+                              📝 <strong>Client Notes:</strong> {inv.notes}
+                            </div>
+                          )}
+
+                          {/* Action Links & 1-Click Sync Bar */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
+                            {inv.calendar_links?.cal_booking_url && (
+                              <a
+                                href={inv.calendar_links.cal_booking_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  fontSize: '0.8rem',
+                                  fontWeight: 700,
+                                  color: '#2563eb',
+                                  textDecoration: 'none',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                }}
+                              >
+                                🔗 Open Cal.com Live Booking Link ↗
+                              </a>
+                            )}
+
+                            {inv.calendar_links && (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>1-Click Sync:</span>
+                                {inv.calendar_links.google && (
+                                  <a href={inv.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🟢 Google</a>
+                                )}
+                                {inv.calendar_links.outlook && (
+                                  <a href={inv.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🔵 Outlook</a>
+                                )}
+                                <a href={`/api/interviews/${inv.id}/invite.ics`} download style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>⚪ .ICS File</a>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()
+            )}
+          </div>
+        )}
     </div>
   );
 }

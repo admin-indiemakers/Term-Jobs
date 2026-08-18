@@ -16,7 +16,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, { method = 'GET', body, token, timeout = 30000 } = {}) {
+export async function request(path, { method = 'GET', body, token, timeout = 180000 } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

@@ -48,6 +48,7 @@ export default function DashboardLayout() {
             { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true },
             { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true },
             { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true },
+            { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true },
           ]
         : user.role === 'Director'
             ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]

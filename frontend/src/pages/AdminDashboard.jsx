@@ -97,43 +97,30 @@ export default function AdminDashboard() {
     }
   }, []);
 
-  const connectCalendar = async (providerKey) => {
-    setError('');
-    setSuccess('');
-    setSavingCalendar(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/calendar/auth/${providerKey}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) {
-        let msg = `Request failed (${res.status})`;
-        try {
-          const data = await res.json();
-          if (data && data.detail) msg = data.detail;
-        } catch { /* ignore */ }
-        throw new Error(msg);
-      }
-      const data = await res.json();
-      window.location.href = data.auth_url;
-    } catch (err) {
-      setError(err.message);
-      setSavingCalendar(false);
-    }
-  };
-
-  const disconnectCalendar = async () => {
+  const handleSaveCalConfig = async (e) => {
+    e?.preventDefault();
     setSavingCalendar(true);
     setError('');
     setSuccess('');
     try {
-      const updated = await request('/api/calendar/disconnect', {
-        method: 'POST',
+      const updated = await request('/api/calendar/config', {
+        method: 'PUT',
         token,
+        body: {
+          provider: 'cal',
+          status: 'connected',
+          cal_link: calConfig.cal_link || 'https://cal.com/',
+          cal_username: calConfig.cal_username || '',
+          event_slug: calConfig.event_slug || '30min',
+          default_duration: Number(calConfig.default_duration) || 60,
+          default_timezone: calConfig.default_timezone || 'Asia/Kolkata',
+          instructions: calConfig.instructions || '',
+        },
       });
-      setCalConfig(updated || { provider: null, status: 'disconnected', connected_email: null });
-      setSuccess('Company calendar disconnected.');
+      setCalConfig(updated);
+      setSuccess('Cal.com / Cal.diy scheduling settings saved successfully.');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to save Cal.com settings.');
     } finally {
       setSavingCalendar(false);
     }
@@ -408,71 +395,142 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div className="glass-panel">
-        <div className="split-card">
-          <div className="split-card-head">
-            <div className="form-panel-head">
-              <div className="form-panel-icon">{Icons.calendar}</div>
-              <div>
-                <div className="form-panel-title">Connect Calendar</div>
-                <div className="form-panel-caption">
-                  Configure your company calendar provider. Connected calendars will be used to schedule interviews and sync candidate interview slots.
-                </div>
-              </div>
+      <div className="glass-panel" style={{ borderRadius: '18px', padding: '26px', marginBottom: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800 }}>
+              📅
             </div>
-            {calConfig.status === 'connected' && (
-              <span className="vendor-check cal-connected-badge">Connected</span>
-            )}
-          </div>
-          <div className="split-card-body">
-            {calConfig.status === 'connected' ? (
-              <div className="cal-connected-box">
-                <div className="cal-connected-name">
-                  {calProviders.find((p) => p.key === calConfig.provider)?.name || calConfig.provider}
-                </div>
-                <p className="muted" style={{ marginTop: 4 }}>
-                  {calConfig.connected_email || 'Company calendar connected'}
-                  {calConfig.connected_at ? ` · connected ${formatDate(calConfig.connected_at)}` : ''}
-                </p>
-                <button className="danger-btn" onClick={disconnectCalendar} disabled={savingCalendar} style={{ marginTop: 12 }}>
-                  {savingCalendar ? 'Disconnecting...' : 'Disconnect'}
-                </button>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  Cal.com / Cal.diy Integration
+                </h3>
+                <span style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.72rem', fontWeight: 800, padding: '3px 10px', borderRadius: '999px', border: '1px solid #a7f3d0' }}>
+                  ✓ Connected & Active
+                </span>
               </div>
-            ) : (
-              <div className="vendor-grid">
-                {calProviders.map((p) => (
-                  <div key={p.key} className="vendor-card cal-card">
-                    <div className="vendor-card-top">
-                      <span className={`cal-dot cal-dot-${p.key}`} />
-                      <span className="vendor-name">{p.name}</span>
-                    </div>
-                    <div className="vendor-meta">{p.description}</div>
-                    {p.configured ? (
-                      <button
-                        className="glow-btn"
-                        style={{ marginTop: 10, width: '100%' }}
-                        onClick={() => connectCalendar(p.key)}
-                        disabled={savingCalendar}
-                      >
-                        {savingCalendar ? 'Connecting...' : `Connect ${p.name}`}
-                      </button>
-                    ) : (
-                      <button
-                        className="ghost-btn"
-                        style={{ marginTop: 10, width: '100%', cursor: 'not-allowed', opacity: 0.6 }}
-                        disabled
-                        title="OAuth credentials not configured on the backend yet"
-                      >
-                        Not configured
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+              <p style={{ color: '#64748b', fontSize: '0.86rem', margin: '4px 0 0 0' }}>
+                Connect your Cal.com (or self-hosted Cal.diy) scheduling link. Hiring Managers will use this to generate live candidate booking slots.
+              </p>
+            </div>
           </div>
+
+          {calConfig.cal_link && calConfig.cal_link !== 'https://cal.com/' && (
+            <a
+              href={calConfig.cal_link.startsWith('http') ? calConfig.cal_link : `https://cal.com/${calConfig.cal_link}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 16px',
+                borderRadius: '10px',
+                background: '#f1f5f9',
+                color: '#0f172a',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                textDecoration: 'none',
+                border: '1px solid #cbd5e1',
+              }}
+            >
+              🔗 Test Live Booking Page ↗
+            </a>
+          )}
         </div>
+
+        <form onSubmit={handleSaveCalConfig}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '18px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Cal.com / Cal.diy Base URL or Handle
+              </label>
+              <input
+                type="text"
+                className="auth-input"
+                style={{ width: '100%', padding: '10px 14px', fontSize: '0.88rem' }}
+                placeholder="e.g. https://cal.com/bearitt-team or bearitt-hiring"
+                value={calConfig.cal_link || ''}
+                onChange={(e) => setCalConfig({ ...calConfig, cal_link: e.target.value })}
+              />
+              <span style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                Enter your free Cal.com URL (e.g. <code>https://cal.com/your-name</code>) or self-hosted Cal.diy link.
+              </span>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Default Event Type Slug
+              </label>
+              <input
+                type="text"
+                className="auth-input"
+                style={{ width: '100%', padding: '10px 14px', fontSize: '0.88rem' }}
+                placeholder="e.g. 30min or technical-interview"
+                value={calConfig.event_slug || '30min'}
+                onChange={(e) => setCalConfig({ ...calConfig, event_slug: e.target.value })}
+              />
+              <span style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
+                The event type name on Cal.com (e.g. <code>30min</code>, <code>technical-round</code>).
+              </span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '18px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Default Interview Duration
+              </label>
+              <select
+                className="auth-input"
+                style={{ width: '100%', padding: '9px 12px', fontSize: '0.85rem' }}
+                value={calConfig.default_duration || 60}
+                onChange={(e) => setCalConfig({ ...calConfig, default_duration: Number(e.target.value) })}
+              >
+                <option value={30}>30 Minutes</option>
+                <option value={45}>45 Minutes</option>
+                <option value={60}>60 Minutes (1 Hour)</option>
+                <option value={90}>90 Minutes (1.5 Hours)</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Company Timezone
+              </label>
+              <select
+                className="auth-input"
+                style={{ width: '100%', padding: '9px 12px', fontSize: '0.85rem' }}
+                value={calConfig.default_timezone || 'Asia/Kolkata'}
+                onChange={(e) => setCalConfig({ ...calConfig, default_timezone: e.target.value })}
+              >
+                <option value="Asia/Kolkata">Asia/Kolkata (IST - UTC+5:30)</option>
+                <option value="America/New_York">America/New York (EST - UTC-5)</option>
+                <option value="America/Los_Angeles">America/Los Angeles (PST - UTC-8)</option>
+                <option value="Europe/London">Europe/London (GMT - UTC+0)</option>
+                <option value="Asia/Dubai">Asia/Dubai (GST - UTC+4)</option>
+                <option value="Asia/Singapore">Asia/Singapore (SGT - UTC+8)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+            <button
+              type="submit"
+              className="glow-btn"
+              style={{ padding: '10px 24px', fontSize: '0.88rem' }}
+              disabled={savingCalendar}
+            >
+              {savingCalendar ? 'Saving...' : '💾 Save Cal.com Settings'}
+            </button>
+          </div>
+        </form>
       </div>
+
+      
+
+      
 
       {loading ? (
         <p className="muted" style={{ padding: 24 }}>Loading workspace...</p>

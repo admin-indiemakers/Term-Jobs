@@ -1,3 +1,4 @@
+import asyncio
 import base64
 """FastAPI router exposing candidate submissions for the Hiring Manager UI."""
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -454,13 +455,12 @@ async def match_bulk_candidates(
     body: dict,
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Bulk match existing bank candidates against a requisition using AI screening in-memory."""
+    """Bulk match existing bank candidates against a requisition using AI screening in-memory with parallel execution."""
     candidate_ids = body.get("candidate_ids")
     requisition_id = body.get("requisition_id")
     if not candidate_ids or not requisition_id:
         raise HTTPException(status_code=400, detail="candidate_ids and requisition_id are required")
         
-    screened_list = []
     with get_session() as session:
         from modules.requisition.domain.models import Requisition
         req = session.get(Requisition, requisition_id)
@@ -487,56 +487,63 @@ async def match_bulk_candidates(
             _jd_parsed = None
             _jd_emb = None
 
+        # Fetch candidate entities
+        candidates = []
         for candidate_id in candidate_ids:
             cand = session.get(Candidate, candidate_id)
-            if not cand:
-                continue
-            if current_user.role != "Super Admin" and cand.tenant_id != current_user.tenant_id:
-                continue
-                
-            try:
-                cand_text = cand.extracted_text or cand.summary or f"{cand.candidate_name} {cand.candidate_title} {' '.join(cand.skills or [])}"
-                _struct = await _structure_resume_compat(cand_text)
-                
-                # Check GitHub if available
-                gh_evidence = None
-                if _struct.github_url:
-                    try:
-                        gh_evidence = await _verify_github_new(_struct.github_url)
-                    except Exception:
-                        gh_evidence = GitHubEvidence(verified=False)
+            if cand:
+                candidates.append(cand)
 
-                if _jd_parsed and _jd_emb:
-                    _score, _bd, _matched, _missing = _compute_score_new(_struct, _jd_parsed, _jd_emb, gh_evidence)
-                    rec = _classify_new(_score).value
-                else:
-                    _score = 75.0
-                    rec = "Strong Match"
-                    _matched = cand.skills or []
-                    _missing = []
+    async def screen_single_candidate(cand):
+        try:
+            cand_text = cand.extracted_text or cand.summary or f"{cand.candidate_name} {cand.candidate_title} {' '.join(cand.skills or [])}"
+            _struct = await _structure_resume_compat(cand_text)
+            
+            # Check GitHub if available with 5s timeout
+            gh_evidence = None
+            if _struct.github_url:
+                try:
+                    gh_evidence = await asyncio.wait_for(_verify_github_new(_struct.github_url), timeout=5.0)
+                except Exception:
+                    gh_evidence = GitHubEvidence(verified=False)
 
-                screened_item = {
-                    "id": f"temp_{candidate_id}",
-                    "candidate_id": candidate_id,
-                    "candidate_name": cand.candidate_name or _struct.name or "Candidate",
-                    "candidate_email": cand.candidate_email or _struct.email or "",
-                    "vendor_name": cand.vendor_company_name or current_user.tenant_name or "Vendor A",
-                    "filename": cand.filename or f"{cand.candidate_name}.pdf",
-                    "match_score": round(_score, 2),
-                    "recommendation": rec,
-                    "matched_skills": _matched,
-                    "missing_skills": _missing,
-                    "summary": f"{cand.candidate_name or _struct.name} scored {round(_score)}% match for this role.",
-                    "status": "Screened",
-                    "requisition_id": requisition_id
-                }
-                screened_list.append(screened_item)
-            except Exception as e:
-                print(f"Error screening candidate {candidate_id}: {e}")
-                
-        # Sort in memory by match_score descending
-        screened_list = sorted(screened_list, key=lambda x: x.get("match_score") or 0, reverse=True)
-        
+            if _jd_parsed and _jd_emb:
+                _score, _bd, _matched, _missing = _compute_score_new(_struct, _jd_parsed, _jd_emb, gh_evidence)
+                rec = _classify_new(_score).value
+            else:
+                _score = 75.0
+                rec = "Strong Match"
+                _matched = cand.skills or []
+                _missing = []
+
+            c_name = cand.candidate_name or getattr(_struct, 'name', '') or "Candidate"
+            c_email = cand.candidate_email or getattr(_struct, 'email', '') or ""
+            v_name = cand.vendor_company_name or getattr(current_user, 'tenant_name', None) or getattr(current_user, 'name', 'Agency') or "Vendor Agency"
+
+            return {
+                "id": f"temp_{cand.id}",
+                "candidate_id": cand.id,
+                "candidate_name": c_name,
+                "candidate_email": c_email,
+                "vendor_name": v_name,
+                "filename": cand.filename or f"{c_name}.pdf",
+                "match_score": round(_score, 2),
+                "recommendation": rec,
+                "matched_skills": _matched or [],
+                "missing_skills": _missing or [],
+                "summary": f"{c_name} scored {round(_score)}% match for this role.",
+                "status": "Screened",
+                "requisition_id": requisition_id
+            }
+        except Exception as e:
+            print(f"Error screening candidate {cand.id}: {e}")
+            return None
+
+    # Parallel processing of all candidates with Groq + GitHub
+    results = await asyncio.gather(*(screen_single_candidate(c) for c in candidates))
+    screened_list = [r for r in results if r is not None]
+    screened_list = sorted(screened_list, key=lambda x: x.get("match_score") or 0, reverse=True)
+    
     return {
         "status": "success",
         "screened_candidates": screened_list

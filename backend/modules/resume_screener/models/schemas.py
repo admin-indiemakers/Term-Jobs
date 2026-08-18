@@ -22,36 +22,38 @@ class MatchCategory(str, Enum):
 # â”€â”€ Resume Structure (LLM output â€” bias-free) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class ProjectItem(BaseModel):
-    name: str = ""
-    description: str = ""
-    technologies: List[str] = []
+    name: Optional[str] = ""
+    description: Optional[str] = ""
+    technologies: Optional[List[str]] = []
     outcome: Optional[str] = None
 
 
 class ExperienceItem(BaseModel):
-    role: str = ""
-    company: str = ""
+    role: Optional[str] = ""
+    company: Optional[str] = ""
     duration_months: Optional[int] = None
-    description: str = ""
-    technologies: List[str] = []
+    description: Optional[str] = ""
+    technologies: Optional[List[str]] = []
 
 
 class EducationItem(BaseModel):
-    degree: str = ""
-    field: str = ""
-    institution: str = ""
+    degree: Optional[str] = ""
+    field: Optional[str] = ""
+    institution: Optional[str] = ""
     year: Optional[int] = None
 
 
 class StructuredResume(BaseModel):
-    skills: List[str] = []
-    projects: List[ProjectItem] = []
-    experience: List[ExperienceItem] = []
-    education: List[EducationItem] = []
-    certifications: List[str] = []
+    name: Optional[str] = ""
+    email: Optional[str] = ""
+    skills: Optional[List[str]] = []
+    projects: Optional[List[ProjectItem]] = []
+    experience: Optional[List[ExperienceItem]] = []
+    education: Optional[List[EducationItem]] = []
+    certifications: Optional[List[str]] = []
     github_url: Optional[str] = None
     portfolio_url: Optional[str] = None
-    raw_text_for_embedding: str = ""
+    raw_text_for_embedding: Optional[str] = ""
 
 
 # â”€â”€ JD Structure (LLM output) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

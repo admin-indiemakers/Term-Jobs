@@ -1,11 +1,7 @@
-"""Company calendar configuration model (MongoDB collection).
-
-Each tenant stores its company calendar provider preference here. For now
-this only holds the provider selection (Google / Microsoft / Zoho); real
-OAuth token sync will extend this later.
+"""
+Company Cal.com / Cal.diy calendar configuration model (MongoDB collection).
 """
 from typing import ClassVar
-
 from ...shared.db import Column, Model, _utcnow, _uuid
 
 
@@ -15,12 +11,15 @@ class CalendarConfig(Model):
     _fields: ClassVar[dict[str, object]] = {
         "id": _uuid,
         "tenant_id": None,
-        "provider": None,          # "google" | "microsoft" | "zoho" | None
-        "status": "disconnected",  # "connected" | "disconnected"
-        "connected_email": None,
-        "access_token": None,
-        "refresh_token": None,
-        "token_expiry": None,      # epoch seconds when access_token expires
+        "provider": "cal",                    # "cal" | "cal_diy"
+        "status": "connected",                # "connected" | "disconnected"
+        "cal_link": "https://cal.com/",       # e.g. "https://cal.com/your-username" or "your-username/30min"
+        "cal_username": "",
+        "event_slug": "30min",                # e.g. "technical-round", "30min", "60min"
+        "cal_api_key": "",                    # optional Cal.com API key
+        "default_duration": 60,               # minutes
+        "default_timezone": "Asia/Kolkata",
+        "instructions": "",
         "created_at": _utcnow,
         "updated_at": _utcnow,
     }
@@ -29,9 +28,12 @@ class CalendarConfig(Model):
     tenant_id = Column("tenant_id")
     provider = Column("provider")
     status = Column("status")
-    connected_email = Column("connected_email")
-    access_token = Column("access_token")
-    refresh_token = Column("refresh_token")
-    token_expiry = Column("token_expiry")
+    cal_link = Column("cal_link")
+    cal_username = Column("cal_username")
+    event_slug = Column("event_slug")
+    cal_api_key = Column("cal_api_key")
+    default_duration = Column("default_duration")
+    default_timezone = Column("default_timezone")
+    instructions = Column("instructions")
     created_at = Column("created_at")
     updated_at = Column("updated_at")

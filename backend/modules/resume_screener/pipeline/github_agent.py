@@ -46,13 +46,16 @@ DOCKER_SIGNALS = ["Dockerfile", "docker-compose.yml", "docker-compose.yaml"]
 RECENT_MONTHS = 12
 
 
+import os
+
 def _build_headers() -> Dict[str, str]:
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    if settings.github_pat and settings.github_pat != "ghp_your_token_here":
-        headers["Authorization"] = f"Bearer {settings.github_pat}"
+    token = os.getenv("GITHUB_PAT") or os.getenv("GITHUB_TOKEN") or getattr(settings, "github_pat", "")
+    if token and token != "ghp_your_token_here":
+        headers["Authorization"] = f"Bearer {token.strip()}"
     return headers
 
 

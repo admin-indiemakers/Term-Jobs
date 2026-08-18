@@ -1,29 +1,28 @@
-from typing import Literal, Optional
-
+from typing import Optional
 from pydantic import BaseModel
-
-CalendarProvider = Literal["google", "microsoft", "zoho"]
 
 
 class CalendarConfigUpdate(BaseModel):
-    provider: Optional[CalendarProvider] = None
-    status: Literal["connected", "disconnected"] = "connected"
-    connected_email: Optional[str] = None
+    provider: Optional[str] = "cal"
+    status: Optional[str] = "connected"
+    cal_link: Optional[str] = None
+    cal_username: Optional[str] = None
+    event_slug: Optional[str] = "30min"
+    cal_api_key: Optional[str] = None
+    default_duration: Optional[int] = 60
+    default_timezone: Optional[str] = "Asia/Kolkata"
+    instructions: Optional[str] = None
 
 
 class CalendarConfigResponse(BaseModel):
     tenant_id: str
-    provider: Optional[str] = None
-    status: str = "disconnected"
-    connected_email: Optional[str] = None
+    provider: str = "cal"
+    status: str = "connected"
+    cal_link: Optional[str] = "https://cal.com/"
+    cal_username: Optional[str] = ""
+    event_slug: Optional[str] = "30min"
+    cal_api_key: Optional[str] = ""
+    default_duration: int = 60
+    default_timezone: str = "Asia/Kolkata"
+    instructions: Optional[str] = ""
     connected_at: Optional[str] = None
-
-
-class AuthUrlResponse(BaseModel):
-    provider: str
-    auth_url: str
-    configured: bool
-
-
-class CalendarProvidersResponse(BaseModel):
-    providers: list[dict]
