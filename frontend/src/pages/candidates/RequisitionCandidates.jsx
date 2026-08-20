@@ -45,6 +45,7 @@ function StatusBadge({ status }) {
     Screened: { background: '#eff6ff', color: '#2563eb' },
     Shortlisted: { background: '#ecfdf5', color: '#059669' },
     Rejected: { background: '#fef2f2', color: '#dc2626' },
+    Accepted: { background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' },
     Error: { background: '#fef2f2', color: '#dc2626' },
   };
   const s = styles[status] || { background: '#f8fafc', color: '#475569' };
@@ -89,7 +90,7 @@ export default function RequisitionCandidates() {
     Promise.all([
       request(`/requisitions/${id}`, { token }).catch(() => null),
       request(`/candidates?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
-      request('/api/interviews', { token }).catch(() => []),
+      request(`/api/interviews/company?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
     ])
       .then(([reqData, candData, intRes]) => {
         setReq(reqData);
@@ -250,6 +251,7 @@ export default function RequisitionCandidates() {
                     onShortlist={() => act(c, 'Shortlisted')}
                     onReject={() => act(c, 'Rejected')}
                     onSchedule={() => setSchedulingCandidate(c)}
+                    scheduleUrl={c.status === 'Shortlisted' ? `/dashboard/requisitions/${id}/candidates/${cid}` : null}
                     onViewResume={() => handleViewResume(c)}
                     acting={isActing}
                     canShortlist={c.status !== 'Shortlisted' && c.status !== 'Error'}
@@ -278,7 +280,7 @@ export default function RequisitionCandidates() {
   );
 }
 
-function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist, onReject, onSchedule, onViewResume, acting, canShortlist, canReject, jdExpanded, onToggleJd, isReadOnly }) {
+function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist, onReject, onSchedule, onViewResume, acting, canShortlist, canReject, jdExpanded, onToggleJd, isReadOnly, scheduleUrl }) {
   return (
     <>
       <tr className="clickable-row" onClick={onToggle}>
@@ -296,43 +298,34 @@ function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist
             <span className="row-action" onClick={onToggle}>{expanded ? 'Hide' : 'Details'}</span>
             {!isReadOnly && (
               <>
-                {c.status === 'Shortlisted' && (
-                  interview ? (
-                    <span
-                      style={{
-                        background: interview.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#eff6ff',
-                        color: interview.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#2563eb',
-                        border: interview.status === 'CONFIRMED_BY_VENDOR' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
-                        fontSize: '0.72rem',
-                        fontWeight: 800,
-                        padding: '4px 8px',
-                        borderRadius: '6px',
-                        whiteSpace: 'nowrap',
-                      }}
-                      title={interview.status === 'CONFIRMED_BY_VENDOR' ? 'Vendor confirmed interview attendance' : 'Interview proposed to vendor'}
-                    >
-                      {interview.status === 'CONFIRMED_BY_VENDOR' ? '✓ Confirmed' : '⏳ Proposed'}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      style={{
-                        background: '#2563eb',
-                        color: '#ffffff',
-                        border: 0,
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        padding: '5px 10px',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        whiteSpace: 'nowrap',
-                        boxShadow: '0 2px 6px rgba(37,99,235,0.2)'
-                      }}
-                      onClick={(e) => { e.stopPropagation(); onSchedule(); }}
-                    >
-                      📅 Schedule
-                    </button>
-                  )
+                {c.status === 'Shortlisted' && scheduleUrl && (
+                  <Link
+                    to={scheduleUrl}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{
+                      background: interview?.status === 'COMPLETED' ? '#f8fafc' : interview?.status === 'CONFIRMED_BY_VENDOR' ? '#ecfdf5' : '#eff6ff',
+                      color: interview?.status === 'COMPLETED' ? '#475569' : interview?.status === 'CONFIRMED_BY_VENDOR' ? '#059669' : '#2563eb',
+                      border: interview?.status === 'COMPLETED' ? '1px solid #cbd5e1' : interview?.status === 'CONFIRMED_BY_VENDOR' ? '1px solid #a7f3d0' : '1px solid #bfdbfe',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                      padding: '5px 10px',
+                      borderRadius: '6px',
+                      whiteSpace: 'nowrap',
+                      textDecoration: 'none',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                    }}
+                    title="Open the interview workspace — schedule, meeting link, and final decision"
+                  >
+                    {interview?.status === 'COMPLETED'
+                      ? `🏁 ${interview.decision || 'Done'}`
+                      : interview?.status === 'CONFIRMED_BY_VENDOR'
+                        ? '✓ Confirmed'
+                        : interview
+                          ? '⏳ Proposed'
+                          : '📅 Schedule'}
+                  </Link>
                 )}
                 {canShortlist && (
                   <button

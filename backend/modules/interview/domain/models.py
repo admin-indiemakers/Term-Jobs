@@ -47,6 +47,9 @@ class InterviewSchedule(Model):
         "status": "PROPOSED_BY_COMPANY",   # InterviewStatus
         "notes": "",
         "vendor_notes": "",
+        "final_remark": "",                # Hiring Manager final feedback once the meeting is over
+        "decision": "",                    # "Accepted" | "Rejected" once the meeting is over
+        "completed_at": None,              # datetime when the meeting was marked over
         "created_at": _utcnow,
         "updated_at": _utcnow,
     }
@@ -72,6 +75,9 @@ class InterviewSchedule(Model):
     status = Column("status")
     notes = Column("notes")
     vendor_notes = Column("vendor_notes")
+    final_remark = Column("final_remark")
+    decision = Column("decision")
+    completed_at = Column("completed_at")
     created_at = Column("created_at")
     updated_at = Column("updated_at")
 
@@ -107,3 +113,8 @@ class VendorConfirmRequest(BaseModel):
     action: str = "confirm"    # "confirm" | "reschedule" | "cancel"
     vendor_notes: Optional[str] = ""
     alternative_slots: Optional[List[SlotSchema]] = None
+
+
+class CompleteInterviewRequest(BaseModel):
+    final_remark: str = ""
+    decision: str = "Accepted"  # "Accepted" | "Rejected"

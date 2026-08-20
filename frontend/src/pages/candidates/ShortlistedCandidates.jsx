@@ -148,9 +148,11 @@ export default function ShortlistedCandidates() {
           ref: c.requisition_ref || `REQ-${c.requisition_id.slice(0, 6).toUpperCase()}`,
           title: c.requisition_title || 'Untitled',
           count: 0,
+          candidates: [],
         };
       }
       map[c.requisition_id].count += 1;
+      map[c.requisition_id].candidates.push({ id: c.submission_id || c.id, name: c.candidate_name });
     });
     return Object.values(map).sort((a, b) => b.count - a.count);
   }, [candidates]);
@@ -236,38 +238,43 @@ export default function ShortlistedCandidates() {
                     {reqItem.title}
                   </h3>
                   <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
-                    Click below to view candidate profiles and schedule interviews.
+                    {reqItem.count} shortlisted candidate{reqItem.count === 1 ? '' : 's'} — open each candidate's individual workspace below.
                   </p>
                 </div>
 
-                <Link
-                  to={`/dashboard/requisitions/${reqItem.id}/candidates`}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justify: 'center',
-                    gap: '8px',
-                    background: '#2563eb',
-                    color: '#ffffff',
-                    padding: '10px 16px',
-                    borderRadius: '10px',
-                    fontSize: '0.85rem',
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
-                    transition: 'all 0.15s ease'
-                  }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                    <polyline points="14 2 14 8 20 8" />
-                    <line x1="16" y1="13" x2="8" y2="13" />
-                    <line x1="16" y1="17" x2="8" y2="17" />
-                    <polyline points="10 9 9 9 8 9" />
-                  </svg>
-                  Review JD Candidates →
-                </Link>
-              </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {reqItem.candidates.map((cand) => (
+                    <Link
+                      key={cand.id}
+                      to={`/dashboard/requisitions/${reqItem.id}/candidates/${cand.id}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: '8px',
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        color: '#0f172a',
+                        padding: '11px 14px',
+                        borderRadius: '10px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
+                        textDecoration: 'none',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                        <span style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#0f172a', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, flexShrink: 0 }}>
+                          {(cand.name || 'C').split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}
+                        </span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cand.name || 'Candidate'}</span>
+                      </span>
+                      <span style={{ color: '#2563eb', whiteSpace: 'nowrap' }}>
+                        Open Workspace →
+                      </span>
+                    </Link>
+                  ))}
+                </div>              </div>
             ))}
           </div>
         )}

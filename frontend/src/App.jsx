@@ -4,6 +4,7 @@ import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
+import CandidateLogin from './pages/CandidateLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -22,6 +23,8 @@ import NewRequisition from './pages/requisitions/NewRequisition';
 import RequisitionDetail from './pages/requisitions/RequisitionDetail';
 import ShortlistedCandidates from './pages/candidates/ShortlistedCandidates';
 import RequisitionCandidates from './pages/candidates/RequisitionCandidates';
+import CandidateSchedule from './pages/candidates/CandidateSchedule';
+import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 
 function FullScreenLoader() {
   return (
@@ -64,6 +67,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
         <Route path="/" element={<HomeRedirect />} />
@@ -84,6 +88,8 @@ export default function App() {
           <Route path="requisitions/new" element={<NewRequisition />} />
           <Route path="requisitions/:id" element={<RequisitionDetail />} />
           <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
+          <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
+          <Route path="candidates/accepted" element={<AcceptedCandidates />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />

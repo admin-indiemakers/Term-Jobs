@@ -278,3 +278,37 @@ def request_reschedule(interview_id: str, vendor_notes: str, alternative_slots: 
         doc = interview.to_doc()
         doc["calendar_links"] = generate_calendar_links(doc)
         return doc
+
+
+def complete_interview(interview_id: str, final_remark: str, decision: str) -> Optional[Dict[str, Any]]:
+    """Mark a meeting as over and record the Hiring Manager's final remark + decision.
+
+    When the candidate is Accepted, the linked candidate submission is also
+    promoted to ``Accepted`` so it surfaces in the dashboard's accepted section.
+    """
+    from modules.candidate.domain.models import CandidateSubmission
+
+    with get_session() as session:
+        interview = session.query(InterviewSchedule).filter(InterviewSchedule.id == interview_id).first()
+        if not interview:
+            return None
+
+        interview.status = InterviewStatus.COMPLETED.value
+        interview.final_remark = final_remark
+        interview.decision = decision
+        interview.completed_at = datetime.now(timezone.utc)
+        interview.updated_at = datetime.now(timezone.utc)
+
+        session._track(interview)
+
+        if interview.candidate_submission_id:
+            sub = session.get(CandidateSubmission, interview.candidate_submission_id)
+            if sub is not None:
+                sub.status = "Accepted" if decision == "Accepted" else "Rejected"
+                sub.updated_at = datetime.now(timezone.utc)
+                session._track(sub)
+
+        session.commit()
+        doc = interview.to_doc()
+        doc["calendar_links"] = generate_calendar_links(doc)
+        return doc

@@ -12,11 +12,13 @@ from modules.interview.domain.models import (
     InterviewStatus,
     ScheduleInterviewRequest,
     VendorConfirmRequest,
+    CompleteInterviewRequest,
 )
 from modules.interview.services.interview_service import (
     create_interview_proposal,
     confirm_interview_slot,
     request_reschedule,
+    complete_interview,
     generate_calendar_links,
     generate_ics_content,
 )
@@ -57,6 +59,7 @@ def schedule_interview(
 @router.get("/company")
 def get_company_interviews(
     requisition_id: Optional[str] = Query(default=None),
+    candidate_submission_id: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -68,6 +71,8 @@ def get_company_interviews(
         )
         if requisition_id:
             query = query.filter(InterviewSchedule.requisition_id == requisition_id)
+        if candidate_submission_id:
+            query = query.filter(InterviewSchedule.candidate_submission_id == candidate_submission_id)
             
         interviews = query.all()
         results = []
@@ -139,6 +144,22 @@ def vendor_confirm_interview(
         conf_slot = body.confirmed_slot.model_dump() if body.confirmed_slot else None
         updated = confirm_interview_slot(interview_id, body.slot_id, conf_slot, body.vendor_notes or "")
         
+    if not updated:
+        raise HTTPException(status_code=404, detail="Interview schedule not found")
+    return updated
+
+
+@router.post("/{interview_id}/complete")
+def complete_interview_endpoint(
+    interview_id: str,
+    body: CompleteInterviewRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Hiring Manager marks the meeting as over and records the final remark
+    plus accept/reject decision for the candidate.
+    """
+    updated = complete_interview(interview_id, body.final_remark or "", body.decision or "Accepted")
     if not updated:
         raise HTTPException(status_code=404, detail="Interview schedule not found")
     return updated

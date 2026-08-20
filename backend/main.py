@@ -62,6 +62,7 @@ app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api", tags=["Calendar"])
 app.include_router(resume_screener_router, prefix="/api", tags=["Resume Screener"])
+app.include_router(interview_router, prefix="/api", tags=["Interviews"])
 app.include_router(notifications_router)
 
 
