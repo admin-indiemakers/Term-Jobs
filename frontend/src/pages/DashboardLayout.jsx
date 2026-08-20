@@ -124,8 +124,7 @@ export default function DashboardLayout() {
                 to="/dashboard/candidates"
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                Shortlisted Candidates
-              </NavLink>
+                Shortlisted Candidates              </NavLink>
             </>
           ) : user.role === 'Super Admin' ? (
             <>
