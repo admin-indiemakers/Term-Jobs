@@ -1,4 +1,4 @@
-﻿"""FastAPI app exposing the requisition module for end-to-end testing.
+"""FastAPI app exposing the requisition module for end-to-end testing.
 
 Run:
     uv run uvicorn main:app --reload --port 8000

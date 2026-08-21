@@ -1,4 +1,4 @@
-﻿[project]
+[project]
 name = "termejobs-backend"
 version = "0.1.0"
 description = "Term Jobs backend - requisition module (AI-generated JDs)"
