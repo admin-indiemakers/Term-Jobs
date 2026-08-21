@@ -9,7 +9,7 @@ import jwt
 
 # No committed default secret: generate an ephemeral one so tokens are
 # invalidated on restart unless JWT_SECRET_KEY is provided via .env.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "termjobs-super-secret-jwt-key-2026-production-secure")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY") or os.getenv("JWT_SECRET") or "termjobs-super-secret-jwt-key-2026-production-secure"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
 

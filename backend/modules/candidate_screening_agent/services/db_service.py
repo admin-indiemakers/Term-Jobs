@@ -12,7 +12,7 @@ try:
     DEFAULT_DB_URL = getattr(settings, "mongodb_url", "mongodb://localhost:27017/")
     DEFAULT_DB_NAME = getattr(settings, "mongo_db_name", "termjobs")
 except ImportError:
-    DEFAULT_DB_URL = "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net/termjobs?retryWrites=true&w=majority"
+    DEFAULT_DB_URL = "mongodb://localhost:27017/"
     DEFAULT_DB_NAME = "termjobs"
 
 

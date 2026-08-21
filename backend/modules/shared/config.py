@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(backend_env), env_file_encoding="utf-8", extra="ignore")
 
     # MongoDB
-    mongodb_url: str = os.getenv("MONGODB_URL", "mongodb+srv://worksarjunm_db_user:Y3fv1MhYgoa94NXT@termjob.bnwy4et.mongodb.net")
+    mongodb_url: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     mongo_db_name: str = os.getenv("MONGO_DB_NAME", "termjobs")
 
     # Groq (cloud LLM)
