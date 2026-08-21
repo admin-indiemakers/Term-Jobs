@@ -1,4 +1,5 @@
 import sys
+import urllib.parse
 from pathlib import Path
 
 backend_root = Path(__file__).resolve().parent.parent
@@ -13,26 +14,17 @@ class VercelASGIApp:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
-            headers = dict(scope.get("headers", []))
+            qs = scope.get("query_string", b"").decode("utf-8", errors="ignore")
+            params = urllib.parse.parse_qs(qs)
 
-            path_candidates = [
-                headers.get(b"x-matched-path", b"").decode("utf-8", errors="ignore"),
-                headers.get(b"x-forwarded-uri", b"").decode("utf-8", errors="ignore"),
-                headers.get(b"x-invoke-path", b"").decode("utf-8", errors="ignore"),
-                headers.get(b"x-now-route-matches", b"").decode("utf-8", errors="ignore"),
-                headers.get(b"x-real-url", b"").decode("utf-8", errors="ignore"),
-            ]
+            if "__vercel_path" in params and params["__vercel_path"]:
+                target_path = params["__vercel_path"][0]
+                if target_path.startswith("//"):
+                    target_path = "/" + target_path.lstrip("/")
+                scope["path"] = target_path
 
-            true_path = None
-            for p in path_candidates:
-                if p and p not in ("/api", "/api/", "/api/index", "/api/index.py"):
-                    true_path = p
-                    break
-
-            if true_path:
-                if "?" in true_path:
-                    true_path = true_path.split("?")[0]
-                scope["path"] = true_path
+                cleaned_params = {k: v for k, v in params.items() if k != "__vercel_path"}
+                scope["query_string"] = urllib.parse.urlencode(cleaned_params, doseq=True).encode("utf-8")
 
         await self.asgi_app(scope, receive, send)
 

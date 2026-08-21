@@ -23,7 +23,7 @@ from typing import Any
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -927,31 +927,3 @@ def health() -> dict:
     except Exception:  # noqa: BLE001
         db_status = "degraded"
     return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq"), "db": db_status}
-
-
-
-
-
-
-@app.api_route("/debug-path", methods=["GET", "POST"])
-async def debug_path(request: Request):
-    return {
-        "url_path": request.url.path,
-        "scope_path": request.scope.get("path"),
-        "root_path": request.scope.get("root_path"),
-        "headers": dict(request.headers),
-    }
-
-
-from fastapi.responses import JSONResponse
-
-@app.get("/debug-headers")
-async def debug_headers(request: Request):
-    headers_dict = dict(request.headers)
-    return JSONResponse({
-        "url_path": request.url.path,
-        "scope_path": request.scope.get("path"),
-        "raw_path": request.scope.get("raw_path", b"").decode("utf-8", errors="ignore"),
-        "query_string": request.scope.get("query_string", b"").decode("utf-8", errors="ignore"),
-        "headers": headers_dict,
-    })
