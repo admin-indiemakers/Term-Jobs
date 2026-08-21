@@ -929,3 +929,15 @@ def health() -> dict:
     return {"status": "ok", "llm_provider": os.getenv("LLM_PROVIDER", "groq"), "db": db_status}
 
 
+
+
+from fastapi import Request
+
+@app.api_route("/debug-path", methods=["GET", "POST"])
+async def debug_path(request: Request):
+    return {
+        "url_path": request.url.path,
+        "scope_path": request.scope.get("path"),
+        "root_path": request.scope.get("root_path"),
+        "headers": dict(request.headers),
+    }
