@@ -1,4 +1,4 @@
-﻿{
+{
   "services": {
     "frontend": {
       "root": "frontend",
