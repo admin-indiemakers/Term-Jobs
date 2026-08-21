@@ -912,7 +912,11 @@ def _extract_docx_text(docx_bytes: bytes) -> str:
 # --- static UI / health ------------------------------------------------------
 @app.get("/", include_in_schema=False)
 @app.get("/api", include_in_schema=False)
-def index() -> FileResponse:
+def index(request: Request) -> Any:
+    # If the requested path or query was for health/docs
+    p = str(request.url)
+    if "/health" in p:
+        return health()
     return FileResponse(Path(__file__).parent / "index.html")
 
 
