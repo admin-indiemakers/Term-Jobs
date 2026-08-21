@@ -7,7 +7,7 @@ if str(backend_root) not in sys.path:
 
 from main import app as fastapi_app
 
-# ASGI middleware wrapper to resolve Vercel serverless rewritten paths
+# Vercel ASGI path normalizer
 class VercelASGIApp:
     def __init__(self, asgi_app):
         self.asgi_app = asgi_app
@@ -15,14 +15,17 @@ class VercelASGIApp:
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
             headers = dict(scope.get("headers", []))
-            # Vercel provides the original matched path in x-matched-path
             matched = headers.get(b"x-matched-path", b"").decode("utf-8", errors="ignore")
             raw_path = scope.get("path", "")
 
-            if matched and matched not in ("/api/index", "/api/index.py", "/api"):
+            # If Vercel forwarded the entrypoint path, restore the true requested path
+            if matched and matched not in ("/api", "/api/", "/api/index", "/api/index.py"):
                 scope["path"] = matched
-            elif raw_path in ("/api/index", "/api/index.py"):
-                scope["path"] = "/"
+            elif raw_path in ("/api", "/api/", "/api/index", "/api/index.py"):
+                if matched and matched not in ("/api", "/api/", "/api/index", "/api/index.py"):
+                    scope["path"] = matched
+                else:
+                    scope["path"] = "/"
 
         await self.asgi_app(scope, receive, send)
 
