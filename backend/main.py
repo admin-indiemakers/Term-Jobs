@@ -911,11 +911,13 @@ def _extract_docx_text(docx_bytes: bytes) -> str:
 
 # --- static UI / health ------------------------------------------------------
 @app.get("/", include_in_schema=False)
+@app.get("/api", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(Path(__file__).parent / "index.html")
 
 
 @app.get("/health")
+@app.get("/api/health")
 def health() -> dict:
     from modules.shared.db import db
 
