@@ -184,34 +184,37 @@ async def parse_jd(jd_text: str) -> JDParsed:
 
 # â”€â”€ Embedding utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-_embedding_model = None
-
-
-def _get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        from sentence_transformers import SentenceTransformer
-        logger.info("Loading sentence-transformers model (all-MiniLM-L6-v2)...")
-        _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-    return _embedding_model
-
-
-def generate_embedding(text: str) -> List[float]:
+def generate_embedding(text: str, dim: int = 384) -> List[float]:
     """
-    Generate a 384-dim embedding using all-MiniLM-L6-v2.
-    Model is lazy-loaded on first call.
+    Generate a normalized 384-dim term-hash embedding without heavy ML runtime.
+    Fast, deterministic, and 100% serverless compatible.
     """
-    model = _get_embedding_model()
-    embedding = model.encode(text, normalize_embeddings=True)
-    return embedding.tolist()
+    import math
+    import hashlib
+    if not text:
+        return [0.0] * dim
+
+    vec = [0.0] * dim
+    tokens = re.findall(r'\b[a-zA-Z0-9_#\+\.\-]{2,}\b', text.lower())
+    if not tokens:
+        return [0.0] * dim
+
+    for token in tokens:
+        h = int(hashlib.md5(token.encode('utf-8')).hexdigest(), 16)
+        idx = h % dim
+        sign = 1.0 if ((h >> 8) & 1) else -1.0
+        vec[idx] += sign
+
+    norm = math.sqrt(sum(x * x for x in vec))
+    if norm > 0:
+        vec = [x / norm for x in vec]
+    return vec
 
 
 def cosine_similarity(vec_a: List[float], vec_b: List[float]) -> float:
     """Compute cosine similarity between two pre-normalized vectors."""
-    import numpy as np
-    a = np.array(vec_a)
-    b = np.array(vec_b)
-    dot = float(np.dot(a, b))
-    # Both are L2-normalized, so cosine similarity == dot product
-    return max(0.0, min(1.0, dot))
+    if not vec_a or not vec_b or len(vec_a) != len(vec_b):
+        return 0.0
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    return max(0.0, min(1.0, float(dot)))
 
