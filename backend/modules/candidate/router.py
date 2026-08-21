@@ -143,11 +143,22 @@ def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list
 
 @router.get("/{candidate_id}/resume")
 def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_current_user)):
-    """Serve the original resume PDF for a candidate, if it still exists on disk."""
+    """Serve the resume PDF for a candidate directly from MongoDB or storage."""
+    from fastapi.responses import Response
     with get_session() as session:
         row = session.get(CandidateSubmission, candidate_id)
         if row is None:
+            # Also check Candidate Bank collection
+            cand_alt = session.get(Candidate, candidate_id)
+            if cand_alt and getattr(cand_alt, "resume_pdf", None):
+                pdf_bytes = base64.b64decode(cand_alt.resume_pdf)
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{cand_alt.filename or "resume.pdf"}"'}
+                )
             raise HTTPException(status_code=404, detail="candidate not found")
+
         if current_user.role != "Super Admin":
             tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
             if row.requisition_id not in tenant_reqs:
@@ -155,9 +166,40 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
                     status_code=403,
                     detail="You do not have access to this candidate",
                 )
+
+        # 1. Primary: Stream from MongoDB Base64 stored field
+        if getattr(row, "resume_pdf", None):
+            try:
+                pdf_bytes = base64.b64decode(row.resume_pdf)
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{row.filename or "resume.pdf"}"'}
+                )
+            except Exception as e:
+                print(f"Error decoding resume_pdf from DB: {e}")
+
+        # 2. Check Candidate Bank for matching candidate
+        cand_bank = session.query(Candidate).filter(
+            Candidate.tenant_id == current_user.tenant_id,
+            (Candidate.filename == row.filename) | 
+            (Candidate.candidate_email == row.candidate_email)
+        ).first()
+        if cand_bank and getattr(cand_bank, "resume_pdf", None):
+            try:
+                pdf_bytes = base64.b64decode(cand_bank.resume_pdf)
+                return Response(
+                    content=pdf_bytes,
+                    media_type="application/pdf",
+                    headers={"Content-Disposition": f'inline; filename="{row.filename or "resume.pdf"}"'}
+                )
+            except Exception as e:
+                print(f"Error decoding candidate bank resume_pdf: {e}")
+
         if not row.filename:
             raise HTTPException(status_code=404, detail="No resume file stored for this candidate")
 
+        # 3. Disk fallback (for local development only)
         for directory in RESUME_UPLOAD_DIRS:
             if not directory:
                 continue
@@ -168,15 +210,6 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
                     media_type="application/pdf",
                     filename=row.filename,
                 )
-
-    # Fallback: find the PDF anywhere under the screening agent uploads folder
-    base = os.path.join(os.path.dirname(__file__), "..", "candidate_screening_agent", "uploads")
-    if os.path.isdir(base):
-        for fname in os.listdir(base):
-            if row.filename and row.filename.split("_")[0].lower() in fname.lower() and fname.lower().endswith(".pdf"):
-                path = os.path.join(base, fname)
-                if os.path.exists(path):
-                    return FileResponse(path, media_type="application/pdf", filename=fname)
 
     raise HTTPException(status_code=404, detail="Resume PDF not found on the server")
 
@@ -261,9 +294,7 @@ async def upload_bank_candidates(
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.resume_screener.pipeline.structurer import structure_resume as _structure_resume_new
     
-    upload_dir = "uploads"
-    os.makedirs(upload_dir, exist_ok=True)
-    
+    import tempfile
     vendor_company = vendor_company_name or current_user.tenant_name or "Vendor A"
     saved_candidates = []
     
@@ -272,73 +303,83 @@ async def upload_bank_candidates(
     
     with get_session() as session:
         if valid_files:
-            for file in valid_files:
-                file_path = os.path.join(upload_dir, file.filename)
-                with open(file_path, "wb") as buffer:
-                    shutil.copyfileobj(file.file, buffer)
-                
-                try:
-                    with open(file_path, "rb") as f_b:
-                        pdf_base64_data = base64.b64encode(f_b.read()).decode("utf-8")
-                    extracted_text = _extract_text_new(file_path, "pdf")
-                    import asyncio as _aio; _structured = _aio.run(_structure_resume_new(extracted_text)); parsed = {"candidate_name": _structured.name, "candidate_email": _structured.email, "candidate_phone": None, "candidate_title": _structured.current_title or "Professional", "skills": [s.name for s in (_structured.skills or [])], "summary": _structured.summary or "", "vendor_company_name": vendor_company, "extracted_text": extracted_text, "resume_pdf": pdf_base64_data}
+            with tempfile.TemporaryDirectory() as temp_dir_str:
+                for file in valid_files:
+                    file_path = os.path.join(temp_dir_str, file.filename)
+                    content = file.file.read()
+                    with open(file_path, "wb") as buffer:
+                        buffer.write(content)
                     
-                    # Apply manual overrides if provided
-                    final_name = name or parsed.get("candidate_name") or "Candidate"
-                    final_email = email or parsed.get("candidate_email")
-                    final_phone = phone or parsed.get("candidate_phone")
-                    final_title = candidate_title or parsed.get("candidate_title") or "Software Engineer"
-                    final_vendor = vendor_company or parsed.get("vendor_company_name") or "Vendor A"
-                    
-                    # Check if candidate already exists
-                    existing = None
-                    if final_email:
-                        existing = session.query(Candidate).filter(
-                            Candidate.tenant_id == current_user.tenant_id,
-                            Candidate.candidate_email == final_email
-                        ).first()
-                    else:
-                        existing = session.query(Candidate).filter(
-                            Candidate.tenant_id == current_user.tenant_id,
-                            Candidate.filename == file.filename
-                        ).first()
-                    
-                    if existing:
-                        existing.candidate_name = final_name
-                        existing.candidate_title = final_title
-                        existing.candidate_email = final_email
-                        existing.candidate_phone = final_phone
-                        existing.skills = parsed.get("skills", [])
-                        existing.summary = parsed.get("summary", "")
-                        existing.vendor_company_name = final_vendor
-                        existing.extracted_text = parsed.get("extracted_text", "")
-                        existing.resume_pdf = parsed.get("resume_pdf")
-                        existing.updated_at = datetime.now(timezone.utc)
-                        session.add(existing)
-                        saved_candidates.append(existing)
-                    else:
-                        new_candidate = Candidate(
-                            candidate_name=final_name,
-                            candidate_title=final_title,
-                            candidate_email=final_email,
-                            candidate_phone=final_phone,
-                            vendor_company_name=final_vendor,
-                            skills=parsed.get("skills", []),
-                            filename=file.filename,
-                            summary=parsed.get("summary", ""),
-                            extracted_text=parsed.get("extracted_text", ""),
-                            resume_pdf=parsed.get("resume_pdf"),
-                            tenant_id=current_user.tenant_id,
-                            details={}
-                        )
-                        session.add(new_candidate)
-                        saved_candidates.append(new_candidate)
-                except Exception as e:
-                    print(f"Error parsing resume {file.filename}: {e}")
-                    raise HTTPException(status_code=500, detail=f"Failed to parse resume {file.filename}: {str(e)}")
-                finally:
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
+                    try:
+                        pdf_base64_data = base64.b64encode(content).decode("utf-8")
+                        extracted_text = _extract_text_new(file_path, "pdf")
+                        import asyncio as _aio
+                        _structured = _aio.run(_structure_resume_new(extracted_text))
+                        parsed = {
+                            "candidate_name": _structured.name,
+                            "candidate_email": _structured.email,
+                            "candidate_phone": None,
+                            "candidate_title": _structured.current_title or "Professional",
+                            "skills": [s.name for s in (_structured.skills or [])],
+                            "summary": _structured.summary or "",
+                            "vendor_company_name": vendor_company,
+                            "extracted_text": extracted_text,
+                            "resume_pdf": pdf_base64_data
+                        }
+                        
+                        # Apply manual overrides if provided
+                        final_name = name or parsed.get("candidate_name") or "Candidate"
+                        final_email = email or parsed.get("candidate_email")
+                        final_phone = phone or parsed.get("candidate_phone")
+                        final_title = candidate_title or parsed.get("candidate_title") or "Software Engineer"
+                        final_vendor = vendor_company or parsed.get("vendor_company_name") or "Vendor A"
+                        
+                        # Check if candidate already exists
+                        existing = None
+                        if final_email:
+                            existing = session.query(Candidate).filter(
+                                Candidate.tenant_id == current_user.tenant_id,
+                                Candidate.candidate_email == final_email
+                            ).first()
+                        else:
+                            existing = session.query(Candidate).filter(
+                                Candidate.tenant_id == current_user.tenant_id,
+                                Candidate.filename == file.filename
+                            ).first()
+                        
+                        if existing:
+                            existing.candidate_name = final_name
+                            existing.candidate_title = final_title
+                            existing.candidate_email = final_email
+                            existing.candidate_phone = final_phone
+                            existing.skills = parsed.get("skills", [])
+                            existing.summary = parsed.get("summary", "")
+                            existing.vendor_company_name = final_vendor
+                            existing.extracted_text = parsed.get("extracted_text", "")
+                            existing.resume_pdf = parsed.get("resume_pdf")
+                            existing.updated_at = datetime.now(timezone.utc)
+                            session.add(existing)
+                            saved_candidates.append(existing)
+                        else:
+                            new_candidate = Candidate(
+                                candidate_name=final_name,
+                                candidate_title=final_title,
+                                candidate_email=final_email,
+                                candidate_phone=final_phone,
+                                vendor_company_name=final_vendor,
+                                skills=parsed.get("skills", []),
+                                filename=file.filename,
+                                summary=parsed.get("summary", ""),
+                                extracted_text=parsed.get("extracted_text", ""),
+                                resume_pdf=parsed.get("resume_pdf"),
+                                tenant_id=current_user.tenant_id,
+                                details={}
+                            )
+                            session.add(new_candidate)
+                            saved_candidates.append(new_candidate)
+                    except Exception as e:
+                        print(f"Error parsing resume {file.filename}: {e}")
+                        raise HTTPException(status_code=500, detail=f"Failed to parse resume {file.filename}: {str(e)}")
         else:
             # Manual candidate entry without file upload
             final_name = name or "Candidate"

@@ -33,8 +33,8 @@ from modules.resume_screener.models.schemas import GitHubEvidence
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-UPLOAD_FOLDER = "uploads/screening"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Temporary directory for in-flight resume processing (cleaned up immediately after parsing)
+import tempfile
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +184,7 @@ def _persist_screened_candidates(results, requisition_id, jd_text, vendor_name, 
             "recommendation": r.get("recommendation"),
             "status": "Screened",
             "summary": r.get("summary"),
+            "resume_pdf": r.get("resume_pdf"),
             "details": r.get("score_breakdown") or {},
             "matched_skills": r.get("matched_skills") or [],
             "missing_skills": r.get("missing_skills") or [],
@@ -243,15 +244,13 @@ async def screen_resumes(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"JD parsing failed: {e}")
 
-    # Save uploaded files to temp dir + process sequentially
+    # Process uploaded files sequentially in a managed temporary directory
     results = []
-    tmp_dir = Path(UPLOAD_FOLDER) / str(uuid.uuid4())
-    tmp_dir.mkdir(parents=True, exist_ok=True)
-
-    try:
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        temp_dir = Path(temp_dir_str)
         for upload in resumes:
             filename = upload.filename or f"resume_{uuid.uuid4().hex[:8]}.pdf"
-            file_path = str(tmp_dir / filename)
+            file_path = str(temp_dir / filename)
             content = await upload.read()
             Path(file_path).write_bytes(content)
 
@@ -260,15 +259,9 @@ async def screen_resumes(
 
             logger.info(f"[screen-resumes] Processing: {filename}")
             result = await _process_resume(file_path, file_type, filename, jd_parsed, jd_embedding)
+            import base64
+            result["resume_pdf"] = base64.b64encode(content).decode("utf-8")
             results.append(result)
-
-    finally:
-        # Clean up temp files
-        import shutil
-        try:
-            shutil.rmtree(str(tmp_dir), ignore_errors=True)
-        except Exception:
-            pass
 
     # Rank by score descending
     results.sort(key=lambda x: x["match_score"], reverse=True)

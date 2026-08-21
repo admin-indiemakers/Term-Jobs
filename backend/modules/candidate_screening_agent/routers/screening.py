@@ -33,8 +33,8 @@ from modules.identity.router import get_current_user
 
 router = APIRouter()
 
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Temporary directory handled safely in memory / OS tempfile per request
+import tempfile
 
 # In-memory candidate cache for active screening session
 CANDIDATE_STORE: List[dict] = []
@@ -123,20 +123,21 @@ async def screen_multiple_candidates(
 
     candidates_data = []
 
-    for file in files:
-        if not file.filename:
-            continue
+    with tempfile.TemporaryDirectory() as temp_dir_str:
+        for file in files:
+            if not file.filename:
+                continue
 
-        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+            file_path = os.path.join(temp_dir_str, file.filename)
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
 
-        extracted_text = extract_text_from_pdf(file_path)
-        candidates_data.append({
-            "filename": file.filename,
-            "extracted_text": extracted_text
-        })
+            extracted_text = extract_text_from_pdf(file_path)
+            candidates_data.append({
+                "filename": file.filename,
+                "extracted_text": extracted_text
+            })
 
     if not candidates_data:
         raise HTTPException(status_code=400, detail="No valid files processed")
