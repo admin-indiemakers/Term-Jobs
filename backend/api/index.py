@@ -7,7 +7,6 @@ if str(backend_root) not in sys.path:
 
 from main import app as fastapi_app
 
-# Vercel ASGI path normalizer
 class VercelASGIApp:
     def __init__(self, asgi_app):
         self.asgi_app = asgi_app
@@ -15,17 +14,25 @@ class VercelASGIApp:
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
             headers = dict(scope.get("headers", []))
-            matched = headers.get(b"x-matched-path", b"").decode("utf-8", errors="ignore")
-            raw_path = scope.get("path", "")
 
-            # If Vercel forwarded the entrypoint path, restore the true requested path
-            if matched and matched not in ("/api", "/api/", "/api/index", "/api/index.py"):
-                scope["path"] = matched
-            elif raw_path in ("/api", "/api/", "/api/index", "/api/index.py"):
-                if matched and matched not in ("/api", "/api/", "/api/index", "/api/index.py"):
-                    scope["path"] = matched
-                else:
-                    scope["path"] = "/"
+            path_candidates = [
+                headers.get(b"x-matched-path", b"").decode("utf-8", errors="ignore"),
+                headers.get(b"x-forwarded-uri", b"").decode("utf-8", errors="ignore"),
+                headers.get(b"x-invoke-path", b"").decode("utf-8", errors="ignore"),
+                headers.get(b"x-now-route-matches", b"").decode("utf-8", errors="ignore"),
+                headers.get(b"x-real-url", b"").decode("utf-8", errors="ignore"),
+            ]
+
+            true_path = None
+            for p in path_candidates:
+                if p and p not in ("/api", "/api/", "/api/index", "/api/index.py"):
+                    true_path = p
+                    break
+
+            if true_path:
+                if "?" in true_path:
+                    true_path = true_path.split("?")[0]
+                scope["path"] = true_path
 
         await self.asgi_app(scope, receive, send)
 

@@ -931,7 +931,7 @@ def health() -> dict:
 
 
 
-from fastapi import Request
+
 
 @app.api_route("/debug-path", methods=["GET", "POST"])
 async def debug_path(request: Request):
@@ -941,3 +941,17 @@ async def debug_path(request: Request):
         "root_path": request.scope.get("root_path"),
         "headers": dict(request.headers),
     }
+
+
+from fastapi.responses import JSONResponse
+
+@app.get("/debug-headers")
+async def debug_headers(request: Request):
+    headers_dict = dict(request.headers)
+    return JSONResponse({
+        "url_path": request.url.path,
+        "scope_path": request.scope.get("path"),
+        "raw_path": request.scope.get("raw_path", b"").decode("utf-8", errors="ignore"),
+        "query_string": request.scope.get("query_string", b"").decode("utf-8", errors="ignore"),
+        "headers": headers_dict,
+    })
