@@ -1,12 +1,13 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter", "Director")
+ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter", "Director", "Candidate")
 
 # Which roles a given role is allowed to provision.
 PROVISION_MATRIX = {
     "Super Admin": ("Admin", "Recruiter"),
     "Admin": ("Hiring Manager", "Director", "HR"),
     "HR": ("Hiring Manager",),
+    "Recruiter": ("Candidate",),
 }
 
 
@@ -50,6 +51,7 @@ class UserCreate(BaseModel):
     tenant_id: str = ""
     department: str = ""
     candidate_limit: int | None = Field(None, ge=1, le=100)
+    candidate_id: str = ""
 
 class UserUpdate(BaseModel):
     email: str | None = Field(None, min_length=3, max_length=255)

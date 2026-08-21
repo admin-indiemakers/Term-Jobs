@@ -45,11 +45,15 @@ export default function DashboardLayout() {
       ]
       : user.role === 'Recruiter'
         ? [
+          { section: 'Workspace' },
           { to: '/dashboard/recruiter', label: 'Dashboard', end: true },
           { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true },
           { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true },
           { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true },
           { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true },
+          { section: 'Candidate Management' },
+          { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true },
+          { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true },
         ]
         : user.role === 'Director'
           ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
@@ -200,9 +204,10 @@ export default function DashboardLayout() {
             </>
           ) : (
             <>
-              <div className="nav-section-label">Workspace</div>
               {navItems.map((item) =>
-                item.to ? (
+                item.section ? (
+                  <div key={item.section} className="nav-section-label" style={{ marginTop: item.section === 'Candidate Management' ? '16px' : undefined }}>{item.section}</div>
+                ) : item.to ? (
                   <NavLink
                     key={item.label}
                     to={item.to}

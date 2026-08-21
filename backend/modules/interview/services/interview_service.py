@@ -287,10 +287,14 @@ def complete_interview(interview_id: str, final_remark: str, decision: str) -> O
     promoted to ``Accepted`` so it surfaces in the dashboard's accepted section.
     """
     from modules.candidate.domain.models import CandidateSubmission
+    import logging
+
+    logger = logging.getLogger(__name__)
 
     with get_session() as session:
         interview = session.query(InterviewSchedule).filter(InterviewSchedule.id == interview_id).first()
         if not interview:
+            logger.warning("complete_interview: interview %s not found", interview_id)
             return None
 
         interview.status = InterviewStatus.COMPLETED.value
@@ -304,9 +308,21 @@ def complete_interview(interview_id: str, final_remark: str, decision: str) -> O
         if interview.candidate_submission_id:
             sub = session.get(CandidateSubmission, interview.candidate_submission_id)
             if sub is not None:
-                sub.status = "Accepted" if decision == "Accepted" else "Rejected"
+                new_status = "Accepted" if decision == "Accepted" else "Rejected"
+                sub.status = new_status
                 sub.updated_at = datetime.now(timezone.utc)
                 session._track(sub)
+                logger.info(
+                    "complete_interview: updated candidate submission %s status to %s",
+                    interview.candidate_submission_id,
+                    new_status,
+                )
+            else:
+                logger.warning(
+                    "complete_interview: candidate submission %s not found for interview %s",
+                    interview.candidate_submission_id,
+                    interview_id,
+                )
 
         session.commit()
         doc = interview.to_doc()

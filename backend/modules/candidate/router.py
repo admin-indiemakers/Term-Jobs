@@ -18,6 +18,21 @@ from modules.shared.db import get_session
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
 
+
+def _make_candidate_id(session, requisition_id: str | None = None) -> str:
+    """Generate a candidate ID prefixed with company initials (e.g. BEAR-a1b2c3d4)."""
+    initials = "CND"
+    if requisition_id:
+        try:
+            req = session.get(Requisition, requisition_id)
+            if req and req.company_profile_id:
+                company = session.get(CompanyProfile, req.company_profile_id)
+                if company and company.name:
+                    initials = company.name[:4].upper()
+        except Exception:
+            pass
+    return f"{initials}-{str(uuid.uuid4())[:8]}"
+
 RESUME_UPLOAD_DIRS = [
     os.path.join(os.path.dirname(__file__), "..", "candidate_screening_agent", "uploads"),
     os.path.join(os.path.dirname(__file__), "..", "..", "uploads"),
@@ -81,11 +96,18 @@ def list_candidates(
         candidates = query.all()
         if current_user.role != "Super Admin":
             tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
+            # For Recruiters (vendors), also include candidates they submitted
+            # by matching vendor_name against the vendor's tenant name.
+            vendor_name = None
+            if current_user.role == "Recruiter":
+                from modules.identity.domain.models import Tenant
+                tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+                vendor_name = (tenant.name or "").lower().strip() if tenant else None
             candidates = [
                 c for c in candidates
-                if getattr(c, 'tenant_id', None) == current_user.tenant_id
-                or not getattr(c, 'tenant_id', None)
-                or c.requisition_id in tenant_reqs
+                if c.requisition_id in tenant_reqs
+                or not c.requisition_id
+                or (vendor_name and c.vendor_name and c.vendor_name.lower().strip() == vendor_name)
             ]
         return [_candidate_dict(session, row) for row in candidates]
 
@@ -107,9 +129,8 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
             tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
             candidates = [
                 c for c in candidates
-                if getattr(c, 'tenant_id', None) == current_user.tenant_id
-                or not getattr(c, 'tenant_id', None)
-                or c.requisition_id in tenant_reqs
+                if c.requisition_id in tenant_reqs
+                or not c.requisition_id
             ]
         return [_candidate_dict(session, row) for row in candidates]
 
@@ -659,7 +680,7 @@ def shortlist_candidate(
             session.add(existing_sub)
             sub_id = existing_sub.id
         else:
-            sub_id = str(uuid.uuid4())[:8]
+            sub_id = _make_candidate_id(session, requisition_id)
             new_sub = CandidateSubmission(
                 id=sub_id,
                 requisition_id=requisition_id,

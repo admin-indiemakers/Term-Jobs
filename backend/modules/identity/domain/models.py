@@ -34,6 +34,7 @@ class User(Model):
         "created_by": "",  # id of the user who provisioned this account ("" for Admin)
         "is_active": True,
         "candidate_limit": None,  # per-account cap on vendor submissions; None = platform default
+        "candidate_id": "",  # links Candidate accounts to their submission_id
         "created_at": _utcnow,
     }
 
@@ -47,6 +48,7 @@ class User(Model):
     created_by = Column("created_by")
     is_active = Column("is_active")
     candidate_limit = Column("candidate_limit")
+    candidate_id = Column("candidate_id")
     created_at = Column("created_at")
 
 

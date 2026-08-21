@@ -25,6 +25,8 @@ import ShortlistedCandidates from './pages/candidates/ShortlistedCandidates';
 import RequisitionCandidates from './pages/candidates/RequisitionCandidates';
 import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
+import CandidatePortal from './pages/candidates/CandidatePortal';
+
 
 function FullScreenLoader() {
   return (
@@ -49,6 +51,7 @@ function HomeRedirect() {
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -59,6 +62,7 @@ function DashboardIndex() {
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -90,6 +94,8 @@ export default function App() {
           <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
           <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
           <Route path="candidates/accepted" element={<AcceptedCandidates />} />
+          <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
+          <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal" />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
@@ -107,6 +113,7 @@ export default function App() {
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
           <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
           <Route path="hr" element={<HRDashboard />} />
+          <Route path="candidate" element={<CandidatePortal />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

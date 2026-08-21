@@ -235,17 +235,34 @@ export default function CandidateSchedule() {
 
   const handleComplete = async (e) => {
     if (e) e.preventDefault();
-    if (!interview) return;
     setSaving(true);
     setError('');
     try {
-      const res = await request(`/api/interviews/${interview.id}/complete`, {
-        method: 'POST',
-        token,
-        body: { final_remark: remark, decision },
-      });
-      setInterview(res);
+      if (interview) {
+        // Interview exists — record decision via the interview complete endpoint
+        const res = await request(`/api/interviews/${interview.id}/complete`, {
+          method: 'POST',
+          token,
+          body: { final_remark: remark, decision },
+        });
+        setInterview(res);
+      } else {
+        // No interview — directly update candidate status via PATCH
+        const newStatus = decision === 'Accepted' ? 'Accepted' : 'Rejected';
+        await request(`/candidates/${candidateId}/status`, {
+          method: 'PATCH',
+          token,
+          body: { status: newStatus },
+        });
+      }
       setEditingDecision(false);
+      // Refetch candidate data so the updated status (Accepted/Rejected) is reflected
+      try {
+        const updatedCandidate = await request(`/candidates/${candidateId}`, { token });
+        if (updatedCandidate) setCandidate(updatedCandidate);
+      } catch (_) {
+        // Candidate fetch failed; decision update succeeded so this is non-critical
+      }
     } catch (err) {
       setError(err.message);
     } finally {

@@ -43,10 +43,26 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def _make_candidate_id(requisition_id: str | None = None) -> str:
+    """Generate a candidate ID prefixed with company initials."""
+    initials = "CND"
+    if requisition_id:
+        try:
+            db = get_db()
+            req = db["requisitions"].find_one({"id": requisition_id})
+            if req and req.get("company_profile_id"):
+                cp = db["company_profiles"].find_one({"id": req["company_profile_id"]})
+                if cp and cp.get("name"):
+                    initials = cp["name"][:4].upper()
+        except Exception:
+            pass
+    return f"{initials}-{str(uuid.uuid4())[:8]}"
+
+
 def save_candidate_submission(cand: dict[str, Any], requisition_id: str | None = None, vendor_name: str = "Vendor A", tenant_id: str | None = None) -> str:
     """Save or update candidate submission document in MongoDB."""
     init_db()
-    submission_id = cand.get("submission_id") or str(uuid.uuid4())[:8]
+    submission_id = cand.get("submission_id") or _make_candidate_id(requisition_id)
 
     try:
         db = get_db()
