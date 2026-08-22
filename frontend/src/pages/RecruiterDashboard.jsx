@@ -1425,30 +1425,6 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         </div>
                       </div>
 
-                      {/* Brief Recommendation Bar (When Collapsed) */}
-                      {!isExpanded && (
-                        <div
-                          onClick={() => setExpandedScreenedId(subId)}
-                          style={{
-                            padding: '12px 20px',
-                            background: '#f8fafc',
-                            fontSize: '0.85rem',
-                            color: '#475569',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                          }}
-                        >
-                          <div>
-                            <strong>AI Recommendation:</strong> {sub.recommendation || (score >= 70 ? 'Strong Match' : score >= 50 ? 'Moderate Match' : 'Weak Match')} — {sub.summary || 'Click to expand complete score breakdown and skills comparison.'}
-                          </div>
-                          <span style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 700, marginLeft: '12px', whiteSpace: 'nowrap' }}>
-                            Click to expand →
-                          </span>
-                        </div>
-                      )}
-
                       {/* Expanded Full Details & Scores Panel */}
                       {isExpanded && (
                         <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '22px', background: '#ffffff', borderTop: '1px solid #f1f5f9' }}>
