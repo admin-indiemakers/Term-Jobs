@@ -55,6 +55,129 @@ const role = (req) => {
 const skillsFor = (req) => role(req).must_have_skills || req?.intent?.tech_stack_hint || [];
 const short = (value, fallback = 'Not specified') => value || fallback;
 
+function SkeletonBlock({ width = '100%', height = '16px', borderRadius = '6px', style = {} }) {
+  return (
+    <div
+      style={{
+        width,
+        height,
+        borderRadius,
+        background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)',
+        backgroundSize: '200% 100%',
+        animation: 'skeletonShimmer 1.5s infinite linear',
+        ...style,
+      }}
+    />
+  );
+}
+
+function SkeletonStatCard({ label, tint = 'tint-blue', icon }) {
+  return (
+    <div className={`stat-card ${tint} glass-panel`}>
+      <div className="stat-header">
+        <span className="stat-label">{label}</span>
+        {icon && <span className="stat-icon">{icon}</span>}
+      </div>
+      <div className="stat-value" style={{ margin: '8px 0' }}>
+        <SkeletonBlock width="50px" height="28px" borderRadius="8px" />
+      </div>
+      <div className="stat-delta">
+        <SkeletonBlock width="120px" height="14px" borderRadius="4px" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonHeroCard() {
+  return (
+    <article className="recruiter-role-hero" style={{ background: '#111827', borderRadius: '18px', padding: '30px', color: '#ffffff', position: 'relative' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <SkeletonBlock width="80px" height="22px" borderRadius="6px" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          <SkeletonBlock width="120px" height="18px" borderRadius="4px" style={{ background: 'rgba(255,255,255,0.1)' }} />
+        </div>
+        <SkeletonBlock width="110px" height="34px" borderRadius="999px" style={{ background: 'rgba(255,255,255,0.1)' }} />
+      </div>
+      <div style={{ marginBottom: '24px' }}>
+        <SkeletonBlock width="320px" height="32px" borderRadius="8px" style={{ background: 'rgba(255,255,255,0.1)' }} />
+      </div>
+      <div className="role-metric-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '16px', marginBottom: '20px' }}>
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} style={{ background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '12px', padding: '14px 18px' }}>
+            <SkeletonBlock width="60px" height="12px" borderRadius="4px" style={{ background: 'rgba(255,255,255,0.1)', marginBottom: '8px' }} />
+            <SkeletonBlock width="90px" height="18px" borderRadius="4px" style={{ background: 'rgba(255,255,255,0.1)' }} />
+          </div>
+        ))}
+      </div>
+      <div style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)', borderRadius: '12px', padding: '16px 20px' }}>
+        <SkeletonBlock width="80%" height="16px" borderRadius="4px" style={{ background: 'rgba(255,255,255,0.08)', marginBottom: '8px' }} />
+        <SkeletonBlock width="50%" height="16px" borderRadius="4px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+      </div>
+    </article>
+  );
+}
+
+function SkeletonReqGridCard() {
+  return (
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: '14px', padding: '20px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '14px', background: '#ffffff' }}>
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <SkeletonBlock width="70px" height="20px" borderRadius="6px" />
+          <SkeletonBlock width="60px" height="16px" borderRadius="4px" />
+        </div>
+        <SkeletonBlock width="180px" height="22px" borderRadius="6px" style={{ marginBottom: '8px' }} />
+        <SkeletonBlock width="100%" height="14px" borderRadius="4px" style={{ marginBottom: '6px' }} />
+        <SkeletonBlock width="80%" height="14px" borderRadius="4px" style={{ marginBottom: '12px' }} />
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <SkeletonBlock width="50px" height="20px" borderRadius="6px" />
+          <SkeletonBlock width="60px" height="20px" borderRadius="6px" />
+          <SkeletonBlock width="55px" height="20px" borderRadius="6px" />
+        </div>
+      </div>
+      <SkeletonBlock width="100%" height="38px" borderRadius="10px" />
+    </div>
+  );
+}
+
+function SkeletonBankTableRows() {
+  return [1, 2, 3, 4].map((i) => (
+    <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+      <td style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <SkeletonBlock width="40px" height="40px" borderRadius="50%" />
+          <div>
+            <SkeletonBlock width="140px" height="16px" borderRadius="4px" style={{ marginBottom: '6px' }} />
+            <SkeletonBlock width="90px" height="13px" borderRadius="4px" />
+          </div>
+        </div>
+      </td>
+      <td style={{ padding: '16px' }}>
+        <SkeletonBlock width="150px" height="14px" borderRadius="4px" style={{ marginBottom: '6px' }} />
+        <SkeletonBlock width="100px" height="12px" borderRadius="4px" />
+      </td>
+      <td style={{ padding: '16px' }}>
+        <SkeletonBlock width="85px" height="22px" borderRadius="6px" />
+      </td>
+      <td style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <SkeletonBlock width="50px" height="20px" borderRadius="6px" />
+          <SkeletonBlock width="50px" height="20px" borderRadius="6px" />
+        </div>
+      </td>
+      <td style={{ padding: '16px' }}>
+        <SkeletonBlock width="75px" height="14px" borderRadius="4px" />
+      </td>
+      <td style={{ padding: '16px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <SkeletonBlock width="95px" height="32px" borderRadius="8px" />
+          <SkeletonBlock width="80px" height="32px" borderRadius="8px" />
+        </div>
+      </td>
+    </tr>
+  ));
+}
+
+
 function getDeadlineInfo(deadlineStr) {
   if (!deadlineStr) return null;
   const deadlineDate = new Date(deadlineStr);
@@ -722,12 +845,21 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             </a>
           </WelcomeBanner>
 
-          <section className="stat-grid recruiter-stats" aria-label="Recruiter summary">
-            <StatCard label="Active Job Roles" value={requisitions.length} icon={Icons.briefcase} tint="tint-ink" delta="Published by clients" deltaTone="ink" />
-            <StatCard label="Talent Bank Profiles" value={bankCandidates.length} icon={Icons.users} tint="tint-blue" delta="Available in repository" deltaTone="blue" />
-            <StatCard label="Shortlisted to HR" value={shortlisted.length} icon={Icons.check} tint="tint-green" delta="Delivered to clients" deltaTone="green" />
-            <StatCard label="Interview Requests" value={interviews.length} icon={Icons.layers} tint="tint-amber" delta="Cal.com scheduling" deltaTone="amber" />
-          </section>
+          {loading ? (
+            <section className="stat-grid recruiter-stats" aria-label="Recruiter summary loading">
+              <SkeletonStatCard label="Active Job Roles" tint="tint-ink" icon={Icons.briefcase} />
+              <SkeletonStatCard label="Talent Bank Profiles" tint="tint-blue" icon={Icons.users} />
+              <SkeletonStatCard label="Shortlisted to HR" tint="tint-green" icon={Icons.check} />
+              <SkeletonStatCard label="Interview Requests" tint="tint-amber" icon={Icons.layers} />
+            </section>
+          ) : (
+            <section className="stat-grid recruiter-stats" aria-label="Recruiter summary">
+              <StatCard label="Active Job Roles" value={requisitions.length} icon={Icons.briefcase} tint="tint-ink" delta="Published by clients" deltaTone="ink" />
+              <StatCard label="Talent Bank Profiles" value={bankCandidates.length} icon={Icons.users} tint="tint-blue" delta="Available in repository" deltaTone="blue" />
+              <StatCard label="Shortlisted to HR" value={shortlisted.length} icon={Icons.check} tint="tint-green" delta="Delivered to clients" deltaTone="green" />
+              <StatCard label="Interview Requests" value={interviews.length} icon={Icons.layers} tint="tint-amber" delta="Cal.com scheduling" deltaTone="amber" />
+            </section>
+          )}
 
           {/* Active Job Requisitions Grid */}
           <div style={{ background: '#ffffff', borderRadius: '18px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
@@ -748,7 +880,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               </a>
             </div>
 
-            {requisitions.length === 0 ? (
+            {loading ? (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                <SkeletonReqGridCard />
+                <SkeletonReqGridCard />
+                <SkeletonReqGridCard />
+              </div>
+            ) : requisitions.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
                 No active requisitions published yet.
               </div>
@@ -963,7 +1101,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
               <div>
                 <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>Open requirements</h2>
-                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '2px 0 0' }}>{requisitions.length} across clients</p>
+                {loading ? (
+                  <div style={{ marginTop: '4px' }}>
+                    <SkeletonBlock width="130px" height="14px" borderRadius="4px" />
+                  </div>
+                ) : (
+                  <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '2px 0 0' }}>{requisitions.length} across clients</p>
+                )}
               </div>
               <input
                 className="auth-input recruiter-search"
@@ -1419,40 +1563,49 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       )}
 
       {showCandidates && (
-        <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary">
-          <StatCard
-            label="TOTAL CANDIDATES IN BANK"
-            value={bankStats.total}
-            icon={Icons.users}
-            tint="tint-ink"
-            delta="Company Talent Repository"
-            deltaTone="ink"
-          />
-          <StatCard
-            label="TECHNICAL ROLES"
-            value={bankStats.titleCount > 0 ? `${bankStats.titleCount}+` : '0+'}
-            icon={Icons.briefcase}
-            tint="tint-blue"
-            delta={bankStats.titles.slice(0, 3).join(', ') || 'Frontend, Backend, Design'}
-            deltaTone="blue"
-          />
-          <StatCard
-            label="AUTO-PARSED RESUMES"
-            value={bankStats.parsed}
-            icon={Icons.layers}
-            tint="tint-violet"
-            delta={bankStats.parsed ? 'Ollama LLM (llama3.2:3b) Parsed' : 'Awaiting PDF upload'}
-            deltaTone="violet"
-          />
-          <StatCard
-            label="READY FOR MATCHING"
-            value={`${bankStats.readyPct}%`}
-            icon={Icons.check}
-            tint="tint-green"
-            delta={bankStats.total ? `${bankStats.ready} of ${bankStats.total} candidates ready` : 'No candidates yet'}
-            deltaTone="green"
-          />
-        </section>
+        loading ? (
+          <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary loading">
+            <SkeletonStatCard label="TOTAL CANDIDATES IN BANK" tint="tint-ink" icon={Icons.users} />
+            <SkeletonStatCard label="TECHNICAL ROLES" tint="tint-blue" icon={Icons.briefcase} />
+            <SkeletonStatCard label="AUTO-PARSED RESUMES" tint="tint-violet" icon={Icons.layers} />
+            <SkeletonStatCard label="READY FOR MATCHING" tint="tint-green" icon={Icons.check} />
+          </section>
+        ) : (
+          <section className="stat-grid recruiter-stats" aria-label="Candidates bank summary">
+            <StatCard
+              label="TOTAL CANDIDATES IN BANK"
+              value={bankStats.total}
+              icon={Icons.users}
+              tint="tint-ink"
+              delta="Company Talent Repository"
+              deltaTone="ink"
+            />
+            <StatCard
+              label="TECHNICAL ROLES"
+              value={bankStats.titleCount > 0 ? `${bankStats.titleCount}+` : '0+'}
+              icon={Icons.briefcase}
+              tint="tint-blue"
+              delta={bankStats.titles.slice(0, 3).join(', ') || 'Frontend, Backend, Design'}
+              deltaTone="blue"
+            />
+            <StatCard
+              label="AUTO-PARSED RESUMES"
+              value={bankStats.parsed}
+              icon={Icons.layers}
+              tint="tint-violet"
+              delta={bankStats.parsed ? 'Groq LLM AI Parsed' : 'Awaiting PDF upload'}
+              deltaTone="violet"
+            />
+            <StatCard
+              label="READY FOR MATCHING"
+              value={`${bankStats.readyPct}%`}
+              icon={Icons.check}
+              tint="tint-green"
+              delta={bankStats.total ? `${bankStats.ready} of ${bankStats.total} candidates ready` : 'No candidates yet'}
+              deltaTone="green"
+            />
+          </section>
+        )
       )}
 
       {showCandidates && (

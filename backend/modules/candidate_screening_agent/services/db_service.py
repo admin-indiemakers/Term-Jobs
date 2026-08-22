@@ -16,17 +16,27 @@ except ImportError:
     DEFAULT_DB_NAME = "termjobs"
 
 
+_cached_db = None
+
 def get_db():
-    """Return the MongoDB database."""
-    db_url = (
-        os.getenv("MONGODB_URL")
-        or os.getenv("MONGODB_URI")
-        or os.getenv("MONGO_URI")
-        or DEFAULT_DB_URL
-    )
-    db_name = os.getenv("MONGO_DB_NAME", DEFAULT_DB_NAME)
-    client = MongoClient(db_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
-    return client[db_name]
+    """Return the cached MongoDB database instance."""
+    global _cached_db
+    if _cached_db is None:
+        try:
+            from modules.shared.db import _get_client, settings
+            client = _get_client()
+            _cached_db = client[settings.mongo_db_name]
+        except Exception:
+            db_url = (
+                os.getenv("MONGODB_URL")
+                or os.getenv("MONGODB_URI")
+                or os.getenv("MONGO_URI")
+                or DEFAULT_DB_URL
+            )
+            db_name = os.getenv("MONGO_DB_NAME", DEFAULT_DB_NAME)
+            client = MongoClient(db_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000, maxPoolSize=50)
+            _cached_db = client[db_name]
+    return _cached_db
 
 
 def init_db():
