@@ -132,6 +132,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [matchingReqId, setMatchingReqId] = useState('');
   const [matching, setMatching] = useState(false);
   const [showResumeModal, setShowResumeModal] = useState(null);
+  const [resumePdfUrl, setResumePdfUrl] = useState(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
+  const [pdfViewTab, setPdfViewTab] = useState('pdf'); // 'pdf' or 'insights'
 
   const [showJdDetails, setShowJdDetails] = useState(false);
   const [reqCandidateSearch, setReqCandidateSearch] = useState('');
@@ -157,6 +160,42 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [newCandVendor, setNewCandVendor] = useState('');
   const [newCandFile, setNewCandFile] = useState(null);
 
+  async function handleOpenResumeModal(candidate) {
+    setShowResumeModal(candidate);
+    setPdfViewTab('pdf');
+    setLoadingPdf(true);
+    if (resumePdfUrl) {
+      window.URL.revokeObjectURL(resumePdfUrl);
+      setResumePdfUrl(null);
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/candidates/bank/${candidate.id}/resume-pdf`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+        setResumePdfUrl(url);
+      } else {
+        setResumePdfUrl(null);
+      }
+    } catch (err) {
+      console.error('Failed to load resume PDF from MongoDB:', err);
+      setResumePdfUrl(null);
+    } finally {
+      setLoadingPdf(false);
+    }
+  }
+
+  function handleCloseResumeModal() {
+    if (resumePdfUrl) {
+      window.URL.revokeObjectURL(resumePdfUrl);
+      setResumePdfUrl(null);
+    }
+    setShowResumeModal(null);
+  }
+
   async function handleDownloadCandidatePdf(candidateId, filename) {
     try {
       const res = await fetch(`${API_BASE_URL}/candidates/bank/${candidateId}/resume-pdf`, {
@@ -166,7 +205,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         throw new Error('Failed to load resume PDF.');
       }
       const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       window.open(url, '_blank');
     } catch (err) {
       alert(err.message || 'Could not load resume PDF.');
@@ -1770,71 +1809,312 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         </div>
       )}
 
-      {/* Resume Preview Modal */}
-      {showResumeModal && (
-        <div className="modal-overlay" onClick={() => setShowResumeModal(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
-          <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px', width: '90%', padding: '28px', background: '#fff', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#1e293b' }}>Resume Profile: {showResumeModal.candidate_name}</h3>
-              <button onClick={() => setShowResumeModal(null)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
-            </div>
-            <div style={{ marginTop: '20px', maxHeight: '70vh', overflowY: 'auto', paddingRight: '8px', display: 'grid', gap: '20px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', background: '#f8fafc', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Role/Title</span>
-                  <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_title || 'N/A'}</strong>
-                </div>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Vendor Company</span>
-                  <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.vendor_company_name || 'N/A'}</strong>
-                </div>
-                <div>
-                  <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Email</span>
-                  <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_email || 'N/A'}</strong>
-                </div>
-                {showResumeModal.candidate_phone && (
+      {/* Resume Preview Modal with Embedded PDF Viewer */}
+        {showResumeModal && (
+          <div
+            className="modal-overlay"
+            onClick={handleCloseResumeModal}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.75)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 110,
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <div
+              className="modal-content glass-panel"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '1100px',
+                width: '95%',
+                height: '92vh',
+                padding: '20px 24px',
+                background: '#ffffff',
+                borderRadius: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              }}
+            >
+              {/* Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid #f1f5f9',
+                  paddingBottom: '14px',
+                  flexShrink: 0,
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                  <div
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                      color: '#ffffff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '1.1rem',
+                    }}
+                  >
+                    {showResumeModal.candidate_name ? showResumeModal.candidate_name.charAt(0).toUpperCase() : 'C'}
+                  </div>
                   <div>
-                    <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Phone</span>
-                    <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_phone}</strong>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      {showResumeModal.candidate_name || 'Candidate Resume'}
+                    </h3>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '3px', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.82rem', color: '#64748b', fontWeight: 600 }}>
+                        {showResumeModal.candidate_title || 'Software Engineer'}
+                      </span>
+                      <span style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 500 }}>
+                        🏢 {showResumeModal.vendor_company_name || 'bridgeon'}
+                      </span>
+                      {showResumeModal.candidate_email && (
+                        <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+                          ✉️ {showResumeModal.candidate_email}
+                        </span>
+                      )}
+                      {showResumeModal.candidate_phone && (
+                        <span style={{ fontSize: '0.82rem', color: '#475569' }}>
+                          📞 {showResumeModal.candidate_phone}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Top Action Controls */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {resumePdfUrl && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => window.open(resumePdfUrl, '_blank')}
+                        style={{
+                          background: '#eff6ff',
+                          color: '#2563eb',
+                          border: '1px solid #bfdbfe',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          fontSize: '0.82rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <span>🔗</span>
+                        <span>Open in New Tab</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const a = document.createElement('a');
+                          a.href = resumePdfUrl;
+                          a.download = showResumeModal.filename || `${showResumeModal.candidate_name || 'Resume'}.pdf`;
+                          a.click();
+                        }}
+                        style={{
+                          background: '#f8fafc',
+                          color: '#334155',
+                          border: '1px solid #cbd5e1',
+                          padding: '8px 14px',
+                          borderRadius: '10px',
+                          fontSize: '0.82rem',
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                        }}
+                      >
+                        <span>⬇️</span>
+                        <span>Download</span>
+                      </button>
+                    </>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCloseResumeModal}
+                    style={{
+                      background: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '50%',
+                      fontSize: '1.2rem',
+                      color: '#64748b',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+
+              {/* View Switcher Tabs */}
+              <div
+                style={{
+                  display: 'flex',
+                  background: '#f1f5f9',
+                  padding: '3px',
+                  borderRadius: '10px',
+                  marginTop: '12px',
+                  width: 'fit-content',
+                  gap: '4px',
+                  flexShrink: 0,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setPdfViewTab('pdf')}
+                  style={{
+                    padding: '6px 16px',
+                    borderRadius: '7px',
+                    border: 0,
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: pdfViewTab === 'pdf' ? '#ffffff' : 'transparent',
+                    color: pdfViewTab === 'pdf' ? '#2563eb' : '#64748b',
+                    boxShadow: pdfViewTab === 'pdf' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>📄</span>
+                  <span>Original PDF Resume</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPdfViewTab('insights')}
+                  style={{
+                    padding: '6px 16px',
+                    borderRadius: '7px',
+                    border: 0,
+                    fontSize: '0.82rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: pdfViewTab === 'insights' ? '#ffffff' : 'transparent',
+                    color: pdfViewTab === 'insights' ? '#0f172a' : '#64748b',
+                    boxShadow: pdfViewTab === 'insights' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>✨</span>
+                  <span>AI Extracted Profile &amp; Skills</span>
+                </button>
+              </div>
+
+              {/* Viewport Content */}
+              <div
+                style={{
+                  flex: 1,
+                  marginTop: '12px',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  position: 'relative',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+              >
+                {pdfViewTab === 'pdf' ? (
+                  loadingPdf ? (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+                      <div className="spinner" style={{ width: '36px', height: '36px', borderTopColor: '#2563eb', marginBottom: '14px' }} />
+                      <p style={{ fontWeight: 600, fontSize: '0.95rem' }}>Loading resume PDF from MongoDB...</p>
+                    </div>
+                  ) : resumePdfUrl ? (
+                    <iframe
+                      src={resumePdfUrl}
+                      title={`Resume PDF - ${showResumeModal.candidate_name}`}
+                      style={{ width: '100%', height: '100%', border: 0 }}
+                    />
+                  ) : (
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>📄</div>
+                      <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1e293b', margin: '0 0 6px 0' }}>
+                        No direct PDF data stored for this profile
+                      </h4>
+                      <p style={{ fontSize: '0.85rem', color: '#64748b', maxWidth: '400px' }}>
+                        This candidate profile might have been added manually. Check the AI Extracted Profile tab to view their skills and summary.
+                      </p>
+                    </div>
+                  )
+                ) : (
+                  <div style={{ flex: 1, overflowY: 'auto', padding: '24px', display: 'grid', gap: '20px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', background: '#ffffff', padding: '16px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                      <div>
+                        <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Role/Title</span>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_title || 'N/A'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Vendor Company</span>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.vendor_company_name || 'bridgeon'}</strong>
+                      </div>
+                      <div>
+                        <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Email</span>
+                        <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_email || 'N/A'}</strong>
+                      </div>
+                      {showResumeModal.candidate_phone && (
+                        <div>
+                          <span style={{ display: 'block', fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Phone</span>
+                          <strong style={{ fontSize: '0.9rem', color: '#1e293b' }}>{showResumeModal.candidate_phone}</strong>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Professional Summary</h4>
+                      <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.6, background: '#ffffff', padding: '14px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                        {showResumeModal.summary || 'No summary extracted.'}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Extracted Skills</h4>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                        {(showResumeModal.skills || []).map((skill, idx) => (
+                          <span key={idx} style={{ background: '#edf5ff', color: '#2563eb', fontSize: '0.75rem', fontWeight: 600, padding: '4px 10px', borderRadius: '6px', border: '1px solid #dbeafe' }}>
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Extracted Resume Text</h4>
+                      <pre style={{ whiteSpace: 'pre-wrap', background: '#f1f5f9', padding: '16px', borderRadius: '10px', fontSize: '0.78rem', fontFamily: 'monospace', maxHeight: '200px', overflowY: 'auto', border: '1px solid #e2e8f0', color: '#334155' }}>
+                        {showResumeModal.extracted_text || 'No text extracted.'}
+                      </pre>
+                    </div>
                   </div>
                 )}
               </div>
-              <div>
-                <h4 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Professional Summary</h4>
-                <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>
-                  {showResumeModal.summary || 'No summary extracted.'}
-                </p>
-              </div>
-              <div>
-                <h4 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Extracted Skills</h4>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {(showResumeModal.skills || []).map((skill, idx) => (
-                    <span key={idx} style={{ background: '#edf5ff', color: '#2563eb', fontSize: '0.75rem', fontWeight: 600, padding: '4px 10px', borderRadius: '6px' }}>
-                      {skill}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h4 style={{ fontSize: '0.88rem', fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>Full Resume Text</h4>
-                <pre style={{ whiteSpace: 'pre-wrap', background: '#f1f5f9', padding: '16px', borderRadius: '8px', fontSize: '0.78rem', marginTop: '6px', fontFamily: 'monospace', maxHeight: '250px', overflowY: 'auto', border: '1px solid #e2e8f0', color: '#334155' }}>
-                  {showResumeModal.extracted_text || 'No text extracted.'}
-                </pre>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
-                <button
-                  className="glow-btn"
-                  onClick={() => setShowResumeModal(null)}
-                  style={{ background: '#1e293b', color: '#fff', border: 0, padding: '10px 20px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  Close
-                </button>
-              </div>
             </div>
           </div>
-        </div>
-      )}
-      {/* Add Candidate Modal */}
+        )}
+        
+        {/* Add Candidate Modal */}
         {showAddCandidateModal && (
           <div
             className="modal-overlay"
