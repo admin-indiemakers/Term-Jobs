@@ -1571,10 +1571,39 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             <div className="cand-actions">
                               <button
                                 className="view-resume-btn glow-btn"
-                                onClick={() => setShowResumeModal(candidate)}
+                                title="View & Preview Original Resume PDF"
+                                onClick={() => handleOpenResumeModal(candidate)}
                               >
                                 <span className="btn-icon">{Icons.fileText}</span>
                                 View Resume
+                              </button>
+                              <button
+                                className="download-resume-btn"
+                                title="Download Original Resume PDF"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDownloadCandidatePdf(
+                                    candidate.id,
+                                    candidate.filename || `${candidate.candidate_name || "Resume"}.pdf`
+                                  );
+                                }}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  padding: "8px 12px",
+                                  borderRadius: "10px",
+                                  border: "1px solid #cbd5e1",
+                                  background: "#ffffff",
+                                  color: "#1e293b",
+                                  fontSize: "0.82rem",
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                  transition: "all 0.2s ease",
+                                }}
+                              >
+                                <span style={{ fontSize: "0.9rem" }}>⬇️</span>
+                                <span>Download</span>
                               </button>
                               <button
                                 className="match-candidate-btn glow-btn"
