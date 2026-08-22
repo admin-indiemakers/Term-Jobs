@@ -140,6 +140,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [showJdDetails, setShowJdDetails] = useState(false);
   const [reqCandidateSearch, setReqCandidateSearch] = useState('');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+  const [selectedCompanyTab, setSelectedCompanyTab] = useState('All');
 
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
   const [addCandidateMode, setAddCandidateMode] = useState('ai'); // 'ai' or 'manual'
@@ -274,8 +275,51 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   }
 
   const selected = fullReq || requisitions.find((item) => item.id === selectedReqId);
-  const visibleRequisitions = useMemo(() => requisitions.filter((item) =>
-    item.title?.toLowerCase().includes(search.toLowerCase())), [requisitions, search]);
+
+  const companyTabs = useMemo(() => {
+    const map = new Map();
+    requisitions.forEach((r) => {
+      const cName = (r.company_name || r.company?.name || r.client_name || 'Bearitt').trim();
+      map.set(cName, (map.get(cName) || 0) + 1);
+    });
+
+    const tabs = [{ name: 'All', count: requisitions.length }];
+    map.forEach((count, name) => {
+      tabs.push({ name, count });
+    });
+    return tabs;
+  }, [requisitions]);
+
+  const visibleRequisitions = useMemo(() => {
+    return requisitions.filter((item) => {
+      const cName = (item.company_name || item.company?.name || item.client_name || 'Bearitt').trim();
+      const matchesCompany = selectedCompanyTab === 'All' || cName.toLowerCase() === selectedCompanyTab.toLowerCase();
+      const query = search.trim().toLowerCase();
+      const skills = skillsFor(item);
+      const matchesSearch = !query ||
+        (item.title || '').toLowerCase().includes(query) ||
+        cName.toLowerCase().includes(query) ||
+        skills.some((s) => s.toLowerCase().includes(query));
+      return matchesCompany && matchesSearch;
+    });
+  }, [requisitions, selectedCompanyTab, search]);
+
+  const groupedRequisitions = useMemo(() => {
+    const groups = [];
+    const map = new Map();
+
+    visibleRequisitions.forEach((req) => {
+      const cName = (req.company_name || req.company?.name || req.client_name || 'Bearitt').trim();
+      if (!map.has(cName)) {
+        const group = { companyName: cName, items: [] };
+        map.set(cName, group);
+        groups.push(group);
+      }
+      map.get(cName).items.push(req);
+    });
+
+    return groups;
+  }, [visibleRequisitions]);
   const queued = screeningResult?.ranked_candidates || [];
   const avgScore = shortlisted.length
     ? Math.round(shortlisted.reduce((sum, candidate) => sum + (candidate.match_score || 0), 0) / shortlisted.length)
@@ -979,107 +1023,276 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             )}
           </article>
 
-          <section className="requisition-rail glass-panel" style={{ width: '100%', padding: '20px 24px', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+          <section className="requisition-rail glass-panel" style={{ width: '100%', padding: '24px 28px', borderRadius: '16px', background: '#ffffff', border: '1px solid #eef2f6', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+            {/* Header: Title, Subtitle, Search */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px', marginBottom: '20px' }}>
               <div>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b', margin: 0 }}>Open requirements</h2>
-                <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '2px 0 0' }}>{requisitions.length} across clients</p>
+                <h2 style={{ fontSize: '1.30rem', fontWeight: 800, color: '#0f172a', margin: 0, letterSpacing: '-0.02em' }}>Open requirements</h2>
+                <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0', fontWeight: 500 }}>
+                  {requisitions.length} across clients
+                </p>
               </div>
-              <input
-                className="auth-input recruiter-search"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Filter requirements…"
-                aria-label="Filter requirements"
-                style={{ width: '280px', padding: '9px 14px', fontSize: '0.88rem' }}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="auth-input recruiter-search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Filter requirements..."
+                  aria-label="Filter requirements"
+                  style={{
+                    width: '280px',
+                    padding: '10px 16px',
+                    fontSize: '0.88rem',
+                    borderRadius: '10px',
+                    border: '1px solid #e2e8f0',
+                    background: '#ffffff',
+                    outline: 'none',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.02)'
+                  }}
+                />
+              </div>
             </div>
 
-            <div className="requisition-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-              {loading ? (
-                <p className="muted">Loading opportunities…</p>
-              ) : visibleRequisitions.length ? (
-                visibleRequisitions.map((item) => {
-                  const isSelected = item.id === selectedReqId;
-                  const rawDeadline = item.submission_deadline || item.structured_role?.submission_deadline || item.deadline;
-                  const deadlineInfo = getDeadlineInfo(rawDeadline);
-                  const roleData = role(item);
-                  const skills = skillsFor(item);
+            {/* Company Tabs Bar */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid #e2e8f0', marginBottom: '24px', overflowX: 'auto' }}>
+              {companyTabs.map((tab) => {
+                const isActive = selectedCompanyTab.toLowerCase() === tab.name.toLowerCase();
+                return (
+                  <button
+                    key={tab.name}
+                    type="button"
+                    onClick={() => setSelectedCompanyTab(tab.name)}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      borderBottom: isActive ? '2.5px solid #2563eb' : '2.5px solid transparent',
+                      padding: '12px 18px',
+                      fontSize: '0.92rem',
+                      fontWeight: isActive ? 700 : 600,
+                      color: isActive ? '#2563eb' : '#475569',
+                      cursor: 'pointer',
+                      whiteSpace: 'nowrap',
+                      transition: 'all 0.15s ease',
+                      outline: 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <span>{tab.name}</span>
+                    <span style={{
+                      fontSize: '0.82rem',
+                      color: isActive ? '#2563eb' : '#94a3b8',
+                      fontWeight: 700
+                    }}>
+                      ({tab.count})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
 
+            {/* Grouped Company Cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {loading ? (
+                <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', fontSize: '0.95rem' }}>
+                  Loading opportunities...
+                </div>
+              ) : groupedRequisitions.length ? (
+                groupedRequisitions.map((group) => {
+                  const companyDisplayName = group.companyName;
+                  const count = group.items.length;
                   return (
                     <div
-                      key={item.id}
-                      onClick={() => selectRequisition(item.id)}
-                      className={`requisition-item ${isSelected ? 'selected' : ''}`}
+                      key={group.companyName}
                       style={{
                         display: 'flex',
-                        flexDirection: 'column',
-                        justify: 'space-between',
-                        width: '100%',
-                        padding: '20px',
-                        borderRadius: '14px',
-                        border: isSelected ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                        background: isSelected ? '#eff6ff' : '#ffffff',
-                        textAlign: 'left',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s ease',
-                        boxShadow: isSelected ? '0 4px 14px rgba(37, 99, 235, 0.15)' : '0 2px 6px rgba(15,23,42,0.03)'
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '16px',
+                        boxShadow: '0 2px 10px rgba(15, 23, 42, 0.03)',
+                        overflow: 'hidden',
+                        position: 'relative'
                       }}
                     >
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px', border: '1px solid #a7f3d0' }}>
-                            {item.company_name || item.company?.name || 'Client'}
-                          </span>
-                          <span className="published-status-badge" style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.68rem', fontWeight: 700, padding: '3px 8px', borderRadius: '4px', textTransform: 'uppercase' }}>
-                            Published
+                      {/* Green Left Accent Bar */}
+                      <div style={{ width: '4px', background: '#10b981', flexShrink: 0 }} />
+
+                      {/* Left Company Branding Column */}
+                      <div
+                        style={{
+                          width: '180px',
+                          minWidth: '160px',
+                          padding: '24px 20px',
+                          background: '#fcfdfd',
+                          borderRight: '1px solid #f1f5f9',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
+                          alignItems: 'flex-start',
+                          gap: '6px',
+                          flexShrink: 0
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ fontSize: '1.25rem' }}>🏢</span>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#047857', letterSpacing: '-0.01em' }}>
+                            {companyDisplayName}
                           </span>
                         </div>
-
-                        <strong style={{ display: 'block', color: isSelected ? '#1e40af' : '#0f172a', fontSize: '1.05rem', fontWeight: 800, marginBottom: '6px' }}>
-                          {item.title || 'Untitled role'}
-                        </strong>
-
-                        {skills.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '10px', marginBottom: '12px' }}>
-                            {skills.slice(0, 3).map((s) => (
-                              <span key={s} style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.70rem', fontWeight: 700, padding: '2px 7px', borderRadius: '4px' }}>
-                                {s}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.80rem', color: '#64748b', fontWeight: 600 }}>
+                          <span>📋</span>
+                          <span>{count} {count === 1 ? 'requirement' : 'requirements'}</span>
+                        </div>
                       </div>
 
-                      {deadlineInfo && (
-                        <div style={{ marginTop: '14px', paddingTop: '10px', borderTop: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px' }}>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.75rem', color: '#475569', fontWeight: 600 }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: deadlineInfo.isUrgent || deadlineInfo.isExpired ? '#dc2626' : '#d97706' }}>
-                              <circle cx="12" cy="12" r="10" />
-                              <polyline points="12 6 12 12 16 14" />
-                            </svg>
-                            {deadlineInfo.formattedDate}
-                          </span>
-                          {deadlineInfo.daysLeftText && (
-                            <span style={{
-                              fontSize: '0.70rem',
-                              fontWeight: 700,
-                              padding: '2px 8px',
-                              borderRadius: '10px',
-                              background: deadlineInfo.isExpired ? '#fef2f2' : deadlineInfo.isUrgent ? '#fff7ed' : '#f0fdf4',
-                              color: deadlineInfo.isExpired ? '#dc2626' : deadlineInfo.isUrgent ? '#c2410c' : '#15803d',
-                              border: `1px solid ${deadlineInfo.isExpired ? '#fecaca' : deadlineInfo.isUrgent ? '#ffedd5' : '#dcfce7'}`
-                            }}>
-                              {deadlineInfo.daysLeftText}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {/* Right Requisitions List Column */}
+                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                        {group.items.map((item, idx) => {
+                          const isSelected = item.id === selectedReqId;
+                          const roleData = role(item);
+                          const skills = skillsFor(item);
+                          const rawDeadline = item.submission_deadline || item.structured_role?.submission_deadline || item.deadline;
+                          
+                          // Extract Rate, Duration, Notice, Deadline
+                          const rateVal = roleData.rate_card_cap || item.rate_card_cap || item.rate || '1950';
+                          const durationVal = roleData.duration || item.contract_duration || item.engagement_duration || '6 months';
+                          const noticeVal = roleData.max_notice_period || item.notice_period || '30 days';
+                          const deadlineDate = rawDeadline ? (rawDeadline.split('T')[0] || rawDeadline) : '2026-08-23';
+
+                          return (
+                            <div
+                              key={item.id}
+                              onClick={() => selectRequisition(item.id)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '20px 24px',
+                                borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none',
+                                background: isSelected ? '#eff6ff' : '#ffffff',
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                                position: 'relative'
+                              }}
+                              onMouseEnter={(e) => {
+                                if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                              }}
+                              onMouseLeave={(e) => {
+                                if (!isSelected) e.currentTarget.style.background = '#ffffff';
+                              }}
+                            >
+                              {/* Selected Left Indicator */}
+                              {isSelected && (
+                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: '#2563eb' }} />
+                              )}
+
+                              {/* Left Role & Skills */}
+                              <div style={{ minWidth: '220px', flex: '1 1 240px', paddingRight: '20px' }}>
+                                <h3 style={{
+                                  fontSize: '1.05rem',
+                                  fontWeight: 700,
+                                  color: '#2563eb',
+                                  margin: 0,
+                                  letterSpacing: '-0.01em'
+                                }}>
+                                  {item.title || 'Untitled role'}
+                                </h3>
+
+                                {skills.length > 0 && (
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                                    {skills.slice(0, 4).map((s) => (
+                                      <span
+                                        key={s}
+                                        style={{
+                                          background: '#f1f5f9',
+                                          color: '#475569',
+                                          fontSize: '0.74rem',
+                                          fontWeight: 600,
+                                          padding: '3px 10px',
+                                          borderRadius: '6px'
+                                        }}
+                                      >
+                                        {s}
+                                      </span>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Middle Metrics Columns */}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '32px', flexWrap: 'nowrap', flexShrink: 0 }}>
+                                {/* Rate */}
+                                <div style={{ minWidth: '70px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.70rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                    ⚡ Rate
+                                  </span>
+                                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', marginTop: '3px' }}>
+                                    {rateVal}
+                                  </div>
+                                </div>
+
+                                {/* Duration */}
+                                <div style={{ minWidth: '85px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.70rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                    ⏳ Duration
+                                  </span>
+                                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', marginTop: '3px' }}>
+                                    {durationVal}
+                                  </div>
+                                </div>
+
+                                {/* Max Notice */}
+                                <div style={{ minWidth: '85px' }}>
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '3px', fontSize: '0.70rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>
+                                    ⏱ Max Notice
+                                  </span>
+                                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', marginTop: '3px' }}>
+                                    {noticeVal}
+                                  </div>
+                                </div>
+
+                                {/* Deadline */}
+                                <div style={{ minWidth: '95px' }}>
+                                  <span style={{ fontSize: '0.70rem', fontWeight: 700, color: '#ef4444', textTransform: 'uppercase' }}>
+                                    Deadline
+                                  </span>
+                                  <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#dc2626', marginTop: '3px' }}>
+                                    {deadlineDate}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Right Chevron Arrow */}
+                              <div style={{ marginLeft: '24px', color: isSelected ? '#2563eb' : '#94a3b8', flexShrink: 0 }}>
+                                <svg
+                                  width="18"
+                                  height="18"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{
+                                    transform: isSelected ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.2s ease'
+                                  }}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })
               ) : (
-                <p className="muted">No published roles found.</p>
+                <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1' }}>
+                  No published requirements found for this client.
+                </div>
               )}
             </div>
           </section>
