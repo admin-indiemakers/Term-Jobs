@@ -1,36 +1,3 @@
-
-function SkeletonBlock({ width = '100%', height = '16px', borderRadius = '6px', style = {} }) {
-  return (
-    <div
-      style={{
-        width,
-        height,
-        borderRadius,
-        background: 'linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%)',
-        backgroundSize: '200% 100%',
-        animation: 'skeletonShimmer 1.5s infinite linear',
-        ...style,
-      }}
-    />
-  );
-}
-
-function SkeletonStatCard({ label, tint = 'tint-blue', icon }) {
-  return (
-    <div className={`stat-card ${tint} glass-panel`}>
-      <div className="stat-header">
-        <span className="stat-label">{label}</span>
-        {icon && <span className="stat-icon">{icon}</span>}
-      </div>
-      <div className="stat-value" style={{ margin: '8px 0' }}>
-        <SkeletonBlock width="45px" height="28px" borderRadius="8px" />
-      </div>
-      <div className="stat-delta">
-        <SkeletonBlock width="110px" height="13px" borderRadius="4px" />
-      </div>
-    </div>
-  );
-}
 import ScheduleInterviewModal from "../../components/ScheduleInterviewModal";
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -210,21 +177,12 @@ export default function ShortlistedCandidates() {
         </Link>
       </WelcomeBanner>
 
-            {loading ? (
-        <div className="stat-grid">
-          <SkeletonStatCard label="Shortlisted" tint="tint-green" icon={Icons.check} />
-          <SkeletonStatCard label="Strong Matches" tint="tint-blue" icon={Icons.briefcase} />
-          <SkeletonStatCard label="Moderate Matches" tint="tint-amber" icon={Icons.layers} />
-          <SkeletonStatCard label="Avg Match Score" tint="tint-violet" icon={Icons.users} />
-        </div>
-      ) : (
-        <div className="stat-grid">
-          <StatCard label="Shortlisted" value={stats.total} icon={Icons.check} tint="tint-green" />
-          <StatCard label="Strong Matches" value={stats.strong} icon={Icons.briefcase} tint="tint-blue" />
-          <StatCard label="Moderate Matches" value={stats.moderate} icon={Icons.layers} tint="tint-amber" />
-          <StatCard label="Avg Match Score" value={stats.avg ? Math.round(stats.avg) + '%' : '–'} icon={Icons.users} tint="tint-violet" />
-        </div>
-      )}
+      <div className="stat-grid">
+        <StatCard label="Shortlisted" value={stats.total} icon={Icons.check} tint="tint-green" />
+        <StatCard label="Strong Matches" value={stats.strong} icon={Icons.briefcase} tint="tint-blue" />
+        <StatCard label="Moderate Matches" value={stats.moderate} icon={Icons.layers} tint="tint-amber" />
+        <StatCard label="Avg Match Score" value={stats.avg ? Math.round(stats.avg) + '%' : '—'} icon={Icons.users} tint="tint-violet" />
+      </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 

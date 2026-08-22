@@ -83,78 +83,33 @@ def list_candidates(
     requisition_id: str | None = None,
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
-    """List candidate submissions with batched requisition & company lookups (eliminates N+1 DB overhead)."""
+    """List candidate submissions, optionally filtered by status and/or requisition."""
     with get_session() as session:
-        filters = {}
-        if status:
-            filters["status"] = status
-        if requisition_id:
-            filters["requisition_id"] = requisition_id
-            
-        # Exclude heavy Base64 resume_pdf from bulk list queries
-        docs = list(
-            session._coll(CandidateSubmission)
-            .find(filters, {"resume_pdf": 0})
-            .sort([("match_score", -1), ("created_at", -1)])
+        query = session.query(CandidateSubmission).order_by(
+            CandidateSubmission.match_score.desc().nulls_last(),
+            CandidateSubmission.created_at.desc()
         )
-        
-        # Batch load Requisitions and CompanyProfiles
-        req_ids = list({d.get("requisition_id") for d in docs if d.get("requisition_id")})
-        req_docs = list(session._coll(Requisition).find({"id": {"$in": req_ids}})) if req_ids else []
-        reqs_map = {r.get("id"): r for r in req_docs}
-        
-        prof_ids = list({r.get("company_profile_id") for r in req_docs if r.get("company_profile_id")})
-        prof_docs = list(session._coll(CompanyProfile).find({"id": {"$in": prof_ids}})) if prof_ids else []
-        profs_map = {p.get("id"): p for p in prof_docs}
-        
+        if status:
+            query = query.filter(CandidateSubmission.status == status)
+        if requisition_id:
+            query = query.filter(CandidateSubmission.requisition_id == requisition_id)
+        candidates = query.all()
         if current_user.role != "Super Admin":
-            tenant_req_ids = {r.get("id") for r in session._coll(Requisition).find({"tenant_id": current_user.tenant_id}, {"id": 1})}
+            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
+            # For Recruiters (vendors), also include candidates they submitted
+            # by matching vendor_name against the vendor's tenant name.
             vendor_name = None
             if current_user.role == "Recruiter":
                 from modules.identity.domain.models import Tenant
-                t_doc = session._coll(Tenant).find_one({"id": current_user.tenant_id})
-                vendor_name = (t_doc.get("name") or "").lower().strip() if t_doc else None
-                
-            docs = [
-                d for d in docs
-                if d.get("requisition_id") in tenant_req_ids
-                or not d.get("requisition_id")
-                or (vendor_name and d.get("vendor_name") and d.get("vendor_name").lower().strip() == vendor_name)
+                tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+                vendor_name = (tenant.name or "").lower().strip() if tenant else None
+            candidates = [
+                c for c in candidates
+                if c.requisition_id in tenant_reqs
+                or not c.requisition_id
+                or (vendor_name and c.vendor_name and c.vendor_name.lower().strip() == vendor_name)
             ]
-            
-        results = []
-        for d in docs:
-            r_id = d.get("requisition_id")
-            req = reqs_map.get(r_id)
-            comp = profs_map.get(req.get("company_profile_id")) if req else None
-            
-            created_at = d.get("created_at")
-            created_str = created_at.isoformat() if hasattr(created_at, 'isoformat') else str(created_at or "")
-            
-            results.append({
-                "id": str(d.get("id") or d.get("_id")),
-                "submission_id": str(d.get("id") or d.get("_id")),
-                "requisition_id": r_id,
-                "requisition_ref": f"REQ-{str(r_id)[:6].upper()}" if r_id else None,
-                "requisition_title": req.get("title") if req else None,
-                "company_name": comp.get("name") if comp else None,
-                "candidate_name": d.get("candidate_name") or "",
-                "candidate_email": d.get("candidate_email"),
-                "vendor_name": d.get("vendor_name"),
-                "filename": d.get("filename"),
-                "resume_text": d.get("resume_text"),
-                "jd_text": d.get("jd_text") or (req.get("generated_jd_markdown") if req else None),
-                "match_score": float(d.get("match_score")) if d.get("match_score") is not None else None,
-                "recommendation": d.get("recommendation"),
-                "status": d.get("status") or "Screened",
-                "summary": d.get("summary"),
-                "matched_skills": d.get("matched_skills") or [],
-                "missing_skills": d.get("missing_skills") or [],
-                "hiring_manager_notes": d.get("hiring_manager_notes"),
-                "created_at": created_str,
-            })
-            
-        return results
+        return [_candidate_dict(session, row) for row in candidates]
 
 
 @router.get("/shortlisted")
@@ -182,34 +137,28 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
 
 @router.get("/bank")
 def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list[dict]:
-    """Fetch candidates excluding heavy Base64 resume_pdf field for high-speed listing."""
+    """Fetch all candidates stored in the candidates collection for this tenant/vendor."""
     with get_session() as session:
-        filters = {}
+        query = session.query(Candidate).order_by(Candidate.created_at.desc())
+        candidates = query.all()
         if current_user.role != "Super Admin":
-            filters = {"$or": [{"tenant_id": current_user.tenant_id}, {"tenant_id": None}, {"tenant_id": ""}]}
-        
-        # High-performance projection: omits heavy Base64 binary field
-        docs = list(
-            session._coll(Candidate)
-            .find(filters, {"resume_pdf": 0})
-            .sort("created_at", -1)
-        )
+            candidates = [c for c in candidates if not c.tenant_id or c.tenant_id == current_user.tenant_id]
         return [
             {
-                "id": str(d.get("id") or d.get("_id")),
-                "candidate_name": d.get("candidate_name") or "",
-                "candidate_title": d.get("candidate_title") or "",
-                "candidate_email": d.get("candidate_email"),
-                "candidate_phone": d.get("candidate_phone"),
-                "vendor_company_name": d.get("vendor_company_name") or "bridgeon",
-                "skills": d.get("skills") or [],
-                "filename": d.get("filename"),
-                "summary": d.get("summary") or "",
-                "created_at": d.get("created_at").isoformat() if hasattr(d.get("created_at"), 'isoformat') else str(d.get("created_at") or ""),
-                "details": d.get("details") or {},
-                "extracted_text": d.get("extracted_text") or ""
+                "id": c.id,
+                "candidate_name": c.candidate_name,
+                "candidate_title": c.candidate_title,
+                "candidate_email": c.candidate_email,
+                "candidate_phone": c.candidate_phone,
+                "vendor_company_name": c.vendor_company_name,
+                "skills": c.skills or [],
+                "filename": c.filename,
+                "summary": c.summary,
+                "created_at": c.created_at.isoformat() if c.created_at else None,
+                "details": c.details or {},
+                "extracted_text": c.extracted_text
             }
-            for d in docs
+            for c in candidates
         ]
 
 
