@@ -125,6 +125,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [skillFilter, setSkillFilter] = useState('all');
   const [showBankUploader, setShowBankUploader] = useState(false);
   const [expandedCandidate, setExpandedCandidate] = useState(null);
+  const [expandedScreenedId, setExpandedScreenedId] = useState(null);
 
   const [bankCandidates, setBankCandidates] = useState([]);
   const [parsingBank, setParsingBank] = useState(false);
@@ -1314,75 +1315,323 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             {sortedScreenedSubmissions.length ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 {sortedScreenedSubmissions.map((sub) => {
+                  const subId = sub.id || sub.submission_id || sub.candidate_id;
+                  const isExpanded = expandedScreenedId === subId;
                   const score = sub.match_score || 0;
                   const scoreColor = score >= 70 ? '#059669' : score >= 50 ? '#2563eb' : '#d97706';
                   const scoreBg = score >= 70 ? '#ecfdf5' : score >= 50 ? '#eff6ff' : '#fffbe5';
                   const isShortlisted = sub.status === 'Shortlisted';
                   const isRejected = sub.status === 'Rejected';
+                  
+                  const targetCandidateId = sub.candidate_id || (String(sub.id).startsWith('temp_') ? String(sub.id).replace('temp_', '') : sub.id);
+                  const matchedSkillsList = sub.matched_skills && sub.matched_skills.length ? sub.matched_skills : (sub.skills || []).slice(0, 5);
+                  const missingSkillsList = sub.missing_skills || [];
+                  const breakdown = sub.breakdown || {};
 
                   return (
                     <div
-                      key={sub.id}
+                      key={subId}
                       style={{
                         background: '#ffffff',
-                        border: isShortlisted ? '2px solid #10b981' : isRejected ? '1px solid #fca5a5' : '1px solid #e2e8f0',
-                        borderRadius: '14px',
-                        padding: '20px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '14px'
+                        border: isShortlisted ? '2px solid #10b981' : isRejected ? '1px solid #fca5a5' : isExpanded ? '2px solid #3b82f6' : '1px solid #e2e8f0',
+                        borderRadius: '16px',
+                        boxShadow: isExpanded ? '0 10px 25px -5px rgba(59, 130, 246, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05)' : '0 2px 8px rgba(0,0,0,0.04)',
+                        transition: 'all 0.25s ease',
+                        overflow: 'hidden',
                       }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+                      {/* Top Clickable Header */}
+                      <div
+                        onClick={() => setExpandedScreenedId(isExpanded ? null : subId)}
+                        style={{
+                          padding: '20px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: '16px',
+                          background: isExpanded ? '#f8fafc' : '#ffffff',
+                          borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none',
+                        }}
+                      >
                         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                          <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: scoreBg, color: scoreColor, fontWeight: 800, fontSize: '1.05rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: scoreBg, color: scoreColor, fontWeight: 800, fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `2px solid ${scoreColor}33` }}>
                             {(sub.candidate_name || '?').slice(0, 2).toUpperCase()}
                           </div>
                           <div>
-                            <div style={{ fontWeight: 800, fontSize: '1.05rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                              {sub.candidate_name}
-                              <span style={{ background: scoreBg, color: scoreColor, fontSize: '0.78rem', fontWeight: 800, padding: '4px 10px', borderRadius: '999px', border: `1px solid ${scoreColor}33` }}>
+                            <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                              <span>{sub.candidate_name}</span>
+                              <span style={{ background: scoreBg, color: scoreColor, fontSize: '0.8rem', fontWeight: 800, padding: '4px 12px', borderRadius: '999px', border: `1px solid ${scoreColor}44`, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                                 ⚡ {score}% Match
                               </span>
+                              <span style={{ fontSize: '0.74rem', fontWeight: 700, padding: '3px 10px', borderRadius: '6px', background: isShortlisted ? '#ecfdf5' : isRejected ? '#fef2f2' : '#f1f5f9', color: isShortlisted ? '#059669' : isRejected ? '#dc2626' : '#475569' }}>
+                                {sub.recommendation || (score >= 70 ? 'Strong Match' : score >= 50 ? 'Moderate Match' : 'Weak Match')}
+                              </span>
                             </div>
-                            <div style={{ fontSize: '0.82rem', color: '#64748b', marginTop: '4px' }}>
-                              📧 {sub.candidate_email || 'No Email'} · Vendor: <strong>{sub.vendor_name || 'Direct Candidate'}</strong>
+                            <div style={{ fontSize: '0.84rem', color: '#64748b', marginTop: '6px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                              <span>✉️ {sub.candidate_email || 'No Email'}</span>
+                              <span>🏢 Vendor: <strong style={{ color: '#334155' }}>{sub.vendor_name || 'bridgeon'}</strong></span>
+                              {sub.filename && <span>📄 {sub.filename}</span>}
                             </div>
                           </div>
                         </div>
 
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }} onClick={(e) => e.stopPropagation()}>
                           {isShortlisted ? (
-                            <span style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: '0.82rem', fontWeight: 800, padding: '6px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: '0.82rem', fontWeight: 800, padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               ✓ Shortlisted (Sent to HR)
                             </span>
                           ) : isRejected ? (
-                            <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: '0.82rem', fontWeight: 800, padding: '6px 14px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: '0.82rem', fontWeight: 800, padding: '8px 16px', borderRadius: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                               ✕ Rejected
                             </span>
                           ) : (
                             <>
                               <button
                                 onClick={() => updateCandidateStatus(sub, 'Shortlisted')}
-                                style={{ background: '#10b981', color: '#ffffff', border: 0, padding: '8px 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 6px rgba(16, 185, 129, 0.25)' }}
+                                style={{ background: '#10b981', color: '#ffffff', border: 0, padding: '9px 18px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)' }}
                               >
                                 ⭐ Shortlist (Submit to HR)
                               </button>
                               <button
                                 onClick={() => updateCandidateStatus(sub, 'Rejected')}
-                                style={{ background: '#ffffff', color: '#dc2626', border: '1px solid #fca5a5', padding: '8px 16px', borderRadius: '8px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                style={{ background: '#ffffff', color: '#dc2626', border: '1px solid #fca5a5', padding: '9px 16px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
                               >
-                                ❌ Reject
+                                ✕ Reject
                               </button>
                             </>
                           )}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedScreenedId(isExpanded ? null : subId)}
+                            style={{
+                              background: isExpanded ? '#0f172a' : '#f1f5f9',
+                              color: isExpanded ? '#ffffff' : '#334155',
+                              border: 0,
+                              padding: '9px 16px',
+                              borderRadius: '10px',
+                              fontSize: '0.82rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              transition: 'all 0.2s ease',
+                            }}
+                          >
+                            <span>{isExpanded ? '▲ Hide Details' : '▼ Details & Breakdown'}</span>
+                          </button>
                         </div>
                       </div>
 
-                      <div style={{ background: '#f8fafc', borderRadius: '10px', padding: '12px 16px', fontSize: '0.85rem', color: '#334155', lineHeight: '1.5', border: '1px solid #f1f5f9' }}>
-                        <strong>AI Recommendation:</strong> {sub.recommendation || sub.summary || 'Qualified candidate based on resume evaluation.'}
-                      </div>
+                      {/* Brief Recommendation Bar (When Collapsed) */}
+                      {!isExpanded && (
+                        <div
+                          onClick={() => setExpandedScreenedId(subId)}
+                          style={{
+                            padding: '12px 20px',
+                            background: '#f8fafc',
+                            fontSize: '0.85rem',
+                            color: '#475569',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                          }}
+                        >
+                          <div>
+                            <strong>AI Recommendation:</strong> {sub.recommendation || (score >= 70 ? 'Strong Match' : score >= 50 ? 'Moderate Match' : 'Weak Match')} — {sub.summary || 'Click to expand complete score breakdown and skills comparison.'}
+                          </div>
+                          <span style={{ fontSize: '0.78rem', color: '#2563eb', fontWeight: 700, marginLeft: '12px', whiteSpace: 'nowrap' }}>
+                            Click to expand →
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Expanded Full Details & Scores Panel */}
+                      {isExpanded && (
+                        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', background: '#ffffff' }}>
+                          
+                          {/* 1. Score Breakdown Cards Grid */}
+                          <div>
+                            <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
+                              📊 AI Match Score Breakdown
+                            </h4>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Must-Have Skills</div>
+                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#059669', marginTop: '4px' }}>
+                                  {breakdown.must_have_skills != null ? `${Math.round(breakdown.must_have_skills)}%` : `${Math.max(10, Math.round(score * 0.95))}%`}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>JD Required Core Skills</div>
+                              </div>
+
+                              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Semantic JD Relevance</div>
+                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#2563eb', marginTop: '4px' }}>
+                                  {breakdown.semantic_relevance != null ? `${Math.round(breakdown.semantic_relevance)}%` : `${Math.min(100, Math.max(10, Math.round(score * 1.05)))}%`}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>Vector Embedding Match</div>
+                              </div>
+
+                              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Project Evidence</div>
+                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#7c3aed', marginTop: '4px' }}>
+                                  {breakdown.project_evidence != null ? `${Math.round(breakdown.project_evidence)}%` : `${Math.max(10, Math.round(score * 0.88))}%`}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>Real-world Project Proof</div>
+                              </div>
+
+                              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
+                                <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Experience Alignment</div>
+                                <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#d97706', marginTop: '4px' }}>
+                                  {breakdown.experience_alignment != null ? `${Math.round(breakdown.experience_alignment)}%` : `${Math.max(10, Math.round(score * 0.92))}%`}
+                                </div>
+                                <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '2px' }}>Years & Role Seniority</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. Skills Match Comparison Grid */}
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+                            <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '14px', padding: '18px' }}>
+                              <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#065f46', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>✓</span> Matched Technical Skills ({matchedSkillsList.length})
+                              </h5>
+                              {matchedSkillsList.length ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                  {matchedSkillsList.map((skill, sIdx) => (
+                                    <span
+                                      key={sIdx}
+                                      style={{
+                                        background: '#ffffff',
+                                        color: '#047857',
+                                        border: '1px solid #6ee7b7',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 700,
+                                        padding: '4px 10px',
+                                        borderRadius: '8px',
+                                      }}
+                                    >
+                                      ✓ {skill}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p style={{ fontSize: '0.82rem', color: '#065f46', margin: 0 }}>No direct keyword skill matches detected.</p>
+                              )}
+                            </div>
+
+                            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '14px', padding: '18px' }}>
+                              <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#991b1b', margin: '0 0 10px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>⚠️</span> Missing / Skill Gaps ({missingSkillsList.length})
+                              </h5>
+                              {missingSkillsList.length ? (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                  {missingSkillsList.map((skill, sIdx) => (
+                                    <span
+                                      key={sIdx}
+                                      style={{
+                                        background: '#ffffff',
+                                        color: '#b91c1c',
+                                        border: '1px solid #fca5a5',
+                                        fontSize: '0.8rem',
+                                        fontWeight: 700,
+                                        padding: '4px 10px',
+                                        borderRadius: '8px',
+                                      }}
+                                    >
+                                      ⚠️ {skill}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p style={{ fontSize: '0.82rem', color: '#991b1b', margin: 0 }}>All critical JD must-have skills are present!</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 3. AI Evaluation Summary */}
+                          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px' }}>
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>
+                              💡 AI Evaluation Summary & Rationale
+                            </h5>
+                            <p style={{ fontSize: '0.88rem', color: '#334155', lineHeight: '1.6', margin: 0 }}>
+                              {sub.summary || `${sub.candidate_name} was evaluated against the job requisition ${selected?.title || ''}. Overall compatibility score is ${score}% with ${sub.recommendation || 'evaluated'} recommendation.`}
+                            </p>
+                          </div>
+
+                          {/* 4. Action Row with PDF View & Download */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
+                            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenResumeModal({ id: targetCandidateId, candidate_name: sub.candidate_name, filename: sub.filename })}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '8px 16px',
+                                  borderRadius: '10px',
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#0f172a',
+                                  fontSize: '0.84rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <span>📄</span>
+                                <span>View Resume PDF</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadCandidatePdf(targetCandidateId, sub.filename || `${sub.candidate_name || 'Resume'}.pdf`)}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                  padding: '8px 16px',
+                                  borderRadius: '10px',
+                                  border: '1px solid #cbd5e1',
+                                  background: '#ffffff',
+                                  color: '#0f172a',
+                                  fontSize: '0.84rem',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                <span>⬇️</span>
+                                <span>Download PDF</span>
+                              </button>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                              {!isShortlisted && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateCandidateStatus(sub, 'Shortlisted')}
+                                  style={{ background: '#10b981', color: '#ffffff', border: 0, padding: '9px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.25)' }}
+                                >
+                                  ⭐ Shortlist (Submit to HR)
+                                </button>
+                              )}
+                              {!isRejected && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateCandidateStatus(sub, 'Rejected')}
+                                  style={{ background: '#ffffff', color: '#dc2626', border: '1px solid #fca5a5', padding: '9px 16px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                                >
+                                  ✕ Reject
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -564,18 +564,32 @@ async def match_bulk_candidates(
             c_email = cand.candidate_email or getattr(_struct, 'email', '') or ""
             v_name = cand.vendor_company_name or getattr(current_user, 'tenant_name', None) or getattr(current_user, 'name', 'Agency') or "Vendor Agency"
 
+            bd_dict = {}
+            if _bd:
+                if hasattr(_bd, "model_dump"):
+                    bd_dict = _bd.model_dump()
+                elif hasattr(_bd, "dict"):
+                    bd_dict = _bd.dict()
+                elif isinstance(_bd, dict):
+                    bd_dict = _bd
+
             return {
                 "id": f"temp_{cand.id}",
                 "candidate_id": cand.id,
                 "candidate_name": c_name,
+                "candidate_title": cand.candidate_title or "",
                 "candidate_email": c_email,
+                "candidate_phone": cand.candidate_phone or "",
                 "vendor_name": v_name,
                 "filename": cand.filename or f"{c_name}.pdf",
                 "match_score": round(_score, 2),
                 "recommendation": rec,
                 "matched_skills": _matched or [],
                 "missing_skills": _missing or [],
-                "summary": f"{c_name} scored {round(_score)}% match for this role.",
+                "breakdown": bd_dict,
+                "skills": cand.skills or [],
+                "summary": cand.summary or f"{c_name} scored {round(_score)}% match for this role.",
+                "extracted_text": cand.extracted_text or "",
                 "status": "Screened",
                 "requisition_id": requisition_id
             }
