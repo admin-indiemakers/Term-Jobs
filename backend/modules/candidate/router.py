@@ -317,7 +317,7 @@ async def upload_bank_candidates(
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.candidate.extractor import extract_candidate_profile
     
-    vendor_company = vendor_company_name or current_user.tenant_name or "bridgeon"
+    vendor_company = vendor_company_name or getattr(current_user, "tenant_name", None) or "bridgeon"
     saved_candidates = []
     
     # Filter valid files if provided
@@ -425,6 +425,9 @@ async def upload_bank_candidates(
                         )
                         session.add(new_candidate)
                         saved_candidates.append(new_candidate)
+            
+            # Persist all uploaded candidates to MongoDB
+            session.commit()
         else:
             # Manual candidate entry without file upload
             final_name = name or "Candidate"
@@ -465,6 +468,9 @@ async def upload_bank_candidates(
                 )
                 session.add(new_candidate)
                 saved_candidates.append(new_candidate)
+            
+            # Persist manual candidate to MongoDB
+            session.commit()
 
     return {
         "status": "success",
