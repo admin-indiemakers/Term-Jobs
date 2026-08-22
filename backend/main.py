@@ -41,6 +41,7 @@ from modules.requisition.domain import models, schemas
 from modules.shared.db import get_session, init_db
 from modules.resume_screener.router import router as resume_screener_router
 from modules.interview.router import router as interview_router
+from modules.onboarding.router import router as onboarding_router
 
 
 app = FastAPI(
@@ -83,6 +84,7 @@ app.include_router(candidate_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api", tags=["Calendar"])
 app.include_router(resume_screener_router, prefix="/api", tags=["Resume Screener"])
 app.include_router(interview_router, prefix="/api", tags=["Interviews"])
+app.include_router(onboarding_router, tags=["Onboarding"])
 app.include_router(notifications_router)
 
 

@@ -267,7 +267,10 @@ export default function ShortlistedCandidates() {
                         <span style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#0f172a', color: '#ffffff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 800, flexShrink: 0 }}>
                           {(cand.name || 'C').split(' ').map((p) => p[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}
                         </span>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cand.name || 'Candidate'}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <span>{cand.name || 'Candidate'}</span>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', fontFamily: 'monospace' }}>{cand.id}</span>
+                        </span>
                       </span>
                       <span style={{ color: '#2563eb', whiteSpace: 'nowrap' }}>
                         Open Workspace →

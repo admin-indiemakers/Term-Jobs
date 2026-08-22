@@ -295,5 +295,6 @@ def init_db() -> None:
     db["candidates"].create_index("tenant_id")
     db["notifications"].create_index("user_id")
     db["notifications"].create_index("created_at")
+    db["onboarding_checklists"].create_index("candidate_id")
 
 

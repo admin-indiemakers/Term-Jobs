@@ -99,6 +99,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const showCandidates = view === 'candidates';
   const showShortlisted = view === 'shortlisted';
   const showInterviews = view === 'interviews';
+  const showAccepted = view === 'accepted';
+  const showPortal = view === 'portal';
 
   const [requisitions, setRequisitions] = useState([]);
   const [selectedReqId, setSelectedReqId] = useState('');
@@ -134,6 +136,14 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [showJdDetails, setShowJdDetails] = useState(false);
   const [reqCandidateSearch, setReqCandidateSearch] = useState('');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
+  const [acceptedCandidates, setAcceptedCandidates] = useState([]);
+  const [selectedAcceptedCompany, setSelectedAcceptedCompany] = useState(null);
+  const [creatingCredsFor, setCreatingCredsFor] = useState(null);
+  const [createdCredentials, setCreatedCredentials] = useState(null);
+  const [credsFormEmail, setCredsFormEmail] = useState('');
+  const [credsFormPassword, setCredsFormPassword] = useState('');
+  const [credsFormName, setCredsFormName] = useState('');
+  const [portalCreatedEmails, setPortalCreatedEmails] = useState(new Set());
 
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
   const [screenedSubmissions, setScreenedSubmissions] = useState([]);
@@ -329,12 +339,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   async function loadWorkspace() {
     setLoading(true);
     try {
-      const [rawRequisitions, candidateData, limitData, bankData, interviewData] = await Promise.all([
+      const [rawRequisitions, candidateData, limitData, bankData, interviewData, acceptedData] = await Promise.all([
         request('/requisitions', { token: authToken }),
         request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] })),
         request('/api/settings/candidate-limit', { token: authToken }).catch(() => ({ limit: null })),
         request('/candidates/bank', { token: authToken }).catch(() => []),
         request('/api/interviews/vendor', { token: authToken }).catch(() => []),
+        request('/candidates?status=Accepted', { token: authToken }).catch(() => []),
       ]);
 
       const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
@@ -344,11 +355,48 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setCandidateLimit(limitData?.limit ?? null);
       setBankCandidates(bankData || []);
       setInterviews(Array.isArray(interviewData) ? interviewData : []);
+      setAcceptedCandidates(Array.isArray(acceptedData) ? acceptedData : []);
       if (list.length) await selectRequisition(list.find((item) => item.status === 'Published')?.id || list[0].id, list);
     } catch (err) {
       setError(err.message || 'Unable to load your recruiter workspace.');
     } finally {
       setLoading(false);
+    }
+  }
+
+  function openCredsForm(candidate) {
+    setCredsFormEmail(candidate.candidate_email || '');
+    setCredsFormName(candidate.candidate_name || '');
+    setCredsFormPassword('');
+    setCreatingCredsFor(candidate.submission_id || candidate.id);
+    setCreatedCredentials(null);
+  }
+
+  async function submitCandidateCredentials(e) {
+    e.preventDefault();
+    if (!credsFormEmail || !credsFormPassword) {
+      setError('Email and password are required.');
+      return;
+    }
+    const cid = creatingCredsFor;
+    try {
+      await request('/api/auth/users', {
+        method: 'POST',
+        token: authToken,
+        body: {
+          email: credsFormEmail,
+          name: credsFormName || credsFormEmail,
+          password: credsFormPassword,
+          role: 'Candidate',
+          candidate_id: creatingCredsFor,
+        },
+      });
+      setCreatedCredentials({ email: credsFormEmail, password: credsFormPassword, name: credsFormName, candidateId: creatingCredsFor });
+      setPortalCreatedEmails((prev) => new Set([...prev, credsFormEmail]));
+    } catch (err) {
+      setError(err.message || 'Failed to create candidate account.');
+    } finally {
+      setCreatingCredsFor(null);
     }
   }
 
@@ -749,6 +797,74 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             )}
           </div>
 
+          {/* Accepted Candidates by Company */}
+          {acceptedCandidates.length > 0 && (() => {
+            const byCompany = {};
+            acceptedCandidates.forEach((c) => {
+              const key = c.company_name || c.requisition_title || 'Unknown Company';
+              if (!byCompany[key]) byCompany[key] = { name: key, count: 0 };
+              byCompany[key].count += 1;
+            });
+            const companies = Object.values(byCompany).sort((a, b) => b.count - a.count);
+            return (
+              <div style={{ background: '#ffffff', borderRadius: '18px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                  <div>
+                    <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                      ✓ Accepted Candidates by Company
+                    </h2>
+                    <p style={{ fontSize: '0.86rem', color: '#64748b', margin: '4px 0 0 0' }}>
+                      Candidates the hiring manager has accepted. Click a company to view details.
+                    </p>
+                  </div>
+                  <a
+                    href="/dashboard/recruiter/accepted"
+                    style={{ fontSize: '0.84rem', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}
+                  >
+                    View All Accepted →
+                  </a>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+                  {companies.map((company) => (
+                    <a
+                      key={company.name}
+                      href="/dashboard/recruiter/accepted"
+                      style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '14px',
+                        padding: '20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '14px',
+                        background: '#f8fafc',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                        boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+                        textDecoration: 'none',
+                        color: 'inherit',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,0.12)'; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 2px 6px rgba(15,23,42,0.03)'; }}
+                    >
+                      <div>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px' }}>
+                          {company.name}
+                        </span>
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '10px 0 4px 0' }}>
+                          {company.count} accepted candidate{company.count !== 1 ? 's' : ''}
+                        </h3>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#10b981', color: '#ffffff', padding: '10px', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 700 }}>
+                        ✓ View Accepted →
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Quick Nav Cards */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
             <a
@@ -805,6 +921,25 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Interview Requests</h4>
               <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
                 Confirm client interview proposals & Cal.com slots.
+              </p>
+            </a>
+
+            <a
+              href="/dashboard/recruiter/accepted"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                padding: '20px',
+                textDecoration: 'none',
+                color: 'inherit',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+              }}
+            >
+              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>✅</div>
+              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Accepted Candidates</h4>
+              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
+                View candidates accepted by client hiring managers.
               </p>
             </a>
           </div>
@@ -2136,6 +2271,491 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               );
             })()
           )}
+        </div>
+      )}
+
+      {showAccepted && (
+        <div style={{ display: 'grid', gap: '20px' }}>
+          <WelcomeBanner
+            title="Accepted Candidates"
+            subtitle="Candidates that client hiring managers have accepted and moved to onboarding."
+          />
+
+          <div className="stat-grid recruiter-stats" aria-label="Accepted summary">
+            <StatCard label="TOTAL ACCEPTED" value={acceptedCandidates.length} icon={Icons.check} tint="tint-green" delta="Ready for onboarding" deltaTone="green" />
+            <StatCard
+              label="COMPANIES"
+              value={[...new Set(acceptedCandidates.map((c) => c.company_name).filter(Boolean))].length}
+              icon={Icons.briefcase}
+              tint="tint-blue"
+              delta="Client companies with accepted candidates"
+              deltaTone="blue"
+            />
+            <StatCard
+              label="AVG MATCH SCORE"
+              value={acceptedCandidates.length ? `${Math.round(acceptedCandidates.reduce((s, c) => s + (c.match_score ?? 0), 0) / acceptedCandidates.length)}%` : '—'}
+              icon={Icons.users}
+              tint="tint-violet"
+              delta="Across all accepted"
+              deltaTone="violet"
+            />
+          </div>
+
+          {/* Company Cards */}
+          {(() => {
+            const byCompany = {};
+            acceptedCandidates.forEach((c) => {
+              const key = c.company_name || c.requisition_title || 'Unknown Company';
+              if (!byCompany[key]) byCompany[key] = { name: key, requisition_title: c.requisition_title || '', candidates: [] };
+              byCompany[key].candidates.push(c);
+            });
+            const companies = Object.values(byCompany).sort((a, b) => b.candidates.length - a.candidates.length);
+
+            if (!companies.length) {
+              return (
+                <div className="glass-panel" style={{ padding: '60px 40px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '12px' }}>✓</div>
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>No accepted candidates yet</h3>
+                  <p style={{ fontSize: '0.88rem', color: '#64748b', margin: 0 }}>
+                    When client hiring managers accept candidates, they will appear here.
+                  </p>
+                </div>
+              );
+            }
+
+            return selectedAcceptedCompany ? (
+              <div className="glass-panel" style={{ padding: '24px', borderRadius: '16px', background: '#fff', border: '1px solid #e2e8f0' }}>
+                <button
+                  onClick={() => setSelectedAcceptedCompany(null)}
+                  style={{ background: '#f1f5f9', color: '#475569', border: 0, padding: '8px 14px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  ← Back to companies
+                </button>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>
+                  {selectedAcceptedCompany.name}
+                </h2>
+                <p style={{ fontSize: '0.86rem', color: '#64748b', margin: '0 0 20px 0' }}>
+                  {selectedAcceptedCompany.candidates.length} accepted candidate{selectedAcceptedCompany.candidates.length !== 1 ? 's' : ''}
+                  {selectedAcceptedCompany.requisition_title && <> · Role: <strong>{selectedAcceptedCompany.requisition_title}</strong></>}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {selectedAcceptedCompany.candidates.map((c) => {
+                    const cid = c.submission_id || c.id;
+                    const submittedDate = c.created_at ? new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+                    return (
+                      <div
+                        key={cid}
+                        style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                          <div style={{ width: '46px', height: '46px', borderRadius: '50%', background: '#ecfdf5', color: '#059669', fontWeight: 800, fontSize: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {(c.candidate_name || '?').slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>{c.candidate_name}</span>
+                              <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8', fontFamily: 'monospace', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>{cid}</span>
+                            </div>
+                            <div style={{ color: '#64748b', fontSize: '0.82rem', marginTop: '2px' }}>{c.candidate_email || ''}</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Role</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>{c.requisition_title || '—'}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Submitted</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>{submittedDate}</div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Vendor</div>
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#1e293b' }}>{c.vendor_name || '—'}</div>
+                          </div>
+                          <span style={{ background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: '0.78rem', fontWeight: 800, padding: '5px 12px', borderRadius: '999px', whiteSpace: 'nowrap' }}>
+                            ✓ Accepted
+                          </span>
+                          {c.candidate_email && (
+                            <button
+                              onClick={() => openCredsForm(c)}
+                              disabled={creatingCredsFor === cid || portalCreatedEmails.has(c.candidate_email)}
+                              style={{
+                                background: portalCreatedEmails.has(c.candidate_email) ? '#ecfdf5' : '#0f172a',
+                                color: portalCreatedEmails.has(c.candidate_email) ? '#059669' : '#ffffff',
+                                border: portalCreatedEmails.has(c.candidate_email) ? '1px solid #a7f3d0' : 'none',
+                                padding: '5px 12px',
+                                borderRadius: '999px',
+                                fontSize: '0.78rem',
+                                fontWeight: 800,
+                                cursor: creatingCredsFor === cid ? 'wait' : 'pointer',
+                                whiteSpace: 'nowrap',
+                                opacity: creatingCredsFor === cid ? 0.6 : 1,
+                              }}
+                            >
+                              {creatingCredsFor === cid ? 'Creating…' : portalCreatedEmails.has(c.candidate_email) ? '✓ Portal Ready' : '🔑 Create Portal Access'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Credentials form popup */}
+                {creatingCredsFor && !createdCredentials && (
+                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '24px' }} onClick={() => setCreatingCredsFor(null)}>
+                    <div style={{ background: '#ffffff', borderRadius: '16px', padding: '32px', maxWidth: '440px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>Create Portal Access</h3>
+                      <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 20px 0' }}>Set the login credentials for <strong>{credsFormName}</strong>.</p>
+                      <form onSubmit={submitCandidateCredentials}>
+                        <div style={{ marginBottom: '14px' }}>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Name</label>
+                          <input
+                            type="text"
+                            value={credsFormName}
+                            onChange={(e) => setCredsFormName(e.target.value)}
+                            placeholder="Candidate name"
+                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ marginBottom: '14px' }}>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Email</label>
+                          <input
+                            type="email"
+                            value={credsFormEmail}
+                            onChange={(e) => setCredsFormEmail(e.target.value)}
+                            placeholder="name@company.com"
+                            required
+                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ marginBottom: '20px' }}>
+                          <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' }}>Password</label>
+                          <input
+                            type="text"
+                            value={credsFormPassword}
+                            onChange={(e) => setCredsFormPassword(e.target.value)}
+                            placeholder="Set a password"
+                            required
+                            style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', color: '#0f172a', outline: 'none', boxSizing: 'border-box' }}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <button type="button" onClick={() => setCreatingCredsFor(null)} style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                          <button type="submit" style={{ flex: 1, background: '#059669', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>Create Account</button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                )}
+
+                {/* Success modal */}
+                {createdCredentials && (
+                  <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '24px' }} onClick={() => setCreatedCredentials(null)}>
+                    <div style={{ background: '#ffffff', borderRadius: '16px', padding: '32px', maxWidth: '420px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>✓ Portal Access Created</h3>
+                      <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '0 0 20px 0' }}>Share these credentials with <strong>{createdCredentials.name}</strong>.</p>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px', marginBottom: '20px' }}>
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Candidate ID</div>
+                          <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#1e293b', fontFamily: 'monospace' }}>{createdCredentials.candidateId}</div>
+                        </div>
+                        <div style={{ marginTop: '12px' }}>
+                          <div style={{ fontSize: '0.68rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '3px' }}>Password</div>
+                          <div style={{ fontSize: '0.92rem', fontWeight: 600, color: '#1e293b', fontFamily: 'monospace', background: '#ffffff', padding: '6px 10px', borderRadius: '6px', border: '1px solid #e2e8f0' }}>{createdCredentials.password}</div>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '0 0 16px 0' }}>Login at: <strong>/candidate/login</strong> with the Candidate ID</p>
+                      <button
+                        onClick={() => setCreatedCredentials(null)}
+                        style={{ width: '100%', background: '#0f172a', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+                {companies.map((company) => (
+                  <div
+                    key={company.name}
+                    onClick={() => setSelectedAcceptedCompany(company)}
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '14px',
+                      padding: '20px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      justifyContent: 'space-between',
+                      gap: '14px',
+                      background: '#f8fafc',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      boxShadow: '0 2px 6px rgba(15,23,42,0.03)',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#10b981'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(16,185,129,0.12)'; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 2px 6px rgba(15,23,42,0.03)'; }}
+                  >
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px' }}>
+                          {company.name}
+                        </span>
+                        {company.requisition_title && (
+                          <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
+                            {company.requisition_title}
+                          </span>
+                        )}
+                      </div>
+                      <h3 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
+                        {company.candidates.length} accepted candidate{company.candidates.length !== 1 ? 's' : ''}
+                      </h3>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                        {company.candidates.slice(0, 3).map((c) => (
+                          <span key={c.submission_id || c.id} style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>
+                            {c.candidate_name}
+                          </span>
+                        ))}
+                        {company.candidates.length > 3 && (
+                          <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, alignSelf: 'center' }}>
+                            +{company.candidates.length - 3} more
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', background: '#10b981', color: '#ffffff', padding: '10px', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 700 }}>
+                      ✓ View Candidates →
+                    </div>
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* Portal Access View */}
+      {showPortal && (
+        <PortalAccessView
+          authToken={authToken}
+          acceptedCandidates={acceptedCandidates}
+          onBack={() => navigate('/dashboard/recruiter')}
+        />
+      )}
+    </div>
+  );
+}
+
+function PortalAccessView({ authToken, acceptedCandidates, onBack }) {
+  const [portalUsers, setPortalUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [editingUser, setEditingUser] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editCandidateId, setEditCandidateId] = useState('');
+  const [showCreate, setShowCreate] = useState(false);
+  const [createName, setCreateName] = useState('');
+  const [createEmail, setCreateEmail] = useState('');
+  const [createPassword, setCreatePassword] = useState('');
+  const [createCandidateId, setCreateCandidateId] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+
+  const loadUsers = () => {
+    setLoading(true);
+    request('/api/auth/portal-users', { token: authToken })
+      .then((data) => setPortalUsers(Array.isArray(data) ? data : []))
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(''), 3000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const matchedCandidates = acceptedCandidates.map((c) => {
+    const user = portalUsers.find((u) => (u.candidate_id && u.candidate_id === c.submission_id) || (u.email?.toLowerCase() === c.candidate_email?.toLowerCase()));
+    return { ...c, portalUser: user || null };
+  });
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!createEmail || !createPassword) return;
+    setSaving(true);
+    setError('');
+    try {
+      await request('/api/auth/users', {
+        method: 'POST',
+        token: authToken,
+        body: { email: createEmail, name: createName || createEmail, password: createPassword, role: 'Candidate', candidate_id: createCandidateId },
+      });
+      setToast('Portal access created for ' + createEmail);
+      setShowCreate(false);
+      setCreateName(''); setCreateEmail(''); setCreatePassword(''); setCreateCandidateId('');
+      loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to create account.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleEdit(e) {
+    e.preventDefault();
+    if (!editingUser) return;
+    setSaving(true);
+    setError('');
+    try {
+      const body = { name: editName, email: editEmail };
+      if (editPassword) body.password = editPassword;
+      await request(`/api/auth/portal-users/${editingUser.id}`, {
+        method: 'PUT',
+        token: authToken,
+        body,
+      });
+      setToast('Credentials updated for ' + editEmail);
+      setEditingUser(null);
+      loadUsers();
+    } catch (err) {
+      setError(err.message || 'Failed to update.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete(user) {
+    if (!window.confirm(`Delete portal access for ${user.email}?`)) return;
+    try {
+      await request(`/api/auth/portal-users/${user.id}`, { method: 'DELETE', token: authToken });
+      setToast('Deleted ' + user.email);
+      loadUsers();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  const inputStyle = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.9rem', color: '#0f172a', outline: 'none', boxSizing: 'border-box' };
+  const labelStyle = { display: 'block', fontSize: '0.72rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '5px' };
+
+  return (
+    <div style={{ display: 'grid', gap: '20px' }}>
+      <WelcomeBanner title="Portal Access" subtitle="Manage candidate portal accounts — create, edit, or remove login credentials." />
+
+      {toast && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#059669', padding: '12px 16px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          ✓ {toast}
+        </div>
+      )}
+      {error && <div className="alert alert-error">{error}</div>}
+
+      {/* Stats */}
+      <div className="stat-grid recruiter-stats">
+        <StatCard label="TOTAL CANDIDATES" value={acceptedCandidates.length} icon={Icons.check} tint="tint-green" delta="Accepted & ready" deltaTone="green" />
+        <StatCard label="PORTAL USERS" value={portalUsers.length} icon={Icons.users} tint="tint-blue" delta="With active credentials" deltaTone="blue" />
+      </div>
+
+      {/* Create button */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button onClick={() => setShowCreate(true)} style={{ background: '#059669', color: '#ffffff', border: 'none', padding: '10px 20px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          + Create Portal Access
+        </button>
+      </div>
+
+      {/* Candidates table */}
+      <div className="glass-panel table-card">
+        <div className="shortlist-head">
+          <h3 className="card-title">Accepted Candidates</h3>
+          <span className="muted">Manage portal access for each accepted candidate</span>
+        </div>
+        {loading ? (
+          <p className="muted" style={{ padding: 24 }}>Loading...</p>
+        ) : (
+          <table className="data-table cand-table">
+            <thead>
+              <tr>
+                <th>Candidate</th>
+                <th>Candidate ID</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Portal Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {matchedCandidates.map((c) => (
+                <tr key={c.submission_id || c.id}>
+                  <td className="td-title" style={{ fontWeight: 700, color: '#0f172a' }}>{c.candidate_name}</td>
+                  <td style={{ fontSize: '0.85rem', color: '#475569', fontFamily: 'monospace' }}>{c.submission_id || c.id || '—'}</td>
+                  <td style={{ fontSize: '0.85rem', color: '#475569' }}>{c.candidate_email || '—'}</td>
+                  <td style={{ fontSize: '0.85rem', color: '#475569' }}>{c.requisition_title || '—'}</td>
+                  <td>
+                    {c.portalUser ? (
+                      <span style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.78rem', fontWeight: 700, padding: '4px 10px', borderRadius: '999px', border: '1px solid #a7f3d0' }}>✓ Active</span>
+                    ) : (
+                      <span style={{ background: '#f1f5f9', color: '#94a3b8', fontSize: '0.78rem', fontWeight: 700, padding: '4px 10px', borderRadius: '999px' }}>No Access</span>
+                    )}
+                  </td>
+                  <td className="td-action">
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      {c.portalUser ? (
+                        <>
+                          <button onClick={() => { setEditingUser(c.portalUser); setEditName(c.portalUser.name); setEditEmail(c.portalUser.email); setEditCandidateId(c.portalUser.candidate_id || ''); setEditPassword(''); }} style={{ fontSize: '0.78rem', fontWeight: 700, padding: '5px 12px', borderRadius: '6px', background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', cursor: 'pointer' }}>Edit</button>
+                          <button onClick={() => handleDelete(c.portalUser)} style={{ fontSize: '0.78rem', fontWeight: 700, padding: '5px 12px', borderRadius: '6px', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', cursor: 'pointer' }}>Delete</button>
+                        </>
+                      ) : (
+                        <button onClick={() => { setCreateEmail(c.candidate_email || ''); setCreateName(c.candidate_name || ''); setCreateCandidateId(c.submission_id || c.id || ''); setCreatePassword(''); setShowCreate(true); }} style={{ fontSize: '0.78rem', fontWeight: 700, padding: '5px 12px', borderRadius: '6px', background: '#059669', color: '#ffffff', border: 'none', cursor: 'pointer' }}>Create Access</button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Create modal */}
+      {showCreate && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '24px' }} onClick={() => setShowCreate(false)}>
+          <div style={{ background: '#ffffff', borderRadius: '16px', padding: '32px', maxWidth: '440px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0' }}>Create Portal Access</h3>
+            <form onSubmit={handleCreate}>
+              <div style={{ marginBottom: '14px' }}><label style={labelStyle}>Name</label><input style={inputStyle} value={createName} onChange={(e) => setCreateName(e.target.value)} placeholder="Candidate name" /></div>
+              <div style={{ marginBottom: '14px' }}><label style={labelStyle}>Email</label><input style={inputStyle} type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} required placeholder="email@company.com" /></div>
+              <div style={{ marginBottom: '14px' }}><label style={labelStyle}>Candidate ID</label><input style={{...inputStyle, fontFamily: 'monospace'}} value={createCandidateId} onChange={(e) => setCreateCandidateId(e.target.value)} required placeholder="e.g. c885133a" /></div>
+              <div style={{ marginBottom: '20px' }}><label style={labelStyle}>Password</label><input style={inputStyle} type="text" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} required placeholder="Set password" /></div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={() => setShowCreate(false)} style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={saving} style={{ flex: 1, background: '#059669', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Creating...' : 'Create Account'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit modal */}
+      {editingUser && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, padding: '24px' }} onClick={() => setEditingUser(null)}>
+          <div style={{ background: '#ffffff', borderRadius: '16px', padding: '32px', maxWidth: '440px', width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }} onClick={(e) => e.stopPropagation()}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 16px 0' }}>Edit Portal Access</h3>
+            <form onSubmit={handleEdit}>
+              <div style={{ marginBottom: '14px' }}><label style={labelStyle}>Name</label><input style={inputStyle} value={editName} onChange={(e) => setEditName(e.target.value)} /></div>
+              <div style={{ marginBottom: '14px' }}><label style={labelStyle}>Candidate ID <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none' }}>(login identifier)</span></label><input style={{...inputStyle, fontFamily: 'monospace', background: '#f8fafc'}} value={editCandidateId} readOnly /></div>
+              <div style={{ marginBottom: '14px' }}><label style={labelStyle}>New Password <span style={{ color: '#94a3b8', fontWeight: 400, textTransform: 'none' }}>(leave blank to keep current)</span></label><input style={inputStyle} type="text" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="Keep current" /></div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button type="button" onClick={() => setEditingUser(null)} style={{ flex: 1, background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={saving} style={{ flex: 1, background: '#0f172a', color: '#ffffff', border: 'none', padding: '10px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Saving...' : 'Save Changes'}</button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

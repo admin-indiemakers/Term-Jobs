@@ -285,7 +285,10 @@ function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist
     <>
       <tr className="clickable-row" onClick={onToggle}>
         <td className="td-title">
-          {c.candidate_name}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 700, color: '#0f172a' }}>{c.candidate_name}</span>
+            <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '2px 7px', borderRadius: '4px', fontFamily: 'monospace', letterSpacing: '0.03em' }}>{c.submission_id || c.id}</span>
+          </div>
           {c.candidate_email && <div className="cand-email">{c.candidate_email}</div>}
         </td>
         <td className="td-company">{c.vendor_name || '—'}</td>

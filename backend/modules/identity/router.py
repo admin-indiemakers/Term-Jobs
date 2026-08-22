@@ -78,9 +78,13 @@ def _tenant_type(tenant_id: str, db: Session) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 def login_user(body: UserLogin, db: Session = Depends(get_db)):
-    # Allow login with either email or username "ADMIN" for superadmin
+    # Allow login with email, username "ADMIN" for superadmin, or candidate_id
+    user = None
     if body.username == "ADMIN":
         user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
+    elif body.username:
+        # Candidate login: username is the candidate_id (submission_id like "c885133a")
+        user = db.query(User).filter(User.candidate_id == body.username).first()
     elif body.email:
         user = db.query(User).filter(User.email == body.email).first()
     else:
@@ -88,11 +92,11 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
-    
+
     if not user or not user.is_active or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="Invalid credentials",
         )
 
     comp = _get_company_profile(user.tenant_id, db)
@@ -252,6 +256,10 @@ def create_user(
         else:
             tenant_id = current_user.tenant_id
 
+    elif body.role == "Candidate":
+        # Candidates are provisioned by Recruiters; place in the same tenant.
+        tenant_id = current_user.tenant_id
+
     else:
         # Hiring Manager: place in the same tenant as the Admin/HR who provisions them.
         tenant_id = current_user.tenant_id
@@ -264,6 +272,7 @@ def create_user(
         role=body.role,
         department=body.department,
         candidate_limit=body.candidate_limit,
+        candidate_id=body.candidate_id,
         created_by=current_user.id,
     )
     db.add(user)
@@ -630,3 +639,72 @@ def set_vendor_engagements(
     db.commit()
 
     return list_vendors(current_user=current_user, db=db)
+
+
+@router.get("/portal-users")
+def list_portal_users(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all Candidate users in this Recruiter's tenant."""
+    users = db.query(User).filter(
+        User.role == "Candidate",
+        User.tenant_id == current_user.tenant_id,
+    ).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "name": u.name,
+            "candidate_id": u.candidate_id or "",
+            "is_active": u.is_active,
+            "created_at": u.created_at.isoformat() if hasattr(u.created_at, 'isoformat') else str(u.created_at) if u.created_at else None,
+        }
+        for u in users
+    ]
+
+
+@router.put("/portal-users/{user_id}")
+def update_portal_user(
+    user_id: str,
+    body: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a Candidate user's credentials (name, email, password, active status)."""
+    target = db.query(User).filter(User.id == user_id, User.role == "Candidate").first()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate user not found")
+    if target.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    if body.name is not None:
+        target.name = body.name
+    if body.email is not None:
+        existing = db.query(User).filter(User.email == body.email, User.id != user_id).first()
+        if existing:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
+        target.email = body.email
+    if body.password:
+        target.password_hash = hash_password(body.password)
+    if body.is_active is not None:
+        target.is_active = body.is_active
+    db.commit()
+    db.refresh(target)
+    return {"id": target.id, "email": target.email, "name": target.name, "is_active": target.is_active}
+
+
+@router.delete("/portal-users/{user_id}")
+def delete_portal_user(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a Candidate user."""
+    target = db.query(User).filter(User.id == user_id, User.role == "Candidate").first()
+    if not target:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Candidate user not found")
+    if target.tenant_id != current_user.tenant_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    db.delete(target)
+    db.commit()
+    return {"status": "deleted", "id": user_id}
