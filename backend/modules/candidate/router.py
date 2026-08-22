@@ -8,7 +8,7 @@ import shutil
 import uuid
 from datetime import datetime, timezone
 
-from modules.candidate.domain.models import CandidateSubmission, Candidate
+from modules.candidate.domain.models import CandidateSubmission, Candidate, ScreeningCache
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.notifications.services.notification_service import notify_candidate_shortlisted, notify_candidate_status
@@ -505,23 +505,137 @@ def delete_bank_candidate(candidate_id: str, current_user: User = Depends(get_cu
     return {"status": "success", "message": "Candidate deleted from bank"}
 
 
+@router.get("/bank/screening-cache/{requisition_id}")
+def get_screening_cache(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Retrieve temporary active screening cache for the current recruiter and requisition on page load."""
+    with get_session() as session:
+        now = datetime.now(timezone.utc)
+        active_caches = (
+            session.query(ScreeningCache)
+            .filter(
+                ScreeningCache.recruiter_id == current_user.id,
+                ScreeningCache.requisition_id == requisition_id,
+            )
+            .order_by(ScreeningCache.created_at.desc())
+            .all()
+        )
+        for cache_doc in active_caches:
+            exp = cache_doc.expires_at
+            is_active = (exp > now) if (exp and exp.tzinfo) else (exp > datetime.utcnow()) if exp else False
+            if is_active and cache_doc.results:
+                print(f"[SCREENING CACHE] Page load HIT requisition_id={requisition_id} candidate_count={len(cache_doc.results)}")
+                return {
+                    "status": "success",
+                    "has_cache": True,
+                    "source": "cache",
+                    "cache_hit": True,
+                    "screened_candidates": cache_doc.results
+                }
+        return {
+            "status": "success",
+            "has_cache": False,
+            "source": "cache",
+            "cache_hit": False,
+            "screened_candidates": []
+        }
+
+
 @router.post("/bank/match-bulk")
 async def match_bulk_candidates(
     body: dict,
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Bulk match existing bank candidates against a requisition using AI screening in-memory with parallel execution."""
+    """Bulk match existing bank candidates against a requisition using AI screening with server-side MongoDB TTL caching."""
+    import hashlib
+    from datetime import timedelta
     candidate_ids = body.get("candidate_ids")
     requisition_id = body.get("requisition_id")
     if not candidate_ids or not requisition_id:
         raise HTTPException(status_code=400, detail="candidate_ids and requisition_id are required")
         
+    sorted_ids = sorted(candidate_ids)
+    cache_key_raw = f"{current_user.id}:{requisition_id}:{','.join(sorted_ids)}"
+    exact_cache_key = hashlib.sha256(cache_key_raw.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
     with get_session() as session:
         from modules.requisition.domain.models import Requisition
         req = session.get(Requisition, requisition_id)
         if not req:
             raise HTTPException(status_code=404, detail="Requisition not found")
-            
+
+        # 1. Exact Cache Key Match Check
+        exact_cache = session.query(ScreeningCache).filter(
+            ScreeningCache.cache_key == exact_cache_key
+        ).first()
+
+        exp = exact_cache.expires_at if exact_cache else None
+        is_active = (exp > now) if (exp and exp.tzinfo) else (exp > datetime.utcnow()) if exp else False
+        if is_active and exact_cache.results:
+            print(f"[SCREENING CACHE] HIT requisition_id={requisition_id} candidate_count={len(exact_cache.results)}")
+            return {
+                "status": "success",
+                "source": "cache",
+                "cache_hit": True,
+                "screened_candidates": exact_cache.results
+            }
+
+        # 2. Check Candidate-Level Partial Cache Hits
+        active_caches = session.query(ScreeningCache).filter(
+            ScreeningCache.recruiter_id == current_user.id,
+            ScreeningCache.requisition_id == requisition_id,
+        ).all()
+
+        cached_candidate_map = {}
+        for cdoc in active_caches:
+            exp = cdoc.expires_at
+            is_active = (exp > now) if (exp and exp.tzinfo) else (exp > datetime.utcnow()) if exp else False
+            if is_active and cdoc.results:
+                for res in cdoc.results:
+                    cid = res.get("candidate_id") or (res.get("id") or "").replace("temp_", "")
+                    if cid and cid not in cached_candidate_map:
+                        cached_candidate_map[cid] = res
+
+        reused_results = []
+        missing_candidate_ids = []
+        for cid in candidate_ids:
+            if cid in cached_candidate_map:
+                reused_results.append(cached_candidate_map[cid])
+            else:
+                missing_candidate_ids.append(cid)
+
+        if not missing_candidate_ids and reused_results:
+            print(f"[SCREENING CACHE] HIT (Candidate-level) requisition_id={requisition_id} candidate_count={len(reused_results)}")
+            expires_at = now + timedelta(hours=24)
+            cache_entry = ScreeningCache(
+                cache_key=exact_cache_key,
+                recruiter_id=current_user.id,
+                tenant_id=current_user.tenant_id,
+                requisition_id=requisition_id,
+                candidate_ids=candidate_ids,
+                results=reused_results,
+                created_at=now,
+                expires_at=expires_at,
+            )
+            session.add(cache_entry)
+            session.commit()
+            return {
+                "status": "success",
+                "source": "cache",
+                "cache_hit": True,
+                "screened_candidates": reused_results
+            }
+
+        if reused_results:
+            print(f"[SCREENING CACHE] MISS (Partial) requisition_id={requisition_id} new_candidates={len(missing_candidate_ids)} cached_candidates={len(reused_results)}")
+        else:
+            print(f"[SCREENING CACHE] MISS requisition_id={requisition_id} candidate_count={len(missing_candidate_ids)}")
+
+        print(f"[SCREENING] Running AI screening for {len(missing_candidate_ids)} candidates")
+
         jd_text = req.generated_jd_markdown or ""
         if not jd_text and req.structured_role:
             from modules.candidate_screening_agent.services.db_service import _vendor_role_text
@@ -544,135 +658,155 @@ async def match_bulk_candidates(
 
         # Fetch candidate entities
         candidates = []
-        for candidate_id in candidate_ids:
+        for candidate_id in missing_candidate_ids:
             cand = session.get(Candidate, candidate_id)
             if cand:
                 candidates.append(cand)
 
-    async def screen_single_candidate(cand):
-        try:
-            import re
-            cand_text = cand.extracted_text or cand.summary or f"{cand.candidate_name} {cand.candidate_title} {' '.join(cand.skills or [])}"
-            _struct = await _structure_resume_compat(cand_text)
-            
-            # Extract GitHub and LinkedIn URLs
-            gh_url = getattr(_struct, 'github_url', None)
-            if not gh_url or 'github.com' not in gh_url.lower():
-                gh_match = re.search(r'(https?://(?:www\.)?github\.com/[a-zA-Z0-9_\-]+|github\.com/[a-zA-Z0-9_\-]+)', cand_text, re.IGNORECASE)
-                if gh_match:
-                    gh_url = gh_match.group(0)
-            if gh_url and not gh_url.startswith('http'):
-                gh_url = 'https://' + gh_url
+        async def screen_single_candidate(cand):
+            try:
+                import re
+                cand_text = cand.extracted_text or cand.summary or f"{cand.candidate_name} {cand.candidate_title} {' '.join(cand.skills or [])}"
+                _struct = await _structure_resume_compat(cand_text)
+                
+                # Extract GitHub and LinkedIn URLs
+                gh_url = getattr(_struct, 'github_url', None)
+                if not gh_url or 'github.com' not in gh_url.lower():
+                    gh_match = re.search(r'(https?://(?:www\.)?github\.com/[a-zA-Z0-9_\-]+|github\.com/[a-zA-Z0-9_\-]+)', cand_text, re.IGNORECASE)
+                    if gh_match:
+                        gh_url = gh_match.group(0)
+                if gh_url and not gh_url.startswith('http'):
+                    gh_url = 'https://' + gh_url
 
-            li_url = getattr(_struct, 'linkedin_url', None)
-            if not li_url or 'linkedin.com' not in li_url.lower():
-                li_match = re.search(r'(https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_\-]+|linkedin\.com/in/[a-zA-Z0-9_\-]+)', cand_text, re.IGNORECASE)
-                if li_match:
-                    li_url = li_match.group(0)
-            if li_url and not li_url.startswith('http'):
-                li_url = 'https://' + li_url
+                li_url = getattr(_struct, 'linkedin_url', None)
+                if not li_url or 'linkedin.com' not in li_url.lower():
+                    li_match = re.search(r'(https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_\-]+|linkedin\.com/in/[a-zA-Z0-9_\-]+)', cand_text, re.IGNORECASE)
+                    if li_match:
+                        li_url = li_match.group(0)
+                if li_url and not li_url.startswith('http'):
+                    li_url = 'https://' + li_url
 
-            # Extract Phone
-            c_phone = cand.candidate_phone or ""
-            if not c_phone:
-                ph_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5})', cand_text)
-                if ph_match and len(ph_match.group(0).strip()) >= 10:
-                    c_phone = ph_match.group(0).strip()
+                # Extract Phone
+                c_phone = cand.candidate_phone or ""
+                if not c_phone:
+                    ph_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5})', cand_text)
+                    if ph_match and len(ph_match.group(0).strip()) >= 10:
+                        c_phone = ph_match.group(0).strip()
 
-            # Verify GitHub live
-            gh_evidence = None
-            if gh_url:
-                try:
-                    gh_evidence = await asyncio.wait_for(_verify_github_new(gh_url), timeout=5.0)
-                except Exception:
-                    gh_evidence = GitHubEvidence(verified=False, profile_url=gh_url, username=gh_url.split('/')[-1])
+                # Verify GitHub live
+                gh_evidence = None
+                if gh_url:
+                    try:
+                        gh_evidence = await asyncio.wait_for(_verify_github_new(gh_url), timeout=8.0)
+                    except Exception:
+                        gh_evidence = GitHubEvidence(verified=False, profile_url=gh_url, username=gh_url.split('/')[-1])
 
-            if _jd_parsed and _jd_emb:
-                _score, _bd, _matched, _missing = _compute_score_new(_struct, _jd_parsed, _jd_emb, gh_evidence)
-                rec = _classify_new(_score).value
-            else:
-                _score = 75.0
-                rec = "Strong Match"
-                _matched = cand.skills or []
-                _missing = []
+                if _jd_parsed and _jd_emb:
+                    _score, _bd, _matched, _missing = _compute_score_new(_struct, _jd_parsed, _jd_emb, gh_evidence)
+                    rec = _classify_new(_score).value
+                else:
+                    _score = 75.0
+                    rec = "Strong Match"
+                    _matched = cand.skills or []
+                    _missing = []
 
-            c_name = cand.candidate_name or getattr(_struct, 'name', '') or "Candidate"
-            c_email = cand.candidate_email or getattr(_struct, 'email', '') or ""
-            v_name = cand.vendor_company_name or getattr(current_user, 'tenant_name', None) or getattr(current_user, 'name', 'Agency') or "Vendor Agency"
+                c_name = cand.candidate_name or getattr(_struct, 'name', '') or "Candidate"
+                c_email = cand.candidate_email or getattr(_struct, 'email', '') or ""
+                v_name = cand.vendor_company_name or getattr(current_user, 'tenant_name', None) or getattr(current_user, 'name', 'Agency') or "Vendor Agency"
 
-            bd_dict = {}
-            if _bd:
-                if hasattr(_bd, "model_dump"):
-                    bd_dict = _bd.model_dump()
-                elif hasattr(_bd, "dict"):
-                    bd_dict = _bd.dict()
-                elif isinstance(_bd, dict):
-                    bd_dict = _bd
+                bd_dict = {}
+                if _bd:
+                    if hasattr(_bd, "model_dump"):
+                        bd_dict = _bd.model_dump()
+                    elif hasattr(_bd, "dict"):
+                        bd_dict = _bd.dict()
+                    elif isinstance(_bd, dict):
+                        bd_dict = _bd
 
-            gh_dict = None
-            if gh_evidence:
-                gh_dict = gh_evidence.model_dump() if hasattr(gh_evidence, "model_dump") else gh_evidence.dict() if hasattr(gh_evidence, "dict") else {}
-                if not gh_dict.get("profile_url") and gh_url:
-                    gh_dict["profile_url"] = gh_url
-            elif gh_url:
-                gh_dict = {"verified": False, "profile_url": gh_url, "username": gh_url.split('/')[-1], "top_repos": [], "verified_skills": []}
+                gh_dict = None
+                if gh_evidence:
+                    gh_dict = gh_evidence.model_dump() if hasattr(gh_evidence, "model_dump") else gh_evidence.dict() if hasattr(gh_evidence, "dict") else {}
+                    if not gh_dict.get("profile_url") and gh_url:
+                        gh_dict["profile_url"] = gh_url
+                elif gh_url:
+                    gh_dict = {"verified": False, "profile_url": gh_url, "username": gh_url.split('/')[-1], "top_repos": [], "verified_skills": []}
 
-            # Extract projects, experience, education, certifications
-            proj_items = [p.model_dump() if hasattr(p, "model_dump") else p.dict() if hasattr(p, "dict") else p for p in (_struct.projects or [])]
-            exp_items = [e.model_dump() if hasattr(e, "model_dump") else e.dict() if hasattr(e, "dict") else e for e in (_struct.experience or [])]
-            edu_items = [ed.model_dump() if hasattr(ed, "model_dump") else ed.dict() if hasattr(ed, "dict") else ed for ed in (_struct.education or [])]
-            certs_items = _struct.certifications or []
+                # Extract projects, experience, education, certifications
+                proj_items = [p.model_dump() if hasattr(p, "model_dump") else p.dict() if hasattr(p, "dict") else p for p in (_struct.projects or [])]
+                exp_items = [e.model_dump() if hasattr(e, "model_dump") else e.dict() if hasattr(e, "dict") else e for e in (_struct.experience or [])]
+                edu_items = [ed.model_dump() if hasattr(ed, "model_dump") else ed.dict() if hasattr(ed, "dict") else ed for ed in (_struct.education or [])]
+                certs_items = _struct.certifications or []
 
-            # If projects or experience are empty from structurer, synthesize from extracted text
-            if not proj_items and gh_dict and gh_dict.get("top_repos"):
-                for r in gh_dict["top_repos"][:4]:
-                    proj_items.append({
-                        "name": r.get("name"),
-                        "description": r.get("description") or f"Public GitHub repository by {c_name}",
-                        "technologies": r.get("languages") or [],
-                        "outcome": f"Available on GitHub: {r.get('url')}"
-                    })
+                # If projects or experience are empty from structurer, synthesize from GitHub
+                if not proj_items and gh_dict and gh_dict.get("top_repos"):
+                    for r in gh_dict["top_repos"][:4]:
+                        proj_items.append({
+                            "name": r.get("name"),
+                            "description": r.get("description") or f"Public GitHub repository by {c_name}",
+                            "technologies": r.get("languages") or [],
+                            "outcome": f"Available on GitHub: {r.get('url')}"
+                        })
 
-            return {
-                "id": f"temp_{cand.id}",
-                "candidate_id": cand.id,
-                "candidate_name": c_name,
-                "candidate_title": cand.candidate_title or getattr(_struct, 'role_title', '') or "",
-                "candidate_email": c_email,
-                "candidate_phone": c_phone,
-                "vendor_name": v_name,
-                "filename": cand.filename or f"{c_name}.pdf",
-                "match_score": round(_score, 2),
-                "recommendation": rec,
-                "matched_skills": _matched or [],
-                "missing_skills": _missing or [],
-                "breakdown": bd_dict,
-                "github_evidence": gh_dict,
-                "github_url": gh_url,
-                "linkedin_url": li_url,
-                "projects": proj_items,
-                "experience": exp_items,
-                "education": edu_items,
-                "certifications": certs_items,
-                "skills": cand.skills or getattr(_struct, 'skills', []) or [],
-                "summary": cand.summary or f"{c_name} scored {round(_score)}% match for this role.",
-                "extracted_text": cand.extracted_text or "",
-                "status": "Screened",
-                "requisition_id": requisition_id
-            }
-        except Exception as e:
-            print(f"Error screening candidate {cand.id}: {e}")
-            return None
+                return {
+                    "id": f"temp_{cand.id}",
+                    "candidate_id": cand.id,
+                    "candidate_name": c_name,
+                    "candidate_title": cand.candidate_title or getattr(_struct, 'role_title', '') or "",
+                    "candidate_email": c_email,
+                    "candidate_phone": c_phone,
+                    "vendor_name": v_name,
+                    "filename": cand.filename or f"{c_name}.pdf",
+                    "match_score": round(_score, 2),
+                    "recommendation": rec,
+                    "matched_skills": _matched or [],
+                    "missing_skills": _missing or [],
+                    "breakdown": bd_dict,
+                    "github_evidence": gh_dict,
+                    "github_url": gh_url,
+                    "linkedin_url": li_url,
+                    "projects": proj_items,
+                    "experience": exp_items,
+                    "education": edu_items,
+                    "certifications": certs_items,
+                    "skills": cand.skills or getattr(_struct, 'skills', []) or [],
+                    "summary": cand.summary or f"{c_name} scored {round(_score)}% match for this role.",
+                    "extracted_text": cand.extracted_text or "",
+                    "status": "Screened",
+                    "requisition_id": requisition_id
+                }
+            except Exception as e:
+                print(f"Error screening candidate {cand.id}: {e}")
+                return None
 
-    # Parallel processing of all candidates with Groq + GitHub
-    results = await asyncio.gather(*(screen_single_candidate(c) for c in candidates))
-    screened_list = [r for r in results if r is not None]
-    screened_list = sorted(screened_list, key=lambda x: x.get("match_score") or 0, reverse=True)
-    
-    return {
-        "status": "success",
-        "screened_candidates": screened_list
-    }
+        # Parallel processing of missing candidates with Groq + GitHub
+        results = await asyncio.gather(*(screen_single_candidate(c) for c in candidates))
+        newly_screened = [r for r in results if r is not None]
+        all_screened = reused_results + newly_screened
+        all_screened = sorted(all_screened, key=lambda x: x.get("match_score") or 0, reverse=True)
+
+        # Save to screening_cache (never store resume_pdf in cache)
+        expires_at = now + timedelta(hours=24)
+        new_cache_entry = ScreeningCache(
+            cache_key=exact_cache_key,
+            recruiter_id=current_user.id,
+            tenant_id=current_user.tenant_id,
+            requisition_id=requisition_id,
+            candidate_ids=candidate_ids,
+            results=all_screened,
+            created_at=now,
+            expires_at=expires_at,
+        )
+        session.add(new_cache_entry)
+        session.commit()
+
+        print(f"[SCREENING CACHE] Saved {len(all_screened)} screening results expires_at={expires_at.isoformat()}")
+
+        return {
+            "status": "success",
+            "source": "ai" if not reused_results else "hybrid",
+            "cache_hit": False,
+            "screened_candidates": all_screened
+        }
 
 
 @router.post("/shortlist")

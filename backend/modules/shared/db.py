@@ -296,5 +296,11 @@ def init_db() -> None:
     db["notifications"].create_index("user_id")
     db["notifications"].create_index("created_at")
     db["onboarding_checklists"].create_index("candidate_id")
+    try:
+        db["screening_cache"].create_index("expires_at", expireAfterSeconds=0)
+        db["screening_cache"].create_index("cache_key")
+        db["screening_cache"].create_index([("recruiter_id", 1), ("requisition_id", 1), ("expires_at", -1)])
+    except Exception as e:
+        print(f"Index creation warning for screening_cache: {e}")
 
 

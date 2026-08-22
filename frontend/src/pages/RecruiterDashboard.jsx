@@ -556,6 +556,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   }
 
   async function runBulkScreening() {
+    if (screening) return; // Prevent duplicate clicks or concurrent requests
     if (!selectedCandidateIds.length) return setError('Please select at least one candidate.');
     if (!selectedReqId) return setError('Please select a requisition.');
 
@@ -659,8 +660,26 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       // The summarized published requisition remains fully usable for screening.
     }
     try {
-      const subs = await request(`/candidates?requisition_id=${id}`, { token: authToken }).catch(() => []);
-      setScreenedSubmissions(subs || []);
+      const [subs, cacheRes] = await Promise.all([
+        request(`/candidates?requisition_id=${id}`, { token: authToken }).catch(() => []),
+        request(`/candidates/bank/screening-cache/${id}`, { token: authToken }).catch(() => ({ has_cache: false, screened_candidates: [] })),
+      ]);
+
+      if (cacheRes?.has_cache && Array.isArray(cacheRes.screened_candidates) && cacheRes.screened_candidates.length) {
+        const permanentMap = new Map((subs || []).map((s) => [s.candidate_name?.toLowerCase() || s.id, s]));
+        const merged = cacheRes.screened_candidates.map((cand) => {
+          const perm = permanentMap.get(cand.candidate_name?.toLowerCase()) || permanentMap.get(cand.id);
+          if (perm && perm.status) {
+            return { ...cand, status: perm.status, id: perm.id || cand.id };
+          }
+          return cand;
+        });
+        setScreenedSubmissions(merged);
+      } else if (Array.isArray(subs) && subs.length) {
+        setScreenedSubmissions(subs);
+      } else {
+        setScreenedSubmissions([]);
+      }
     } catch {
       setScreenedSubmissions([]);
     }

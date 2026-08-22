@@ -94,3 +94,29 @@ class Candidate(Model):
     created_at = Column("created_at")
     updated_at = Column("updated_at")
 
+
+
+class ScreeningCache(Model):
+    __tablename__ = "screening_cache"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "cache_key": "",
+        "recruiter_id": "",
+        "tenant_id": None,
+        "requisition_id": "",
+        "candidate_ids": list,
+        "results": list,
+        "created_at": _utcnow,
+        "expires_at": _utcnow,
+    }
+
+    id = Column("id")
+    cache_key = Column("cache_key")
+    recruiter_id = Column("recruiter_id")
+    tenant_id = Column("tenant_id")
+    requisition_id = Column("requisition_id")
+    candidate_ids = Column("candidate_ids")
+    results = Column("results")
+    created_at = Column("created_at")
+    expires_at = Column("expires_at")
