@@ -26,6 +26,7 @@ import RequisitionCandidates from './pages/candidates/RequisitionCandidates';
 import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
+import OnboardingManagement from './pages/candidates/OnboardingManagement';
 
 
 function FullScreenLoader() {
@@ -94,15 +95,14 @@ export default function App() {
           <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
           <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
           <Route path="candidates/accepted" element={<AcceptedCandidates />} />
-          <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
-          <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal" />} />
+          <Route path="candidates/onboarding" element={<OnboardingManagement />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
           <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
           <Route path="recruiter/shortlisted" element={<RecruiterDashboard view="shortlisted" />} />
           <Route path="recruiter/interviews" element={<InterviewRequests />} />
-          <Route path="recruiter/accepted" element={<AcceptedCandidates />} />
+          <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
           <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/directors" element={<ManageDirectors />} />
@@ -115,8 +115,15 @@ export default function App() {
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
           <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
           <Route path="hr" element={<HRDashboard />} />
-          <Route path="candidate" element={<CandidatePortal />} />
         </Route>
+        <Route
+          path="/dashboard/candidate"
+          element={
+            <RequireAuth>
+              <CandidatePortal />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

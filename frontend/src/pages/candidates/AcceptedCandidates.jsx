@@ -104,8 +104,25 @@ export default function AcceptedCandidates() {
       {error && <div className="alert alert-error">{error}</div>}
 
       <div className="glass-panel table-card" style={{ marginTop: '20px' }}>
-        <div className="shortlist-head">
+        <div className="shortlist-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <h3 className="card-title">Accepted Candidates</h3>
+          <Link
+            to="/dashboard/candidates/onboarding"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '6px 14px',
+              borderRadius: 8,
+              background: '#0f172a',
+              color: '#fff',
+              fontSize: '0.78rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            📋 Open Onboarding & Issues Hub →
+          </Link>
         </div>
         {loading ? (
           <p className="muted" style={{ padding: 24 }}>Loading accepted candidates...</p>
@@ -284,6 +301,9 @@ function OnboardingModal({ candidate, token, existing, onClose }) {
   const handleSave = async () => {
     setSaving(true);
     try {
+      if (!existing) {
+        await request(`/api/onboarding/${cid}`, { method: 'POST', token }).catch(() => {});
+      }
       const body = {
         ...form,
         candidate_name: candidate.candidate_name || '',

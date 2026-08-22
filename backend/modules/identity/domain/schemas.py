@@ -89,6 +89,7 @@ class UserResponse(BaseModel):
     created_by: str = ""
     is_active: bool = True
     candidate_limit: int | None = None
+    candidate_id: str = ""
 
 class UserListResponse(BaseModel):
     id: str

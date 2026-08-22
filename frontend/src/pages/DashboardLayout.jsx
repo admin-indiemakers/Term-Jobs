@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
+import AssistantWidget from '../components/AssistantWidget';
 
 function initials(name) {
   if (!name) return 'TJ';
@@ -132,6 +133,12 @@ export default function DashboardLayout() {
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
                 Accepted Candidates
+              </NavLink>
+              <NavLink
+                to="/dashboard/candidates/onboarding"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Onboarding Management
               </NavLink>
             </>
           ) : user.role === 'Super Admin' ? (
@@ -270,6 +277,7 @@ export default function DashboardLayout() {
             <Outlet />
           </div>
         </main>
+        <AssistantWidget />
       </div>
     </div>
   );

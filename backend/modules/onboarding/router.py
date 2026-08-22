@@ -133,6 +133,59 @@ def _auto_status(doc: dict) -> str:
 
 # ── Routes ───────────────────────────────────────────────────────────────────
 
+# ── Onboarding Issues Management (must be before /{candidate_id}) ──────────
+
+def _issues_coll():
+    return db["onboarding_issues"]
+
+
+@router.post("/issues")
+def raise_onboarding_issue(data: dict):
+    """Candidate raises an issue regarding onboarding."""
+    from datetime import datetime, timezone
+    issue = {
+        "id": f"issue_{uuid.uuid4().hex[:8]}",
+        "candidate_id": data.get("candidate_id", ""),
+        "candidate_name": data.get("candidate_name", ""),
+        "company_name": data.get("company_name", ""),
+        "category": data.get("category", "other"),
+        "category_label": data.get("category_label", "Onboarding Issue"),
+        "description": data.get("description", ""),
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "resolved_at": None,
+    }
+    _issues_coll().insert_one(issue)
+    issue.pop("_id", None)
+    return issue
+
+
+@router.get("/issues")
+def list_onboarding_issues():
+    """List all raised onboarding issues."""
+    docs = list(_issues_coll().find())
+    for d in docs:
+        d.pop("_id", None)
+    return docs
+
+
+@router.post("/issues/{issue_id}/resolve")
+def resolve_onboarding_issue(issue_id: str):
+    """Mark an onboarding issue as fixed/resolved."""
+    from datetime import datetime, timezone
+    result = _issues_coll().update_one(
+        {"id": issue_id},
+        {"$set": {"status": "fixed", "resolved_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    doc = _issues_coll().find_one({"id": issue_id})
+    doc.pop("_id", None)
+    return doc
+
+
+# ── Onboarding Checklists ──────────────────────────────────────────────────
+
 @router.get("/{candidate_id}")
 def get_onboarding(candidate_id: str, authorization: str | None = None):
     doc = _coll().find_one({"candidate_id": candidate_id})
@@ -181,10 +234,31 @@ def create_onboarding(candidate_id: str, authorization: str | None = None):
 def update_onboarding(candidate_id: str, body: OnboardingUpdate):
     """Update the onboarding checklist (hiring manager setup or candidate completion)."""
     existing = _coll().find_one({"candidate_id": candidate_id})
-    if not existing:
-        raise HTTPException(status_code=404, detail="No onboarding checklist found")
-
     from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    if not existing:
+        doc = {
+            "candidate_id": candidate_id,
+            "candidate_name": getattr(body, "candidate_name", ""),
+            "candidate_email": getattr(body, "candidate_email", ""),
+            "requisition_id": getattr(body, "requisition_id", ""),
+            "requisition_title": getattr(body, "requisition_title", ""),
+            "company_name": getattr(body, "company_name", ""),
+            "vendor_name": getattr(body, "vendor_name", ""),
+            "laptop_required": False,
+            "laptop_spec": "Standard build",
+            "badge_required": False,
+            "software": [],
+            "training": [],
+            "custom_items": [],
+            "notes": "",
+            "completed_items": {},
+            "status": "not_started",
+            "created_at": now,
+            "updated_at": now,
+        }
+        _coll().insert_one(doc)
+        existing = _coll().find_one({"candidate_id": candidate_id})
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "candidate_id"}
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
 
@@ -274,3 +348,83 @@ def list_onboarding():
     for d in docs:
         d.pop("_id", None)
     return docs
+
+
+@router.post("/assistant")
+def ai_assistant_chat(data: dict):
+    """AI Assistant for Hiring Managers powered by Groq API.
+    Can summarize candidate onboarding issues and auto-resolve issues mentioned in the chat.
+    """
+    user_message = data.get("message", "").strip()
+    if not user_message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    from datetime import datetime, timezone
+    # Fetch current onboarding issues & candidate checklists
+    issues_list = list(_issues_coll().find())
+    for i in issues_list:
+        i.pop("_id", None)
+    
+    checklists = list(_coll().find())
+    for c in checklists:
+        c.pop("_id", None)
+
+    open_issues = [i for i in issues_list if i.get("status") == "open"]
+
+    # Check if user message indicates resolving/rectifying an issue for a candidate or issue ID
+    resolved_issue_ids = []
+    user_lower = user_message.lower()
+    if any(k in user_lower for k in ("resolve", "fix", "fixed", "rectify", "rectified", "solved", "done", "close")):
+        for issue in open_issues:
+            cid = issue.get("candidate_id", "").lower()
+            cname = issue.get("candidate_name", "").lower()
+            iid = issue.get("id", "").lower()
+            if (cid and cid in user_lower) or (cname and cname in user_lower) or (iid and iid in user_lower) or ("issue" in user_lower and len(open_issues) == 1):
+                # Auto fix this issue
+                _issues_coll().update_one(
+                    {"id": issue["id"]},
+                    {"$set": {"status": "fixed", "resolved_at": datetime.now(timezone.utc).isoformat()}}
+                )
+                issue["status"] = "fixed"
+                resolved_issue_ids.append(issue["id"])
+
+    # Prompt Groq API
+    try:
+        from modules.requisition.llm.groq import GroqClient
+        client = GroqClient()
+        
+        context_str = f"Current Open Onboarding Issues ({len(open_issues)}):\n"
+        for idx, iss in enumerate(open_issues, 1):
+            context_str += f"{idx}. [ID: {iss.get('id')}] Candidate: {iss.get('candidate_name')} ({iss.get('candidate_id')}) - Category: {iss.get('category_label')} - Details: {iss.get('description')}\n"
+        
+        if not open_issues:
+            context_str += "None. All candidate onboarding issues are currently resolved.\n"
+
+        if resolved_issue_ids:
+            context_str += f"\nACTION TAKEN: Automatically marked issue(s) {', '.join(resolved_issue_ids)} as FIXED based on user input.\n"
+
+        prompt = f"""You are the TermJobs AI Hiring Assistant. You help Hiring Managers monitor candidate onboarding, review reported candidate issues, and manage task rectifications.
+
+System Context:
+{context_str}
+
+Hiring Manager Message: "{user_message}"
+
+Instructions:
+- Provide a helpful, concise, professional response to the Hiring Manager.
+- If an issue was just marked as fixed/rectified, confirm it clearly to the user.
+- If there are open candidate issues, remind them politely or answer their query.
+- Be direct, friendly, and structured.
+"""
+        reply = client.generate_text(prompt, tier="small").strip()
+    except Exception as e:
+        reply = f"I noted your message. (Note: Groq LLM API response error: {str(e)})"
+
+    return {
+        "reply": reply,
+        "resolved_issues": resolved_issue_ids,
+        "open_issues_count": len([i for i in issues_list if i.get("status") == "open"]),
+        "issues": issues_list,
+    }
+
+

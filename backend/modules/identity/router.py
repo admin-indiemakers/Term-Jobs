@@ -117,6 +117,7 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         department=user.department or "",
         created_by=user.created_by,
         is_active=user.is_active,
+        candidate_id=getattr(user, 'candidate_id', '') or '',
     )
 
     return TokenResponse(access_token=token, user=user_resp)
@@ -141,6 +142,7 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
         department=current_user.department or "",
         created_by=current_user.created_by,
         is_active=current_user.is_active,
+        candidate_id=getattr(current_user, 'candidate_id', '') or '',
     )
 
 
