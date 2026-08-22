@@ -141,6 +141,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [reqCandidateSearch, setReqCandidateSearch] = useState('');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
   const [selectedCompanyTab, setSelectedCompanyTab] = useState('All');
+  const [screenedReqSummary, setScreenedReqSummary] = useState({});
 
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
   const [addCandidateMode, setAddCandidateMode] = useState('ai'); // 'ai' or 'manual'
@@ -453,12 +454,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   async function loadWorkspace() {
     setLoading(true);
     try {
-      const [rawRequisitions, candidateData, limitData, bankData, interviewData] = await Promise.all([
+      const [rawRequisitions, candidateData, limitData, bankData, interviewData, screenedSummaryData] = await Promise.all([
         request('/requisitions', { token: authToken }),
         request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] })),
         request('/api/settings/candidate-limit', { token: authToken }).catch(() => ({ limit: null })),
         request('/candidates/bank', { token: authToken }).catch(() => []),
         request('/api/interviews/vendor', { token: authToken }).catch(() => []),
+        request('/candidates/bank/screened-summary', { token: authToken }).catch(() => ({ screened_requisitions: {} })),
       ]);
 
       const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
@@ -468,6 +470,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setCandidateLimit(limitData?.limit ?? null);
       setBankCandidates(bankData || []);
       setInterviews(Array.isArray(interviewData) ? interviewData : []);
+      setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
       if (list.length) await selectRequisition(list.find((item) => item.status === 'Published')?.id || list[0].id, list);
     } catch (err) {
       setError(err.message || 'Unable to load your recruiter workspace.');
@@ -662,6 +665,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         setSelectedCandidateIds([]);
         if (Array.isArray(response.screened_candidates) && response.screened_candidates.length) {
           setScreenedSubmissions(response.screened_candidates);
+          setScreenedReqSummary((prev) => ({
+            ...prev,
+            [selectedReqId]: {
+              screened_count: response.screened_candidates.length,
+              has_cache: true,
+            }
+          }));
         } else {
           const subs = await request(`/candidates?requisition_id=${selectedReqId}`, { token: authToken }).catch(() => []);
           setScreenedSubmissions(subs || []);
@@ -962,6 +972,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ background: '#10b981', color: '#ffffff', fontSize: '0.72rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Published</span>
+                {(screenedReqSummary[selected?.id] || (screenedSubmissions.length > 0)) && (
+                  <span style={{ background: '#059669', color: '#ecfdf5', fontSize: '0.72rem', fontWeight: 800, padding: '4px 10px', borderRadius: '6px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    ✓ AI Screened ({screenedReqSummary[selected?.id]?.screened_count || screenedSubmissions.length})
+                  </span>
+                )}
                 <span style={{ color: '#94a3b8', fontWeight: 600, fontSize: '0.9rem' }}>{selected?.company_name || selected?.company?.name || 'Bearitt'}</span>
               </div>
               <button
@@ -1189,15 +1204,42 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
                               {/* Left Role & Skills */}
                               <div style={{ minWidth: '220px', flex: '1 1 240px', paddingRight: '20px' }}>
-                                <h3 style={{
-                                  fontSize: '1.05rem',
-                                  fontWeight: 700,
-                                  color: '#2563eb',
-                                  margin: 0,
-                                  letterSpacing: '-0.01em'
-                                }}>
-                                  {item.title || 'Untitled role'}
-                                </h3>
+                                {(() => {
+                                  const sInfo = screenedReqSummary[item.id] || (item.id === selectedReqId && screenedSubmissions.length ? { screened_count: screenedSubmissions.length } : null);
+                                  const isScrn = Boolean(sInfo && sInfo.screened_count > 0);
+                                  return (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                                      <h3 style={{
+                                        fontSize: '1.05rem',
+                                        fontWeight: 700,
+                                        color: '#2563eb',
+                                        margin: 0,
+                                        letterSpacing: '-0.01em'
+                                      }}>
+                                        {item.title || 'Untitled role'}
+                                      </h3>
+                                      {isScrn && (
+                                        <span style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: '5px',
+                                          fontSize: '0.70rem',
+                                          fontWeight: 800,
+                                          background: '#ecfdf5',
+                                          color: '#059669',
+                                          border: '1px solid #a7f3d0',
+                                          padding: '2px 8px',
+                                          borderRadius: '999px',
+                                          textTransform: 'uppercase',
+                                          letterSpacing: '0.04em'
+                                        }}>
+                                          <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+                                          ✓ Screened ({sInfo.screened_count})
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
 
                                 {skills.length > 0 && (
                                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>

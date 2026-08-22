@@ -505,6 +505,54 @@ def delete_bank_candidate(candidate_id: str, current_user: User = Depends(get_cu
     return {"status": "success", "message": "Candidate deleted from bank"}
 
 
+@router.get("/bank/screened-summary")
+def get_screened_summary(
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Return a map of all requisitions screened by the current recruiter (from both active cache & submissions)."""
+    with get_session() as session:
+        now = datetime.now(timezone.utc)
+        summary_map = {}
+
+        # 1. From temporary active screening cache
+        active_caches = (
+            session.query(ScreeningCache)
+            .filter(ScreeningCache.recruiter_id == current_user.id)
+            .order_by(ScreeningCache.created_at.desc())
+            .all()
+        )
+        for cache_doc in active_caches:
+            exp = cache_doc.expires_at
+            is_active = (exp > now) if (exp and exp.tzinfo) else (exp > datetime.utcnow()) if exp else False
+            if is_active and cache_doc.requisition_id and cache_doc.results:
+                req_id = cache_doc.requisition_id
+                if req_id not in summary_map:
+                    summary_map[req_id] = {
+                        "screened_count": len(cache_doc.results),
+                        "has_cache": True,
+                        "latest_screened_at": cache_doc.created_at.isoformat() if cache_doc.created_at else None
+                    }
+
+        # 2. From candidate submissions (permanent shortlisted)
+        submissions = (
+            session.query(CandidateSubmission)
+            .all()
+        )
+        for sub in submissions:
+            if sub.requisition_id:
+                if sub.requisition_id not in summary_map:
+                    summary_map[sub.requisition_id] = {
+                        "screened_count": 1,
+                        "has_cache": False,
+                        "latest_screened_at": sub.created_at.isoformat() if sub.created_at else None
+                    }
+
+        return {
+            "status": "success",
+            "screened_requisitions": summary_map
+        }
+
+
 @router.get("/bank/screening-cache/{requisition_id}")
 def get_screening_cache(
     requisition_id: str,
