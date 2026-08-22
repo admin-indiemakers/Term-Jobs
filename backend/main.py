@@ -86,6 +86,7 @@ app.include_router(resume_screener_router, prefix="/api", tags=["Resume Screener
 app.include_router(interview_router, prefix="/api", tags=["Interviews"])
 app.include_router(onboarding_router, tags=["Onboarding"])
 app.include_router(notifications_router)
+app.include_router(onboarding_router)
 
 
 

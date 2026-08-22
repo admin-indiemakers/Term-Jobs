@@ -23,14 +23,22 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(
-    async (email, password, candidateId) => {
-      // For candidates: send candidate_id as username; for others: send email only
-      const body = candidateId
-        ? { username: candidateId, password }
-        : { email, password };
+    async (email, password) => {
       const data = await request('/api/auth/login', { 
         method: 'POST', 
-        body 
+        body: { email, password } 
+      });
+      applySession(data.access_token, data.user);
+      return data.user;
+    },
+    [applySession]
+  );
+
+  const loginWithCandidateId = useCallback(
+    async (candidateId, password) => {
+      const data = await request('/api/auth/login', { 
+        method: 'POST', 
+        body: { username: candidateId, password } 
       });
       applySession(data.access_token, data.user);
       return data.user;
@@ -60,7 +68,7 @@ export function AuthProvider({ children }) {
   }, [token, logout]);
 
   return (
-    <AuthContext.Provider value={{ user, token, initializing, login, logout }}>
+    <AuthContext.Provider value={{ user, token, initializing, login, loginWithCandidateId, logout }}>
       {children}
     </AuthContext.Provider>
   );

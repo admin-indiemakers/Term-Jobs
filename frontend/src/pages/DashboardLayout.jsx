@@ -45,15 +45,13 @@ export default function DashboardLayout() {
       ]
       : user.role === 'Recruiter'
         ? [
-          { section: 'Workspace' },
-          { to: '/dashboard/recruiter', label: 'Dashboard', end: true },
-          { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true },
-          { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true },
-          { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true },
-          { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true },
-          { section: 'Candidate Management' },
-          { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true },
-          { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true },
+          { to: '/dashboard/recruiter', label: 'Dashboard', end: true, section: 'Workspace' },
+          { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true, section: 'Workspace' },
+          { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true, section: 'Workspace' },
+          { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true, section: 'Workspace' },
+          { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true, section: 'Workspace' },
+          { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'Candidate Management' },
+          { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'Candidate Management' },
         ]
         : user.role === 'Director'
           ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
@@ -204,25 +202,34 @@ export default function DashboardLayout() {
             </>
           ) : (
             <>
-              {navItems.map((item) =>
-                item.section ? (
-                  <div key={item.section} className="nav-section-label" style={{ marginTop: item.section === 'Candidate Management' ? '16px' : undefined }}>{item.section}</div>
-                ) : item.to ? (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                  >
-                    {item.label}
-                  </NavLink>
-                ) : (
-                  <span key={item.label} className="nav-link locked">
-                    {item.label}
-                    <span className="soon-tag">Soon</span>
-                  </span>
-                )
-              )}
+              {(() => {
+                let lastSection = '';
+                return navItems.map((item) => {
+                  const section = item.section || 'Workspace';
+                  const sectionLabel = section !== lastSection ? (
+                    <div key={`section-${section}`} className="nav-section-label">{section}</div>
+                  ) : null;
+                  if (section !== lastSection) lastSection = section;
+                  return [
+                    sectionLabel,
+                    item.to ? (
+                      <NavLink
+                        key={item.label}
+                        to={item.to}
+                        end={item.end}
+                        className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                      >
+                        {item.label}
+                      </NavLink>
+                    ) : (
+                      <span key={item.label} className="nav-link locked">
+                        {item.label}
+                        <span className="soon-tag">Soon</span>
+                      </span>
+                    ),
+                  ];
+                }).flat();
+              })()}
             </>
           )}
         </nav>

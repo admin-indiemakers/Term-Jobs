@@ -1,240 +1,157 @@
-"""Onboarding checklist endpoints.
+"""Onboarding checklist API.
 
-Each accepted candidate gets an onboarding checklist generated (or manually
-created) by the hiring manager.  The AI-assisted endpoint uses Groq to
-suggest items based on the candidate's role and company context.
+Each accepted candidate gets a checklist of items (equipment, software,
+training, custom) that the hiring manager sets up and the candidate fills out.
+Status is auto-computed based on completion percentage.
 """
-import json
-import logging
 import uuid
-from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from modules.identity.domain.models import User
-from modules.identity.router import get_current_user
-from modules.shared.config import settings
-from modules.shared.db import db, Session, get_session
+from modules.identity.services.auth_service import decode_access_token
+from modules.shared.db import db, get_session
 
-logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/onboarding", tags=["Onboarding"])
 
-UTC = timezone.utc
 
-
-# ---------------------------------------------------------------------------
-# Pydantic schemas
-# ---------------------------------------------------------------------------
-class EquipmentItem(BaseModel):
-    required: bool = False
-    spec: str = ""
-
+# ── Schemas ──────────────────────────────────────────────────────────────────
 
 class SoftwareItem(BaseModel):
+    id: str
+    label: str
     enabled: bool = False
     note: str = ""
-
 
 class TrainingItem(BaseModel):
+    id: str
+    label: str
     enabled: bool = False
-
+    mandatory: bool = False
+    note: str = ""
 
 class CustomItem(BaseModel):
-    id: str = ""
-    label: str = ""
-    section: str = ""  # equipment | software | training
+    id: str
+    label: str
+    section: str  # equipment | software | training
     enabled: bool = False
     note: str = ""
 
-
 class OnboardingChecklist(BaseModel):
-    candidate_id: str = ""
+    candidate_id: str
     candidate_name: str = ""
     candidate_email: str = ""
     requisition_id: str = ""
     requisition_title: str = ""
     company_name: str = ""
+    vendor_name: str = ""
 
-    status: str = "not_started"  # not_started | in_progress | completed
+    laptop_required: bool = False
+    laptop_spec: str = "Standard build"
+    badge_required: bool = False
 
-    laptop: EquipmentItem = Field(default_factory=EquipmentItem)
-    badge: bool = False
-
-    software: dict[str, SoftwareItem] = Field(default_factory=dict)
-
-    mandatory_training: dict[str, TrainingItem] = Field(default_factory=dict)
-    optional_training: dict[str, TrainingItem] = Field(default_factory=dict)
-
-    custom_items: list[CustomItem] = Field(default_factory=list)
-
-    # Candidate fills these — tracks which items are done
-    completed_items: list[str] = Field(default_factory=list)
+    software: list[SoftwareItem] = []
+    training: list[TrainingItem] = []
+    custom_items: list[CustomItem] = []
 
     notes: str = ""
+
+    # Candidate fills these
+    completed_items: dict[str, bool] = {}  # item_id -> True/False
+    status: str = "not_started"  # not_started | in_progress | completed
+
     created_at: str = ""
     updated_at: str = ""
 
 
 class OnboardingUpdate(BaseModel):
-    # Flexible — accept any subset of fields the client sends
     model_config = {"extra": "allow"}
-
-    status: str | None = None
-    laptop: EquipmentItem | None = None
-    badge: bool | None = None
-    software: dict[str, SoftwareItem] | None = None
-    mandatory_training: dict[str, TrainingItem] | None = None
-    optional_training: dict[str, TrainingItem] | None = None
+    laptop_required: bool | None = None
+    laptop_spec: str | None = None
+    badge_required: bool | None = None
+    software: list[SoftwareItem] | None = None
+    training: list[TrainingItem] | None = None
     custom_items: list[CustomItem] | None = None
-    completed_items: list[str] | None = None
     notes: str | None = None
+    completed_items: dict[str, bool] | None = None
+    status: str | None = None
 
 
-class GenerateRequest(BaseModel):
-    candidate_id: str
-    role_title: str = ""
-    company_name: str = ""
-    tech_stack: list[str] = Field(default_factory=list)
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 def _coll():
     return db["onboarding_checklists"]
 
 
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+def _get_current_user(authorization: str | None) -> dict | None:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization.split(" ")[1]
+    payload = decode_access_token(token)
+    if not payload or "sub" not in payload:
+        return None
+    with get_session() as session:
+        user = session.get(User, payload["sub"])
+        if user:
+            return {"id": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id}
+    return None
 
 
-def _ensure_software_defaults(sw: dict) -> dict:
-    defaults = {
-        "vpn": SoftwareItem(),
-        "email": SoftwareItem(enabled=True),
-        "github": SoftwareItem(),
-        "slack": SoftwareItem(enabled=True),
-        "client": SoftwareItem(),
-    }
-    for k, v in defaults.items():
-        if k not in sw:
-            sw[k] = v
-    return sw
-
-
-def _count_required_items(doc: dict) -> int:
-    """Count how many items the candidate needs to complete."""
-    count = 0
+def _auto_status(doc: dict) -> str:
+    """Compute onboarding status based on completed items."""
+    required = []
     # Equipment
-    if doc.get("laptop", {}).get("required"):
-        count += 1
-    if doc.get("badge"):
-        count += 1
+    if doc.get("laptop_required"):
+        required.append("laptop")
+    if doc.get("badge_required"):
+        required.append("badge")
     # Software
-    for item in (doc.get("software") or {}).values():
-        if isinstance(item, dict) and item.get("enabled"):
-            count += 1
-    # Optional training
-    for item in (doc.get("optional_training") or {}).values():
-        if isinstance(item, dict) and item.get("enabled"):
-            count += 1
+    for s in doc.get("software", []):
+        if s.get("enabled"):
+            required.append(s["id"])
+    # Training
+    for t in doc.get("training", []):
+        if t.get("enabled"):
+            required.append(t["id"])
     # Custom items
-    for item in (doc.get("custom_items") or []):
-        if isinstance(item, dict) and item.get("enabled"):
-            count += 1
-    return count
+    for ci in doc.get("custom_items", []):
+        if ci.get("enabled"):
+            required.append(ci["id"])
+
+    if not required:
+        return "not_started"
+
+    completed = doc.get("completed_items", {})
+    done_count = sum(1 for r in required if completed.get(r))
+    if done_count == 0:
+        return "not_started"
+    if done_count >= len(required):
+        return "completed"
+    return "in_progress"
 
 
-def _ensure_training_defaults(mt: dict, ot: dict) -> tuple[dict, dict]:
-    mandatory_defaults = {"posh": TrainingItem(enabled=True), "code_of_conduct": TrainingItem(enabled=True)}
-    optional_defaults = {
-        "induction": TrainingItem(),
-        "security": TrainingItem(),
-        "nda": TrainingItem(),
-    }
-    for k, v in mandatory_defaults.items():
-        if k not in mt:
-            mt[k] = v
-    for k, v in optional_defaults.items():
-        if k not in ot:
-            ot[k] = v
-    return mt, ot
+# ── Routes ───────────────────────────────────────────────────────────────────
 
-
-# ---------------------------------------------------------------------------
-# GET – fetch onboarding checklist for a candidate
-# ---------------------------------------------------------------------------
 @router.get("/{candidate_id}")
-def get_onboarding(
-    candidate_id: str,
-    current_user: User = Depends(get_current_user),
-) -> dict:
+def get_onboarding(candidate_id: str, authorization: str | None = None):
     doc = _coll().find_one({"candidate_id": candidate_id})
     if not doc:
-        raise HTTPException(status_code=404, detail="No onboarding checklist found for this candidate")
+        raise HTTPException(status_code=404, detail="No onboarding checklist found")
     doc.pop("_id", None)
     return doc
 
 
-# ---------------------------------------------------------------------------
-# PUT – update onboarding checklist
-# ---------------------------------------------------------------------------
-@router.put("/{candidate_id}")
-def update_onboarding(
-    candidate_id: str,
-    body: OnboardingUpdate,
-    current_user: User = Depends(get_current_user),
-) -> dict:
-    update_fields: dict = {k: v for k, v in body.model_dump().items() if v is not None and k != "candidate_id"}
-    update_fields["updated_at"] = _now()
-
-    result = _coll().update_one(
-        {"candidate_id": candidate_id},
-        {"$set": update_fields},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="No onboarding checklist found for this candidate")
-
-    doc = _coll().find_one({"candidate_id": candidate_id})
-    doc.pop("_id", None)
-
-    # Auto-compute status from completed_items
-    completed = set(doc.get("completed_items", []))
-    total_items = _count_required_items(doc)
-    if total_items > 0 and len(completed) == total_items:
-        new_status = "completed"
-    elif completed:
-        new_status = "in_progress"
-    else:
-        new_status = "not_started"
-    if doc.get("status") != new_status:
-        _coll().update_one(
-            {"candidate_id": candidate_id},
-            {"$set": {"status": new_status}},
-        )
-        doc["status"] = new_status
-
-    return doc
-
-
-# ---------------------------------------------------------------------------
-# POST – create a new onboarding checklist (blank or pre-filled)
-# ---------------------------------------------------------------------------
 @router.post("/{candidate_id}")
-def create_onboarding(
-    candidate_id: str,
-    current_user: User = Depends(get_current_user),
-) -> dict:
+def create_onboarding(candidate_id: str, authorization: str | None = None):
+    """Create a blank onboarding checklist for a candidate."""
     existing = _coll().find_one({"candidate_id": candidate_id})
     if existing:
         existing.pop("_id", None)
         return existing
 
-    now = _now()
-    software = _ensure_software_defaults({})
-    mt, ot = _ensure_training_defaults({}, {})
-
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
     doc = {
         "candidate_id": candidate_id,
         "candidate_name": "",
@@ -242,14 +159,16 @@ def create_onboarding(
         "requisition_id": "",
         "requisition_title": "",
         "company_name": "",
-        "status": "not_started",
-        "laptop": {"required": True, "spec": "Standard build"},
-        "badge": True,
-        "software": {k: v.model_dump() for k, v in software.items()},
-        "mandatory_training": {k: v.model_dump() for k, v in mt.items()},
-        "optional_training": {k: v.model_dump() for k, v in ot.items()},
+        "vendor_name": "",
+        "laptop_required": False,
+        "laptop_spec": "Standard build",
+        "badge_required": False,
+        "software": [],
+        "training": [],
         "custom_items": [],
         "notes": "",
+        "completed_items": {},
+        "status": "not_started",
         "created_at": now,
         "updated_at": now,
     }
@@ -258,145 +177,100 @@ def create_onboarding(
     return doc
 
 
-# ---------------------------------------------------------------------------
-# POST – AI-generate onboarding checklist using Groq
-# ---------------------------------------------------------------------------
-@router.post("/generate")
-def generate_onboarding(
-    body: GenerateRequest,
-    current_user: User = Depends(get_current_user),
-) -> dict:
-    """Use Groq LLM to generate an intelligent onboarding checklist based on
-    the candidate's role, company, and tech stack."""
-    # Check if Groq is configured
-    if not settings.groq_api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="AI generation unavailable — GROQ_API_KEY not configured",
-        )
+@router.put("/{candidate_id}")
+def update_onboarding(candidate_id: str, body: OnboardingUpdate):
+    """Update the onboarding checklist (hiring manager setup or candidate completion)."""
+    existing = _coll().find_one({"candidate_id": candidate_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="No onboarding checklist found")
 
-    import httpx
+    from datetime import datetime, timezone
+    updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "candidate_id"}
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
 
-    # Build the prompt
-    role_context = body.role_title or "Software Engineer"
-    company_context = body.company_name or "the company"
-    tech_str = ", ".join(body.tech_stack[:10]) if body.tech_stack else "general tech"
+    # Merge completed_items (don't replace entirely)
+    if body.completed_items is not None:
+        existing_completed = existing.get("completed_items", {})
+        existing_completed.update(body.completed_items)
+        updates["completed_items"] = existing_completed
 
-    prompt = f"""You are an HR onboarding expert. Generate an onboarding checklist for a new hire.
+    _coll().update_one({"candidate_id": candidate_id}, {"$set": updates})
 
-Role: {role_context}
-Company: {company_context}
-Tech stack: {tech_str}
-
-Return a JSON object with EXACTLY this structure (no markdown, no commentary):
-
-{{
-  "laptop": {{"required": true, "spec": "Developer build"}},
-  "badge": true,
-  "software": {{
-    "vpn": {{"enabled": true, "note": ""}},
-    "email": {{"enabled": true, "note": ""}},
-    "github": {{"enabled": true/false, "note": ""}},
-    "slack": {{"enabled": true/false, "note": ""}},
-    "client": {{"enabled": true/false, "note": "specific system name if any"}}
-  }},
-  "mandatory_training": {{
-    "posh": {{"enabled": true}},
-    "code_of_conduct": {{"enabled": true}}
-  }},
-  "optional_training": {{
-    "induction": {{"enabled": true/false}},
-    "security": {{"enabled": true/false}},
-    "nda": {{"enabled": true/false}}
-  }},
-  "notes": "Brief reasoning for the choices made"
-}}
-
-Rules:
-- Engineers always need VPN, GitHub, email, Slack
-- Non-engineers typically skip GitHub
-- Everyone gets POSH + code of conduct training
-- Security training for roles handling sensitive data
-- NDA if client-facing role
-- Badge for office access
-- Keep laptop spec appropriate to the role
-- Return ONLY the JSON object"""
-
-    try:
-        resp = httpx.post(
-            f"{settings.groq_base_url}/chat/completions",
-            json={
-                "model": settings.groq_default_model,
-                "messages": [
-                    {"role": "system", "content": "You are a precise HR onboarding assistant. Return only valid JSON."},
-                    {"role": "user", "content": prompt},
-                ],
-                "stream": False,
-                "response_format": {"type": "json_object"},
-            },
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {settings.groq_api_key}",
-            },
-            timeout=60.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        raw = data["choices"][0]["message"]["content"].strip()
-        raw = raw.strip("`")
-        if raw.startswith("json"):
-            raw = raw[4:].strip()
-        generated = json.loads(raw)
-    except Exception as exc:
-        logger.warning("Groq onboarding generation failed: %s", exc)
-        raise HTTPException(status_code=502, detail=f"AI generation failed: {exc}")
-
-    now = _now()
-    software = _ensure_software_defaults(generated.get("software", {}))
-    mt, ot = _ensure_training_defaults(
-        generated.get("mandatory_training", {}),
-        generated.get("optional_training", {}),
-    )
-
-    doc = {
-        "candidate_id": body.candidate_id,
-        "candidate_name": "",
-        "candidate_email": "",
-        "requisition_id": "",
-        "requisition_title": body.role_title,
-        "company_name": body.company_name,
-        "status": "not_started",
-        "laptop": generated.get("laptop", {"required": True, "spec": "Standard build"}),
-        "badge": generated.get("badge", True),
-        "software": {k: v.model_dump() if hasattr(v, "model_dump") else v for k, v in software.items()},
-        "mandatory_training": {k: v.model_dump() if hasattr(v, "model_dump") else v for k, v in mt.items()},
-        "optional_training": {k: v.model_dump() if hasattr(v, "model_dump") else v for k, v in ot.items()},
-        "custom_items": [],
-        "notes": generated.get("notes", ""),
-        "created_at": now,
-        "updated_at": now,
-    }
-
-    # Upsert
-    _coll().update_one(
-        {"candidate_id": body.candidate_id},
-        {"$set": doc},
-        upsert=True,
-    )
+    # Auto-compute status
+    doc = _coll().find_one({"candidate_id": candidate_id})
+    doc.pop("_id", None)
+    new_status = _auto_status(doc)
+    if new_status != doc.get("status"):
+        _coll().update_one({"candidate_id": candidate_id}, {"$set": {"status": new_status}})
+        doc["status"] = new_status
 
     return doc
 
 
-# ---------------------------------------------------------------------------
-# GET – list all onboarding checklists for the current tenant
-# ---------------------------------------------------------------------------
+@router.post("/generate")
+def generate_checklist(data: dict):
+    """AI-generate an onboarding checklist using Groq."""
+    role_title = data.get("role_title", "")
+    company_name = data.get("company_name", "")
+    tech_stack = data.get("tech_stack", [])
+
+    prompt = f"""Generate an onboarding checklist for a new hire:
+Role: {role_title}
+Company: {company_name}
+Tech stack: {', '.join(tech_stack) if tech_stack else 'Not specified'}
+
+Return a JSON object with exactly these fields:
+{{
+  "laptop_required": true/false,
+  "laptop_spec": "Standard build" or "Developer build" or "Design build (GPU)",
+  "badge_required": true/false,
+  "software": [
+    {{"id": "vpn", "label": "VPN access", "enabled": true/false}},
+    {{"id": "email", "label": "Company email", "enabled": true/false}},
+    {{"id": "github", "label": "GitHub / repo access", "enabled": true/false}},
+    {{"id": "slack", "label": "Slack / Teams", "enabled": true/false}},
+    {{"id": "client", "label": "Client / dept system", "enabled": true/false}}
+  ],
+  "training": [
+    {{"id": "posh", "label": "POSH training", "enabled": true, "mandatory": true}},
+    {{"id": "codeofconduct", "label": "Code of conduct & data privacy", "enabled": true, "mandatory": true}},
+    {{"id": "induction", "label": "Company induction", "enabled": true/false, "mandatory": false}},
+    {{"id": "security", "label": "Security & data-handling awareness", "enabled": true/false, "mandatory": false}},
+    {{"id": "nda", "label": "Client-specific NDA / compliance", "enabled": true/false, "mandatory": false}}
+  ]
+}}
+
+Rules:
+- Engineers/DevOps get GitHub=true, VPN=true, laptop=Developer build
+- Sales/Finance get Client=true, GitHub=false
+- Always enable POSH and code of conduct as mandatory
+- Enable induction for everyone
+- Enable security for technical roles
+- Enable NDA if client-facing
+- Return ONLY the JSON, no markdown fences."""
+
+    try:
+        from modules.requisition.llm.groq import GroqClient
+        client = GroqClient()
+        import json
+        raw = client.generate_text(prompt, tier="small")
+        # Clean markdown fences
+        raw = raw.strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+        result = json.loads(raw)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
 @router.get("/")
-def list_onboarding(
-    current_user: User = Depends(get_current_user),
-) -> list[dict]:
-    cursor = _coll().find({})
-    results = []
-    for doc in cursor:
-        doc.pop("_id", None)
-        results.append(doc)
-    return results
+def list_onboarding():
+    """List all onboarding checklists."""
+    docs = list(_coll().find())
+    for d in docs:
+        d.pop("_id", None)
+    return docs
