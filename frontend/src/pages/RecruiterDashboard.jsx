@@ -138,6 +138,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
 
   const [showAddCandidateModal, setShowAddCandidateModal] = useState(false);
+  const [addCandidateMode, setAddCandidateMode] = useState('ai'); // 'ai' or 'manual'
+  const [bulkFiles, setBulkFiles] = useState([]);
+  const [bulkVendor, setBulkVendor] = useState('');
+  const [isDraggingBank, setIsDraggingBank] = useState(false);
+  const [bankSuccessMsg, setBankSuccessMsg] = useState('');
   const [screenedSubmissions, setScreenedSubmissions] = useState([]);
   const [screeningProgress, setScreeningProgress] = useState({
     total: 0,
@@ -152,21 +157,51 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [newCandVendor, setNewCandVendor] = useState('');
   const [newCandFile, setNewCandFile] = useState(null);
 
+  async function handleDownloadCandidatePdf(candidateId, filename) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/candidates/bank/${candidateId}/resume-pdf`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (!res.ok) {
+        throw new Error('Failed to load resume PDF.');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (err) {
+      alert(err.message || 'Could not load resume PDF.');
+    }
+  }
+
   async function handleAddCandidateSubmit(e) {
     if (e) e.preventDefault();
-    if (!newCandName.trim()) {
-      return setError('Candidate name is required.');
-    }
     setParsingBank(true);
     setError('');
+    setBankSuccessMsg('');
 
     const form = new FormData();
-    if (newCandName) form.append('name', newCandName.trim());
-    if (newCandEmail) form.append('email', newCandEmail.trim());
-    if (newCandPhone) form.append('phone', newCandPhone.trim());
-    if (newCandVendor) form.append('vendor_company_name', newCandVendor.trim());
-    if (newCandTitle) form.append('candidate_title', newCandTitle.trim());
-    if (newCandFile) form.append('files', newCandFile);
+
+    if (addCandidateMode === 'ai') {
+      if (!bulkFiles || bulkFiles.length === 0) {
+        setParsingBank(false);
+        return setError('Please select or drop at least one resume PDF or DOCX file.');
+      }
+      for (const f of bulkFiles) {
+        form.append('files', f);
+      }
+      form.append('vendor_company_name', (bulkVendor || user?.tenant_name || 'bridgeon').trim());
+    } else {
+      if (!newCandName.trim()) {
+        setParsingBank(false);
+        return setError('Candidate name is required.');
+      }
+      if (newCandName) form.append('name', newCandName.trim());
+      if (newCandEmail) form.append('email', newCandEmail.trim());
+      if (newCandPhone) form.append('phone', newCandPhone.trim());
+      if (newCandVendor) form.append('vendor_company_name', newCandVendor.trim());
+      if (newCandTitle) form.append('candidate_title', newCandTitle.trim());
+      if (newCandFile) form.append('files', newCandFile);
+    }
 
     try {
       const response = await fetch(`${API_BASE_URL}/candidates/bank/upload`, {
@@ -182,14 +217,17 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setBankCandidates(updatedBank || []);
 
       setShowAddCandidateModal(false);
+      setBulkFiles([]);
       setNewCandName('');
       setNewCandEmail('');
       setNewCandPhone('');
       setNewCandTitle('');
       setNewCandVendor('');
       setNewCandFile(null);
+      setBankSuccessMsg(`Successfully processed and added ${data.count || bulkFiles.length || 1} candidate profile(s) with Groq AI!`);
+      setTimeout(() => setBankSuccessMsg(''), 6000);
     } catch (err) {
-      setError(err.message || 'Failed to save candidate.');
+      setError(err.message || 'Failed to process candidates.');
     } finally {
       setParsingBank(false);
     }
@@ -1797,121 +1835,586 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         </div>
       )}
       {/* Add Candidate Modal */}
-      {showAddCandidateModal && (
-        <div className="modal-overlay" onClick={() => setShowAddCandidateModal(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, backdropFilter: 'blur(4px)' }}>
-          <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '540px', width: '90%', padding: '24px', background: '#fff', borderRadius: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>Add New Candidate</h3>
-              <button onClick={() => setShowAddCandidateModal(false)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
-            </div>
-
-            <form onSubmit={handleAddCandidateSubmit} style={{ marginTop: '16px', display: 'grid', gap: '14px' }}>
-              <div>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  Candidate Name *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. John Doe"
-                  value={newCandName}
-                  onChange={(e) => setNewCandName(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        {showAddCandidateModal && (
+          <div
+            className="modal-overlay"
+            onClick={() => !parsingBank && setShowAddCandidateModal(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(15, 23, 42, 0.65)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 100,
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <div
+              className="modal-content glass-panel"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                maxWidth: '620px',
+                width: '92%',
+                padding: '24px 28px',
+                background: '#ffffff',
+                borderRadius: '20px',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              }}
+            >
+              {/* Modal Header */}
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  borderBottom: '1px solid #f1f5f9',
+                  paddingBottom: '14px',
+                }}
+              >
                 <div>
-                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Email Address
-                  </label>
-                  <input
-                    type="email"
-                    placeholder="john@example.com"
-                    value={newCandEmail}
-                    onChange={(e) => setNewCandEmail(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                  />
+                  <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                    Add Candidates to Talent Pool
+                  </h3>
+                  <p style={{ fontSize: '0.82rem', color: '#64748b', margin: '4px 0 0 0' }}>
+                    Auto-extract candidate identity, contact info &amp; skills with Groq AI.
+                  </p>
                 </div>
-
-                <div>
-                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Phone Number
-                  </label>
-                  <input
-                    type="tel"
-                    placeholder="+1 555-0199"
-                    value={newCandPhone}
-                    onChange={(e) => setNewCandPhone(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Vendor / Company Name
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Acme Staffing"
-                    value={newCandVendor}
-                    onChange={(e) => setNewCandVendor(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                  />
-                </div>
-
-                <div>
-                  <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                    Job Title / Role
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Senior React Developer"
-                    value={newCandTitle}
-                    onChange={(e) => setNewCandTitle(e.target.value)}
-                    style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.9rem' }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="form-label" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
-                  Upload Resume (PDF - Optional)
-                </label>
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  onChange={(e) => setNewCandFile(e.target.files?.[0] || null)}
-                  style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
                 <button
                   type="button"
-                  onClick={() => setShowAddCandidateModal(false)}
+                  onClick={() => !parsingBank && setShowAddCandidateModal(false)}
                   disabled={parsingBank}
-                  style={{ background: '#f1f5f9', color: '#475569', border: 0, padding: '10px 16px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer' }}
+                  style={{
+                    background: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    fontSize: '1.1rem',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="glow-btn"
-                  disabled={parsingBank || !newCandName.trim()}
-                  style={{ background: '#2563eb', color: '#fff', border: 0, padding: '10px 20px', borderRadius: '8px', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  {parsingBank ? 'Saving...' : 'Save Candidate'}
+                  ✕
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {showInterviews && (
+              {/* Tab Selector */}
+              <div
+                style={{
+                  display: 'flex',
+                  background: '#f1f5f9',
+                  padding: '4px',
+                  borderRadius: '12px',
+                  marginTop: '16px',
+                  gap: '4px',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setAddCandidateMode('ai')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 0,
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: addCandidateMode === 'ai' ? '#ffffff' : 'transparent',
+                    color: addCandidateMode === 'ai' ? '#2563eb' : '#64748b',
+                    boxShadow: addCandidateMode === 'ai' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  <span>✨ AI Auto-Extract (Bulk Resumes)</span>
+                  <span
+                    style={{
+                      background: '#dbeafe',
+                      color: '#1d4ed8',
+                      fontSize: '0.68rem',
+                      fontWeight: 800,
+                      padding: '2px 6px',
+                      borderRadius: '999px',
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    Recommended
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddCandidateMode('manual')}
+                  style={{
+                    flex: 1,
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    border: 0,
+                    fontSize: '0.85rem',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    background: addCandidateMode === 'manual' ? '#ffffff' : 'transparent',
+                    color: addCandidateMode === 'manual' ? '#0f172a' : '#64748b',
+                    boxShadow: addCandidateMode === 'manual' ? '0 2px 4px rgba(0,0,0,0.06)' : 'none',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  ✍️ Manual Form Entry
+                </button>
+              </div>
+
+              <form onSubmit={handleAddCandidateSubmit} style={{ marginTop: '16px', display: 'grid', gap: '14px' }}>
+                {addCandidateMode === 'ai' ? (
+                  <>
+                    {/* Vendor Company Name */}
+                    <div>
+                      <label
+                        className="form-label"
+                        style={{
+                          display: 'block',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#475569',
+                          textTransform: 'uppercase',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Vendor / Company Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. bridgeon"
+                        value={bulkVendor}
+                        onChange={(e) => setBulkVendor(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 14px',
+                          borderRadius: '10px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.9rem',
+                          color: '#0f172a',
+                        }}
+                      />
+                    </div>
+
+                    {/* Drag & Drop Zone */}
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setIsDraggingBank(true);
+                      }}
+                      onDragLeave={() => setIsDraggingBank(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setIsDraggingBank(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                          const newFiles = Array.from(e.dataTransfer.files).filter(
+                            (f) =>
+                              f.name.toLowerCase().endsWith('.pdf') ||
+                              f.name.toLowerCase().endsWith('.docx') ||
+                              f.name.toLowerCase().endsWith('.doc')
+                          );
+                          setBulkFiles((prev) => [...prev, ...newFiles]);
+                        }
+                      }}
+                      style={{
+                        border: isDraggingBank ? '2px dashed #2563eb' : '2px dashed #cbd5e1',
+                        borderRadius: '14px',
+                        padding: '24px 16px',
+                        textAlign: 'center',
+                        background: isDraggingBank ? '#eff6ff' : '#f8fafc',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s ease',
+                      }}
+                      onClick={() => document.getElementById('bulk-resume-file-input').click()}
+                    >
+                      <input
+                        id="bulk-resume-file-input"
+                        type="file"
+                        multiple
+                        accept=".pdf,.docx,.doc"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            const newFiles = Array.from(e.target.files);
+                            setBulkFiles((prev) => [...prev, ...newFiles]);
+                          }
+                        }}
+                        style={{ display: 'none' }}
+                      />
+                      <div style={{ fontSize: '2.2rem', marginBottom: '8px' }}>📂</div>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
+                        Drag &amp; Drop Resumes Here, or <span style={{ color: '#2563eb' }}>Browse Files</span>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '4px' }}>
+                        Supports PDF and DOCX files. You can select 1 to 100+ resumes at once.
+                      </div>
+                    </div>
+
+                    {/* Selected Files List */}
+                    {bulkFiles.length > 0 && (
+                      <div
+                        style={{
+                          background: '#f8fafc',
+                          padding: '12px 14px',
+                          borderRadius: '12px',
+                          border: '1px solid #e2e8f0',
+                          maxHeight: '150px',
+                          overflowY: 'auto',
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            marginBottom: '8px',
+                          }}
+                        >
+                          <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#0f172a' }}>
+                            {bulkFiles.length} Resume(s) Selected for AI Extraction
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setBulkFiles([]);
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 0,
+                              color: '#ef4444',
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Clear All
+                          </button>
+                        </div>
+                        <div style={{ display: 'grid', gap: '6px' }}>
+                          {bulkFiles.map((file, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                background: '#ffffff',
+                                padding: '6px 10px',
+                                borderRadius: '8px',
+                                border: '1px solid #e2e8f0',
+                                fontSize: '0.8rem',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+                                <span>📄</span>
+                                <span
+                                  style={{
+                                    fontWeight: 600,
+                                    color: '#1e293b',
+                                    whiteSpace: 'nowrap',
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    maxWidth: '360px',
+                                  }}
+                                >
+                                  {file.name}
+                                </span>
+                                <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>
+                                  ({(file.size / 1024).toFixed(1)} KB)
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setBulkFiles(bulkFiles.filter((_, i) => i !== idx));
+                                }}
+                                style={{
+                                  background: 'transparent',
+                                  border: 0,
+                                  color: '#94a3b8',
+                                  cursor: 'pointer',
+                                  fontSize: '0.8rem',
+                                  padding: '2px 4px',
+                                }}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Ingestion Info Box */}
+                    <div
+                      style={{
+                        background: '#eff6ff',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: '1px solid #bfdbfe',
+                        fontSize: '0.8rem',
+                        color: '#1e40af',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                      }}
+                    >
+                      <span>⚡</span>
+                      <span>
+                        Groq AI will automatically extract Name, Email, Phone, Job Title &amp; Skills from each resume and store them in the Candidate Bank table.
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Manual Form Entry */}
+                    <div>
+                      <label
+                        className="form-label"
+                        style={{
+                          display: 'block',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#64748b',
+                          textTransform: 'uppercase',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Candidate Name *
+                      </label>
+                      <input
+                        type="text"
+                        required={addCandidateMode === 'manual'}
+                        placeholder="e.g. John Doe"
+                        value={newCandName}
+                        onChange={(e) => setNewCandName(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '10px 12px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.9rem',
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label
+                          className="form-label"
+                          style={{
+                            display: 'block',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: '#64748b',
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          Email Address
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="john@example.com"
+                          value={newCandEmail}
+                          onChange={(e) => setNewCandEmail(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.9rem',
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          className="form-label"
+                          style={{
+                            display: 'block',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: '#64748b',
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          Phone Number
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="+1 555-0199"
+                          value={newCandPhone}
+                          onChange={(e) => setNewCandPhone(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.9rem',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label
+                          className="form-label"
+                          style={{
+                            display: 'block',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: '#64748b',
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          Vendor / Company Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Acme Staffing"
+                          value={newCandVendor}
+                          onChange={(e) => setNewCandVendor(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.9rem',
+                          }}
+                        />
+                      </div>
+
+                      <div>
+                        <label
+                          className="form-label"
+                          style={{
+                            display: 'block',
+                            fontSize: '0.78rem',
+                            fontWeight: 700,
+                            color: '#64748b',
+                            textTransform: 'uppercase',
+                            marginBottom: '4px',
+                          }}
+                        >
+                          Job Title / Role
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Senior React Developer"
+                          value={newCandTitle}
+                          onChange={(e) => setNewCandTitle(e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '10px 12px',
+                            borderRadius: '8px',
+                            border: '1px solid #cbd5e1',
+                            fontSize: '0.9rem',
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        className="form-label"
+                        style={{
+                          display: 'block',
+                          fontSize: '0.78rem',
+                          fontWeight: 700,
+                          color: '#64748b',
+                          textTransform: 'uppercase',
+                          marginBottom: '4px',
+                        }}
+                      >
+                        Upload Resume (PDF / DOCX - Optional)
+                      </label>
+                      <input
+                        type="file"
+                        accept=".pdf,.docx,.doc"
+                        onChange={(e) => setNewCandFile(e.target.files[0])}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.85rem',
+                        }}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Submit / Cancel Buttons */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCandidateModal(false)}
+                    disabled={parsingBank}
+                    style={{
+                      background: '#f1f5f9',
+                      color: '#475569',
+                      border: 0,
+                      padding: '10px 18px',
+                      borderRadius: '10px',
+                      fontSize: '0.88rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="glow-btn"
+                    disabled={parsingBank || (addCandidateMode === 'ai' ? bulkFiles.length === 0 : !newCandName.trim())}
+                    style={{
+                      background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+                      color: '#fff',
+                      border: 0,
+                      padding: '10px 22px',
+                      borderRadius: '10px',
+                      fontSize: '0.9rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      boxShadow: '0 4px 12px rgba(37, 99, 235, 0.35)',
+                    }}
+                  >
+                    {parsingBank ? (
+                      <>
+                        <span className="spinner" style={{ width: '14px', height: '14px', borderTopColor: '#fff' }} />
+                        <span>Processing with Groq AI...</span>
+                      </>
+                    ) : addCandidateMode === 'ai' ? (
+                      <>
+                        <span>✨ Ingest {bulkFiles.length > 0 ? `${bulkFiles.length} Resume(s)` : 'Resumes'}</span>
+                      </>
+                    ) : (
+                      'Save Candidate'
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+        
+        {showInterviews && (
         <div className="interviews-page-content" style={{ display: 'grid', gap: '20px' }}>
           <WelcomeBanner
             title="Interview Requests & Cal.com Scheduling"

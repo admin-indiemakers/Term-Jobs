@@ -311,12 +311,13 @@ async def upload_bank_candidates(
     candidate_title: str | None = Form(None),
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Add candidates to candidate bank â€” either via PDF upload with AI extraction or manual form entry."""
-    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
-    from modules.resume_screener.pipeline.structurer import structure_resume as _structure_resume_new
-    
+    """Add candidates to candidate bank via AI multi-resume parsing (Groq LLM) or manual form entry."""
     import tempfile
-    vendor_company = vendor_company_name or current_user.tenant_name or "Vendor A"
+    import asyncio
+    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+    from modules.candidate.extractor import extract_candidate_profile
+    
+    vendor_company = vendor_company_name or current_user.tenant_name or "bridgeon"
     saved_candidates = []
     
     # Filter valid files if provided
@@ -325,82 +326,105 @@ async def upload_bank_candidates(
     with get_session() as session:
         if valid_files:
             with tempfile.TemporaryDirectory() as temp_dir_str:
-                for file in valid_files:
-                    file_path = os.path.join(temp_dir_str, file.filename)
-                    content = file.file.read()
-                    with open(file_path, "wb") as buffer:
-                        buffer.write(content)
-                    
-                    try:
+                sem = asyncio.Semaphore(5)  # Process up to 5 resumes concurrently
+                
+                async def process_file(file: UploadFile):
+                    async with sem:
+                        file_path = os.path.join(temp_dir_str, file.filename)
+                        content = await file.read()
+                        with open(file_path, "wb") as buffer:
+                            buffer.write(content)
+                        
                         pdf_base64_data = base64.b64encode(content).decode("utf-8")
-                        extracted_text = _extract_text_new(file_path, "pdf")
-                        import asyncio as _aio
-                        _structured = _aio.run(_structure_resume_new(extracted_text))
-                        parsed = {
-                            "candidate_name": _structured.name,
-                            "candidate_email": _structured.email,
-                            "candidate_phone": None,
-                            "candidate_title": _structured.current_title or "Professional",
-                            "skills": [s.name for s in (_structured.skills or [])],
-                            "summary": _structured.summary or "",
-                            "vendor_company_name": vendor_company,
+                        file_type = "docx" if file.filename.lower().endswith(".docx") else "pdf"
+                        
+                        try:
+                            extracted_text = _extract_text_new(file_path, file_type)
+                        except Exception as ex:
+                            print(f"Text extraction failed for {file.filename}: {ex}")
+                            extracted_text = ""
+                            
+                        # Use Groq LLM candidate profile extractor
+                        profile = await extract_candidate_profile(extracted_text, file.filename)
+                        
+                        # Apply manual overrides if explicitly provided (for single upload)
+                        final_name = (name if len(valid_files) == 1 and name else None) or profile.get("candidate_name") or "Candidate"
+                        final_email = (email if len(valid_files) == 1 and email else None) or profile.get("candidate_email")
+                        final_phone = (phone if len(valid_files) == 1 and phone else None) or profile.get("candidate_phone")
+                        final_title = (candidate_title if len(valid_files) == 1 and candidate_title else None) or profile.get("candidate_title") or "Software Engineer"
+                        final_vendor = vendor_company
+                        
+                        return {
+                            "filename": file.filename,
+                            "name": final_name,
+                            "email": final_email,
+                            "phone": final_phone,
+                            "title": final_title,
+                            "vendor": final_vendor,
+                            "skills": profile.get("skills") or [],
+                            "summary": profile.get("summary") or "",
                             "extracted_text": extracted_text,
-                            "resume_pdf": pdf_base64_data
+                            "resume_pdf": pdf_base64_data,
+                            "details": {"experience_years": profile.get("experience_years")}
                         }
+                
+                extracted_results = await asyncio.gather(*[process_file(f) for f in valid_files], return_exceptions=True)
+                
+                for item in extracted_results:
+                    if isinstance(item, Exception):
+                        print(f"Error processing candidate file: {item}")
+                        continue
+                    
+                    final_name = item["name"]
+                    final_email = item["email"]
+                    final_phone = item["phone"]
+                    final_title = item["title"]
+                    final_vendor = item["vendor"]
+                    
+                    # Upsert candidate in database
+                    existing = None
+                    if final_email:
+                        existing = session.query(Candidate).filter(
+                            Candidate.tenant_id == current_user.tenant_id,
+                            Candidate.candidate_email == final_email
+                        ).first()
+                    if not existing and item["filename"]:
+                        existing = session.query(Candidate).filter(
+                            Candidate.tenant_id == current_user.tenant_id,
+                            Candidate.filename == item["filename"]
+                        ).first()
                         
-                        # Apply manual overrides if provided
-                        final_name = name or parsed.get("candidate_name") or "Candidate"
-                        final_email = email or parsed.get("candidate_email")
-                        final_phone = phone or parsed.get("candidate_phone")
-                        final_title = candidate_title or parsed.get("candidate_title") or "Software Engineer"
-                        final_vendor = vendor_company or parsed.get("vendor_company_name") or "Vendor A"
-                        
-                        # Check if candidate already exists
-                        existing = None
-                        if final_email:
-                            existing = session.query(Candidate).filter(
-                                Candidate.tenant_id == current_user.tenant_id,
-                                Candidate.candidate_email == final_email
-                            ).first()
-                        else:
-                            existing = session.query(Candidate).filter(
-                                Candidate.tenant_id == current_user.tenant_id,
-                                Candidate.filename == file.filename
-                            ).first()
-                        
-                        if existing:
-                            existing.candidate_name = final_name
-                            existing.candidate_title = final_title
-                            existing.candidate_email = final_email
-                            existing.candidate_phone = final_phone
-                            existing.skills = parsed.get("skills", [])
-                            existing.summary = parsed.get("summary", "")
-                            existing.vendor_company_name = final_vendor
-                            existing.extracted_text = parsed.get("extracted_text", "")
-                            existing.resume_pdf = parsed.get("resume_pdf")
-                            existing.updated_at = datetime.now(timezone.utc)
-                            session.add(existing)
-                            saved_candidates.append(existing)
-                        else:
-                            new_candidate = Candidate(
-                                candidate_name=final_name,
-                                candidate_title=final_title,
-                                candidate_email=final_email,
-                                candidate_phone=final_phone,
-                                vendor_company_name=final_vendor,
-                                skills=parsed.get("skills", []),
-                                filename=file.filename,
-                                summary=parsed.get("summary", ""),
-                                extracted_text=parsed.get("extracted_text", ""),
-                                resume_pdf=parsed.get("resume_pdf"),
-                                tenant_id=current_user.tenant_id,
-                                details={}
-                            )
-                            session.add(new_candidate)
-                            saved_candidates.append(new_candidate)
-                    except Exception as e:
-                        print(f"Error parsing resume {file.filename}: {e}")
-                        raise HTTPException(status_code=500, detail=f"Failed to parse resume {file.filename}: {str(e)}")
+                    if existing:
+                        existing.candidate_name = final_name
+                        existing.candidate_title = final_title
+                        existing.candidate_email = final_email
+                        existing.candidate_phone = final_phone
+                        existing.skills = item["skills"]
+                        existing.summary = item["summary"]
+                        existing.vendor_company_name = final_vendor
+                        existing.extracted_text = item["extracted_text"]
+                        existing.resume_pdf = item["resume_pdf"]
+                        existing.details = item["details"]
+                        existing.updated_at = datetime.now(timezone.utc)
+                        session.add(existing)
+                        saved_candidates.append(existing)
+                    else:
+                        new_candidate = Candidate(
+                            candidate_name=final_name,
+                            candidate_title=final_title,
+                            candidate_email=final_email,
+                            candidate_phone=final_phone,
+                            vendor_company_name=final_vendor,
+                            skills=item["skills"],
+                            filename=item["filename"],
+                            summary=item["summary"],
+                            extracted_text=item["extracted_text"],
+                            resume_pdf=item["resume_pdf"],
+                            tenant_id=current_user.tenant_id,
+                            details=item["details"]
+                        )
+                        session.add(new_candidate)
+                        saved_candidates.append(new_candidate)
         else:
             # Manual candidate entry without file upload
             final_name = name or "Candidate"
@@ -419,7 +443,6 @@ async def upload_bank_candidates(
             if existing:
                 existing.candidate_name = final_name
                 existing.candidate_title = final_title
-                existing.candidate_email = final_email
                 existing.candidate_phone = final_phone
                 existing.vendor_company_name = final_vendor
                 existing.updated_at = datetime.now(timezone.utc)
@@ -434,92 +457,20 @@ async def upload_bank_candidates(
                     vendor_company_name=final_vendor,
                     skills=[],
                     filename=None,
-                    summary=f"Manually added candidate: {final_name} from {final_vendor}",
-                    extracted_text=f"Candidate Name: {final_name}\nEmail: {final_email}\nPhone: {final_phone}\nVendor: {final_vendor}",
+                    summary="Manually registered candidate profile.",
+                    extracted_text="",
+                    resume_pdf=None,
                     tenant_id=current_user.tenant_id,
                     details={}
                 )
                 session.add(new_candidate)
                 saved_candidates.append(new_candidate)
-        
-        session.commit()
-    
+
     return {
         "status": "success",
-        "message": f"Successfully saved {len(saved_candidates)} candidate(s).",
-        "candidates": [
-            {
-                "id": c.id,
-                "candidate_name": c.candidate_name,
-                "candidate_email": c.candidate_email,
-                "vendor_company_name": c.vendor_company_name
-            }
-            for c in saved_candidates
-        ]
-    }
-
-
-
-@router.post("/bank/match")
-def match_bank_candidate(
-    body: dict,
-    current_user: User = Depends(get_current_user)
-) -> dict:
-    """Match an existing bank candidate against a requisition using AI screening, saving a CandidateSubmission."""
-    candidate_id = body.get("candidate_id")
-    requisition_id = body.get("requisition_id")
-    if not candidate_id or not requisition_id:
-        raise HTTPException(status_code=400, detail="candidate_id and requisition_id are required")
-        
-    with get_session() as session:
-        cand = session.get(Candidate, candidate_id)
-        if not cand:
-            raise HTTPException(status_code=404, detail="Candidate not found")
-        if current_user.role != "Super Admin" and cand.tenant_id != current_user.tenant_id:
-            raise HTTPException(status_code=403, detail="You do not have access to this candidate")
-            
-        req = session.get(Requisition, requisition_id)
-        if not req:
-            raise HTTPException(status_code=404, detail="Requisition not found")
-            
-        from modules.resume_screener.pipeline.jd_parser import parse_jd as _parse_jd_new; from modules.resume_screener.pipeline.jd_parser import generate_embedding as _gen_emb_new; from modules.resume_screener.pipeline.scorer import compute_score as _compute_score_new, classify_candidate as _classify_new; from modules.resume_screener.pipeline.structurer import structure_resume as _structure_resume_compat
-        
-        jd_text = req.generated_jd_markdown or ""
-        if not jd_text and req.structured_role:
-            from modules.candidate_screening_agent.services.db_service import _vendor_role_text
-            jd_text = _vendor_role_text(req.structured_role)
-            
-        # Get existing submissions to avoid duplicate screening
-        existing_submissions = session.query(CandidateSubmission).filter(
-            CandidateSubmission.requisition_id == requisition_id
-        ).all()
-        existing_dicts = [
-            {
-                "candidate_name": e.candidate_name,
-                "filename": e.filename,
-                "fingerprint": e.fingerprint
-            }
-            for e in existing_submissions
-        ]
-        
-        import asyncio as _asyncio
-        _jd_parsed = _asyncio.run(_parse_jd_new(jd_text))
-        _jd_emb = _gen_emb_new(_jd_parsed.embedding_text or jd_text[:500])
-        _struct = _asyncio.run(_structure_resume_compat(cand.extracted_text))
-        _score, _bd, _matched, _missing = _compute_score_new(_struct, _jd_parsed, _jd_emb, None)
-        evaluation = {
-            'match_score': round(_score, 2),
-            'recommendation': _classify_new(_score).value,
-            'summary': f'{_struct.name or cand.candidate_name or "Candidate"} scored {round(_score)}% match.'
-        }
-        
-    return {
-        "status": "success",
-        "message": "Candidate successfully matched and screened in-memory.",
-        "candidate_id": candidate_id,
-        "match_score": evaluation["match_score"],
-        "recommendation": evaluation["recommendation"],
-        "summary": evaluation["summary"]
+        "message": f"Successfully processed {len(saved_candidates)} candidate(s) to the Candidate Bank.",
+        "count": len(saved_candidates),
+        "candidates": [c.id for c in saved_candidates]
     }
 
 
