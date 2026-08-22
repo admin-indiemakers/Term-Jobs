@@ -202,6 +202,7 @@ export default function CandidateSchedule() {
   const [copied, setCopied] = useState(false);
   const [editingDecision, setEditingDecision] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
 
   const isReadOnly = user?.role === 'Director';
 
@@ -256,6 +257,7 @@ export default function CandidateSchedule() {
         });
       }
       setEditingDecision(false);
+      setSuccessMsg(decision === 'Accepted' ? `✓ ${candidate?.candidate_name || 'Candidate'} has been accepted and moved to onboarding.` : `✕ ${candidate?.candidate_name || 'Candidate'} has been rejected for this role.`);
       // Refetch candidate data so the updated status (Accepted/Rejected) is reflected
       try {
         const updatedCandidate = await request(`/candidates/${candidateId}`, { token });
@@ -263,6 +265,10 @@ export default function CandidateSchedule() {
       } catch (_) {
         // Candidate fetch failed; decision update succeeded so this is non-critical
       }
+      // Auto-navigate back after 3 seconds
+      setTimeout(() => {
+        window.location.href = `/dashboard/requisitions/${reqId}/candidates`;
+      }, 3000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -315,6 +321,12 @@ export default function CandidateSchedule() {
       {error && (
         <div style={{ background: PAPER, border: `1px solid ${LINE_STRONG}`, color: INK, padding: '12px 16px', borderRadius: '12px', fontSize: '0.86rem', fontWeight: 600, marginTop: '16px' }}>
           {error}
+        </div>
+      )}
+      {successMsg && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', padding: '14px 18px', borderRadius: '12px', fontSize: '0.88rem', fontWeight: 700, marginTop: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{successMsg}</span>
+          <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#047857' }}>Redirecting in 3s…</span>
         </div>
       )}
 
@@ -526,7 +538,7 @@ export default function CandidateSchedule() {
                 </div>
               )}
 
-              {(!isOver || editingDecision) && (
+              {(!isOver || editingDecision) && !successMsg && (
                 <form onSubmit={handleComplete}>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }} className="decision-grid">
                     {['Accepted', 'Rejected'].map((d) => {

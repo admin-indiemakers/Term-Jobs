@@ -16,23 +16,28 @@ export default function CandidatePortal() {
   const [saving, setSaving] = useState(false);
   const [submission, setSubmission] = useState(null);
   const [showRaiseIssue, setShowRaiseIssue] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   if (!user) return <Navigate to="/candidate/login" replace />;
   if (user.role !== 'Candidate') return <Navigate to="/" replace />;
 
   const candidateId = user.candidate_id || '';
+  const unreadNotifs = notifications.filter((n) => !n.read);
 
   useEffect(() => {
     if (!candidateId) { setLoading(false); return; }
     Promise.all([
       request(`/api/onboarding/${candidateId}`, { token }).catch(() => null),
       request('/candidates?status=Accepted', { token }).catch(() => []),
+      request(`/api/onboarding/notifications/${candidateId}`, { token }).catch(() => []),
     ])
-      .then(([obData, cands]) => {
+      .then(([obData, cands, notifs]) => {
         setChecklist(obData);
         const allCands = Array.isArray(cands) ? cands : cands?.candidates || [];
         const my = allCands.find((c) => (c.submission_id || c.id) === candidateId);
         if (my) setSubmission(my);
+        setNotifications(Array.isArray(notifs) ? notifs : []);
       })
       .catch(() => setChecklist(null))
       .finally(() => setLoading(false));
@@ -71,6 +76,13 @@ export default function CandidatePortal() {
     (checklist.training || []).forEach((t) => { if (t.enabled) items.push({ id: t.id, label: t.label, section: 'training', mandatory: t.mandatory, note: t.note }); });
     (checklist.custom_items || []).forEach((ci) => { if (ci.enabled) items.push({ id: ci.id, label: ci.label, section: ci.section, custom: true, note: ci.note }); });
     return items;
+  };
+
+  const markNotifRead = async (notifId) => {
+    setNotifications((prev) => prev.map((n) => n.id === notifId ? { ...n, read: true } : n));
+    try {
+      await request(`/api/onboarding/notifications/${notifId}/read`, { method: 'POST', token });
+    } catch (_) {}
   };
 
   const requiredItems = getRequiredItems();
@@ -173,7 +185,7 @@ export default function CandidatePortal() {
             </div>
           </div>
         </div>
-        {showRaiseIssue && <RaiseIssueModal onClose={() => setShowRaiseIssue(false)} candidateId={candidateId} companyName={companyName} token={token} />}
+        {showRaiseIssue && <RaiseIssueModal onClose={() => setShowRaiseIssue(false)} candidateId={candidateId} candidateName={user.name} companyName={companyName} vendorName={vendorName} tenantId={user.tenant_id} token={token} />}
       </div>
     );
   }
@@ -367,6 +379,36 @@ export default function CandidatePortal() {
               </div>
             ))}
 
+            {/* Notifications */}
+            {notifications.length > 0 && (
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Bell size={14} className="text-[#0A0A0A]" />
+                  <span className="text-[13px] font-semibold text-[#0A0A0A]">Updates from your hiring manager</span>
+                  {unreadNotifs.length > 0 && (
+                    <span className="text-[11px] font-bold text-white bg-[#DC2626] rounded-full px-2 py-0.5 leading-none">{unreadNotifs.length}</span>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  {notifications.slice(0, 5).map((n) => (
+                    <div
+                      key={n.id}
+                      onClick={() => markNotifRead(n.id)}
+                      className="bg-white border rounded-xl px-4 py-3 cursor-pointer transition-colors"
+                      style={{ borderColor: n.read ? '#EDECE7' : '#93C5FD', background: n.read ? '#fff' : '#F0F9FF' }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[13px] font-semibold text-[#0A0A0A]">{n.title}</span>
+                        {!n.read && <span className="w-2 h-2 rounded-full bg-[#2563EB] shrink-0" />}
+                      </div>
+                      <p className="text-[12.5px] text-[#6B6B67] leading-relaxed m-0">{n.body}</p>
+                      <span className="text-[11px] text-[#A6A59F] mt-1 block">{n.created_at ? new Date(n.created_at).toLocaleString() : ''}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Footer */}
             <div className="mt-6 flex flex-col items-center gap-3">
               <div className="inline-flex items-center gap-2 text-[13px] text-[#8A8A87] bg-white border border-[#EDECE7] rounded-full px-5 py-2.5">
@@ -394,11 +436,12 @@ export default function CandidatePortal() {
 }
 
 
-function RaiseIssueModal({ onClose, candidateId, companyName, token }) {
+function RaiseIssueModal({ onClose, candidateId, candidateName, companyName, vendorName, tenantId, token }) {
   const [category, setCategory] = useState('access');
   const [description, setDescription] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
 
   const CATEGORIES = [
     { value: 'access', label: 'Access not provided', desc: 'VPN, email, GitHub, Slack or system access missing' },
@@ -411,23 +454,33 @@ function RaiseIssueModal({ onClose, candidateId, companyName, token }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
+    setErrorMsg('');
     try {
       const selectedCat = CATEGORIES.find((c) => c.value === category);
-      await request('/api/onboarding/issues', {
+      const result = await request('/api/onboarding/issues', {
         method: 'POST',
         token,
         body: {
           candidate_id: candidateId,
-          candidate_name: user?.name || '',
+          candidate_name: candidateName || candidateId,
           company_name: companyName,
+          vendor_name: vendorName || '',
+          tenant_id: tenantId || '',
           category,
           category_label: selectedCat?.label || 'Onboarding Issue',
           description,
         },
-      }).catch(() => {});
-    } catch (err) { /* ignore */ }
-    setSubmitting(false);
-    setSubmitted(true);
+      });
+      if (result && result.id) {
+        setSubmitted(true);
+      } else {
+        setErrorMsg('Server returned unexpected response. Please try again.');
+      }
+    } catch (err) {
+      setErrorMsg(err.message || 'Failed to submit issue. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -481,6 +534,11 @@ function RaiseIssueModal({ onClose, candidateId, companyName, token }) {
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #EDECE7', fontSize: '0.85rem', resize: 'vertical', fontFamily: 'inherit', outline: 'none' }}
                 />
               </label>
+              {errorMsg && (
+                <div style={{ padding: '10px 14px', borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', color: '#dc2626', fontSize: '0.8rem', fontWeight: 600, marginBottom: 12 }}>
+                  {errorMsg}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, paddingBottom: 4 }}>
                 <button type="button" onClick={onClose} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: '1px solid #EDECE7', background: '#fff', fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer', color: '#6B6B67', fontFamily: 'inherit' }}>Cancel</button>
                 <button type="submit" disabled={submitting || !description.trim()} style={{ flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', background: '#0A0A0A', color: '#fff', fontSize: '0.85rem', fontWeight: 700, cursor: submitting ? 'wait' : 'pointer', opacity: submitting || !description.trim() ? 0.5 : 1, fontFamily: 'inherit' }}>

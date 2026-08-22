@@ -62,6 +62,7 @@ export default function DashboardLayout() {
               { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
               { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
               { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
+              { to: '/dashboard/superadmin/archives', label: 'Archives', end: true },
             ]
             : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
@@ -176,6 +177,13 @@ export default function DashboardLayout() {
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
                 Vendor Accounts
+              </NavLink>
+              <div className="nav-section-label">Archives</div>
+              <NavLink
+                to="/dashboard/superadmin/archives"
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                View All Archives
               </NavLink>
             </>
           ) : user.role === 'Admin' ? (

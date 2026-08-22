@@ -27,6 +27,7 @@ import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
+import Archives from './pages/Archives';
 
 
 function FullScreenLoader() {
@@ -114,6 +115,7 @@ export default function App() {
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
           <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
+          <Route path="superadmin/archives" element={<Archives />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>
         <Route
