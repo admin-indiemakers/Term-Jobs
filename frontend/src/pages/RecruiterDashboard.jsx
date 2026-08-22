@@ -1451,12 +1451,90 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
                       {/* Expanded Full Details & Scores Panel */}
                       {isExpanded && (
-                        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px', background: '#ffffff' }}>
+                        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '22px', background: '#ffffff', borderTop: '1px solid #f1f5f9' }}>
                           
+                          {/* 0. Professional Contact & Social Links Bar */}
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', background: '#f8fafc', padding: '12px 18px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                            {sub.candidate_email && (
+                              <div style={{ fontSize: '0.84rem', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                                <span>✉️</span>
+                                <span>{sub.candidate_email}</span>
+                              </div>
+                            )}
+
+                            {sub.candidate_phone && (
+                              <div style={{ fontSize: '0.84rem', color: '#334155', display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: 600 }}>
+                                <span>📱</span>
+                                <span>{sub.candidate_phone}</span>
+                              </div>
+                            )}
+
+                            {(sub.github_url || sub.github_evidence?.profile_url) && (
+                              <a
+                                href={sub.github_url || sub.github_evidence?.profile_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  fontSize: '0.82rem',
+                                  color: '#0f172a',
+                                  background: '#ffffff',
+                                  border: '1px solid #cbd5e1',
+                                  padding: '4px 10px',
+                                  borderRadius: '8px',
+                                  textDecoration: 'none',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                }}
+                              >
+                                <span>🐙</span>
+                                <span>GitHub: {sub.github_evidence?.username || (sub.github_url ? sub.github_url.split('/').pop() : 'Profile')}</span>
+                                {sub.github_evidence?.verified && (
+                                  <span style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.7rem', padding: '1px 5px', borderRadius: '4px', border: '1px solid #a7f3d0' }}>✓ Verified</span>
+                                )}
+                                <span>↗</span>
+                              </a>
+                            )}
+
+                            {sub.linkedin_url && (
+                              <a
+                                href={sub.linkedin_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                style={{
+                                  fontSize: '0.82rem',
+                                  color: '#0284c7',
+                                  background: '#ffffff',
+                                  border: '1px solid #bae6fd',
+                                  padding: '4px 10px',
+                                  borderRadius: '8px',
+                                  textDecoration: 'none',
+                                  fontWeight: 700,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '6px',
+                                }}
+                              >
+                                <span>💼</span>
+                                <span>LinkedIn Profile ↗</span>
+                              </a>
+                            )}
+
+                            {sub.candidate_title && (
+                              <span style={{ fontSize: '0.82rem', color: '#475569', fontWeight: 600 }}>
+                                🏷️ {sub.candidate_title}
+                              </span>
+                            )}
+                          </div>
+
                           {/* 1. Score Breakdown Cards Grid */}
                           <div>
-                            <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0' }}>
-                              📊 AI Match Score Breakdown
+                            <h4 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span>📊</span>
+                              <span>AI Match Score Breakdown</span>
                             </h4>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
                               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px 16px' }}>
@@ -1552,17 +1630,185 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             </div>
                           </div>
 
-                          {/* 3. AI Evaluation Summary */}
+                          {/* 3. 🐙 GitHub Code Evidence & Public Repositories (If available) */}
+                          {(sub.github_evidence || sub.github_url) && (
+                            <div style={{ background: '#0f172a', color: '#f8fafc', borderRadius: '16px', padding: '20px', border: '1px solid #1e293b' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '16px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                  <span style={{ fontSize: '1.4rem' }}>🐙</span>
+                                  <div>
+                                    <h4 style={{ fontSize: '0.95rem', fontWeight: 800, color: '#ffffff', margin: 0 }}>
+                                      GitHub Verified Code Proof & Repositories
+                                    </h4>
+                                    <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '2px 0 0' }}>
+                                      Profile: <strong>@{sub.github_evidence?.username || (sub.github_url ? sub.github_url.split('/').pop() : 'Candidate')}</strong> • {sub.github_evidence?.public_repos || 0}+ Public Repositories
+                                    </p>
+                                  </div>
+                                </div>
+                                <a
+                                  href={sub.github_url || sub.github_evidence?.profile_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  style={{
+                                    background: '#334155',
+                                    color: '#38bdf8',
+                                    border: '1px solid #475569',
+                                    padding: '6px 14px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.8rem',
+                                    fontWeight: 700,
+                                    textDecoration: 'none',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                  }}
+                                >
+                                  <span>Open GitHub Profile</span>
+                                  <span>↗</span>
+                                </a>
+                              </div>
+
+                              {/* Verified languages */}
+                              {sub.github_evidence?.verified_skills && sub.github_evidence.verified_skills.length > 0 && (
+                                <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.78rem', color: '#cbd5e1', fontWeight: 600 }}>Detected Code Languages:</span>
+                                  {sub.github_evidence.verified_skills.map((lang, lIdx) => (
+                                    <span
+                                      key={lIdx}
+                                      style={{
+                                        background: '#1e293b',
+                                        color: '#38bdf8',
+                                        border: '1px solid #334155',
+                                        fontSize: '0.74rem',
+                                        fontWeight: 700,
+                                        padding: '2px 8px',
+                                        borderRadius: '6px',
+                                      }}
+                                    >
+                                      {lang}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Top Repositories Grid */}
+                              {sub.github_evidence?.top_repos && sub.github_evidence.top_repos.length > 0 ? (
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+                                  {sub.github_evidence.top_repos.map((repo, rIdx) => (
+                                    <div
+                                      key={rIdx}
+                                      style={{
+                                        background: '#1e293b',
+                                        borderRadius: '10px',
+                                        padding: '14px',
+                                        border: '1px solid #334155',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        justifyContent: 'space-between',
+                                        gap: '10px',
+                                      }}
+                                    >
+                                      <div>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                                          <a
+                                            href={repo.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            onClick={(e) => e.stopPropagation()}
+                                            style={{
+                                              color: '#60a5fa',
+                                              fontSize: '0.88rem',
+                                              fontWeight: 700,
+                                              textDecoration: 'none',
+                                              wordBreak: 'break-all',
+                                            }}
+                                          >
+                                            📦 {repo.name} ↗
+                                          </a>
+                                          {repo.stars > 0 && (
+                                            <span style={{ fontSize: '0.75rem', color: '#fbbf24', display: 'flex', alignItems: 'center', gap: '2px' }}>
+                                              ★ {repo.stars}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {repo.description && (
+                                          <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: '6px 0 0', lineHeight: '1.4' }}>
+                                            {repo.description.length > 120 ? `${repo.description.slice(0, 120)}...` : repo.description}
+                                          </p>
+                                        )}
+                                      </div>
+
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                        {(repo.languages || []).map((l, li) => (
+                                          <span
+                                            key={li}
+                                            style={{
+                                              background: '#0f172a',
+                                              color: '#94a3b8',
+                                              fontSize: '0.7rem',
+                                              padding: '2px 6px',
+                                              borderRadius: '4px',
+                                            }}
+                                          >
+                                            {l}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p style={{ fontSize: '0.82rem', color: '#94a3b8', margin: 0 }}>
+                                  Public GitHub repository details verified directly from GitHub API.
+                                </p>
+                              )}
+                            </div>
+                          )}
+
+                          {/* 4. Key Projects & Experience Highlights */}
+                          {((sub.projects && sub.projects.length > 0) || (sub.experience && sub.experience.length > 0)) && (
+                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px' }}>
+                              <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <span>💼</span> Notable Projects & Professional Experience
+                              </h5>
+                              <div style={{ display: 'grid', gap: '12px' }}>
+                                {(sub.projects || []).slice(0, 4).map((proj, pIdx) => (
+                                  <div key={pIdx} style={{ background: '#ffffff', padding: '12px 16px', borderRadius: '10px', border: '1px solid #e2e8f0' }}>
+                                    <div style={{ fontWeight: 700, fontSize: '0.86rem', color: '#0f172a', marginBottom: '4px' }}>
+                                      🚀 {proj.name || 'Technical Project'}
+                                    </div>
+                                    {proj.description && (
+                                      <p style={{ fontSize: '0.8rem', color: '#475569', margin: '0 0 6px 0', lineHeight: '1.4' }}>
+                                        {proj.description}
+                                      </p>
+                                    )}
+                                    {proj.technologies && proj.technologies.length > 0 && (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                        {proj.technologies.map((t, ti) => (
+                                          <span key={ti} style={{ background: '#f1f5f9', color: '#475569', fontSize: '0.72rem', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>
+                                            {t}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 5. AI Evaluation Summary */}
                           <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px' }}>
-                            <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0' }}>
-                              💡 AI Evaluation Summary & Rationale
+                            <h5 style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a', margin: '0 0 8px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>💡</span> AI Evaluation Summary & Rationale
                             </h5>
                             <p style={{ fontSize: '0.88rem', color: '#334155', lineHeight: '1.6', margin: 0 }}>
                               {sub.summary || `${sub.candidate_name} was evaluated against the job requisition ${selected?.title || ''}. Overall compatibility score is ${score}% with ${sub.recommendation || 'evaluated'} recommendation.`}
                             </p>
                           </div>
 
-                          {/* 4. Action Row with PDF View & Download */}
+                          {/* 6. Action Row with PDF View & Download */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', borderTop: '1px solid #f1f5f9', paddingTop: '16px' }}>
                             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                               <button

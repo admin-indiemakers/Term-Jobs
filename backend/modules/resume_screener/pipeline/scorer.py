@@ -67,7 +67,7 @@ PROBLEM_SOLVING_SIGNALS = [
 
 
 def _normalize_skill(skill: str) -> str:
-    return skill.lower().strip()
+    return (skill or "").lower().strip()
 
 
 def _expand_synonyms(skill: str) -> List[str]:
@@ -124,7 +124,7 @@ def score_must_have_skills(
 
     # Build a combined text corpus to search: structured skills + raw resume text
     raw_lower = (resume.raw_text_for_embedding or "").lower()
-    all_resume_lower = " ".join(resume.skills).lower() + " " + raw_lower
+    all_resume_lower = " ".join(str(s) for s in (resume.skills or []) if s).lower() + " " + raw_lower
 
     matched, missing = [], []
     total_score = 0.0
@@ -160,7 +160,7 @@ def score_nice_to_have(jd: JDParsed, resume: StructuredResume) -> float:
         return 50.0
 
     raw_lower = (resume.raw_text_for_embedding or "").lower()
-    all_resume_lower = " ".join(resume.skills).lower() + " " + raw_lower
+    all_resume_lower = " ".join(str(s) for s in (resume.skills or []) if s).lower() + " " + raw_lower
 
     total_score = 0.0
     for skill in jd.nice_to_have_skills:
@@ -282,7 +282,7 @@ def score_problem_solving(resume: StructuredResume) -> float:
             for p in resume.projects
         )
         + " "
-        + " ".join(e.description for e in resume.experience)
+        + " ".join((e.description or "") for e in (resume.experience or []))
     ).lower()
 
     hits = sum(1 for pattern in PROBLEM_SOLVING_SIGNALS if re.search(pattern, all_text, re.IGNORECASE))

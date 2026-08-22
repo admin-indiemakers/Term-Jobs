@@ -186,37 +186,43 @@ async def verify_github(github_url: str) -> GitHubEvidence:
         any_docker = False
         any_recent = False
 
-        # Step 3: Analyse each repo (cap at 10 for speed)
-        for repo in repos_data[:10]:
+        # Step 3: Fast parallel analysis of top repos (cap at 6 for speed)
+        import asyncio
+
+        async def _analyze_single_repo(repo):
+            if repo.get("fork"):
+                return None
             repo_name = repo.get("name", "")
             owner = repo.get("owner", {}).get("login", username)
             pushed_at = repo.get("pushed_at")
             topics = repo.get("topics") or []
             description = repo.get("description") or ""
             stars = repo.get("stargazers_count", 0)
+            primary_lang = repo.get("language")
+
+            languages = [primary_lang] if primary_lang else []
+            has_docker = False
+            has_ci = False
+
+            try:
+                lang_task = _get_repo_languages(client, owner, repo_name)
+                file_task = _check_repo_files(client, owner, repo_name)
+                lang_res, file_res = await asyncio.gather(lang_task, file_task, return_exceptions=True)
+                if isinstance(lang_res, list) and lang_res:
+                    languages = lang_res
+                if isinstance(file_res, dict):
+                    has_docker = file_res.get("docker", False)
+                    has_ci = file_res.get("ci", False)
+            except Exception:
+                pass
+
+            skills = _detect_skills_from_repo(repo, languages, topics)
+            if primary_lang and primary_lang.title() not in skills:
+                skills.append(primary_lang.title())
 
             recent = _is_recent(pushed_at)
-            if recent:
-                any_recent = True
 
-            # Fetch languages (one extra API call per repo â€” worth it for accuracy)
-            languages = await _get_repo_languages(client, owner, repo_name)
-
-            # Check for Dockerfile / CI files
-            file_signals = await _check_repo_files(client, owner, repo_name)
-            has_docker = file_signals["docker"]
-            has_ci = file_signals["ci"]
-
-            if has_docker:
-                any_docker = True
-            if has_ci:
-                any_ci = True
-
-            # Detect skills
-            skills = _detect_skills_from_repo(repo, languages, topics)
-            all_verified_skills.extend(skills)
-
-            top_repos.append(
+            return (
                 GitHubRepo(
                     name=repo_name,
                     url=f"https://github.com/{owner}/{repo_name}",
@@ -227,8 +233,22 @@ async def verify_github(github_url: str) -> GitHubEvidence:
                     has_ci=has_ci,
                     stars=stars,
                     recent_activity=recent,
-                )
+                ),
+                skills,
+                has_ci,
+                has_docker,
+                recent
             )
+
+        repo_results = await asyncio.gather(*(_analyze_single_repo(r) for r in repos_data[:6]), return_exceptions=True)
+        for res in repo_results:
+            if isinstance(res, tuple) and res[0] is not None:
+                gh_repo, r_skills, r_ci, r_docker, r_recent = res
+                top_repos.append(gh_repo)
+                all_verified_skills.extend(r_skills)
+                if r_ci: any_ci = True
+                if r_docker: any_docker = True
+                if r_recent: any_recent = True
 
         evidence.top_repos = top_repos[:5]  # Return top 5 in response
         evidence.verified_skills = list(set(all_verified_skills))

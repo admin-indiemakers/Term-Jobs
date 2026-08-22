@@ -53,6 +53,7 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         req = session.get(Requisition, row.requisition_id)
     if req and req.company_profile_id:
         company = session.get(CompanyProfile, req.company_profile_id)
+    details = row.details or {}
     return {
         "id": row.id,
         "submission_id": row.id,
@@ -62,6 +63,7 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         "company_name": company.name if company else None,
         "candidate_name": row.candidate_name,
         "candidate_email": row.candidate_email,
+        "candidate_phone": details.get("candidate_phone") or "",
         "vendor_name": row.vendor_name,
         "filename": row.filename,
         "resume_text": row.resume_text,
@@ -72,6 +74,15 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         "summary": row.summary,
         "matched_skills": row.matched_skills or [],
         "missing_skills": row.missing_skills or [],
+        "breakdown": details.get("breakdown") or {},
+        "github_evidence": details.get("github_evidence"),
+        "github_url": details.get("github_url"),
+        "linkedin_url": details.get("linkedin_url"),
+        "projects": details.get("projects") or [],
+        "experience": details.get("experience") or [],
+        "education": details.get("education") or [],
+        "certifications": details.get("certifications") or [],
+        "skills": details.get("skills") or [],
         "hiring_manager_notes": row.hiring_manager_notes,
         "created_at": row.created_at.isoformat() if hasattr(row.created_at, 'isoformat') else row.created_at,
     }
@@ -540,16 +551,41 @@ async def match_bulk_candidates(
 
     async def screen_single_candidate(cand):
         try:
+            import re
             cand_text = cand.extracted_text or cand.summary or f"{cand.candidate_name} {cand.candidate_title} {' '.join(cand.skills or [])}"
             _struct = await _structure_resume_compat(cand_text)
             
-            # Check GitHub if available with 5s timeout
+            # Extract GitHub and LinkedIn URLs
+            gh_url = getattr(_struct, 'github_url', None)
+            if not gh_url or 'github.com' not in gh_url.lower():
+                gh_match = re.search(r'(https?://(?:www\.)?github\.com/[a-zA-Z0-9_\-]+|github\.com/[a-zA-Z0-9_\-]+)', cand_text, re.IGNORECASE)
+                if gh_match:
+                    gh_url = gh_match.group(0)
+            if gh_url and not gh_url.startswith('http'):
+                gh_url = 'https://' + gh_url
+
+            li_url = getattr(_struct, 'linkedin_url', None)
+            if not li_url or 'linkedin.com' not in li_url.lower():
+                li_match = re.search(r'(https?://(?:www\.)?linkedin\.com/in/[a-zA-Z0-9_\-]+|linkedin\.com/in/[a-zA-Z0-9_\-]+)', cand_text, re.IGNORECASE)
+                if li_match:
+                    li_url = li_match.group(0)
+            if li_url and not li_url.startswith('http'):
+                li_url = 'https://' + li_url
+
+            # Extract Phone
+            c_phone = cand.candidate_phone or ""
+            if not c_phone:
+                ph_match = re.search(r'(\+?\d{1,3}[-.\s]?\(?\d{2,4}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5})', cand_text)
+                if ph_match and len(ph_match.group(0).strip()) >= 10:
+                    c_phone = ph_match.group(0).strip()
+
+            # Verify GitHub live
             gh_evidence = None
-            if _struct.github_url:
+            if gh_url:
                 try:
-                    gh_evidence = await asyncio.wait_for(_verify_github_new(_struct.github_url), timeout=5.0)
+                    gh_evidence = await asyncio.wait_for(_verify_github_new(gh_url), timeout=5.0)
                 except Exception:
-                    gh_evidence = GitHubEvidence(verified=False)
+                    gh_evidence = GitHubEvidence(verified=False, profile_url=gh_url, username=gh_url.split('/')[-1])
 
             if _jd_parsed and _jd_emb:
                 _score, _bd, _matched, _missing = _compute_score_new(_struct, _jd_parsed, _jd_emb, gh_evidence)
@@ -573,13 +609,37 @@ async def match_bulk_candidates(
                 elif isinstance(_bd, dict):
                     bd_dict = _bd
 
+            gh_dict = None
+            if gh_evidence:
+                gh_dict = gh_evidence.model_dump() if hasattr(gh_evidence, "model_dump") else gh_evidence.dict() if hasattr(gh_evidence, "dict") else {}
+                if not gh_dict.get("profile_url") and gh_url:
+                    gh_dict["profile_url"] = gh_url
+            elif gh_url:
+                gh_dict = {"verified": False, "profile_url": gh_url, "username": gh_url.split('/')[-1], "top_repos": [], "verified_skills": []}
+
+            # Extract projects, experience, education, certifications
+            proj_items = [p.model_dump() if hasattr(p, "model_dump") else p.dict() if hasattr(p, "dict") else p for p in (_struct.projects or [])]
+            exp_items = [e.model_dump() if hasattr(e, "model_dump") else e.dict() if hasattr(e, "dict") else e for e in (_struct.experience or [])]
+            edu_items = [ed.model_dump() if hasattr(ed, "model_dump") else ed.dict() if hasattr(ed, "dict") else ed for ed in (_struct.education or [])]
+            certs_items = _struct.certifications or []
+
+            # If projects or experience are empty from structurer, synthesize from extracted text
+            if not proj_items and gh_dict and gh_dict.get("top_repos"):
+                for r in gh_dict["top_repos"][:4]:
+                    proj_items.append({
+                        "name": r.get("name"),
+                        "description": r.get("description") or f"Public GitHub repository by {c_name}",
+                        "technologies": r.get("languages") or [],
+                        "outcome": f"Available on GitHub: {r.get('url')}"
+                    })
+
             return {
                 "id": f"temp_{cand.id}",
                 "candidate_id": cand.id,
                 "candidate_name": c_name,
-                "candidate_title": cand.candidate_title or "",
+                "candidate_title": cand.candidate_title or getattr(_struct, 'role_title', '') or "",
                 "candidate_email": c_email,
-                "candidate_phone": cand.candidate_phone or "",
+                "candidate_phone": c_phone,
                 "vendor_name": v_name,
                 "filename": cand.filename or f"{c_name}.pdf",
                 "match_score": round(_score, 2),
@@ -587,7 +647,14 @@ async def match_bulk_candidates(
                 "matched_skills": _matched or [],
                 "missing_skills": _missing or [],
                 "breakdown": bd_dict,
-                "skills": cand.skills or [],
+                "github_evidence": gh_dict,
+                "github_url": gh_url,
+                "linkedin_url": li_url,
+                "projects": proj_items,
+                "experience": exp_items,
+                "education": edu_items,
+                "certifications": certs_items,
+                "skills": cand.skills or getattr(_struct, 'skills', []) or [],
                 "summary": cand.summary or f"{c_name} scored {round(_score)}% match for this role.",
                 "extracted_text": cand.extracted_text or "",
                 "status": "Screened",
