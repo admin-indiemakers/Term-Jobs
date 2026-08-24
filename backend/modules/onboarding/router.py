@@ -140,9 +140,15 @@ def _issues_coll():
 
 
 @router.post("/issues")
-def raise_onboarding_issue(data: dict):
+def raise_onboarding_issue(data: dict, authorization: str | None = None):
     """Candidate raises an issue regarding onboarding."""
     from datetime import datetime, timezone
+    current_user = _get_current_user(authorization)
+    tenant_id = ""
+    if current_user:
+        tenant_id = current_user.get("tenant_id", "")
+    elif data.get("tenant_id"):
+        tenant_id = data["tenant_id"]
     issue = {
         "id": f"issue_{uuid.uuid4().hex[:8]}",
         "candidate_id": data.get("candidate_id", ""),
@@ -151,6 +157,8 @@ def raise_onboarding_issue(data: dict):
         "category": data.get("category", "other"),
         "category_label": data.get("category_label", "Onboarding Issue"),
         "description": data.get("description", ""),
+        "tenant_id": tenant_id,
+        "vendor_name": data.get("vendor_name", ""),
         "status": "open",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "resolved_at": None,
@@ -161,8 +169,8 @@ def raise_onboarding_issue(data: dict):
 
 
 @router.get("/issues")
-def list_onboarding_issues():
-    """List all raised onboarding issues."""
+def list_onboarding_issues(authorization: str | None = None):
+    """List raised onboarding issues. Returns all issues."""
     docs = list(_issues_coll().find())
     for d in docs:
         d.pop("_id", None)
@@ -171,17 +179,81 @@ def list_onboarding_issues():
 
 @router.post("/issues/{issue_id}/resolve")
 def resolve_onboarding_issue(issue_id: str):
-    """Mark an onboarding issue as fixed/resolved."""
+    """Mark an onboarding issue as fixed/resolved and notify the candidate."""
     from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
     result = _issues_coll().update_one(
-        {"id": issue_id},
-        {"$set": {"status": "fixed", "resolved_at": datetime.now(timezone.utc).isoformat()}}
+        {"id": issue_id}, {"$set": {"status": "fixed", "resolved_at": now}}
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Issue not found")
     doc = _issues_coll().find_one({"id": issue_id})
     doc.pop("_id", None)
+
+    # Create notification for the candidate
+    try:
+        from modules.identity.domain.models import User
+        from modules.shared.db import get_session
+        candidate_user = None
+        with get_session() as session:
+            users = session.query(User).filter(
+                User.role == "Candidate",
+            ).all()
+            for u in users:
+                candidate_id = getattr(u, "candidate_id", None) or getattr(u, "_candidate_id", "")
+                # Check via raw doc
+                pass
+        # Find candidate user by candidate_id from MongoDB users collection
+        candidate_id = doc.get("candidate_id", "")
+        candidate_user_doc = db["users"].find_one({"candidate_id": candidate_id, "role": "Candidate"})
+        if candidate_user_doc:
+            notif_id = f"notif_{uuid.uuid4().hex[:8]}"
+            db["notifications"].insert_one({
+                "id": notif_id,
+                "user_id": candidate_user_doc.get("id", ""),
+                "tenant_id": candidate_user_doc.get("tenant_id", ""),
+                "type": "issue.resolved",
+                "title": "Issue Resolved",
+                "body": f"Your onboarding issue '{doc.get('category_label', 'Issue')}' — {doc.get('description', '')} — has been resolved by your hiring manager.",
+                "data": {
+                    "issue_id": doc.get("id"),
+                    "category": doc.get("category"),
+                    "category_label": doc.get("category_label"),
+                    "candidate_id": candidate_id,
+                },
+                "read": False,
+                "created_at": now,
+            })
+    except Exception as e:
+        import logging
+        logging.getLogger("onboarding").warning(f"Failed to create issue resolved notification: {e}")
+
     return doc
+
+
+
+# ── Candidate Notifications ──────────────────────────────────────────────
+
+@router.get("/notifications/{candidate_id}")
+def get_candidate_notifications(candidate_id: str):
+    """Get issue-related notifications for a candidate."""
+    candidate_user = db["users"].find_one({"candidate_id": candidate_id, "role": "Candidate"})
+    if not candidate_user:
+        return []
+    user_id = candidate_user.get("id", "")
+    docs = list(db["notifications"].find({"user_id": user_id}).sort("created_at", -1).limit(20))
+    for d in docs:
+        d.pop("_id", None)
+    return docs
+
+
+@router.post("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str):
+    """Mark a candidate notification as read."""
+    db["notifications"].update_one(
+        {"id": notification_id}, {"$set": {"read": True}}
+    )
+    return {"status": "success"}
 
 
 # ── Onboarding Checklists ──────────────────────────────────────────────────

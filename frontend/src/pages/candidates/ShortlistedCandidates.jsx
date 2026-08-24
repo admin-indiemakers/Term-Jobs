@@ -152,7 +152,11 @@ export default function ShortlistedCandidates() {
         };
       }
       map[c.requisition_id].count += 1;
-      map[c.requisition_id].candidates.push({ id: c.submission_id || c.id, name: c.candidate_name });
+      map[c.requisition_id].candidates.push({ id: c.submission_id || c.id, name: c.candidate_name, vendor: c.vendor_name || '—', score: c.match_score ?? null });
+    });
+    // Sort candidates within each requisition by match score (highest first)
+    Object.values(map).forEach((req) => {
+      req.candidates.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
     });
     return Object.values(map).sort((a, b) => b.count - a.count);
   }, [candidates]);
@@ -238,7 +242,7 @@ export default function ShortlistedCandidates() {
                     {reqItem.title}
                   </h3>
                   <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
-                    {reqItem.count} shortlisted candidate{reqItem.count === 1 ? '' : 's'} — open each candidate's individual workspace below.
+                    {reqItem.count} shortlisted candidate{reqItem.count === 1 ? '' : 's'} — sorted by match score, best first.
                   </p>
                 </div>
 
@@ -270,10 +274,29 @@ export default function ShortlistedCandidates() {
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', flexDirection: 'column', gap: '1px' }}>
                           <span>{cand.name || 'Candidate'}</span>
                           <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#94a3b8', fontFamily: 'monospace' }}>{cand.id}</span>
+                          {cand.vendor && cand.vendor !== '—' && (
+                            <span style={{ fontSize: '0.63rem', fontWeight: 600, color: '#6366f1', background: '#eef2ff', padding: '1px 6px', borderRadius: '4px', border: '1px solid #c7d2fe', display: 'inline-block', width: 'fit-content', marginTop: '2px' }}>{cand.vendor}</span>
+                          )}
                         </span>
                       </span>
-                      <span style={{ color: '#2563eb', whiteSpace: 'nowrap' }}>
-                        Open Workspace →
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+                        {cand.score != null && (
+                          <span style={{
+                            fontSize: '0.72rem',
+                            fontWeight: 800,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            fontFamily: 'monospace',
+                            background: cand.score >= 70 ? '#ecfdf5' : cand.score >= 40 ? '#fef3c7' : '#fef2f2',
+                            color: cand.score >= 70 ? '#059669' : cand.score >= 40 ? '#d97706' : '#dc2626',
+                            border: `1px solid ${cand.score >= 70 ? '#a7f3d0' : cand.score >= 40 ? '#fde68a' : '#fecaca'}`,
+                          }}>
+                            {Math.round(cand.score)}%
+                          </span>
+                        )}
+                        <span style={{ color: '#2563eb', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>
+                          Open Workspace →
+                        </span>
                       </span>
                     </Link>
                   ))}

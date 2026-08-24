@@ -450,6 +450,13 @@ def delete_user(
             detail="You are not allowed to delete accounts",
         )
 
+    # Archive before deleting
+    from modules.shared.db import db as mongo_db
+    user_doc = mongo_db["users"].find_one({"id": user_id})
+    if user_doc:
+        user_doc.pop("_id", None)
+        _archive_item("user", user_doc, current_user.id, "Deleted by admin")
+
     db.delete(target)
     db.commit()
     return None
@@ -475,8 +482,19 @@ def delete_tenant(
             detail="Tenant not found",
         )
 
+    # Archive the tenant and all its users before deleting
+    from modules.shared.db import db as mongo_db
+    tenant_data = {"id": tenant.id, "name": tenant.name, "tenant_type": tenant.tenant_type}
+    _archive_item("tenant", tenant_data, current_user.id, "Deleted by Super Admin")
+
+    # Archive all users in this tenant
+    users = mongo_db["users"].find({"tenant_id": tenant_id})
+    for u in users:
+        u.pop("_id", None)
+        _archive_item("user", u, current_user.id, f"User of deleted tenant: {tenant.name}")
+
     # Cascade: remove all accounts in the company first.
-    db._coll(User).delete_many({"tenant_id": tenant_id})
+    mongo_db["users"].delete_many({"tenant_id": tenant_id})
     db.delete(tenant)
     db.commit()
     return None
@@ -504,6 +522,62 @@ def list_tenants(
     ]
 
 
+@router.get("/tenants/check-name")
+def check_tenant_name(
+    name: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Check if a tenant name is already taken (case-insensitive)."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins")
+    from modules.shared.db import db as mongo_db
+    existing = mongo_db["tenants"].find_one({"name": name.strip()})
+    return {"taken": existing is not None, "existing_name": existing.get("name") if existing else None}
+
+
+@router.post("/tenants/ai-describe")
+def ai_describe_company(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+):
+    """Use AI to research a company and return ALL profile fields."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins")
+    company_name = body.get("name", "")
+    if not company_name:
+        raise HTTPException(status_code=400, detail="Company name is required")
+    prompt = f"""Research the company "{company_name}" and return a JSON object with these fields:
+{{
+  "industry": "string — primary industry (e.g. IT Services, SaaS, Fintech, E-commerce)",
+  "size": "string — approximate employee count range (e.g. 500-1000, 5000+)",
+  "location": "string — headquarters location (e.g. Bangalore, India)",
+  "tech_stack": "string — comma-separated list of known technologies (e.g. Python, React, AWS, PostgreSQL)",
+  "notes": "string — 3-5 sentence professional description: what the company does, strengths, why candidates would want to work there"
+}}
+
+Rules:
+- If you don't know something for certain, use your best estimate based on the company's industry and size.
+- Keep the description professional, concise, and suitable for a recruitment platform.
+- Return ONLY the JSON object, no markdown fences, no extra text."""
+    try:
+        from modules.requisition.llm.groq import GroqClient
+        import json
+        client = GroqClient()
+        raw = client.generate_text(prompt, tier="small").strip()
+        # Clean markdown fences
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1]
+        if raw.endswith("```"):
+            raw = raw.rsplit("```", 1)[0]
+        raw = raw.strip()
+        result = json.loads(raw)
+        return result
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="AI returned invalid data. Please try again.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
+
+
 @router.post("/tenants", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 def create_tenant(
     body: TenantCreate,
@@ -516,7 +590,15 @@ def create_tenant(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only Super Admins can create tenants",
         )
-    tenant = Tenant(name=body.name, tenant_type=body.tenant_type)
+    # Check for duplicate company/vendor name via MongoDB
+    from modules.shared.db import db as mongo_db
+    existing = mongo_db["tenants"].find_one({"name": body.name.strip()})
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A {existing.get('tenant_type', 'company')} with the name '{existing.get('name')}' already exists. Company names must be unique.",
+        )
+    tenant = Tenant(name=body.name.strip(), tenant_type=body.tenant_type)
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
@@ -709,3 +791,92 @@ def delete_portal_user(
     db.delete(target)
     db.commit()
     return {"ok": True, "message": "Portal user deleted"}
+
+
+# ── Archives ────────────────────────────────────────────────────────────────
+
+def _archives():
+    from modules.shared.db import db as _db
+    return _db["archives"]
+
+
+def _archive_item(item_type: str, item: dict, archived_by: str, reason: str = ""):
+    """Move an item to the archives collection."""
+    import uuid
+    from datetime import datetime, timezone
+    archive_doc = {
+        "id": f"arch_{uuid.uuid4().hex[:12]}",
+        "item_type": item_type,
+        "original_data": item,
+        "archived_by": archived_by,
+        "reason": reason,
+        "archived_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _archives().insert_one(archive_doc)
+    return archive_doc
+
+
+@router.get("/archives")
+def list_archives(
+    current_user: User = Depends(get_current_user),
+):
+    """List all archived items. Super Admin only."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins")
+    docs = list(_archives().find().sort("archived_at", -1).limit(200))
+    for d in docs:
+        d.pop("_id", None)
+    return docs
+
+
+@router.post("/archives/{archive_id}/restore")
+def restore_archive(
+    archive_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Restore an archived item back to its original collection."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins")
+    archive = _archives().find_one({"id": archive_id})
+    if not archive:
+        raise HTTPException(status_code=404, detail="Archive not found")
+    original = archive.get("original_data", {})
+    item_type = archive.get("item_type", "")
+
+    if item_type == "tenant":
+        # Restore tenant
+        tenant = Tenant(id=original.get("id", ""), name=original.get("name", ""), tenant_type=original.get("tenant_type", "client"))
+        db.add(tenant)
+        db.commit()
+    elif item_type == "user":
+        # Restore user
+        user = User(
+            id=original.get("id", ""),
+            email=original.get("email", ""),
+            name=original.get("name", ""),
+            role=original.get("role", ""),
+            tenant_id=original.get("tenant_id", ""),
+            password_hash=original.get("password_hash", ""),
+            is_active=original.get("is_active", True),
+        )
+        db.add(user)
+        db.commit()
+
+    # Remove from archives
+    _archives().delete_one({"id": archive_id})
+    return {"ok": True, "message": f"{item_type} restored successfully"}
+
+
+@router.delete("/archives/{archive_id}")
+def permanently_delete_archive(
+    archive_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Permanently delete an archived item."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins")
+    result = _archives().delete_one({"id": archive_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Archive not found")
+    return {"ok": True, "message": "Permanently deleted"}
