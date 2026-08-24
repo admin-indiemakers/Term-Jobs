@@ -124,6 +124,46 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/candidate/portal"
+          element={
+            <RequireAuth>
+              <CandidatePortal />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate/dashboard"
+          element={
+            <RequireAuth>
+              <CandidatePortal />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate/assignment"
+          element={
+            <RequireAuth>
+              <CandidatePortal />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate/timesheet"
+          element={
+            <RequireAuth>
+              <CandidatePortal />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate/attendance"
+          element={
+            <RequireAuth>
+              <CandidatePortal />
+            </RequireAuth>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

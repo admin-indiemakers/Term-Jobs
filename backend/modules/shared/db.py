@@ -302,5 +302,15 @@ def init_db() -> None:
         db["screening_cache"].create_index([("recruiter_id", 1), ("requisition_id", 1), ("expires_at", -1)])
     except Exception as e:
         print(f"Index creation warning for screening_cache: {e}")
+    try:
+        db["work_orders"].create_index("candidate_id")
+        db["work_orders"].create_index("work_order_number")
+        db["work_orders"].create_index("status")
+        db["timesheets"].create_index([("candidate_id", 1), ("week_start_date", -1)])
+        db["timesheets"].create_index("work_order_id")
+        db["timesheets"].create_index("status")
+        db["attendance_sheets"].create_index([("candidate_id", 1), ("month_year", -1)])
+    except Exception as e:
+        print(f"Index creation warning for candidate_portal collections: {e}")
 
 
