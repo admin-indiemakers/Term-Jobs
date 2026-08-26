@@ -7,6 +7,7 @@ import DirectorLogin from './pages/DirectorLogin';
 import CandidateLogin from './pages/CandidateLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
+import HiringManagerDashboard from './pages/HiringManagerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import ManageDirectors from './pages/ManageDirectors';
 import ManageHiringManagers from './pages/ManageHiringManagers';
@@ -86,6 +87,7 @@ export default function App() {
           }
         >
           <Route index element={<DashboardIndex />} />
+          <Route path="hiring-manager" element={<HiringManagerDashboard />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
           <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />

@@ -726,6 +726,21 @@ def create_candidate_expense(
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Expense amount must be greater than 0")
 
+    assignment_start = "2026-08-25"
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    if payload.date < assignment_start:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Expense date cannot be before assignment start date ({assignment_start})."
+        )
+
+    if payload.date > today_str:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot log expenses for a future date ahead of time."
+        )
+
     cand_id = current_user.candidate_id or ""
     exp_coll = db["candidate_expenses"]
     

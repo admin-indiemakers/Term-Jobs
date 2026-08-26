@@ -1,3 +1,4 @@
+import { ArrowRight, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -786,186 +787,346 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   return (
     <div className="page recruiter-page">
       {showDashboard && (
-        <div style={{ display: 'grid', gap: '24px' }}>
-          <WelcomeBanner
-            title="Recruiter Consultancy Portal"
-            subtitle={`Agency: ${user?.tenant_name || 'Your Consultancy'} • Match talent bank profiles, run AI screening, and manage client interview requests.`}
+        <div className="space-y-5 animate-in fade-in duration-300">
+          <style>{`
+            .bento-card-hover {
+              position: relative;
+              overflow: hidden;
+            }
+            .bento-card-hover::after {
+              content: '';
+              position: absolute;
+              bottom: 0;
+              left: 0;
+              width: 100%;
+              height: 2.5px;
+              background-color: #0A0A0A;
+              transform: scaleX(0);
+              transform-origin: left center;
+              transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+            }
+            .bento-card-hover:hover::after {
+              transform: scaleX(1);
+            }
+          `}</style>
+
+          {/* ========================================================
+              HERO WELCOME BANNER (MONOCHROME RECRUITER WORKSPACE)
+             ======================================================== */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 22,
+              border: '1px solid #E2E2DC',
+              boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+            }}
+            className="relative p-6 sm:p-7 overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-6"
           >
-            <a className="recruiter-banner-link" href="/dashboard/recruiter/requisitions">
-              Start Candidate Screening <span>→</span>
-            </a>
-          </WelcomeBanner>
-
-          <section className="stat-grid recruiter-stats" aria-label="Recruiter summary">
-            <StatCard label="Active Job Roles" value={requisitions.length} icon={Icons.briefcase} tint="tint-ink" delta="Published by clients" deltaTone="ink" />
-            <StatCard label="Talent Bank Profiles" value={bankCandidates.length} icon={Icons.users} tint="tint-blue" delta="Available in repository" deltaTone="blue" />
-            <StatCard label="Shortlisted to HR" value={shortlisted.length} icon={Icons.check} tint="tint-green" delta="Delivered to clients" deltaTone="green" />
-            <StatCard label="Interview Requests" value={interviews.length} icon={Icons.layers} tint="tint-amber" delta="Cal.com scheduling" deltaTone="amber" />
-          </section>
-
-          {/* Active Job Requisitions Grid */}
-          <div style={{ background: '#ffffff', borderRadius: '18px', padding: '24px', border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(0,0,0,0.02)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div>
-                <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                  Active Client Requisitions
-                </h2>
-                <p style={{ fontSize: '0.86rem', color: '#64748b', margin: '4px 0 0 0' }}>
-                  Open roles published by client companies currently open for candidate submissions.
-                </p>
-              </div>
-              <a
-                href="/dashboard/recruiter/requisitions"
-                style={{ fontSize: '0.84rem', fontWeight: 700, color: '#2563eb', textDecoration: 'none' }}
-              >
-                View Requisitions Workspace →
-              </a>
+            {/* Subtle Geometric Concentric Line Art on Right */}
+            <div className="absolute right-0 top-0 bottom-0 w-80 pointer-events-none opacity-40 overflow-hidden hidden sm:block">
+              <svg className="w-full h-full" viewBox="0 0 320 160" fill="none">
+                <circle cx="280" cy="80" r="70" stroke="#E5E5E0" strokeWidth="1" />
+                <circle cx="280" cy="80" r="110" stroke="#EAEAE6" strokeWidth="1" />
+                <circle cx="280" cy="80" r="150" stroke="#F0F0EC" strokeWidth="1" />
+              </svg>
             </div>
 
-            {requisitions.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                No active requisitions published yet.
+            <div className="relative z-10 space-y-1.5 max-w-2xl">
+              <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#8A8A85] flex items-center gap-1.5">
+                <span>TERM JOBS</span>
+                <span className="inline-block w-1 h-1 rounded-full bg-[#8A8A85]" />
+                <span>ACTIVE RECRUITER WORKSPACE</span>
               </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-                {requisitions.map((req) => {
-                  const roleData = role(req);
-                  const skills = skillsFor(req);
-                  return (
-                    <div
-                      key={req.id}
-                      style={{
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '14px',
-                        padding: '20px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'space-between',
-                        gap: '14px',
-                        background: '#f8fafc',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#059669', background: '#ecfdf5', padding: '3px 8px', borderRadius: '6px' }}>
-                            {req.company_name || 'Client HR'}
-                          </span>
-                          <span style={{ fontSize: '0.74rem', color: '#64748b', fontWeight: 600 }}>
-                            {roleData.location || 'Hybrid'}
-                          </span>
-                        </div>
-                        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: '0 0 6px 0' }}>
-                          {req.title || roleData.title || 'Software Role'}
-                        </h3>
-                        <p style={{ fontSize: '0.82rem', color: '#475569', margin: '0 0 10px 0', lineHeight: '1.4' }}>
-                          {roleData.summary ? roleData.summary.slice(0, 110) + '...' : 'Client requirement looking for skilled professionals.'}
-                        </p>
-                        {skills.length > 0 && (
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                            {skills.slice(0, 4).map((s) => (
-                              <span key={s} style={{ background: '#e2e8f0', color: '#334155', fontSize: '0.72rem', fontWeight: 700, padding: '2px 8px', borderRadius: '6px' }}>
-                                {s}
-                              </span>
-                            ))}
-                            {skills.length > 4 && (
-                              <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600, alignSelf: 'center' }}>
-                                +{skills.length - 4} more
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
+              <h1 className="text-[1.85rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+                {(() => {
+                  const hr = new Date().getHours();
+                  const greeting = hr < 12 ? 'Good morning' : hr < 18 ? 'Good afternoon' : 'Good evening';
+                  const firstName = user?.name ? user.name.split(' ')[0] : 'Hashil';
+                  return `${greeting}, ${firstName}.`;
+                })()}
+              </h1>
+              <p className="text-[12.8px] text-[#737373] leading-relaxed pt-1">
+                Recruiter Consultancy Portal. Manage client requisitions, match talent from your candidate bank, run AI-assisted screening, and move the strongest profiles forward.
+              </p>
+            </div>
 
-                      <a
-                        href={`/dashboard/recruiter/requisitions`}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          gap: '6px',
-                          background: '#0f172a',
-                          color: '#ffffff',
-                          padding: '10px',
-                          borderRadius: '10px',
-                          fontSize: '0.82rem',
-                          fontWeight: 700,
-                          textDecoration: 'none',
-                        }}
-                      >
-                        ⚡ Match & Screen Candidates →
-                      </a>
-                    </div>
-                  );
-                })}
+            {/* Date and Status Badge on Right */}
+            <div className="relative z-10 shrink-0 text-left md:text-right">
+              <div className="text-[1.35rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
               </div>
-            )}
+              <div className="text-[11px] text-[#8A8A85] font-semibold mt-0.5">
+                Workspace active
+              </div>
+            </div>
           </div>
 
-          {/* Quick Nav Cards */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
-            <a
-              href="/dashboard/recruiter/candidates"
+          {/* ========================================================
+              4 KPI METRIC CARDS (HORIZONTAL ROW WITH HOVER UNDERLINE)
+             ======================================================== */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. ACTIVE JOB ROLES */}
+            <div
+              onClick={() => navigate('/dashboard/recruiter/requisitions')}
               style={{
-                background: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '16px',
-                padding: '20px',
-                textDecoration: 'none',
-                color: 'inherit',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                backgroundColor: '#FFFFFF',
+                borderRadius: 22,
+                border: '1px solid #E2E2DC',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
               }}
+              className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
             >
-              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>📁</div>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Candidates Bank</h4>
-              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
-                Upload resume PDFs and manage talent profiles.
-              </p>
-            </a>
+              <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                ACTIVE JOB ROLES
+              </div>
+              <div className="text-[1.75rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+                {requisitions.length}
+              </div>
+              <div className="text-[11.5px] text-[#737373] font-medium pt-1">
+                Published by clients
+              </div>
+            </div>
 
-            <a
-              href="/dashboard/recruiter/shortlisted"
+            {/* 2. TALENT BANK */}
+            <div
+              onClick={() => navigate('/dashboard/recruiter/candidates')}
               style={{
-                background: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '16px',
-                padding: '20px',
-                textDecoration: 'none',
-                color: 'inherit',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                backgroundColor: '#FFFFFF',
+                borderRadius: 22,
+                border: '1px solid #E2E2DC',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
               }}
+              className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
             >
-              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🏆</div>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Shortlisted Talent</h4>
-              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
-                Track candidates submitted to client hiring teams.
-              </p>
-            </a>
+              <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                TALENT BANK
+              </div>
+              <div className="text-[1.75rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+                {bankCandidates.length}
+              </div>
+              <div className="text-[11.5px] text-[#737373] font-medium pt-1">
+                Candidate profiles
+              </div>
+            </div>
 
-            <a
-              href="/dashboard/recruiter/interviews"
+            {/* 3. SHORTLISTED TO HR */}
+            <div
+              onClick={() => navigate('/dashboard/recruiter/shortlisted')}
               style={{
-                background: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '16px',
-                padding: '20px',
-                textDecoration: 'none',
-                color: 'inherit',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+                backgroundColor: '#FFFFFF',
+                borderRadius: 22,
+                border: '1px solid #E2E2DC',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
               }}
+              className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
             >
-              <div style={{ fontSize: '1.8rem', marginBottom: '8px' }}>🗓️</div>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 4px 0' }}>Interview Requests</h4>
-              <p style={{ fontSize: '0.82rem', color: '#64748b', margin: 0 }}>
-                Confirm client interview proposals & Cal.com slots.
-              </p>
-            </a>
+              <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                SHORTLISTED TO HR
+              </div>
+              <div className="text-[1.75rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+                {shortlisted.length}
+              </div>
+              <div className="text-[11.5px] text-[#737373] font-medium pt-1">
+                Delivered profiles
+              </div>
+            </div>
+
+            {/* 4. INTERVIEW REQUESTS */}
+            <div
+              onClick={() => navigate('/dashboard/recruiter/interviews')}
+              style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 22,
+                border: '1px solid #E2E2DC',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.02)',
+              }}
+              className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+            >
+              <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                INTERVIEW REQUESTS
+              </div>
+              <div className="text-[1.75rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+                {interviews.length}
+              </div>
+              <div className="text-[11.5px] text-[#737373] font-medium pt-1">
+                Client pipeline
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================
+              MAIN CONTENT: TWO COLUMN LAYOUT
+             ======================================================== */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+            {/* LEFT COLUMN: ACTIVE CLIENT REQUISITIONS (65% width / col-span-8) */}
+            <div className="lg:col-span-8 space-y-3.5">
+              {/* Header Row */}
+              <div className="flex items-center justify-between px-1">
+                <div>
+                  <h2 className="text-[1.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
+                    Active Client Requisitions
+                  </h2>
+                  <p className="text-[12px] text-[#737373] font-medium mt-0.5">
+                    Open roles published by client companies
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => navigate('/dashboard/recruiter/requisitions')}
+                  className="text-[12px] font-semibold text-[#8A8A85] hover:text-[#0A0A0A] transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  View requisitions <ArrowRight size={12} />
+                </button>
+              </div>
+
+              {/* Requisition Cards */}
+              {requisitions.length === 0 ? (
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 22,
+                    border: '1px solid #E2E2DC',
+                    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+                  }}
+                  className="py-12 text-center text-[12.5px] text-[#8A8A85]"
+                >
+                  No active client requisitions published yet.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {requisitions.slice(0, 4).map((req) => {
+                    const roleData = role(req);
+                    const skills = skillsFor(req);
+                    return (
+                      <div
+                        key={req.id}
+                        style={{
+                          backgroundColor: '#FFFFFF',
+                          borderRadius: 22,
+                          border: '1px solid #E2E2DC',
+                          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+                        }}
+                        className="p-6 space-y-4 flex flex-col justify-between transition-all hover:border-[#D5D5D0]"
+                      >
+                        <div>
+                          <div className="text-[12px] text-[#737373] font-semibold flex items-center gap-1.5">
+                            <span>{req.company_name || 'Bearitt'}</span>
+                            <span className="inline-block w-1 h-1 rounded-full bg-[#A3A39F]" />
+                            <span>{roleData.location || req.location || 'Kozhikode'}</span>
+                          </div>
+                          <h3 className="text-[1.35rem] font-extrabold text-[#0A0A0A] tracking-tight mt-1">
+                            {roleData.title || req.title || 'Data Engineer'}
+                          </h3>
+                          <p className="text-[12.8px] text-[#737373] font-medium leading-relaxed mt-1">
+                            {req.description || roleData.summary || 'Client requirement looking for skilled professionals.'}
+                          </p>
+                        </div>
+
+                        {/* Skill Badges */}
+                        {skills.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {skills.slice(0, 5).map((skill, sIdx) => (
+                              <span
+                                key={sIdx}
+                                style={{
+                                  backgroundColor: '#F5F5F2',
+                                  borderRadius: 8,
+                                  border: '1px solid #E5E5E0',
+                                }}
+                                className="px-2.5 py-1 text-[11px] font-bold text-[#0A0A0A]"
+                              >
+                                {skill}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Action CTA Button */}
+                        <div className="pt-2">
+                          <button
+                            onClick={() => {
+                              setSelectedReqId(req.id);
+                              navigate('/dashboard/recruiter/requisitions');
+                            }}
+                            style={{
+                              backgroundColor: '#0A0A0A',
+                              color: '#FFFFFF',
+                              borderRadius: 12,
+                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                            }}
+                            className="px-4.5 py-2.5 text-[12.5px] font-bold hover:bg-[#262626] transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            Match & Screen Candidates <ArrowRight size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT COLUMN: WORKSPACE SNAPSHOT (35% width / col-span-4) */}
+            <div className="lg:col-span-4 space-y-4">
+              <div
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 22,
+                  border: '1px solid #E2E2DC',
+                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+                }}
+                className="p-6 space-y-5"
+              >
+                {/* Header Row */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-[1.05rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
+                      Workspace Snapshot
+                    </h2>
+                    <p className="text-[12px] text-[#737373] font-medium mt-0.5">
+                      Recruiter activity overview
+                    </p>
+                  </div>
+
+                  <span
+                    style={{
+                      backgroundColor: '#F5F5F2',
+                      borderRadius: 9999,
+                      border: '1px solid #E5E5E0',
+                    }}
+                    className="px-2.5 py-0.5 text-[9.5px] font-extrabold text-[#0A0A0A] uppercase tracking-wider"
+                  >
+                    ACTIVE
+                  </span>
+                </div>
+
+                {/* Key-Value Breakdown Rows */}
+                <div className="divide-y divide-[#F2F2EE] text-[12.5px]">
+                  <div className="py-3 flex items-center justify-between">
+                    <span className="text-[#8A8A85] font-medium">Agency</span>
+                    <span className="font-bold text-[#0A0A0A] lowercase">{user?.tenant_name || 'bridgeon'}</span>
+                  </div>
+
+                  <div className="py-3 flex items-center justify-between">
+                    <span className="text-[#8A8A85] font-medium">Published roles</span>
+                    <span className="font-extrabold text-[#0A0A0A]">{requisitions.length}</span>
+                  </div>
+
+                  <div className="py-3 flex items-center justify-between">
+                    <span className="text-[#8A8A85] font-medium">Talent profiles</span>
+                    <span className="font-extrabold text-[#0A0A0A]">{bankCandidates.length}</span>
+                  </div>
+
+                  <div className="py-3 flex items-center justify-between">
+                    <span className="text-[#8A8A85] font-medium">Screening ready</span>
+                    <span className="font-extrabold text-[#0A0A0A]">{bankCandidates.length} / {bankCandidates.length}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
-
-      {error && <div className="alert alert-error recruiter-alert">{error}<button onClick={() => setError('')}>Dismiss</button></div>}
-
       {showRequisitions && (
         <section className="recruiter-workspace-stacked" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <article className="recruiter-role-hero" style={{ background: '#111827', borderRadius: '18px', padding: '30px', color: '#ffffff', position: 'relative' }}>

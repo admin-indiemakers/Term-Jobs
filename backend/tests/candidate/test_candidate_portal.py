@@ -1,3 +1,4 @@
+import uuid
 import pytest
 from datetime import datetime, timezone, timedelta
 from fastapi import HTTPException
@@ -29,7 +30,7 @@ def setup_candidate_test_data():
             email=f"candidate_test_{datetime.now().timestamp()}@example.com",
             name="Sreehari P S",
             role="Candidate",
-            candidate_id=f"BEAR-{datetime.now().strftime('%M%S')}",
+            candidate_id=f"BEAR-{uuid.uuid4().hex[:8]}",
             tenant_id=tenant.id
         )
         session.add(cand_user)
@@ -180,6 +181,7 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
     data = setup_candidate_test_data
     user = data["user"]
     from modules.candidate_portal.router import list_candidate_expenses, create_candidate_expense, ExpenseCreateRequest
+    from fastapi import HTTPException
 
     # 1. List expenses (initial seed check)
     exp_res = list_candidate_expenses(current_user=user)
@@ -187,9 +189,37 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
     assert exp_res["total_this_month"] == 0.0
     assert len(exp_res["expenses"]) == 0
 
-    # 2. Create new expense
+    # 2. Reject expense before assignment start date (e.g. 2026-08-22)
+    with pytest.raises(HTTPException) as exc_past:
+        create_candidate_expense(
+            payload=ExpenseCreateRequest(
+                date="2026-08-22",
+                category="Travel",
+                amount=200.0,
+                receipt_name="cab_bill.pdf",
+                description="Pre-start travel"
+            ),
+            current_user=user
+        )
+    assert exc_past.value.status_code == 400
+
+    # 3. Reject future expense (e.g. 2026-08-28)
+    with pytest.raises(HTTPException) as exc_future:
+        create_candidate_expense(
+            payload=ExpenseCreateRequest(
+                date="2026-08-28",
+                category="Broadband & Internet",
+                amount=850.0,
+                receipt_name="broadband_bill_aug.pdf",
+                description="Future internet"
+            ),
+            current_user=user
+        )
+    assert exc_future.value.status_code == 400
+
+    # 4. Create valid expense for today (2026-08-25)
     new_req = ExpenseCreateRequest(
-        date="2026-08-28",
+        date="2026-08-25",
         category="Broadband & Internet",
         amount=850.0,
         receipt_name="broadband_bill_aug.pdf",
@@ -200,10 +230,10 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
     assert create_res["status"] == "success"
     assert create_res["expense"]["amount"] == 850.0
 
-    # 3. List again to verify total
-    exp_res2 = list_candidate_expenses(current_user=user)
-    assert exp_res2["total_this_month"] == 850.0
-
+    # 5. Verify total updated
+    exp_res_after = list_candidate_expenses(current_user=user)
+    assert exp_res_after["total_this_month"] == 850.0
+    assert len(exp_res_after["expenses"]) == 1
 
 def test_candidate_notifications_flow(setup_candidate_test_data):
     data = setup_candidate_test_data
