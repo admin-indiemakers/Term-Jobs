@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import AssistantWidget from '../components/AssistantWidget';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Menu, X } from 'lucide-react';
 import { request } from '../api/client';
 
 function initials(name) {
@@ -92,6 +92,7 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 12, candidates: 251 });
@@ -113,6 +114,11 @@ export default function DashboardLayout() {
       }).catch(() => {});
     }
   }, [user?.role, token]);
+
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -169,6 +175,264 @@ export default function DashboardLayout() {
             ]
             : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
+  // Render full reusable sidebar inner contents
+  const renderSidebarContent = (onLinkClick) => (
+    <div className="flex flex-col justify-between h-full">
+      <div>
+        {/* Brand Header */}
+        <div className="sidebar-brand pb-4 border-b border-[#EAEAE6] mb-5">
+          {userRole === 'Recruiter' ? (
+            <div className="flex items-center gap-3">
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                }}
+                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
+              >
+                TJ
+              </div>
+              <div className="leading-tight">
+                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
+                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
+              </div>
+            </div>
+          ) : userRole === 'Hiring Manager' ? (
+            <div className="flex items-center gap-3">
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                }}
+                className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
+              >
+                {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
+              </div>
+              <div className="leading-tight">
+                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
+                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
+              </div>
+            </div>
+          ) : ['Admin', 'HR', 'Director'].includes(userRole) ? (
+            <>
+              <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
+              <div className="brand-text">
+                <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
+                <span className="brand-sub">{userRole} Console</span>
+              </div>
+            </>
+          ) : (
+            <div className="brand-text">
+              <span className="brand-name">Term Jobs</span>
+              <span className="brand-sub">{userRole}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Navigation Sections */}
+        <nav className="flex flex-col gap-1">
+          {isModernLayout ? (
+            <>
+              {(() => {
+                let lastSection = null;
+                return navItems.map((item) => {
+                  const showSection = item.section && item.section !== lastSection;
+                  if (item.section) lastSection = item.section;
+                  const IconComp = item.icon;
+
+                  const isItemActive = item.to === '/dashboard/requisitions'
+                    ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                    : item.to === '/dashboard/candidates'
+                    ? location.pathname.startsWith('/dashboard/candidates')
+                    : item.end
+                    ? location.pathname === item.to
+                    : location.pathname.startsWith(item.to);
+
+                  return (
+                    <React.Fragment key={item.label}>
+                      {showSection && (
+                        <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
+                          {item.section}
+                        </div>
+                      )}
+                      {item.to ? (
+                        <NavLink
+                          to={item.to}
+                          end={item.end}
+                          onClick={onLinkClick}
+                          className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            {IconComp && <IconComp className="shrink-0" size={15} />}
+                            <span className="font-semibold text-[13px]">{item.label}</span>
+                          </div>
+                          {item.count !== undefined && (
+                            <span
+                              className={`text-[11px] font-bold ${isItemActive ? 'text-white' : 'text-[#8A8A85]'} ml-auto pr-1`}
+                            >
+                              {item.count}
+                            </span>
+                          )}
+                        </NavLink>
+                      ) : (
+                        <span className="nav-link sidebar-nav-btn">
+                          <div className="flex items-center gap-2.5">
+                            {IconComp && <IconComp className="shrink-0" size={15} />}
+                            <span>{item.label}</span>
+                          </div>
+                        </span>
+                      )}
+                    </React.Fragment>
+                  );
+                });
+              })()}
+            </>
+          ) : userRole === 'Super Admin' ? (
+            <>
+              <div className="nav-section-label">Overview</div>
+              <NavLink
+                to="/dashboard/superadmin"
+                end
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Dashboard
+              </NavLink>
+              <div className="nav-section-label">Companies</div>
+              <NavLink
+                to="/dashboard/superadmin/onboard"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Onboard Company
+              </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/accounts"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Company Accounts
+              </NavLink>
+              <div className="nav-section-label">Vendors</div>
+              <NavLink
+                to="/dashboard/superadmin/onboard-vendor"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Onboard Vendor
+              </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/vendor-accounts"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Vendor Accounts
+              </NavLink>
+              <div className="nav-section-label">Archives</div>
+              <NavLink
+                to="/dashboard/superadmin/archives"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                View All Archives
+              </NavLink>
+            </>
+          ) : userRole === 'Admin' ? (
+            <>
+              <div className="nav-section-label">Workspace</div>
+              <NavLink
+                to="/dashboard/admin"
+                end
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Dashboard
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/hiring-managers"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Hiring Managers
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/directors"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Directors
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/partner-vendors"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Partner Vendors
+              </NavLink>
+            </>
+          ) : (
+            <>
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  end={item.end}
+                  onClick={onLinkClick}
+                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+                >
+                  {item.label}
+                </NavLink>
+              ))}
+            </>
+          )}
+        </nav>
+      </div>
+
+      {/* Sidebar Footer */}
+      <div className="sidebar-footer pt-4 border-t border-[#EAEAE6] mt-4">
+        <div className="flex items-center justify-between px-0.5">
+          <div className="flex items-center gap-3 min-w-0">
+            <div
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                backgroundColor: '#0A0A0A',
+                color: '#FFFFFF',
+              }}
+              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs"
+            >
+              {initials(user?.name)}
+            </div>
+            <div className="leading-tight min-w-0">
+              <div className="text-[13.5px] font-extrabold text-[#0A0A0A] tracking-tight truncate">
+                {user?.name || (userRole === 'Hiring Manager' ? 'hr' : 'Hashil')}
+              </div>
+              <div className="text-[11px] text-[#8A8A85] font-medium mt-0.5 truncate">
+                {userRole === 'Recruiter' ? 'Recruiter' : userRole === 'Hiring Manager' ? 'Hiring Manager' : userRole}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleLogout}
+            type="button"
+            title="Sign out"
+            className="p-1.5 text-[#8A8A85] hover:text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-lg transition-colors cursor-pointer shrink-0"
+          >
+            <Icons.Logout />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className={`app-shell ${consoleClass}`}>
       <style>{`
@@ -223,33 +487,39 @@ export default function DashboardLayout() {
           background-color: #FFFFFF;
           border-radius: 0 4px 4px 0;
         }
-                        .app-shell.console-recruiter,
+        .app-shell.console-recruiter,
         .app-shell.console-hiringmanager,
         .app-shell {
           background-color: #ECECE9 !important;
           background: #ECECE9 !important;
           min-height: 100vh !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow-x: clip !important;
+          display: flex !important;
+          align-items: flex-start !important;
         }
         .app-shell.console-recruiter .main-area,
         .app-shell.console-hiringmanager .main-area,
         .app-shell .main-area,
-                .app-shell.console-recruiter .page,
+        .app-shell.console-recruiter .page,
         .app-shell.console-hiringmanager .page,
         .recruiter-page {
           max-width: 100% !important;
           width: 100% !important;
           margin-left: 0 !important;
           margin-right: 0 !important;
+          min-width: 0 !important;
         }
         .app-shell.console-recruiter .content-area,
         .app-shell.console-hiringmanager .content-area {
           padding-left: 20px !important;
           padding-right: 20px !important;
           padding-top: 8px !important;
-          padding-bottom: 4px !important;
+          padding-bottom: 8px !important;
           max-width: 100% !important;
           width: 100% !important;
-          overflow-y: auto !important;
+          box-sizing: border-box !important;
         }
         .app-shell.console-recruiter .recruiter-topbar,
         .app-shell.console-hiringmanager .recruiter-topbar {
@@ -277,6 +547,7 @@ export default function DashboardLayout() {
           max-height: calc(100vh - 32px) !important;
           position: sticky !important;
           top: 16px !important;
+          align-self: flex-start !important;
           background-color: #FFFFFF !important;
           border: 1px solid #E2E2DC !important;
           border-radius: 30px !important;
@@ -287,279 +558,94 @@ export default function DashboardLayout() {
           justify-content: space-between !important;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
           box-sizing: border-box !important;
+          z-index: 40 !important;
+        }
+
+        /* Mobile & Tablet Responsiveness (< 1024px) */
+        @media (max-width: 1023px) {
+          .recruiter-sidebar-container {
+            display: none !important;
+          }
+          .app-shell.console-recruiter .content-area,
+          .app-shell.console-hiringmanager .content-area {
+            padding-left: 12px !important;
+            padding-right: 12px !important;
+            padding-top: 12px !important;
+            padding-bottom: 24px !important;
+            width: 100% !important;
+            overflow-x: hidden !important;
+          }
+          .app-shell.console-recruiter .recruiter-topbar,
+          .app-shell.console-hiringmanager .recruiter-topbar {
+            margin-left: 12px !important;
+            margin-right: 12px !important;
+            padding-top: 12px !important;
+            padding-bottom: 12px !important;
+          }
         }
       `}</style>
 
-      {/* Floating Rounded Sidebar Card */}
-      <aside className={`sidebar ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
-        <div>
-          {/* Brand Header */}
-          <div className="sidebar-brand pb-4 border-b border-[#EAEAE6] mb-5">
-            {userRole === 'Recruiter' ? (
-              <div className="flex items-center gap-3">
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: '50%',
-                    backgroundColor: '#0A0A0A',
-                    color: '#FFFFFF',
-                  }}
-                  className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-                >
-                  TJ
-                </div>
-                <div className="leading-tight">
-                  <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
-                  <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
-                </div>
-              </div>
-            ) : userRole === 'Hiring Manager' ? (
-              <div className="flex items-center gap-3">
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: '50%',
-                    backgroundColor: '#0A0A0A',
-                    color: '#FFFFFF',
-                  }}
-                  className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
-                >
-                  {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
-                </div>
-                <div className="leading-tight">
-                  <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
-                  <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
-                </div>
-              </div>
-            ) : ['Admin', 'HR', 'Director'].includes(userRole) ? (
-              <>
-                <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
-                <div className="brand-text">
-                  <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
-                  <span className="brand-sub">{userRole}</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="brand-mark">TJ</div>
-                <div className="brand-text">
-                  <span className="brand-name">Term Jobs</span>
-                  <span className="brand-sub">Workforce Platform</span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Navigation Links */}
-          <nav className="sidebar-nav flex flex-col gap-1">
-            {isModernLayout ? (
-              <>
-                {(() => {
-                  let lastSection = '';
-                  return navItems.map((item) => {
-                    const section = item.section || 'WORKSPACE';
-                    const isNewSection = section !== lastSection;
-                    if (isNewSection) lastSection = section;
-                    const IconComp = item.icon;
-
-                    const isItemActive = (() => {
-                      if (item.end) return location.pathname === item.to;
-                      if (item.to === '/dashboard/requisitions') {
-                        return location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new';
-                      }
-                      if (item.to === '/dashboard/candidates') {
-                        return location.pathname.startsWith('/dashboard/candidates');
-                      }
-                      return location.pathname.startsWith(item.to);
-                    })();
-
-                    return (
-                      <React.Fragment key={`item-${item.label}`}>
-                        {isNewSection && (
-                          <div
-                            className={`text-[10px] font-bold tracking-widest text-[#A3A39F] uppercase px-2.5 ${
-                              section === 'WORKSPACE' ? 'mb-2 mt-1' : 'mb-2 mt-5'
-                            }`}
-                          >
-                            {section}
-                          </div>
-                        )}
-                        {item.to ? (
-                          <NavLink
-                            to={item.to}
-                            end={item.end}
-                            className={() =>
-                              `nav-link flex items-center justify-between w-full ${isItemActive ? 'active-nav-tab text-white font-bold' : 'sidebar-nav-btn text-[#737373] hover:text-[#0A0A0A]'}`
-                            }
-                          >
-                            <div className="flex items-center gap-2.5">
-                              {IconComp && (
-                                <IconComp
-                                  className="shrink-0"
-                                  size={15}
-                                  stroke={isItemActive ? '#FFFFFF' : '#737373'}
-                                />
-                              )}
-                              <span className="tracking-tight">{item.label}</span>
-                            </div>
-                            {item.count !== undefined && (
-                              <span
-                                className={`text-[11px] font-bold ${isItemActive ? 'text-white' : 'text-[#8A8A85]'} ml-auto pr-1`}
-                              >
-                                {item.count}
-                              </span>
-                            )}
-                          </NavLink>
-                        ) : (
-                          <span className="nav-link sidebar-nav-btn">
-                            <div className="flex items-center gap-2.5">
-                              {IconComp && <IconComp className="shrink-0" size={15} />}
-                              <span>{item.label}</span>
-                            </div>
-                          </span>
-                        )}
-                      </React.Fragment>
-                    );
-                  });
-                })()}
-              </>
-            ) : userRole === 'Super Admin' ? (
-              <>
-                <div className="nav-section-label">Overview</div>
-                <NavLink
-                  to="/dashboard/superadmin"
-                  end
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Dashboard
-                </NavLink>
-                <div className="nav-section-label">Companies</div>
-                <NavLink
-                  to="/dashboard/superadmin/onboard"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Onboard Company
-                </NavLink>
-                <NavLink
-                  to="/dashboard/superadmin/accounts"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Company Accounts
-                </NavLink>
-                <div className="nav-section-label">Vendors</div>
-                <NavLink
-                  to="/dashboard/superadmin/onboard-vendor"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Onboard Vendor
-                </NavLink>
-                <NavLink
-                  to="/dashboard/superadmin/vendor-accounts"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Vendor Accounts
-                </NavLink>
-                <div className="nav-section-label">Archives</div>
-                <NavLink
-                  to="/dashboard/superadmin/archives"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  View All Archives
-                </NavLink>
-              </>
-            ) : userRole === 'Admin' ? (
-              <>
-                <div className="nav-section-label">Workspace</div>
-                <NavLink
-                  to="/dashboard/admin"
-                  end
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Dashboard
-                </NavLink>
-                <NavLink
-                  to="/dashboard/admin/hiring-managers"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Hiring Managers
-                </NavLink>
-                <NavLink
-                  to="/dashboard/admin/directors"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Directors
-                </NavLink>
-                <NavLink
-                  to="/dashboard/admin/partner-vendors"
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  Partner Vendors
-                </NavLink>
-              </>
-            ) : (
-              <>
-                {navItems.map((item) => (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
-              </>
-            )}
-          </nav>
-        </div>
-
-        {/* Sidebar Footer */}
-        <div className="sidebar-footer pt-4 border-t border-[#EAEAE6] mt-4">
-          <div className="flex items-center justify-between px-0.5">
-            <div className="flex items-center gap-3 min-w-0">
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs"
-              >
-                {initials(user?.name)}
-              </div>
-              <div className="leading-tight min-w-0">
-                <div className="text-[13.5px] font-extrabold text-[#0A0A0A] tracking-tight truncate">
-                  {user?.name || (userRole === 'Hiring Manager' ? 'hr' : 'Hashil')}
-                </div>
-                <div className="text-[11px] text-[#8A8A85] font-medium mt-0.5 truncate">
-                  {userRole === 'Recruiter' ? 'Recruiter' : userRole === 'Hiring Manager' ? 'Hiring Manager' : userRole}
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={handleLogout}
-              type="button"
-              title="Sign out"
-              className="p-1.5 text-[#8A8A85] hover:text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-lg transition-colors cursor-pointer shrink-0"
-            >
-              <Icons.Logout />
-            </button>
-          </div>
-        </div>
+      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px) */}
+      <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
+        {renderSidebarContent()}
       </aside>
 
-      <div className="main-area">
-        <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between ml-5 mr-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static">
-          {/* Breadcrumb Left */}
-          <div className="topbar-breadcrumb flex items-center gap-2 text-[13px]">
-            <span className="font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}</span>
+      {/* Mobile Drawer (Visible when isMobileMenuOpen is true on < 1024px) */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+
+          {/* Drawer Card */}
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              width: '290px',
+              maxWidth: '85vw',
+              height: '100%',
+              padding: '24px 20px',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              position: 'relative',
+              zIndex: 60,
+            }}
+            className="flex flex-col justify-between overflow-y-auto animate-in slide-in-from-left duration-200"
+          >
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="absolute top-4 right-4 p-2 text-[#8A8A85] hover:text-[#0A0A0A] rounded-xl hover:bg-[#F5F5F2] cursor-pointer"
+              title="Close menu"
+            >
+              <X size={20} strokeWidth={2.2} />
+            </button>
+
+            {renderSidebarContent(() => setIsMobileMenuOpen(false))}
+          </div>
+        </div>
+      )}
+
+      <div className="main-area min-w-0 flex-1 flex flex-col">
+        <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
+          {/* Breadcrumb & Mobile Menu Toggle Left */}
+          <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
+            {/* Hamburger Toggle (Mobile / Tablet only) */}
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+              aria-label="Open menu"
+            >
+              <Menu size={21} strokeWidth={2.2} />
+            </button>
+
+            <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
+              {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
+            </span>
             <span className="text-[#8A8A85] font-normal">/</span>
-            <span className="text-[#0A0A0A] font-semibold">
+            <span className="text-[#0A0A0A] font-semibold truncate">
               {location.pathname.includes('/requisitions') ? 'Requisitions'
                 : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
                 : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
@@ -568,12 +654,12 @@ export default function DashboardLayout() {
                 : location.pathname.includes('/portal-access') ? 'Portal Access'
                 : 'Dashboard'}
             </span>
-            <span className="inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle" />
-            <span className="text-[#737373] font-medium">{userRole}</span>
+            <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
+            <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
           </div>
 
           {/* Actions Right */}
-          <div className="topbar-right flex items-center gap-2.5 pr-1">
+          <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
             <button
               type="button"
               onClick={() => setIsAssistantOpen((prev) => !prev)}
@@ -586,7 +672,7 @@ export default function DashboardLayout() {
                 border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
                 color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
               }}
-              className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group"
+              className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
             >
               <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
             </button>
@@ -597,15 +683,16 @@ export default function DashboardLayout() {
                 border: '1px solid #E2E2DC',
                 borderRadius: 9999,
               }}
-              className="px-3.5 py-1 text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight"
+              className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-              SECURE SESSION
+              <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
+              <span className="xs:hidden sm:hidden">SECURE</span>
             </span>
           </div>
         </header>
 
-        <main className="content-area pt-1.5 pl-5 pr-5 pb-0 w-full max-w-none">
+        <main className="content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1">
           <Outlet />
         </main>
       </div>

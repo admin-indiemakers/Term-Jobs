@@ -181,11 +181,7 @@ export default function AcceptedCandidates() {
 
   return (
     <div
-      style={{
-        height: 'calc(100vh - 86px)',
-        maxHeight: 'calc(100vh - 86px)',
-      }}
-      className="flex flex-col space-y-4 overflow-hidden"
+      className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0"
     >
       <style>{`
         .custom-cand-scroll::-webkit-scrollbar {
@@ -213,12 +209,12 @@ export default function AcceptedCandidates() {
           borderRadius: 22,
           boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
         }}
-        className="shrink-0 p-6 text-white space-y-2 relative overflow-hidden"
+        className="shrink-0 p-4 sm:p-6 text-white space-y-2 relative overflow-hidden rounded-[20px] sm:rounded-[22px]"
       >
         <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#A3A3A3]">
           {greetingText}, {userName}
         </div>
-        <h1 className="text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
+        <h1 className="text-[1.8rem] sm:text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
           Accepted Candidates
         </h1>
         <p className="text-[13px] text-[#A3A3A3] font-medium pt-0.5">
@@ -249,7 +245,7 @@ export default function AcceptedCandidates() {
       {/* ========================================================
           2. TOP 4 BENTO METRIC CARDS (MATCHES IMAGE 2)
          ======================================================== */}
-      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. ACCEPTED */}
         <div
           style={{
@@ -258,9 +254,9 @@ export default function AcceptedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {metrics.accepted}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -276,9 +272,9 @@ export default function AcceptedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {metrics.started}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -294,9 +290,9 @@ export default function AcceptedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {metrics.completed}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -312,9 +308,9 @@ export default function AcceptedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {metrics.openIssues}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -379,7 +375,7 @@ export default function AcceptedCandidates() {
           border: '1px solid #E2E2DC',
           boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}
-        className="flex-1 min-h-0 flex flex-col p-6 overflow-hidden"
+        className="flex-1 min-h-[360px] md:min-h-0 flex flex-col p-4 sm:p-6 md:overflow-hidden"
       >
         {/* Header inside card */}
         <div className="shrink-0 flex items-center justify-between mb-4">
@@ -419,7 +415,7 @@ export default function AcceptedCandidates() {
 
         {/* Data Table (Scrollable inside card) */}
         <div className="flex-1 overflow-x-auto overflow-y-auto custom-cand-scroll">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[620px]">
             <thead className="sticky top-0 bg-[#FFFFFF] z-10 shadow-2xs">
               <tr className="border-b border-[#F2F2EE] text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85] bg-[#FFFFFF]">
                 <th className="py-3.5 pl-4 pr-3 font-extrabold">CANDIDATE</th>

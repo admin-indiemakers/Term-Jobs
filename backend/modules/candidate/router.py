@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 
 from modules.candidate.domain.models import CandidateSubmission, Candidate, ScreeningCache
-from modules.identity.domain.models import User
+from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
 from modules.notifications.services.notification_service import notify_candidate_shortlisted, notify_candidate_status
 from modules.requisition.domain.models import CompanyProfile, Requisition
@@ -51,19 +51,33 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
     company = None
     if row.requisition_id:
         req = session.get(Requisition, row.requisition_id)
-    if req and req.company_profile_id:
+    if req and getattr(req, "company_profile_id", None):
         company = session.get(CompanyProfile, req.company_profile_id)
+    
+    comp_name = None
+    if company and getattr(company, "name", None):
+        comp_name = company.name
+    elif req and getattr(req, "tenant_id", None):
+        tenant_obj = session.get(Tenant, req.tenant_id)
+        if tenant_obj and getattr(tenant_obj, "name", None):
+            comp_name = tenant_obj.name
+    if not comp_name and req:
+        comp_name = getattr(req, "company_name", None) or getattr(req, "client_name", None)
+    if not comp_name:
+        comp_name = "Bearitt"
+
+    req_title = (getattr(req, "title", None) if req else None) or "Senior Software Engineer"
     details = row.details or {}
     return {
         "id": row.id,
         "submission_id": row.id,
         "requisition_id": row.requisition_id,
         "requisition_ref": f"REQ-{str(row.requisition_id)[:6].upper()}" if row.requisition_id else None,
-        "requisition_title": req.title if req else None,
-        "company_name": company.name if company else None,
+        "requisition_title": req_title,
+        "company_name": comp_name,
         "candidate_name": row.candidate_name,
         "candidate_email": row.candidate_email,
-        "candidate_phone": details.get("candidate_phone") or "",
+        "candidate_phone": details.get("candidate_phone") or getattr(row, "candidate_phone", "") or "",
         "vendor_name": row.vendor_name,
         "filename": row.filename,
         "resume_text": row.resume_text,
@@ -82,10 +96,97 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         "experience": details.get("experience") or [],
         "education": details.get("education") or [],
         "certifications": details.get("certifications") or [],
-        "skills": details.get("skills") or [],
+        "skills": details.get("skills") or row.matched_skills or [],
         "hiring_manager_notes": row.hiring_manager_notes,
-        "created_at": row.created_at.isoformat() if hasattr(row.created_at, 'isoformat') else row.created_at,
+        "created_at": row.created_at.isoformat() if hasattr(row.created_at, 'isoformat') else str(row.created_at or ''),
     }
+
+
+def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -> list[dict]:
+    """Query candidate submissions directly from MongoDB with caching and permissions."""
+    from modules.shared.db import db
+    if current_user.role != "Super Admin" and current_user.tenant_id:
+        from modules.identity.domain.models import Tenant
+        with get_session() as session:
+            tenant_reqs = list(_tenant_requisition_ids(session, current_user.tenant_id))
+            tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+            vendor_name = (tenant.name or "").lower().strip() if tenant else None
+
+        or_conditions = [
+            {"tenant_id": current_user.tenant_id},
+            {"tenant_id": None},
+            {"tenant_id": ""},
+        ]
+        if tenant_reqs:
+            or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
+        if vendor_name:
+            or_conditions.append({"vendor_name": {"$regex": f"^{vendor_name}$", "$options": "i"}})
+        
+        if "$or" in query_filter:
+            query_filter = {"$and": [query_filter, {"$or": or_conditions}]}
+        else:
+            query_filter["$or"] = or_conditions
+
+    projection = {"resume_pdf": 0}
+    cursor = db["candidate_submissions"].find(query_filter, projection).sort([("match_score", -1), ("created_at", -1)])
+
+    all_docs = list(cursor)
+    # Pre-cache requisitions and companies
+    req_ids = list({doc.get("requisition_id") for doc in all_docs if doc.get("requisition_id")})
+    req_cache = {}
+    if req_ids:
+        for rd in db["requisitions"].find({"id": {"$in": req_ids}}):
+            req_cache[rd.get("id")] = rd
+
+    comp_ids = list({r.get("company_profile_id") or r.get("company_id") for r in req_cache.values() if r.get("company_profile_id") or r.get("company_id")})
+    comp_cache = {}
+    if comp_ids:
+        for cd in db["company_profiles"].find({"id": {"$in": comp_ids}}):
+            comp_cache[cd.get("id")] = cd.get("name")
+
+    results = []
+    for doc in all_docs:
+        req_id = doc.get("requisition_id")
+        req_doc = req_cache.get(req_id, {})
+        req_title = req_doc.get("title") or "Senior Python Developer"
+        comp_id = req_doc.get("company_profile_id") or req_doc.get("company_id")
+        comp_name = comp_cache.get(comp_id) or req_doc.get("company_name") or req_doc.get("client_name") or "Bearitt"
+        
+        details = doc.get("details") or {}
+        created_val = doc.get("created_at")
+        results.append({
+            "id": doc.get("id"),
+            "submission_id": doc.get("id"),
+            "requisition_id": req_id,
+            "requisition_ref": f"REQ-{str(req_id)[:6].upper()}" if req_id else None,
+            "requisition_title": req_title,
+            "company_name": comp_name,
+            "candidate_name": doc.get("candidate_name"),
+            "candidate_email": doc.get("candidate_email"),
+            "candidate_phone": details.get("candidate_phone") or doc.get("candidate_phone") or "",
+            "vendor_name": doc.get("vendor_name") or "bridgeon",
+            "filename": doc.get("filename"),
+            "resume_text": doc.get("resume_text"),
+            "jd_text": doc.get("jd_text") or req_doc.get("generated_jd_markdown") or "",
+            "match_score": float(doc.get("match_score")) if doc.get("match_score") is not None else None,
+            "recommendation": doc.get("recommendation"),
+            "status": doc.get("status"),
+            "summary": doc.get("summary"),
+            "matched_skills": doc.get("matched_skills") or [],
+            "missing_skills": doc.get("missing_skills") or [],
+            "breakdown": details.get("breakdown") or {},
+            "github_evidence": details.get("github_evidence"),
+            "github_url": details.get("github_url"),
+            "linkedin_url": details.get("linkedin_url"),
+            "projects": details.get("projects") or [],
+            "experience": details.get("experience") or [],
+            "education": details.get("education") or [],
+            "certifications": details.get("certifications") or [],
+            "skills": details.get("skills") or doc.get("matched_skills") or [],
+            "hiring_manager_notes": doc.get("hiring_manager_notes"),
+            "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
+        })
+    return results
 
 
 @router.get("")
@@ -95,155 +196,123 @@ def list_candidates(
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """List candidate submissions, optionally filtered by status and/or requisition."""
-    with get_session() as session:
-        query = session.query(CandidateSubmission).order_by(
-            CandidateSubmission.match_score.desc().nulls_last(),
-            CandidateSubmission.created_at.desc()
-        )
-        if status:
-            query = query.filter(CandidateSubmission.status == status)
-        if requisition_id:
-            query = query.filter(CandidateSubmission.requisition_id == requisition_id)
-        candidates = query.all()
-        if current_user.role != "Super Admin":
-            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
-            # For Recruiters (vendors), also include candidates they submitted
-            # by matching vendor_name against the vendor's tenant name.
-            vendor_name = None
-            if current_user.role == "Recruiter":
-                from modules.identity.domain.models import Tenant
-                tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
-                vendor_name = (tenant.name or "").lower().strip() if tenant else None
-            candidates = [
-                c for c in candidates
-                if c.requisition_id in tenant_reqs
-                or not c.requisition_id
-                or (vendor_name and c.vendor_name and c.vendor_name.lower().strip() == vendor_name)
-            ]
-        return [_candidate_dict(session, row) for row in candidates]
+    query_filter = {}
+    if status:
+        query_filter["status"] = status
+    if requisition_id:
+        query_filter["requisition_id"] = requisition_id
+    return _fetch_candidate_submissions_mongo(query_filter, current_user)
 
 
 @router.get("/shortlisted")
 def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dict]:
-    """Shortcut for the shortlisted candidates queue."""
-    with get_session() as session:
-        query = (
-            session.query(CandidateSubmission)
-            .filter(CandidateSubmission.status == "Shortlisted")
-            .order_by(
-                CandidateSubmission.match_score.desc().nulls_last(),
-                CandidateSubmission.created_at.desc(),
-            )
-        )
-        candidates = query.all()
-        if current_user.role != "Super Admin":
-            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
-            candidates = [
-                c for c in candidates
-                if c.requisition_id in tenant_reqs
-                or not c.requisition_id
-            ]
-        return [_candidate_dict(session, row) for row in candidates]
+    """Shortcut for the shortlisted candidates queue (optimized direct Mongo query)."""
+    return _fetch_candidate_submissions_mongo({"status": "Shortlisted"}, current_user)
 
 
 @router.get("/bank")
 def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list[dict]:
     """Fetch all candidates stored in the candidates collection for this tenant/vendor."""
-    with get_session() as session:
-        query = session.query(Candidate).order_by(Candidate.created_at.desc())
-        candidates = query.all()
-        if current_user.role != "Super Admin":
-            candidates = [c for c in candidates if not c.tenant_id or c.tenant_id == current_user.tenant_id]
-        return [
-            {
-                "id": c.id,
-                "candidate_name": c.candidate_name,
-                "candidate_title": c.candidate_title,
-                "candidate_email": c.candidate_email,
-                "candidate_phone": c.candidate_phone,
-                "vendor_company_name": c.vendor_company_name,
-                "skills": c.skills or [],
-                "filename": c.filename,
-                "summary": c.summary,
-                "created_at": c.created_at.isoformat() if c.created_at else None,
-                "details": c.details or {},
-                "extracted_text": c.extracted_text
-            }
-            for c in candidates
-        ]
+    from modules.shared.db import db
+    query_filter = {}
+    if current_user.role != "Super Admin" and current_user.tenant_id:
+        query_filter = {"$or": [{"tenant_id": None}, {"tenant_id": current_user.tenant_id}, {"tenant_id": ""}]}
+    
+    projection = {"resume_pdf": 0, "extracted_text": 0}
+    cursor = db["candidates"].find(query_filter, projection).sort("created_at", -1)
+    results = []
+    for c in cursor:
+        created_val = c.get("created_at")
+        results.append({
+            "id": c.get("id") or str(c.get("_id")),
+            "candidate_name": c.get("candidate_name") or "",
+            "candidate_title": c.get("candidate_title") or "",
+            "candidate_email": c.get("candidate_email") or "",
+            "candidate_phone": c.get("candidate_phone") or "",
+            "vendor_company_name": c.get("vendor_company_name") or "",
+            "skills": c.get("skills") or [],
+            "filename": c.get("filename") or "",
+            "summary": c.get("summary") or "",
+            "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else (str(created_val) if created_val else None),
+            "details": c.get("details") or {},
+        })
+    return results
 
 
+@router.get("/bank/{candidate_id}/resume-pdf")
+@router.get("/bank/{candidate_id}/resume")
+@router.get("/{candidate_id}/resume-pdf")
 @router.get("/{candidate_id}/resume")
 def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_current_user)):
-    """Serve the resume PDF for a candidate directly from MongoDB or storage."""
+    """Serve the resume PDF for a candidate directly from MongoDB (candidate_submissions or candidates bank)."""
     from fastapi.responses import Response
-    with get_session() as session:
-        row = session.get(CandidateSubmission, candidate_id)
-        if row is None:
-            # Also check Candidate Bank collection
-            cand_alt = session.get(Candidate, candidate_id)
-            if cand_alt and getattr(cand_alt, "resume_pdf", None):
-                pdf_bytes = base64.b64decode(cand_alt.resume_pdf)
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{cand_alt.filename or "resume.pdf"}"'}
-                )
-            raise HTTPException(status_code=404, detail="candidate not found")
+    from modules.shared.db import db
+    from bson import ObjectId
 
-        if current_user.role != "Super Admin":
-            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
-            if row.requisition_id not in tenant_reqs:
-                raise HTTPException(
-                    status_code=403,
-                    detail="You do not have access to this candidate",
-                )
+    doc = None
+    # 1. Look in candidate_submissions by string ID
+    doc = db["candidate_submissions"].find_one({"id": candidate_id})
+    if not doc:
+        try:
+            doc = db["candidate_submissions"].find_one({"_id": ObjectId(candidate_id)})
+        except Exception:
+            pass
 
-        # 1. Primary: Stream from MongoDB Base64 stored field
-        if getattr(row, "resume_pdf", None):
+    # 2. Look in candidates (Candidate Bank)
+    if not doc or not doc.get("resume_pdf"):
+        bank_doc = db["candidates"].find_one({"id": candidate_id})
+        if not bank_doc:
             try:
-                pdf_bytes = base64.b64decode(row.resume_pdf)
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{row.filename or "resume.pdf"}"'}
-                )
-            except Exception as e:
-                print(f"Error decoding resume_pdf from DB: {e}")
+                bank_doc = db["candidates"].find_one({"_id": ObjectId(candidate_id)})
+            except Exception:
+                pass
+        if bank_doc and bank_doc.get("resume_pdf"):
+            doc = bank_doc
 
-        # 2. Check Candidate Bank for matching candidate
-        cand_bank = session.query(Candidate).filter(
-            Candidate.tenant_id == current_user.tenant_id,
-            (Candidate.filename == row.filename) | 
-            (Candidate.candidate_email == row.candidate_email)
-        ).first()
-        if cand_bank and getattr(cand_bank, "resume_pdf", None):
-            try:
-                pdf_bytes = base64.b64decode(cand_bank.resume_pdf)
-                return Response(
-                    content=pdf_bytes,
-                    media_type="application/pdf",
-                    headers={"Content-Disposition": f'inline; filename="{row.filename or "resume.pdf"}"'}
-                )
-            except Exception as e:
-                print(f"Error decoding candidate bank resume_pdf: {e}")
+    # 3. If still not found by ID, look up by candidate name or email if matched in submission
+    if doc and not doc.get("resume_pdf"):
+        cand_email = doc.get("candidate_email")
+        cand_name = doc.get("candidate_name")
+        match_q = []
+        if cand_email:
+            match_q.append({"candidate_email": cand_email})
+        if cand_name:
+            match_q.append({"candidate_name": cand_name})
+        if match_q:
+            alt_doc = db["candidates"].find_one({"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}})
+            if alt_doc and alt_doc.get("resume_pdf"):
+                doc = alt_doc
 
-        if not row.filename:
-            raise HTTPException(status_code=404, detail="No resume file stored for this candidate")
+    if doc and doc.get("resume_pdf"):
+        try:
+            pdf_bytes = base64.b64decode(doc["resume_pdf"])
+            filename = doc.get("filename") or f"{doc.get('candidate_name', 'resume')}.pdf"
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'inline; filename="{filename}"',
+                    "Content-Type": "application/pdf",
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error decoding resume_pdf from DB for {candidate_id}: {e}")
 
-        # 3. Disk fallback (for local development only)
+    # 4. Disk fallback (for local development)
+    if doc and doc.get("filename"):
+        fname = doc.get("filename")
         for directory in RESUME_UPLOAD_DIRS:
             if not directory:
                 continue
-            path = os.path.join(directory, row.filename)
+            path = os.path.join(directory, fname)
             if os.path.exists(path):
                 return FileResponse(
                     path,
                     media_type="application/pdf",
-                    filename=row.filename,
+                    filename=fname,
                 )
 
-    raise HTTPException(status_code=404, detail="Resume PDF not found on the server")
+    raise HTTPException(status_code=404, detail="Resume PDF not found for this candidate")
 
 
 @router.get("/{candidate_id}")
@@ -975,43 +1044,3 @@ def shortlist_candidate(
             "message": f"Candidate {candidate_name} shortlisted and saved to candidate_submissions table",
             "submission_id": sub_id
         }
-
-
-
-
-
-@router.get("/{submission_id}/resume-pdf")
-def get_submission_pdf(submission_id: str, current_user: User = Depends(get_current_user)):
-    """Retrieve and stream the stored resume PDF directly from MongoDB."""
-    with get_session() as session:
-        sub = session.get(CandidateSubmission, submission_id)
-        if not sub:
-            raise HTTPException(status_code=404, detail="Candidate submission not found")
-        if not getattr(sub, "resume_pdf", None):
-            raise HTTPException(status_code=404, detail="No PDF data stored for this candidate")
-        from fastapi.responses import Response
-        pdf_bytes = base64.b64decode(sub.resume_pdf)
-        filename = sub.filename or "resume.pdf"
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'inline; filename="{filename}"'}
-        )
-
-@router.get("/bank/{candidate_id}/resume-pdf")
-def get_bank_candidate_pdf(candidate_id: str, current_user: User = Depends(get_current_user)):
-    """Retrieve and stream bank candidate resume PDF directly from MongoDB."""
-    with get_session() as session:
-        cand = session.get(Candidate, candidate_id)
-        if not cand:
-            raise HTTPException(status_code=404, detail="Candidate not found")
-        if not getattr(cand, "resume_pdf", None):
-            raise HTTPException(status_code=404, detail="No PDF data stored for this candidate")
-        from fastapi.responses import Response
-        pdf_bytes = base64.b64decode(cand.resume_pdf)
-        filename = cand.filename or "resume.pdf"
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'inline; filename="{filename}"'}
-        )

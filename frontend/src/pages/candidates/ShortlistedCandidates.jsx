@@ -94,11 +94,7 @@ export default function ShortlistedCandidates() {
 
   return (
     <div
-      style={{
-        height: 'calc(100vh - 86px)',
-        maxHeight: 'calc(100vh - 86px)',
-      }}
-      className="flex flex-col space-y-4 overflow-hidden"
+      className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0"
     >
       <style>{`
         .custom-cand-scroll::-webkit-scrollbar {
@@ -126,12 +122,12 @@ export default function ShortlistedCandidates() {
           borderRadius: 22,
           boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
         }}
-        className="shrink-0 p-6 text-white space-y-2 relative overflow-hidden"
+        className="shrink-0 p-4 sm:p-6 text-white space-y-2 relative overflow-hidden rounded-[20px] sm:rounded-[22px]"
       >
         <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#A3A3A3]">
           {greetingText}, {userName}
         </div>
-        <h1 className="text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
+        <h1 className="text-[1.8rem] sm:text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
           Shortlisted Candidates
         </h1>
         <p className="text-[13px] text-[#A3A3A3] font-medium pt-0.5">
@@ -162,7 +158,7 @@ export default function ShortlistedCandidates() {
       {/* ========================================================
           2. TOP 4 BENTO METRIC CARDS (MATCHES IMAGE 1)
          ======================================================== */}
-      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. SHORTLISTED */}
         <div
           style={{
@@ -171,9 +167,9 @@ export default function ShortlistedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {stats.shortlisted}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -189,9 +185,9 @@ export default function ShortlistedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {stats.strong}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -207,9 +203,9 @@ export default function ShortlistedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {stats.moderate}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -225,9 +221,9 @@ export default function ShortlistedCandidates() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-1.5"
+          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {stats.avgMatch}%
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -292,7 +288,7 @@ export default function ShortlistedCandidates() {
           border: '1px solid #E2E2DC',
           boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}
-        className="flex-1 min-h-0 flex flex-col p-6 overflow-hidden"
+        className="flex-1 min-h-[360px] md:min-h-0 flex flex-col p-4 sm:p-6 md:overflow-hidden"
       >
         {/* Header inside card */}
         <div className="shrink-0 flex items-center justify-between mb-4">
@@ -356,8 +352,9 @@ export default function ShortlistedCandidates() {
                       <div className="flex items-center justify-between">
                         <span
                           style={{
-                            backgroundColor: '#EEF2FF',
-                            color: '#4F46E5',
+                            backgroundColor: '#F5F5F2',
+                            color: '#0A0A0A',
+                            border: '1px solid #E2E2DC',
                             borderRadius: 6,
                           }}
                           className="px-2.5 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide"
@@ -367,13 +364,13 @@ export default function ShortlistedCandidates() {
 
                         <span
                           style={{
-                            backgroundColor: score >= 70 ? '#ECFDF5' : score >= 50 ? '#FEF3C7' : '#FEF3C7',
-                            color: score >= 70 ? '#059669' : score >= 50 ? '#D97706' : '#D97706',
+                            backgroundColor: '#0A0A0A',
+                            color: '#FFFFFF',
                             borderRadius: 6,
                           }}
-                          className="px-2 py-0.5 text-[11px] font-extrabold"
+                          className="px-2.5 py-0.5 text-[11px] font-black shadow-2xs"
                         >
-                          {score}%
+                          ⚡ {score}%
                         </span>
                       </div>
 
@@ -382,8 +379,13 @@ export default function ShortlistedCandidates() {
                         <h3 className="text-[14px] font-extrabold text-[#0A0A0A] tracking-tight uppercase leading-snug">
                           {candName}
                         </h3>
-                        <p className="text-[11.5px] text-[#737373] font-medium mt-0.5">
-                          {vendorName} - {roleTitle}
+                        <p className="text-[11.5px] text-[#0A0A0A] font-bold mt-1 flex items-center gap-1 truncate">
+                          <span>💼</span>
+                          <span className="truncate">{roleTitle}</span>
+                        </p>
+                        <p className="text-[11px] text-[#737373] font-medium mt-0.5 flex items-center justify-between">
+                          <span>🏢 {cand.company_name || 'Bearitt'}</span>
+                          <span>Vendor: {vendorName}</span>
                         </p>
                       </div>
                     </div>

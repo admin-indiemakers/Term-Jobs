@@ -296,7 +296,7 @@ export default function NewRequisition() {
       submission_deadline: role.submission_deadline || '',
       priority: role.priority || 'Normal',
     }));
-    setSelectedTemplateId('');
+    setSelectedTemplateId(templateId);
   };
 
   const roleTitle = prefill.job_title.trim();
@@ -397,31 +397,32 @@ export default function NewRequisition() {
             </p>
 
             {/* Template Import Dropdown */}
-            {templates.length > 0 && (
-              <div className="intake-section" style={{ marginTop: 24 }}>
-                <div className="intake-section-head">
-                  <h2 className="intake-section-title">Import from Template</h2>
-                  <span className="intake-section-caption">Select an uploaded JSON template to pre-fill all fields as a starting point.</span>
-                </div>
-                <div className="template-selector" style={{ marginTop: 12 }}>
-                  <label className="form-label">Select Template</label>
-                  <select
-                    className="auth-input"
-                    value={selectedTemplateId}
-                    onChange={(e) => handleImportTemplate(e.target.value)}
-                    disabled={loadingTemplates}
-                  >
-                    <option value="">— Choose a template to import —</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name || t.title || 'Untitled'} — {t.company_name || 'Unknown'}
-                      </option>
-                    ))}
-                  </select>
-                  {loadingTemplates && <span className="field-hint">Loading templates...</span>}
-                </div>
+            <div className="intake-section" style={{ marginTop: 24 }}>
+              <div className="intake-section-head">
+                <h2 className="intake-section-title">Import from Template</h2>
+                <span className="intake-section-caption">Select an uploaded JSON template to pre-fill all fields as a starting point.</span>
               </div>
-            )}
+              <div className="template-selector" style={{ marginTop: 12 }}>
+                <label className="form-label">Select Template</label>
+                <select
+                  className="auth-input"
+                  value={selectedTemplateId}
+                  onChange={(e) => {
+                    setSelectedTemplateId(e.target.value);
+                    handleImportTemplate(e.target.value);
+                  }}
+                  disabled={loadingTemplates}
+                >
+                  <option value="">— Choose a template to import —</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name || t.title || 'Untitled'} — {t.company_name || 'Director template'}
+                    </option>
+                  ))}
+                </select>
+                {loadingTemplates && <span className="field-hint">Loading templates...</span>}
+              </div>
+            </div>
           </section>
 
           {/* D. Pre-fill Structured Role Fields (Optional) */}

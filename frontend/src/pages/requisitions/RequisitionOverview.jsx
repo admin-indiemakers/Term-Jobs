@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
   Plus, Search, Trash2, ExternalLink,
-  Check, Filter as FilterIcon, AlertCircle
+  Check, Filter as FilterIcon, AlertCircle, X
 } from 'lucide-react';
 
 /* Section metadata and descriptions matching the reference UI */
@@ -277,11 +277,7 @@ export default function RequisitionOverview({ section }) {
 
   return (
     <div
-      style={{
-        height: 'calc(100vh - 86px)',
-        maxHeight: 'calc(100vh - 86px)',
-      }}
-      className="flex flex-col space-y-4 overflow-hidden"
+      className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0"
     >
       <style>{`
         .bento-card-hover {
@@ -369,7 +365,7 @@ export default function RequisitionOverview({ section }) {
       {/* ========================================================
           2. TOP 4 KPI BENTO METRIC CARDS (LARGE & SPACIOUS)
          ======================================================== */}
-      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. DRAFTED */}
         <div
           onClick={() => handleTabChange('drafted')}
@@ -379,9 +375,9 @@ export default function RequisitionOverview({ section }) {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {counts.drafted}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -401,9 +397,9 @@ export default function RequisitionOverview({ section }) {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {counts.published}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -423,9 +419,9 @@ export default function RequisitionOverview({ section }) {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {counts.completed}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -445,9 +441,9 @@ export default function RequisitionOverview({ section }) {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {counts.history}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -524,7 +520,7 @@ export default function RequisitionOverview({ section }) {
                   onClick={() => setSearchQuery('')}
                   className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#0A0A0A] text-xs font-bold"
                 >
-                  ?
+                  <X size={13} />
                 </button>
               )}
             </div>
@@ -556,10 +552,10 @@ export default function RequisitionOverview({ section }) {
           border: '1px solid #E2E2DC',
           boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
         }}
-        className="flex-1 min-h-0 flex flex-col overflow-hidden"
+        className="flex-1 min-h-[420px] md:min-h-0 flex flex-col rounded-[20px] sm:rounded-[22px] border border-[#E2E2DC] bg-white shadow-2xs overflow-hidden"
       >
         <div className="overflow-x-auto overflow-y-auto flex-1 custom-table-scroll">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[620px]">
             <thead className="sticky top-0 bg-[#FFFFFF] z-10 shadow-2xs">
               <tr className="border-b border-[#F2F2EE] text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85] bg-[#FFFFFF]">
                 <th className="py-3.5 pl-6 pr-4 font-extrabold">REQUISITION</th>

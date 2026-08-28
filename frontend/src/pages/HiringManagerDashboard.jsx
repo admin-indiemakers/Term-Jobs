@@ -168,11 +168,7 @@ export default function HiringManagerDashboard() {
 
   return (
     <div
-      style={{
-        height: 'calc(100vh - 86px)',
-        maxHeight: 'calc(100vh - 86px)',
-      }}
-      className="flex flex-col space-y-4 overflow-hidden"
+      className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0"
     >
       <style>{`
         .bento-card-hover {
@@ -245,7 +241,7 @@ export default function HiringManagerDashboard() {
       {/* ========================================================
           2. TOP 4 METRIC BENTO SUMMARY CARDS (UNTOUCHED)
          ======================================================== */}
-      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. LIVE REQUISITIONS */}
         <div
           onClick={() => navigate('/dashboard/requisitions/published')}
@@ -255,9 +251,9 @@ export default function HiringManagerDashboard() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {liveRolesCount}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -277,9 +273,9 @@ export default function HiringManagerDashboard() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {totalRequisitionsCount}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -301,9 +297,9 @@ export default function HiringManagerDashboard() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {avgCandidateMatch}%
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -323,9 +319,9 @@ export default function HiringManagerDashboard() {
             border: '1px solid #E2E2DC',
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
           }}
-          className="p-5 space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
         >
-          <div className="text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
             {onboardingCount}
           </div>
           <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
@@ -340,7 +336,7 @@ export default function HiringManagerDashboard() {
       {/* ========================================================
           3. MAIN TWO-COLUMN WORKSPACE (BOTTOM LEVEL MATCHES SIDEBAR)
          ======================================================== */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-5 overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4 sm:gap-5 md:overflow-hidden">
         {/* ================= LEFT COLUMN (65% width / col-span-8) ================= */}
         <div className="lg:col-span-8 flex flex-col h-full overflow-hidden space-y-4">
           {/* Card 1: Hiring Pipeline (SHRINK-0) */}
@@ -373,7 +369,7 @@ export default function HiringManagerDashboard() {
             </div>
 
             {/* 5 Pipeline Progression Stages (100% Interactive & Live) */}
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5">
               {pipelineStages.map((stage) => (
                 <div
                   key={stage.id}
@@ -415,7 +411,7 @@ export default function HiringManagerDashboard() {
               border: '1px solid #E2E2DC',
               boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
             }}
-            className="flex-1 min-h-0 flex flex-col p-5 overflow-hidden"
+            className="flex-1 min-h-[340px] md:min-h-0 flex flex-col p-4 sm:p-5 md:overflow-hidden"
           >
             <div className="shrink-0 mb-3">
               <h2 className="text-[1.15rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
@@ -592,7 +588,7 @@ export default function HiringManagerDashboard() {
               border: '1px solid #E2E2DC',
               boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
             }}
-            className="flex-1 min-h-0 flex flex-col p-5 overflow-hidden"
+            className="flex-1 min-h-[340px] md:min-h-0 flex flex-col p-4 sm:p-5 md:overflow-hidden"
           >
             <div className="shrink-0 mb-2.5">
               <h2 className="text-[1.15rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">

@@ -43,8 +43,8 @@ CANDIDATE_STORE: List[dict] = []
 def _tenant_filter(current_user: User) -> tuple[str | None, list[str] | None]:
     """Return (tenant_id, company_tenant_ids) scope for the current user.
 
-    Super Admin sees all (None, None). Recruiters (vendors) only see
-    requisitions from companies that engaged their consultancy.
+    Super Admin sees all (None, None). Recruiters (vendors) see
+    submissions for their tenant or engaged companies.
     """
     if current_user.role == "Super Admin":
         return None, None
@@ -60,7 +60,7 @@ def _tenant_filter(current_user: User) -> tuple[str | None, list[str] | None]:
                 .filter(VendorEngagement.vendor_tenant_id == current_user.tenant_id)
                 .all()
             }
-        return None, list(company_ids or [])
+        return current_user.tenant_id, list(company_ids) if company_ids else None
 
     return current_user.tenant_id, None
 

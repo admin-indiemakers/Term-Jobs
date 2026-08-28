@@ -568,6 +568,7 @@ def _normalize_template(payload: dict) -> dict:
 
 
 @app.get("/templates")
+@app.get("/api/templates")
 def list_templates(current_user: User = Depends(get_current_user)) -> list[dict]:
     with get_session() as session:
         # Templates are shared platform config: Super Admin-created templates are
@@ -581,7 +582,7 @@ def list_templates(current_user: User = Depends(get_current_user)) -> list[dict]
             rows = [
                 r
                 for r in rows
-                if r.tenant_id == current_user.tenant_id or r.created_by in super_admin_ids
+                if r.tenant_id in (current_user.tenant_id, "local", "platform", None) or r.created_by in super_admin_ids or not r.created_by
             ]
         return [_template_dict(r) for r in rows]
 
@@ -639,6 +640,7 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
 
 
 @app.get("/requisitions")
+@app.get("/api/requisitions")
 def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
@@ -649,7 +651,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             pass
         elif current_user.role == "Recruiter":
             # Vendors only see requisitions from companies that engaged them,
-            # and only published requisitions â€” never drafts or in-progress ones.
+            # and only published requisitions — never drafts or in-progress ones.
             engaged_company_ids = {
                 e.tenant_id
                 for e in session.query(VendorEngagement)
@@ -686,6 +688,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
 
 
 @app.get("/requisitions/{requisition_id}")
+@app.get("/api/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _auto_close_expired()
     req = _get_requisition(requisition_id)
