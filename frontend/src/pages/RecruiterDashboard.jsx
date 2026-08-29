@@ -160,6 +160,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
   const [selectedCompanyTab, setSelectedCompanyTab] = useState('All');
   const [limitReachedModal, setLimitReachedModal] = useState(null);
+  const [limitToast, setLimitToast] = useState(null);
   const [shortlistQuota, setShortlistQuota] = useState({ limit: 3, used: 0, is_limit_reached: false });
   const [workspaceActiveTab, setWorkspaceActiveTab] = useState('requirements'); // 'requirements' | 'candidates'
   const [screenedReqSummary, setScreenedReqSummary] = useState({});
@@ -701,6 +702,26 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   async function updateCandidateStatus(sub, newStatus) {
     try {
       if (newStatus === 'Shortlisted') {
+        // Active shortlisted + accepted candidate count check
+        const activeSubCount = screenedSubmissions.filter((s) => {
+          const st = (s.status || '').toLowerCase();
+          return st === 'shortlisted' || st === 'accepted' || st === 'hired' || st === 'under review';
+        }).length;
+        const currentCap = shortlistQuota?.limit || 3;
+
+        if (activeSubCount >= currentCap) {
+          const limitMsg = `Maximum candidate shortlist limit of ${currentCap} reached for this requisition. You cannot shortlist more candidates.`;
+          setLimitToast(limitMsg);
+          setTimeout(() => setLimitToast(null), 2500);
+          setLimitReachedModal({
+            title: 'Maximum Shortlist Limit Reached',
+            message: limitMsg,
+            candidateName: sub.candidate_name,
+            limit: currentCap,
+          });
+          return;
+        }
+
         const res = await request('/candidates/shortlist', {
           method: 'POST',
           token: authToken,
@@ -725,6 +746,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           );
           const data = await request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] }));
           setShortlisted(Array.isArray(data) ? data : data?.shortlisted_candidates || []);
+          if (selectedReqId) {
+            fetchShortlistQuota(selectedReqId);
+          }
         } else {
           throw new Error(res.message || 'Failed to shortlist candidate.');
         }
@@ -742,7 +766,18 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         );
       }
     } catch (err) {
-      setError(err.message || 'Failed to update candidate status.');
+      const msg = err.message || 'Failed to update candidate status.';
+      setLimitToast(msg);
+      setTimeout(() => setLimitToast(null), 2500);
+      if (msg.toLowerCase().includes('limit') || msg.toLowerCase().includes('maximum') || msg.toLowerCase().includes('shortlist')) {
+        setLimitReachedModal({
+          title: 'Maximum Shortlist Limit Reached',
+          message: msg,
+          candidateName: sub.candidate_name,
+          limit: shortlistQuota?.limit || 3,
+        });
+      }
+      setError(msg);
     }
   }
 
@@ -1442,6 +1477,34 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           </div>
 
 {/* Limit Reached Modal Popup */}
+          {/* 2-Second Floating Limit Toast Notification */}
+          {limitToast && (
+            <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-6 duration-200">
+              <div
+                style={{
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                  borderRadius: 16,
+                  border: '1px solid #262626',
+                  boxShadow: '0 20px 40px rgba(0, 0, 0, 0.45)',
+                }}
+                className="px-5 py-3.5 flex items-center gap-3"
+              >
+                <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/30 text-amber-400 flex items-center justify-center shrink-0">
+                  <AlertCircle size={18} strokeWidth={2.5} />
+                </div>
+                <div className="text-left pr-2">
+                  <div className="text-[13px] font-extrabold text-[#FFFFFF] tracking-tight">
+                    Maximum Shortlist Limit Reached
+                  </div>
+                  <div className="text-[11.5px] text-[#A1A1AA] font-medium mt-0.5 max-w-sm">
+                    {limitToast}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {limitReachedModal && (
             <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
               <div
