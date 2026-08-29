@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle } from 'lucide-react';
+import { ArrowRight, ChevronDown, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle, Bell, Clock } from 'lucide-react';
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -128,6 +128,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [viewProfileCandidate, setViewProfileCandidate] = useState(null);
   const [shortlistedStatusFilter, setShortlistedStatusFilter] = useState('ALL');
   const [interviews, setInterviews] = useState([]);
+  const [acceptedCandidates, setAcceptedCandidates] = useState([]);
+  const [portalUsers, setPortalUsers] = useState([]);
+  const [dismissedNotifIds, setDismissedNotifIds] = useState(new Set());
   const [loadingInterviews, setLoadingInterviews] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
   const [interviewFilter, setInterviewFilter] = useState('ALL');
@@ -518,6 +521,102 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     return [...screenedSubmissions].sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
   }, [screenedSubmissions]);
 
+  // Prioritized Live Notifications (Compact, auto-dismisses when access given or screened)
+  const notifications = useMemo(() => {
+    const list = [];
+
+    // Priority 1: Unscreened Requisition Deadlines Approaching
+    (requisitions || []).forEach((req) => {
+      const isScreened = Boolean(screenedReqSummary[req.id]);
+      if (isScreened) return; // If already screened, deadline alert disappears!
+
+      const dStr = req.submission_deadline || req.deadline;
+      if (dStr) {
+        try {
+          const dDate = new Date(dStr);
+          const now = new Date();
+          const diffDays = Math.ceil((dDate - now) / (1000 * 60 * 60 * 24));
+          if (diffDays <= 7) {
+            const notifId = `deadline-${req.id}`;
+            if (dismissedNotifIds.has(notifId)) return;
+
+            const isUrgent = diffDays <= 3;
+            list.push({
+              id: notifId,
+              priority: 1,
+              type: 'deadline',
+              badge: diffDays < 0 ? 'Expired' : diffDays === 0 ? 'Due Today' : `${diffDays}d Left`,
+              badgeColor: isUrgent ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-orange-50 text-orange-700 border-orange-200',
+              title: req.title || 'Requisition Role',
+              subtitle: `${req.company_name || 'Client'} • Deadline: ${dStr}`,
+              actionLabel: 'Screen',
+              actionUrl: '/dashboard/recruiter/requisitions',
+              reqId: req.id,
+            });
+          }
+        } catch {}
+      }
+    });
+
+    // Priority 2: HR Accepted Candidates (Pending Portal Access)
+    (acceptedCandidates || []).forEach((cand) => {
+      const candEmail = (cand.candidate_email || cand.email || '').toLowerCase().trim();
+      const candId = cand.id || cand.submission_id || cand.candidate_id;
+
+      // Check if portal access has already been granted
+      const alreadyHasAccess = (portalUsers || []).some((u) => {
+        const uEmail = (u.email || '').toLowerCase().trim();
+        const uCandId = u.candidate_id;
+        return (candEmail && uEmail === candEmail) || (candId && uCandId === candId);
+      });
+
+      if (alreadyHasAccess) return; // Disappears if portal access is already granted!
+
+      const notifId = `accepted-${candId}`;
+      if (dismissedNotifIds.has(notifId)) return;
+
+      const candName = cand.candidate_name || cand.name || 'Candidate';
+      const compName = cand.company_name || cand.vendor_name || 'Bearitt';
+      const roleName = cand.requisition_title || cand.title || 'Selected Role';
+
+      list.push({
+        id: notifId,
+        priority: 2,
+        type: 'accepted',
+        badge: 'HR Accepted',
+        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        title: candName,
+        subtitle: `${compName} • ${roleName}`,
+        actionLabel: 'Grant Access',
+        actionUrl: '/dashboard/recruiter/portal-access',
+        candId,
+      });
+    });
+
+    // Priority 3: Interview Requests
+    (interviews || []).forEach((inv) => {
+      const notifId = `interview-${inv.id}`;
+      if (dismissedNotifIds.has(notifId)) return;
+
+      const candName = inv.candidate_name || 'Candidate';
+      const compName = inv.company_name || inv.client_name || 'Client';
+
+      list.push({
+        id: notifId,
+        priority: 3,
+        type: 'interview',
+        badge: 'Interview',
+        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+        title: candName,
+        subtitle: `${compName} • Scheduled`,
+        actionLabel: 'View',
+        actionUrl: '/dashboard/recruiter/interviews',
+      });
+    });
+
+    return list.sort((a, b) => a.priority - b.priority);
+  }, [requisitions, screenedReqSummary, acceptedCandidates, portalUsers, interviews, dismissedNotifIds]);
+
   const toggleCandidateSelect = (id) => {
     setSelectedCandidateIds((prev) =>
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
@@ -537,7 +636,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     setLoading(true);
     const activeToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token');
     try {
-      const [rawRequisitions, candidateData, limitData, bankData, interviewData, screenedSummaryData] = await Promise.all([
+      const [rawRequisitions, candidateData, limitData, bankData, interviewData, screenedSummaryData, acceptedData, portalUsersData] = await Promise.all([
         request('/requisitions', { token: activeToken }).catch(() => []),
         request('/candidates/shortlisted', { token: activeToken })
           .catch(() => request('/api/candidates/shortlisted', { token: activeToken }))
@@ -546,6 +645,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         request('/candidates/bank', { token: activeToken }).catch(() => []),
         request('/api/interviews/vendor', { token: activeToken }).catch(() => []),
         request('/candidates/bank/screened-summary', { token: activeToken }).catch(() => ({ screened_requisitions: {} })),
+        request('/candidates?status=Accepted', { token: activeToken }).catch(() => []),
+        request('/api/auth/portal-users', { token: activeToken }).catch(() => []),
       ]);
 
       const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
@@ -561,6 +662,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setCandidateLimit(limitData?.limit ?? null);
       setBankCandidates(bankData || []);
       setInterviews(Array.isArray(interviewData) ? interviewData : []);
+      const acceptedList = Array.isArray(acceptedData) ? acceptedData : (acceptedData?.candidates || []);
+      setAcceptedCandidates(acceptedList);
+      setPortalUsers(Array.isArray(portalUsersData) ? portalUsersData : []);
       setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
       setLoading(false);
 
@@ -1354,7 +1458,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               )}
             </div>
 
-            {/* RIGHT COLUMN: WORKSPACE SNAPSHOT (35% width / col-span-4) */}
+            {/* RIGHT COLUMN: WORKSPACE SNAPSHOT & LIVE NOTIFICATIONS (col-span-4) */}
             <div className="lg:col-span-4 space-y-4">
               <div
                 style={{
@@ -1363,7 +1467,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   border: '1px solid #E2E2DC',
                   boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
                 }}
-                className="p-6 space-y-5"
+                className="p-5 space-y-4"
               >
                 {/* Header Row */}
                 <div className="flex items-center justify-between">
@@ -1371,7 +1475,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                     <h2 className="text-[1.05rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
                       Workspace Snapshot
                     </h2>
-                    <p className="text-[12px] text-[#737373] font-medium mt-0.5">
+                    <p className="text-[11.5px] text-[#737373] font-medium mt-0.5">
                       Recruiter activity overview
                     </p>
                   </div>
@@ -1389,27 +1493,125 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 </div>
 
                 {/* Key-Value Breakdown Rows */}
-                <div className="divide-y divide-[#F2F2EE] text-[12.5px]">
-                  <div className="py-3 flex items-center justify-between">
+                <div className="divide-y divide-[#F2F2EE] text-[12px]">
+                  <div className="py-2.5 flex items-center justify-between">
                     <span className="text-[#8A8A85] font-medium">Agency</span>
                     <span className="font-bold text-[#0A0A0A] lowercase">{user?.tenant_name || 'bridgeon'}</span>
                   </div>
 
-                  <div className="py-3 flex items-center justify-between">
+                  <div className="py-2.5 flex items-center justify-between">
                     <span className="text-[#8A8A85] font-medium">Published roles</span>
                     <span className="font-extrabold text-[#0A0A0A]">{requisitions.length}</span>
                   </div>
 
-                  <div className="py-3 flex items-center justify-between">
+                  <div className="py-2.5 flex items-center justify-between">
                     <span className="text-[#8A8A85] font-medium">Talent profiles</span>
                     <span className="font-extrabold text-[#0A0A0A]">{bankCandidates.length}</span>
                   </div>
 
-                  <div className="py-3 flex items-center justify-between">
+                  <div className="py-2.5 flex items-center justify-between">
                     <span className="text-[#8A8A85] font-medium">Screening ready</span>
                     <span className="font-extrabold text-[#0A0A0A]">{bankCandidates.length} / {bankCandidates.length}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Live Alerts & Notifications Card (Compact & Streamlined) */}
+              <div
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 20,
+                  border: '1px solid #E2E2DC',
+                  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+                }}
+                className="p-4 space-y-3"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-md bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                      <Bell size={12} strokeWidth={2.5} />
+                    </div>
+                    <h3 className="text-[13px] font-extrabold text-[#0A0A0A] tracking-tight">
+                      Live Alerts
+                    </h3>
+                  </div>
+
+                  <span
+                    style={{
+                      backgroundColor: notifications.length ? '#0A0A0A' : '#F5F5F2',
+                      color: notifications.length ? '#FFFFFF' : '#8A8A85',
+                      borderRadius: 9999,
+                    }}
+                    className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider"
+                  >
+                    {notifications.length} {notifications.length === 1 ? 'Alert' : 'Alerts'}
+                  </span>
+                </div>
+
+                {/* Compact Notification Items */}
+                {notifications.length === 0 ? (
+                  <div className="py-4 px-3 text-center bg-[#FBFBFA] rounded-xl border border-[#F2F2EE] text-[11.5px] text-[#8A8A85]">
+                    No pending alerts right now.
+                  </div>
+                ) : (
+                  <div className="max-h-[220px] overflow-y-auto space-y-2 pr-0.5 custom-cand-scroll">
+                    {notifications.map((notif) => (
+                      <div
+                        key={notif.id}
+                        onClick={() => {
+                          if (notif.reqId) selectRequisition(notif.reqId);
+                          if (notif.actionUrl) navigate(notif.actionUrl);
+                        }}
+                        className="px-3 py-2 bg-[#FBFBFA] hover:bg-[#F5F5F2] border border-[#EAEAE6] hover:border-[#D5D5D0] rounded-xl transition-all cursor-pointer group flex items-center justify-between gap-2.5"
+                      >
+                        {/* Left: Badge + Short Info */}
+                        <div className="min-w-0 flex items-center gap-2">
+                          <span
+                            className={`px-1.5 py-0.5 text-[9.5px] font-extrabold rounded-md border shrink-0 ${notif.badgeColor}`}
+                          >
+                            {notif.badge}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-[12px] font-extrabold text-[#0A0A0A] truncate leading-tight group-hover:text-black">
+                              {notif.title}
+                            </div>
+                            <div className="text-[10.5px] text-[#8A8A85] truncate leading-tight mt-0.5 font-medium">
+                              {notif.subtitle}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: Action Pill & Dismiss */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span
+                            style={{
+                              backgroundColor: '#0A0A0A',
+                              color: '#FFFFFF',
+                              borderRadius: 6,
+                            }}
+                            className="px-2 py-1 text-[10px] font-extrabold group-hover:bg-[#262626] transition-colors flex items-center gap-1 shadow-2xs whitespace-nowrap"
+                          >
+                            {notif.actionLabel}
+                            <ArrowRight size={10} />
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDismissedNotifIds((prev) => new Set([...prev, notif.id]));
+                            }}
+                            className="text-[#A1A1AA] hover:text-[#0A0A0A] p-0.5 rounded hover:bg-[#EAEAE6] transition-colors cursor-pointer"
+                            title="Dismiss notification"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
