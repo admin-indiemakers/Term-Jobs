@@ -745,6 +745,115 @@ def list_portal_users(
     ]
 
 
+@router.post("/portal-users")
+def create_or_update_portal_user(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create or update a Candidate portal account for a specific candidate submission.
+    
+    Enforces candidate/tenant uniqueness:
+    - If a Candidate user already exists for this candidate_id (or email within this tenant),
+      it updates the existing credentials and ensures is_active=True.
+    - Otherwise, provisions a new Candidate user linked to this candidate_id.
+    """
+    if current_user.role not in ("Recruiter", "Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only recruiters and admins may provision candidate portal access",
+        )
+
+    email = (body.get("email") or "").strip().lower()
+    name = (body.get("name") or "").strip()
+    password = body.get("password") or ""
+    candidate_id = (body.get("candidate_id") or "").strip()
+
+    if not email or "@" not in email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate name is required")
+    if not candidate_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate ID is required")
+
+    tenant_id = current_user.tenant_id
+
+    # 1. Search for existing Candidate user by candidate_id OR (tenant_id + email)
+    existing_user = None
+    if candidate_id:
+        existing_user = db.query(User).filter(
+            User.role == "Candidate",
+            User.tenant_id == tenant_id,
+            User.candidate_id == candidate_id,
+        ).first()
+
+    if not existing_user and email:
+        existing_user = db.query(User).filter(
+            User.role == "Candidate",
+            User.tenant_id == tenant_id,
+            User.email == email,
+        ).first()
+
+    if existing_user:
+        # Update existing candidate user credentials & ensure active
+        existing_user.name = name
+        existing_user.email = email
+        existing_user.candidate_id = candidate_id
+        if password:
+            existing_user.password_hash = hash_password(password)
+        existing_user.is_active = True
+        db.commit()
+        db.refresh(existing_user)
+        return {
+            "ok": True,
+            "id": existing_user.id,
+            "email": existing_user.email,
+            "name": existing_user.name,
+            "candidate_id": existing_user.candidate_id,
+            "is_active": existing_user.is_active,
+            "message": "Portal credentials updated and activated successfully",
+        }
+
+    # 2. Check if email is already taken by a non-candidate account
+    email_taken = db.query(User).filter(User.email == email, User.role != "Candidate").first()
+    if email_taken:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Email '{email}' is already registered for staff role '{email_taken.role}'",
+        )
+
+    if not password or len(password) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 4 characters long",
+        )
+
+    # 3. Create new Candidate user
+    new_user = User(
+        tenant_id=tenant_id,
+        email=email,
+        name=name,
+        password_hash=hash_password(password),
+        role="Candidate",
+        candidate_id=candidate_id,
+        created_by=current_user.id,
+        is_active=True,
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+
+    return {
+        "ok": True,
+        "id": new_user.id,
+        "email": new_user.email,
+        "name": new_user.name,
+        "candidate_id": new_user.candidate_id,
+        "is_active": new_user.is_active,
+        "message": "Portal access created successfully",
+    }
+
+
 @router.put("/portal-users/{user_id}")
 def update_portal_user(
     user_id: str,
@@ -792,8 +901,6 @@ def delete_portal_user(
     db.commit()
     return {"ok": True, "message": "Portal user deleted"}
 
-
-# ── Archives ────────────────────────────────────────────────────────────────
 
 def _archives():
     from modules.shared.db import db as _db

@@ -563,11 +563,12 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       const candEmail = (cand.candidate_email || cand.email || '').toLowerCase().trim();
       const candId = cand.id || cand.submission_id || cand.candidate_id;
 
-      // Check if portal access has already been granted
+      // Check if portal access has already been granted & is active
       const alreadyHasAccess = (portalUsers || []).some((u) => {
         const uEmail = (u.email || '').toLowerCase().trim();
-        const uCandId = u.candidate_id;
-        return (candEmail && uEmail === candEmail) || (candId && uCandId === candId);
+        const uCandId = (u.candidate_id || '').trim();
+        const isUserActive = u.is_active !== false;
+        return isUserActive && ((candId && uCandId === candId) || (candEmail && candEmail.length > 3 && uEmail === candEmail && (!uCandId || uCandId === candId)));
       });
 
       if (alreadyHasAccess) return; // Disappears if portal access is already granted!
@@ -5945,7 +5946,7 @@ function PortalAccessView({ authToken }) {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'PENDING'
+  const [filterStatus, setFilterStatus] = useState('ALL'); // 'ALL' | 'ACTIVE' | 'REVOKED' | 'PENDING'
 
   const [showCreate, setShowCreate] = useState(false);
   const [editUser, setEditUser] = useState(null);
@@ -5953,6 +5954,7 @@ function PortalAccessView({ authToken }) {
   const [createEmail, setCreateEmail] = useState('');
   const [createPassword, setCreatePassword] = useState('');
   const [createCandidateId, setCreateCandidateId] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
   const loadData = () => {
     setLoading(true);
@@ -5972,16 +5974,17 @@ function PortalAccessView({ authToken }) {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
-      await request('/api/auth/users', {
+      await request('/api/auth/portal-users', {
         method: 'POST',
         token: authToken,
         body: {
-          email: createEmail,
-          name: createName,
+          email: createEmail.trim().toLowerCase(),
+          name: createName.trim(),
           password: createPassword,
-          role: 'Candidate',
-          candidate_id: createCandidateId,
+          candidate_id: createCandidateId.trim(),
         },
       });
       setToast('✓ Portal access created successfully');
@@ -5993,12 +5996,16 @@ function PortalAccessView({ authToken }) {
       loadData();
       setTimeout(() => setToast(''), 3500);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to create portal access.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleUpdate = async (e) => {
     e.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
     try {
       const body = { name: editUser._name };
       if (editUser._password) body.password = editUser._password;
@@ -6012,47 +6019,81 @@ function PortalAccessView({ authToken }) {
       loadData();
       setTimeout(() => setToast(''), 3500);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to update credentials.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleActive = async (user, activate = true) => {
+    try {
+      await request(`/api/auth/portal-users/${user.id}`, {
+        method: 'PUT',
+        token: authToken,
+        body: { is_active: activate },
+      });
+      setToast(activate ? '✓ Portal access re-activated' : '✓ Portal access revoked');
+      loadData();
+      setTimeout(() => setToast(''), 3500);
+    } catch (err) {
+      setError(err.message || 'Failed to change access state.');
     }
   };
 
   const handleDelete = async (userId) => {
-    if (!confirm('Are you sure you want to revoke portal access for this candidate?')) return;
+    if (!confirm('Are you sure you want to permanently delete portal access for this candidate?')) return;
     try {
       await request(`/api/auth/portal-users/${userId}`, {
         method: 'DELETE',
         token: authToken,
       });
-      setToast('✓ Portal access revoked');
+      setToast('✓ Portal account deleted');
       loadData();
       setTimeout(() => setToast(''), 3500);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Failed to delete portal user.');
     }
   };
 
-  // Pre-calculate user matching
+  // Strict Candidate matching to actual Database Portal User credentials
   const candidateRows = candidates.map((c) => {
-    const cid = c.submission_id || c.id;
-    const user = portalUsers.find(
-      (u) => (u.candidate_id && u.candidate_id === cid) || (u.email?.toLowerCase() === c.candidate_email?.toLowerCase())
+    const cid = (c.submission_id || c.id || '').trim();
+    const candEmail = (c.candidate_email || '').trim().toLowerCase();
+
+    // 1. Strict primary match by candidate_id / submission_id
+    let user = portalUsers.find(
+      (u) => u.candidate_id && u.candidate_id.trim() === cid
     );
+
+    // 2. Secondary fallback by email ONLY if candidate_email is valid non-empty and candidate_id matches
+    if (!user && candEmail && candEmail.length > 3) {
+      user = portalUsers.find(
+        (u) => (u.email || '').trim().toLowerCase() === candEmail && (!u.candidate_id || u.candidate_id.trim() === cid)
+      );
+    }
+
+    const isActive = !!user && user.is_active !== false;
+    const isRevoked = !!user && user.is_active === false;
+
     return {
       ...c,
       cid,
       portalUser: user,
-      hasAccess: !!user,
+      hasAccess: isActive,
+      isRevoked,
     };
   });
 
   const activeCount = candidateRows.filter((r) => r.hasAccess).length;
-  const pendingCount = candidateRows.filter((r) => !r.hasAccess).length;
+  const revokedCount = candidateRows.filter((r) => r.isRevoked).length;
+  const pendingCount = candidateRows.filter((r) => !r.hasAccess && !r.isRevoked).length;
   const adoptionRate = candidateRows.length > 0 ? Math.round((activeCount / candidateRows.length) * 100) : 0;
 
   // Filtered rows
   const filteredCandidates = candidateRows.filter((c) => {
     if (filterStatus === 'ACTIVE' && !c.hasAccess) return false;
-    if (filterStatus === 'PENDING' && c.hasAccess) return false;
+    if (filterStatus === 'REVOKED' && !c.isRevoked) return false;
+    if (filterStatus === 'PENDING' && (c.hasAccess || c.isRevoked)) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const name = (c.candidate_name || '').toLowerCase();
@@ -6081,7 +6122,7 @@ function PortalAccessView({ authToken }) {
             <span className="text-[10px] font-black tracking-widest text-[#8A8A85] uppercase">
               CANDIDATE MANAGEMENT
             </span>
-            <span className="text-[#8A8A85]">·</span>
+            <span className="text-[#8A8A85]">›</span>
             <span className="text-[11px] font-bold text-[#0A0A0A]">
               PORTAL ACCESS & CREDENTIALS
             </span>
@@ -6135,7 +6176,7 @@ function PortalAccessView({ authToken }) {
             {candidates.length}
           </div>
           <div className="text-[11px] text-[#8A8A85] mt-0.5">
-            Screened talent in pipeline
+            Accepted talent in pipeline
           </div>
         </div>
 
@@ -6261,6 +6302,7 @@ function PortalAccessView({ authToken }) {
           {[
             { id: 'ALL', label: 'All Candidates', count: candidateRows.length },
             { id: 'ACTIVE', label: 'Active Access', count: activeCount },
+            { id: 'REVOKED', label: 'Revoked', count: revokedCount },
             { id: 'PENDING', label: 'No Access', count: pendingCount },
           ].map((pill) => {
             const isSelected = filterStatus === pill.id;
@@ -6298,19 +6340,19 @@ function PortalAccessView({ authToken }) {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search name, email, ID..."
+            placeholder="Search candidate, email, ID..."
             style={{
-              backgroundColor: '#FBFBFA',
+              backgroundColor: '#F5F5F2',
               border: '1px solid #E2E2DC',
-              borderRadius: 10,
+              borderRadius: 12,
             }}
-            className="w-full pl-3 pr-8 py-1.5 text-[12px] text-[#0A0A0A] placeholder-[#8A8A85] focus:outline-none focus:border-[#0A0A0A]"
+            className="w-full pl-3.5 pr-8 py-2 text-[12.5px] font-medium text-[#0A0A0A] placeholder-[#8A8A85] outline-hidden focus:border-[#0A0A0A] focus:bg-[#FFFFFF] transition-all"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8A8A85] hover:text-[#0A0A0A]"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8A8A85] hover:text-[#0A0A0A] cursor-pointer"
             >
               ✕
             </button>
@@ -6318,84 +6360,69 @@ function PortalAccessView({ authToken }) {
         </div>
       </div>
 
-      {/* Main Table Container */}
+      {/* Main Candidate Portal Table */}
       <div
         style={{
           backgroundColor: '#FFFFFF',
           border: '1px solid #E2E2DC',
           borderRadius: 16,
           boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          height: 'calc(100vh - 450px)',
-          minHeight: '380px',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
         }}
+        className="overflow-hidden"
       >
         {loading ? (
-          <div className="p-12 text-center text-[#8A8A85] text-sm">
-            Loading candidate access records...
+          <div className="p-12 text-center text-[13px] text-[#8A8A85] font-medium animate-pulse">
+            Loading candidate portal access records...
           </div>
         ) : filteredCandidates.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="w-12 h-12 rounded-full bg-[#F5F5F2] text-[#8A8A85] flex items-center justify-center mx-auto mb-3 text-lg font-black">
-              🔐
+            <div className="text-3xl mb-2">👤</div>
+            <div className="text-base font-black text-[#0A0A0A]">
+              No Candidates Found
             </div>
-            <h4 className="text-[14px] font-black text-[#0A0A0A] mb-1">
-              No matching candidate accounts found
-            </h4>
-            <p className="text-[12px] text-[#8A8A85]">
-              {searchQuery
-                ? 'Try adjusting your search criteria.'
-                : 'Candidates will appear here automatically as submissions are screened.'}
-            </p>
+            <div className="text-[13px] text-[#8A8A85] mt-1">
+              {searchQuery ? 'Try adjusting your search query or filter.' : 'Accepted candidates will appear here for portal setup.'}
+            </div>
           </div>
         ) : (
-          <div className="overflow-y-auto flex-1 custom-cand-scroll">
+          <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
-              <thead className="sticky top-0 z-10 shadow-xs">
-                <tr
-                  style={{
-                    backgroundColor: '#F5F5F2',
-                    borderBottom: '1px solid #E2E2DC',
-                  }}
-                >
-                  <th className="py-3 px-4 text-[11px] font-black text-[#8A8A85] uppercase tracking-wider">
+              <thead>
+                <tr className="border-b border-[#E2E2DC] bg-[#FAFAFA]">
+                  <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85]">
                     Candidate
                   </th>
-                  <th className="py-3 px-4 text-[11px] font-black text-[#8A8A85] uppercase tracking-wider">
+                  <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85]">
                     Candidate ID
                   </th>
-                  <th className="py-3 px-4 text-[11px] font-black text-[#8A8A85] uppercase tracking-wider">
-                    Assigned Requisition
+                  <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85]">
+                    Requisition & Role
                   </th>
-                  <th className="py-3 px-4 text-[11px] font-black text-[#8A8A85] uppercase tracking-wider">
+                  <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85]">
                     Portal Status
                   </th>
-                  <th className="py-3 px-4 text-[11px] font-black text-[#8A8A85] uppercase tracking-wider text-right">
+                  <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85] text-right">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-[#F2F2EE]">
+              <tbody className="divide-y divide-[#E2E2DC]">
                 {filteredCandidates.map((c) => {
+                  const user = c.portalUser;
                   const candName = c.candidate_name || 'Candidate';
                   const initials = candName
                     .split(' ')
-                    .filter(Boolean)
-                    .slice(0, 2)
                     .map((n) => n[0])
                     .join('')
-                    .toUpperCase() || 'CD';
-
-                  const user = c.portalUser;
+                    .toUpperCase()
+                    .slice(0, 2);
 
                   return (
                     <tr
-                      key={c.cid}
-                      className="hover:bg-[#FBFBFA] transition-colors"
+                      key={c.cid || c.id}
+                      className="hover:bg-[#FDFDFD] transition-colors"
                     >
-                      {/* Candidate Name & Avatar */}
+                      {/* Candidate Name & Email */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
                           <div
@@ -6447,7 +6474,7 @@ function PortalAccessView({ authToken }) {
 
                       {/* Portal Status */}
                       <td className="py-3.5 px-4">
-                        {user ? (
+                        {c.hasAccess ? (
                           <span
                             style={{
                               backgroundColor: '#0A0A0A',
@@ -6456,8 +6483,20 @@ function PortalAccessView({ authToken }) {
                             }}
                             className="inline-flex items-center gap-1.5 text-[11px] font-black px-2.5 py-0.5"
                           >
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                             <span>Active</span>
+                          </span>
+                        ) : c.isRevoked ? (
+                          <span
+                            style={{
+                              backgroundColor: '#F5F5F2',
+                              border: '1px solid #E2E2DC',
+                              color: '#8A8A85',
+                              borderRadius: 999,
+                            }}
+                            className="inline-flex items-center text-[11px] font-bold px-2.5 py-0.5 line-through"
+                          >
+                            Revoked
                           </span>
                         ) : (
                           <span
@@ -6477,8 +6516,54 @@ function PortalAccessView({ authToken }) {
                       {/* Actions */}
                       <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          {user ? (
+                          {c.hasAccess ? (
                             <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setEditUser({
+                                    id: user.id,
+                                    _name: user.name,
+                                    _password: '',
+                                    candidate_id: user.candidate_id,
+                                  })
+                                }
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid #E2E2DC',
+                                  borderRadius: 8,
+                                }}
+                                className="px-2.5 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleActive(user, false)}
+                                style={{
+                                  backgroundColor: '#FFFFFF',
+                                  border: '1px solid #FCA5A5',
+                                  borderRadius: 8,
+                                }}
+                                className="px-2.5 py-1 text-[11.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] transition-colors cursor-pointer"
+                              >
+                                Revoke
+                              </button>
+                            </>
+                          ) : c.isRevoked ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleActive(user, true)}
+                                style={{
+                                  backgroundColor: '#0A0A0A',
+                                  color: '#FFFFFF',
+                                  borderRadius: 8,
+                                }}
+                                className="px-2.5 py-1 text-[11.5px] font-extrabold hover:bg-[#262626] transition-colors cursor-pointer"
+                              >
+                                Re-activate
+                              </button>
                               <button
                                 type="button"
                                 onClick={() =>
@@ -6508,7 +6593,7 @@ function PortalAccessView({ authToken }) {
                                 }}
                                 className="px-2.5 py-1 text-[11.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] transition-colors cursor-pointer"
                               >
-                                Revoke
+                                Delete
                               </button>
                             </>
                           ) : (
@@ -6558,23 +6643,22 @@ function PortalAccessView({ authToken }) {
               borderRadius: 18,
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
               width: 440,
-              maxWidth: '100%',
             }}
             className="p-6 space-y-4"
           >
-            <div className="flex items-center justify-between border-b border-[#F2F2EE] pb-3">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2E2DC]">
               <div>
-                <h3 className="text-[16px] font-black text-[#0A0A0A]">
+                <h3 className="text-base font-black text-[#0A0A0A]">
                   Create Portal Access
                 </h3>
                 <p className="text-[12px] text-[#8A8A85]">
-                  Issue candidate login credentials
+                  Candidate ID: <span className="font-mono font-bold text-[#0A0A0A]">{createCandidateId}</span>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreate(false)}
-                className="w-7 h-7 rounded-full bg-[#F5F5F2] text-[#0A0A0A] font-bold text-xs flex items-center justify-center hover:bg-[#EAEAE6] cursor-pointer"
+                className="text-[#8A8A85] hover:text-[#0A0A0A] text-lg font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -6582,81 +6666,62 @@ function PortalAccessView({ authToken }) {
 
             <form onSubmit={handleCreate} className="space-y-3.5">
               <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
+                <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
                   Candidate Name
                 </label>
                 <input
+                  type="text"
+                  required
                   value={createName}
                   onChange={(e) => setCreateName(e.target.value)}
-                  required
-                  placeholder="Full name"
                   style={{
-                    backgroundColor: '#FBFBFA',
+                    backgroundColor: '#F5F5F2',
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="w-full px-3 py-2 text-[13px] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+                  className="w-full px-3.5 py-2 text-[13px] font-bold text-[#0A0A0A] outline-hidden focus:bg-[#FFFFFF] focus:border-[#0A0A0A]"
                 />
               </div>
 
               <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
-                  Candidate ID
+                <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
+                  Portal Login Email
                 </label>
                 <input
-                  value={createCandidateId}
-                  onChange={(e) => setCreateCandidateId(e.target.value)}
+                  type="email"
                   required
-                  placeholder="e.g. BEAR-a1b2c3d4"
-                  style={{
-                    backgroundColor: '#FBFBFA',
-                    border: '1px solid #E2E2DC',
-                    borderRadius: 10,
-                  }}
-                  className="w-full px-3 py-2 text-[13px] text-[#0A0A0A] font-mono focus:outline-none focus:border-[#0A0A0A]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
-                  Email Address
-                </label>
-                <input
                   value={createEmail}
                   onChange={(e) => setCreateEmail(e.target.value)}
-                  required
-                  type="email"
-                  placeholder="candidate@example.com"
                   style={{
-                    backgroundColor: '#FBFBFA',
+                    backgroundColor: '#F5F5F2',
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="w-full px-3 py-2 text-[13px] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+                  className="w-full px-3.5 py-2 text-[13px] font-bold text-[#0A0A0A] outline-hidden focus:bg-[#FFFFFF] focus:border-[#0A0A0A]"
                 />
               </div>
 
               <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
-                  Temporary Password
+                <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
+                  Initial Password
                 </label>
                 <input
+                  type="password"
+                  required
+                  minLength={4}
                   value={createPassword}
                   onChange={(e) => setCreatePassword(e.target.value)}
-                  required
-                  type="password"
-                  minLength={4}
-                  placeholder="Min 4 characters"
+                  placeholder="At least 4 characters"
                   style={{
-                    backgroundColor: '#FBFBFA',
+                    backgroundColor: '#F5F5F2',
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="w-full px-3 py-2 text-[13px] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+                  className="w-full px-3.5 py-2 text-[13px] font-bold text-[#0A0A0A] outline-hidden focus:bg-[#FFFFFF] focus:border-[#0A0A0A]"
                 />
               </div>
 
-              <div className="pt-2 flex items-center gap-2">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#E2E2DC]">
                 <button
                   type="button"
                   onClick={() => setShowCreate(false)}
@@ -6665,20 +6730,21 @@ function PortalAccessView({ authToken }) {
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="flex-1 py-2 text-[12.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer"
+                  className="px-4 py-2 text-[12px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  disabled={submitting}
                   style={{
                     backgroundColor: '#0A0A0A',
                     color: '#FFFFFF',
                     borderRadius: 10,
                   }}
-                  className="flex-1 py-2 text-[12.5px] font-extrabold hover:bg-[#262626] transition-all cursor-pointer shadow-2xs"
+                  className="px-4 py-2 text-[12px] font-extrabold hover:bg-[#262626] transition-all cursor-pointer shadow-2xs disabled:opacity-60"
                 >
-                  Create Credentials
+                  {submitting ? 'Creating...' : 'Create Credentials'}
                 </button>
               </div>
             </form>
@@ -6702,23 +6768,22 @@ function PortalAccessView({ authToken }) {
               borderRadius: 18,
               boxShadow: '0 20px 60px rgba(0, 0, 0, 0.15)',
               width: 440,
-              maxWidth: '100%',
             }}
             className="p-6 space-y-4"
           >
-            <div className="flex items-center justify-between border-b border-[#F2F2EE] pb-3">
+            <div className="flex items-center justify-between pb-3 border-b border-[#E2E2DC]">
               <div>
-                <h3 className="text-[16px] font-black text-[#0A0A0A]">
-                  Edit Portal Credentials
+                <h3 className="text-base font-black text-[#0A0A0A]">
+                  Edit Candidate Credentials
                 </h3>
                 <p className="text-[12px] text-[#8A8A85]">
-                  Update candidate login info
+                  ID: <span className="font-mono font-bold text-[#0A0A0A]">{editUser.candidate_id}</span>
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setEditUser(null)}
-                className="w-7 h-7 rounded-full bg-[#F5F5F2] text-[#0A0A0A] font-bold text-xs flex items-center justify-center hover:bg-[#EAEAE6] cursor-pointer"
+                className="text-[#8A8A85] hover:text-[#0A0A0A] text-lg font-bold cursor-pointer"
               >
                 ✕
               </button>
@@ -6726,57 +6791,42 @@ function PortalAccessView({ authToken }) {
 
             <form onSubmit={handleUpdate} className="space-y-3.5">
               <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
+                <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
                   Candidate Name
                 </label>
                 <input
+                  type="text"
+                  required
                   value={editUser._name}
                   onChange={(e) => setEditUser({ ...editUser, _name: e.target.value })}
-                  required
-                  style={{
-                    backgroundColor: '#FBFBFA',
-                    border: '1px solid #E2E2DC',
-                    borderRadius: 10,
-                  }}
-                  className="w-full px-3 py-2 text-[13px] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
-                  Candidate ID
-                </label>
-                <input
-                  value={editUser.candidate_id || ''}
-                  disabled
                   style={{
                     backgroundColor: '#F5F5F2',
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="w-full px-3 py-2 text-[13px] text-[#8A8A85] font-mono cursor-not-allowed"
+                  className="w-full px-3.5 py-2 text-[13px] font-bold text-[#0A0A0A] outline-hidden focus:bg-[#FFFFFF] focus:border-[#0A0A0A]"
                 />
               </div>
 
               <div>
-                <label className="text-[11.5px] font-bold uppercase tracking-wider text-[#8A8A85] block mb-1">
-                  Reset Password (optional)
+                <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
+                  New Password (leave blank to keep current)
                 </label>
                 <input
-                  value={editUser._password || ''}
-                  onChange={(e) => setEditUser({ ...editUser, _password: e.target.value })}
                   type="password"
-                  placeholder="Leave blank to keep unchanged"
+                  value={editUser._password}
+                  onChange={(e) => setEditUser({ ...editUser, _password: e.target.value })}
+                  placeholder="Optional new password"
                   style={{
-                    backgroundColor: '#FBFBFA',
+                    backgroundColor: '#F5F5F2',
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="w-full px-3 py-2 text-[13px] text-[#0A0A0A] focus:outline-none focus:border-[#0A0A0A]"
+                  className="w-full px-3.5 py-2 text-[13px] font-bold text-[#0A0A0A] outline-hidden focus:bg-[#FFFFFF] focus:border-[#0A0A0A]"
                 />
               </div>
 
-              <div className="pt-2 flex items-center gap-2">
+              <div className="flex justify-end gap-2.5 pt-3 border-t border-[#E2E2DC]">
                 <button
                   type="button"
                   onClick={() => setEditUser(null)}
@@ -6785,20 +6835,21 @@ function PortalAccessView({ authToken }) {
                     border: '1px solid #E2E2DC',
                     borderRadius: 10,
                   }}
-                  className="flex-1 py-2 text-[12.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer"
+                  className="px-4 py-2 text-[12px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
+                  disabled={submitting}
                   style={{
                     backgroundColor: '#0A0A0A',
                     color: '#FFFFFF',
                     borderRadius: 10,
                   }}
-                  className="flex-1 py-2 text-[12.5px] font-extrabold hover:bg-[#262626] transition-all cursor-pointer shadow-2xs"
+                  className="px-4 py-2 text-[12px] font-extrabold hover:bg-[#262626] transition-all cursor-pointer shadow-2xs disabled:opacity-60"
                 >
-                  Save Updates
+                  {submitting ? 'Updating...' : 'Save Changes'}
                 </button>
               </div>
             </form>
@@ -6808,6 +6859,3 @@ function PortalAccessView({ authToken }) {
     </div>
   );
 }
-
-
-function RoleMetric({ label, value }) { return <div className="role-metric"><span>{label}</span><b>{value}</b></div>; }
