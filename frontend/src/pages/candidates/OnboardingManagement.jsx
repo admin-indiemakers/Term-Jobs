@@ -117,14 +117,14 @@ export default function OnboardingManagement() {
     const existing = onboardingDocs[id];
 
     setEditingCandidate(cand);
-    if (existing?.software_access?.length) {
-      setSetupSoftware(existing.software_access);
+    if (existing?.software?.length) {
+      setSetupSoftware(existing.software);
     } else {
       setSetupSoftware(DEFAULT_SOFTWARE.map((s) => ({ ...s, enabled: false })));
     }
 
-    if (existing?.training_modules?.length) {
-      setSetupTraining(existing.training_modules);
+    if (existing?.training?.length) {
+      setSetupTraining(existing.training);
     } else {
       setSetupTraining(DEFAULT_TRAINING.map((t) => ({ ...t, enabled: t.mandatory || false })));
     }
@@ -144,8 +144,8 @@ export default function OnboardingManagement() {
         vendor_name: editingCandidate.vendor_name || 'bridgeon',
         requisition_ref: editingCandidate.requisition_ref || 'REQ-F7F406',
         requisition_title: editingCandidate.requisition_title || 'DevOps Engineer',
-        software_access: setupSoftware,
-        training_modules: setupTraining,
+        software: setupSoftware,
+        training: setupTraining,
         status: setupSoftware.some((s) => s.enabled) || setupTraining.some((t) => t.enabled) ? 'completed' : 'in_progress',
       };
 

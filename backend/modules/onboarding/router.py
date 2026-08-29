@@ -190,40 +190,45 @@ def resolve_onboarding_issue(issue_id: str):
     doc = _issues_coll().find_one({"id": issue_id})
     doc.pop("_id", None)
 
-    # Create notification for the candidate
+    # Create notification for the candidate in both collections
+    candidate_id = doc.get("candidate_id", "")
     try:
-        from modules.identity.domain.models import User
-        from modules.shared.db import get_session
-        candidate_user = None
-        with get_session() as session:
-            users = session.query(User).filter(
-                User.role == "Candidate",
-            ).all()
-            for u in users:
-                candidate_id = getattr(u, "candidate_id", None) or getattr(u, "_candidate_id", "")
-                # Check via raw doc
-                pass
-        # Find candidate user by candidate_id from MongoDB users collection
-        candidate_id = doc.get("candidate_id", "")
         candidate_user_doc = db["users"].find_one({"candidate_id": candidate_id, "role": "Candidate"})
-        if candidate_user_doc:
-            notif_id = f"notif_{uuid.uuid4().hex[:8]}"
-            db["notifications"].insert_one({
-                "id": notif_id,
-                "user_id": candidate_user_doc.get("id", ""),
-                "tenant_id": candidate_user_doc.get("tenant_id", ""),
-                "type": "issue.resolved",
-                "title": "Issue Resolved",
-                "body": f"Your onboarding issue '{doc.get('category_label', 'Issue')}' — {doc.get('description', '')} — has been resolved by your hiring manager.",
-                "data": {
-                    "issue_id": doc.get("id"),
-                    "category": doc.get("category"),
-                    "category_label": doc.get("category_label"),
-                    "candidate_id": candidate_id,
-                },
-                "read": False,
-                "created_at": now,
-            })
+        user_id = candidate_user_doc.get("id", "") if candidate_user_doc else ""
+        tenant_id = candidate_user_doc.get("tenant_id", "") if candidate_user_doc else ""
+        notif_id = f"notif_{uuid.uuid4().hex[:8]}"
+        notif_body = f"Your onboarding issue '{doc.get('category_label', 'Issue')}' — {doc.get('description', '')} — has been resolved by your hiring manager."
+        notif_data = {
+            "issue_id": doc.get("id"),
+            "category": doc.get("category"),
+            "category_label": doc.get("category_label"),
+            "candidate_id": candidate_id,
+        }
+        # Save to 'notifications' collection (onboarding module)
+        db["notifications"].insert_one({
+            "id": notif_id,
+            "user_id": user_id,
+            "tenant_id": tenant_id,
+            "type": "issue.resolved",
+            "title": "Issue Resolved",
+            "body": notif_body,
+            "data": notif_data,
+            "read": False,
+            "created_at": now,
+        })
+        # Also save to 'candidate_notifications' collection (candidate portal)
+        db["candidate_notifications"].insert_one({
+            "id": f"notif_{uuid.uuid4().hex[:8]}",
+            "candidate_id": candidate_id,
+            "title": "Issue Resolved",
+            "message": notif_body,
+            "category": "onboarding",
+            "timestamp_label": "Just now",
+            "is_read": False,
+            "target_tab": "onboarding",
+            "data": notif_data,
+            "created_at": now,
+        })
     except Exception as e:
         import logging
         logging.getLogger("onboarding").warning(f"Failed to create issue resolved notification: {e}")

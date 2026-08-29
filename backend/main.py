@@ -218,6 +218,7 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
             if prof:
                 company = _company_dict(prof)
+        sr = req.structured_role or {}
         return {
             "id": req.id,
             "ref": f"REQ-{req.id[:6].upper()}",
@@ -230,6 +231,7 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
             "structured_role": req.structured_role,
+            "hiring_manager_name": sr.get("hiring_manager") or "",
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
@@ -680,6 +682,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 else None,
                 "generated_jd_markdown": r.generated_jd_markdown,
                 "structured_role": r.structured_role,
+                "hiring_manager_name": (r.structured_role or {}).get("hiring_manager") or "",
                 "intent": r.intent,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
             }

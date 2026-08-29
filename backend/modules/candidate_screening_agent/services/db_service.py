@@ -152,6 +152,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
             comp_name = None
             req_id = doc.get("requisition_id")
             req_jd = None
+            req_doc = None
             if req_id:
                 req_doc = db["requisitions"].find_one({"id": req_id})
                 if req_doc:
@@ -163,6 +164,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                         if comp_doc:
                             comp_name = comp_doc.get("name")
 
+            hm_name = (req_doc or {}).get("structured_role", {}).get("hiring_manager") if req_doc else ""
             results.append({
                 "id": doc.get("id"),
                 "submission_id": doc.get("id"),
@@ -170,6 +172,7 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                 "requisition_title": req_title or req_titles.get(req_id),
                 "requisition_ref": f"REQ-{str(req_id)[:6].upper()}" if req_id else None,
                 "company_name": comp_name,
+                "hiring_manager_name": hm_name or "",
                 "tenant_id": doc.get("tenant_id"),
                 "candidate_name": doc.get("candidate_name"),
                 "candidate_email": doc.get("candidate_email"),
