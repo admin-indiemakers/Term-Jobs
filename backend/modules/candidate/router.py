@@ -628,6 +628,17 @@ def get_screened_summary(
                         "latest_screened_at": sub.created_at.isoformat() if sub.created_at else None
                     }
 
+        # 3. From Mongo submissions
+        from modules.shared.db import db
+        for doc in db["candidate_submissions"].find({}, {"requisition_id": 1, "created_at": 1}):
+            rid = doc.get("requisition_id")
+            if rid and rid not in summary_map:
+                summary_map[rid] = {
+                    "screened_count": 1,
+                    "has_cache": False,
+                    "latest_screened_at": str(doc.get("created_at") or "")
+                }
+
         return {
             "status": "success",
             "screened_requisitions": summary_map

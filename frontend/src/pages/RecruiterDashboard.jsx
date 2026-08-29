@@ -1181,7 +1181,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 </button>
               </div>
 
-              {/* Requisition Cards */}
+              {/* Requisition Single Tab with Inbuilt Scroller (Unscreened on Top, Screened at Bottom) */}
               {requisitions.length === 0 ? (
                 <div
                   style={{
@@ -1195,75 +1195,161 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   No active client requisitions published yet.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {requisitions.slice(0, 4).map((req) => {
-                    const roleData = role(req);
-                    const skills = skillsFor(req);
-                    return (
-                      <div
-                        key={req.id}
-                        style={{
-                          backgroundColor: '#FFFFFF',
-                          borderRadius: 22,
-                          border: '1px solid #E2E2DC',
-                          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
-                        }}
-                        className="p-6 space-y-4 flex flex-col justify-between transition-all hover:border-[#D5D5D0]"
-                      >
-                        <div>
-                          <div className="text-[12px] text-[#737373] font-semibold flex items-center gap-1.5">
-                            <span>{req.company_name || 'Bearitt'}</span>
-                            <span className="inline-block w-1 h-1 rounded-full bg-[#A3A39F]" />
-                            <span>{roleData.location || req.location || 'Kozhikode'}</span>
-                          </div>
-                          <h3 className="text-[1.35rem] font-extrabold text-[#0A0A0A] tracking-tight mt-1">
-                            {roleData.title || req.title || 'Data Engineer'}
-                          </h3>
-                          <p className="text-[12.8px] text-[#737373] font-medium leading-relaxed mt-1">
-                            {req.description || roleData.summary || 'Client requirement looking for skilled professionals.'}
-                          </p>
-                        </div>
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 22,
+                    border: '1px solid #E2E2DC',
+                    boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
+                  }}
+                  className="overflow-hidden"
+                >
+                  {/* Table Header */}
+                  <div className="grid grid-cols-12 gap-3 px-6 py-3.5 bg-[#FBFBFA] border-b border-[#F2F2EE] text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                    <div className="col-span-3">Company</div>
+                    <div className="col-span-3">Hiring Manager</div>
+                    <div className="col-span-3">Requisition</div>
+                    <div className="col-span-2 text-center">Status</div>
+                    <div className="col-span-1 text-right">Action</div>
+                  </div>
 
-                        {/* Skill Badges */}
-                        {skills.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 pt-1">
-                            {skills.slice(0, 5).map((skill, sIdx) => (
-                              <span
-                                key={sIdx}
-                                style={{
-                                  backgroundColor: '#F5F5F2',
-                                  borderRadius: 8,
-                                  border: '1px solid #E5E5E0',
-                                }}
-                                className="px-2.5 py-1 text-[11px] font-bold text-[#0A0A0A]"
-                              >
-                                {skill}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                  {/* Scrollable Line-by-Line Rows */}
+                  <div className="max-h-[340px] overflow-y-auto divide-y divide-[#F2F2EE] custom-cand-scroll">
+                    {[...requisitions]
+                      .sort((a, b) => {
+                        const aScreened = Boolean(screenedReqSummary[a.id]);
+                        const bScreened = Boolean(screenedReqSummary[b.id]);
+                        if (aScreened === bScreened) return 0;
+                        return aScreened ? 1 : -1; // Unscreened on top, Screened at bottom
+                      })
+                      .map((req) => {
+                        const roleData = role(req);
+                        const companyName = req.company_name || 'Bearitt';
+                        const hmName = req.hiring_manager_name || req.manager_name || req.contact_name || req.created_by_name || 'Hiring Manager';
+                        const reqTitle = roleData.title || req.title || 'Data Engineer';
+                        const isScreened = Boolean(screenedReqSummary[req.id]);
 
-                        {/* Action CTA Button */}
-                        <div className="pt-2">
-                          <button
+                        return (
+                          <div
+                            key={req.id}
                             onClick={() => {
-                              selectRequisition(req.id);
-                              navigate('/dashboard/recruiter/requisitions');
+                              if (isScreened) {
+                                setSelectedShortlistedCompany(companyName || 'ALL');
+                                navigate('/dashboard/recruiter/shortlisted');
+                              } else {
+                                selectRequisition(req.id);
+                                navigate('/dashboard/recruiter/requisitions');
+                              }
                             }}
-                            style={{
-                              backgroundColor: '#0A0A0A',
-                              color: '#FFFFFF',
-                              borderRadius: 12,
-                              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                            }}
-                            className="px-4.5 py-2.5 text-[12.5px] font-bold hover:bg-[#262626] transition-colors flex items-center gap-1.5 cursor-pointer"
+                            className="grid grid-cols-12 gap-3 items-center px-6 py-4 hover:bg-[#F9F9F8] transition-colors cursor-pointer group"
                           >
-                            Match & Screen Candidates <ArrowRight size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                            {/* 1. Company Name */}
+                            <div className="col-span-3 min-w-0 flex items-center gap-2.5">
+                              <div
+                                style={{
+                                  backgroundColor: '#0A0A0A',
+                                  color: '#FFFFFF',
+                                  borderRadius: 8,
+                                  width: 30,
+                                  height: 30,
+                                }}
+                                className="flex items-center justify-center font-black text-[11.5px] shrink-0 uppercase"
+                              >
+                                {companyName.slice(0, 2)}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[13px] font-extrabold text-[#0A0A0A] truncate group-hover:text-black">
+                                  {companyName}
+                                </div>
+                                <div className="text-[11px] text-[#8A8A85] truncate font-medium">
+                                  {req.location || roleData.location || 'Kozhikode'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 2. Hiring Manager Name */}
+                            <div className="col-span-3 min-w-0">
+                              <div className="text-[13px] font-bold text-[#0A0A0A] truncate">
+                                {hmName}
+                              </div>
+                              <div className="text-[11px] text-[#8A8A85] truncate font-medium">
+                                Client Lead
+                              </div>
+                            </div>
+
+                            {/* 3. Requisition Title */}
+                            <div className="col-span-3 min-w-0">
+                              <div className="text-[13px] font-extrabold text-[#0A0A0A] truncate">
+                                {reqTitle}
+                              </div>
+                              <div className="text-[11px] text-[#8A8A85] truncate font-medium">
+                                {req.requisition_ref || (req.id ? `REQ-${req.id.slice(0, 6).toUpperCase()}` : 'REQ-ACTIVE')}
+                              </div>
+                            </div>
+
+                            {/* 4. Status (Screened vs Published) */}
+                            <div className="col-span-2 text-center">
+                              {isScreened ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500" />
+                                  Screened
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border bg-zinc-100 text-zinc-600 border-zinc-200">
+                                  <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-zinc-400" />
+                                  Published
+                                </span>
+                              )}
+                            </div>
+
+                            {/* 5. Action */}
+                            <div className="col-span-1 flex justify-end">
+                              {isScreened ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedShortlistedCompany(companyName || 'ALL');
+                                    navigate('/dashboard/recruiter/shortlisted');
+                                  }}
+                                  style={{
+                                    backgroundColor: '#0A0A0A',
+                                    color: '#FFFFFF',
+                                    borderRadius: 8,
+                                    width: 30,
+                                    height: 30,
+                                  }}
+                                  className="flex items-center justify-center text-white hover:bg-[#262626] transition-colors shadow-2xs shrink-0 cursor-pointer"
+                                  title="View Shortlisted Candidates"
+                                >
+                                  <ArrowRight size={13} />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    selectRequisition(req.id);
+                                    navigate('/dashboard/recruiter/requisitions');
+                                  }}
+                                  style={{
+                                    backgroundColor: '#0A0A0A',
+                                    color: '#FFFFFF',
+                                    borderRadius: 8,
+                                    width: 30,
+                                    height: 30,
+                                  }}
+                                  className="flex items-center justify-center text-white hover:bg-[#262626] transition-colors shadow-2xs shrink-0 cursor-pointer"
+                                  title="Match & Screen Candidates"
+                                >
+                                  <ArrowRight size={13} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
                 </div>
               )}
             </div>
