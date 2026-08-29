@@ -67,6 +67,7 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         comp_name = "Bearitt"
 
     req_title = (getattr(req, "title", None) if req else None) or "Senior Software Engineer"
+    hm_name = (req.structured_role or {}).get("hiring_manager") if req else ""
     details = row.details or {}
     return {
         "id": row.id,
@@ -75,6 +76,7 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         "requisition_ref": f"REQ-{str(row.requisition_id)[:6].upper()}" if row.requisition_id else None,
         "requisition_title": req_title,
         "company_name": comp_name,
+        "hiring_manager_name": hm_name or "",
         "candidate_name": row.candidate_name,
         "candidate_email": row.candidate_email,
         "candidate_phone": details.get("candidate_phone") or getattr(row, "candidate_phone", "") or "",
@@ -154,6 +156,7 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
         
         details = doc.get("details") or {}
         created_val = doc.get("created_at")
+        hm_name = (req_doc.get("structured_role") or {}).get("hiring_manager") or ""
         results.append({
             "id": doc.get("id"),
             "submission_id": doc.get("id"),
@@ -161,6 +164,7 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
             "requisition_ref": f"REQ-{str(req_id)[:6].upper()}" if req_id else None,
             "requisition_title": req_title,
             "company_name": comp_name,
+            "hiring_manager_name": hm_name,
             "candidate_name": doc.get("candidate_name"),
             "candidate_email": doc.get("candidate_email"),
             "candidate_phone": details.get("candidate_phone") or doc.get("candidate_phone") or "",

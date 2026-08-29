@@ -203,11 +203,11 @@ def test_candidate_expenses_list_and_create(setup_candidate_test_data):
         )
     assert exc_past.value.status_code == 400
 
-    # 3. Reject future expense (e.g. 2026-08-28)
+    # 3. Reject future expense (e.g. 2026-08-30)
     with pytest.raises(HTTPException) as exc_future:
         create_candidate_expense(
             payload=ExpenseCreateRequest(
-                date="2026-08-28",
+                date="2026-08-30",
                 category="Broadband & Internet",
                 amount=850.0,
                 receipt_name="broadband_bill_aug.pdf",

@@ -32,15 +32,28 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
     ob = db["onboarding_checklists"].find_one({"candidate_id": candidate_id}) or {}
     sub = db["candidate_submissions"].find_one({"$or": [{"id": candidate_id}, {"candidate_email": candidate_email}]}) or {}
 
-    role_title = ob.get("requisition_title") or sub.get("requisition_title") or "DevOps Engineer"
-    comp_name = ob.get("company_name") or "Bearitt"
-    vend_name = ob.get("vendor_name") or sub.get("vendor_name") or "Bridgeon"
+    role_title = ob.get("requisition_title") or sub.get("requisition_title") or ""
+    comp_name = ob.get("company_name") or ""
+    vend_name = ob.get("vendor_name") or sub.get("vendor_name") or ""
     req_id = ob.get("requisition_id") or sub.get("requisition_id") or ""
 
-    today = datetime.now(timezone.utc).date()
+    manager_name = (
+        ob.get("hiring_manager_name") or ob.get("hiring_manager")
+        or sub.get("hiring_manager_name") or sub.get("hiring_manager") or ""
+    )
+    if not manager_name and req_id:
+        req_doc = db["requisitions"].find_one({"id": req_id}) or {}
+        manager_name = req_doc.get("hiring_manager") or req_doc.get("hiring_manager_name") or ""
+
+    if not manager_name:
+        hm_user = db["users"].find_one({"role": "Hiring Manager"})
+        if hm_user:
+            manager_name = hm_user.get("name") or hm_user.get("email") or ""
+
+    today_iso = datetime.now(timezone.utc).strftime("%d %b %Y")
     new_wo = {
         "id": f"wo_{uuid.uuid4().hex[:12]}",
-        "work_order_number": "WO-2026-00124",
+        "work_order_number": f"WO-{datetime.now(timezone.utc).year}-{uuid.uuid4().hex[:5].upper()}",
         "tenant_id": tenant_id or "default-tenant",
         "requisition_id": req_id,
         "requisition_title": role_title,
@@ -48,18 +61,18 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
         "candidate_id": candidate_id,
         "candidate_name": candidate_name or "Candidate",
         "candidate_email": candidate_email,
-        "vendor_id": "",
+        "vendor_id": sub.get("vendor_id", ""),
         "vendor_name": vend_name,
         "company_name": comp_name,
-        "bill_rate": 1550.0,
+        "bill_rate": 0.0,
         "rate_basis": "hourly",
         "currency": "INR",
-        "start_date": "25 Aug 2026",
-        "end_date": "25 Feb 2027",
+        "start_date": today_iso,
+        "end_date": "",
         "weekly_hours": 40.0,
-        "location": "Bangalore",
-        "work_arrangement": "Hybrid",
-        "reporting_manager": "Arun Deshpande",
+        "location": "",
+        "work_arrangement": "Remote",
+        "reporting_manager": manager_name,
         "overtime_eligible": True,
         "overtime_policy": "Allowed",
         "engagement_type": "Contractor",
@@ -80,16 +93,16 @@ def _sanitize_work_order_for_candidate(wo: dict) -> dict:
         return {}
     return {
         "id": wo.get("id"),
-        "work_order_number": wo.get("work_order_number", "WO-2026-00124"),
-        "requisition_title": wo.get("requisition_title", "DevOps Engineer"),
-        "company_name": wo.get("company_name", "Bearitt"),
-        "vendor_name": wo.get("vendor_name", "Bridgeon"),
-        "start_date": wo.get("start_date", "25 Aug 2026"),
-        "end_date": wo.get("end_date", "25 Feb 2027"),
+        "work_order_number": wo.get("work_order_number", ""),
+        "requisition_title": wo.get("requisition_title", ""),
+        "company_name": wo.get("company_name", ""),
+        "vendor_name": wo.get("vendor_name", ""),
+        "start_date": wo.get("start_date", ""),
+        "end_date": wo.get("end_date", ""),
         "weekly_hours": wo.get("weekly_hours", 40.0),
-        "location": wo.get("location", "Bangalore"),
-        "work_arrangement": wo.get("work_arrangement", "Hybrid"),
-        "reporting_manager": wo.get("reporting_manager", "Arun Deshpande"),
+        "location": wo.get("location", ""),
+        "work_arrangement": wo.get("work_arrangement", ""),
+        "reporting_manager": wo.get("reporting_manager", ""),
         "overtime_eligible": wo.get("overtime_eligible", True),
         "overtime_policy": wo.get("overtime_policy", "Allowed"),
         "engagement_type": wo.get("engagement_type", "Contractor"),
@@ -184,46 +197,8 @@ def _analyze_timesheet_with_assistant(daily_entries: list, expected_hours: float
 
 
 def _ensure_seed_history(candidate_id: str, tenant_id: str, work_order: dict):
-    ts_coll = db["timesheets"]
-    count = ts_coll.count_documents({"candidate_id": candidate_id, "status": "APPROVED"})
-    if count == 0:
-        history_records = [
-            {
-                "id": f"ts_hist_{uuid.uuid4().hex[:8]}",
-                "timesheet_number": "TS-2026-W34-8841",
-                "candidate_id": candidate_id,
-                "work_order_id": work_order.get("id"),
-                "work_order_number": work_order.get("work_order_number", "WO-2026-00124"),
-                "tenant_id": tenant_id,
-                "period_label": "17 – 23 Aug 2026",
-                "week_start_date": "2026-08-17",
-                "week_end_date": "2026-08-23",
-                "total_regular_hours": 40.0,
-                "total_overtime_hours": 0.0,
-                "total_hours": 40.0,
-                "status": "APPROVED",
-                "submitted_at": "23 Aug 2026",
-                "created_at": "2026-08-23T18:00:00Z",
-            },
-            {
-                "id": f"ts_hist_{uuid.uuid4().hex[:8]}",
-                "timesheet_number": "TS-2026-W33-4109",
-                "candidate_id": candidate_id,
-                "work_order_id": work_order.get("id"),
-                "work_order_number": work_order.get("work_order_number", "WO-2026-00124"),
-                "tenant_id": tenant_id,
-                "period_label": "10 – 16 Aug 2026",
-                "week_start_date": "2026-08-10",
-                "week_end_date": "2026-08-16",
-                "total_regular_hours": 42.0,
-                "total_overtime_hours": 2.0,
-                "total_hours": 44.0,
-                "status": "APPROVED",
-                "submitted_at": "16 Aug 2026",
-                "created_at": "2026-08-16T18:00:00Z",
-            }
-        ]
-        ts_coll.insert_many(history_records)
+    # No fake seed history - user starts fresh with clean history
+    pass
 
 
 # --- Endpoints ---
@@ -238,14 +213,14 @@ def get_candidate_profile(current_user: User = Depends(get_current_user)):
     sub = db["candidate_submissions"].find_one({"$or": [{"id": cand_id}, {"candidate_email": current_user.email}]}) or {}
 
     return {
-        "id": cand_id or sub.get("id") or "BEAR-c7a70f8a",
-        "name": current_user.name or ob.get("candidate_name") or sub.get("candidate_name") or "Sreehari P S",
+        "id": cand_id or sub.get("id") or "",
+        "name": current_user.name or ob.get("candidate_name") or sub.get("candidate_name") or "Candidate",
         "email": current_user.email,
-        "company": ob.get("company_name") or "Bearitt",
-        "vendor": ob.get("vendor_name") or sub.get("vendor_name") or "Bridgeon",
-        "requisition_title": ob.get("requisition_title") or sub.get("requisition_title") or "DevOps Engineer",
+        "company": ob.get("company_name") or "",
+        "vendor": ob.get("vendor_name") or sub.get("vendor_name") or "",
+        "requisition_title": ob.get("requisition_title") or sub.get("requisition_title") or "",
         "requisition_id": ob.get("requisition_id") or sub.get("requisition_id") or "",
-        "onboarding_status": ob.get("status") or "completed",
+        "onboarding_status": ob.get("status") or "not_started",
         "status": "Active & Verified",
     }
 
@@ -256,7 +231,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Candidate role required")
 
     cand_id = current_user.candidate_id or ""
-    cand_name = current_user.name or "Sreehari P S"
+    cand_name = current_user.name or ""
     cand_email = current_user.email
 
     ob = db["onboarding_checklists"].find_one({"candidate_id": cand_id}) or {}
@@ -276,16 +251,19 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
     if not current_ts:
         entries = _generate_smart_draft_entries(mon_str)
         analysis = _analyze_timesheet_with_assistant(entries, expected_hours=40.0)
+        from datetime import datetime as _dt
+        _week_num = _dt.fromisoformat(mon_str).isocalendar()[1]
+        _year = mon_str[:4]
         current_ts = {
             "id": f"ts_{uuid.uuid4().hex[:12]}",
-            "timesheet_number": "TS-2026-W35-8910",
+            "timesheet_number": f"TS-{_year}-W{_week_num:02d}-{uuid.uuid4().hex[:4].upper()}",
             "candidate_id": cand_id,
             "work_order_id": safe_wo.get("id"),
             "work_order_number": safe_wo.get("work_order_number"),
             "tenant_id": current_user.tenant_id,
             "week_start_date": mon_str,
             "week_end_date": sun_str,
-            "period_label": "24 – 30 August 2026",
+            "period_label": f"{mon_str} – {sun_str}",
             "daily_entries": entries,
             "total_regular_hours": analysis["total_regular_hours"],
             "total_overtime_hours": analysis["total_overtime_hours"],
@@ -313,7 +291,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         })
 
     expected_h = safe_wo.get("weekly_hours", 40.0)
-    progress_pct = int(round((logged_hrs / expected_h) * 100)) if expected_h > 0 else 80
+    progress_pct = int(round((logged_hrs / expected_h) * 100)) if expected_h > 0 else 0
 
     recent_ts = list(ts_coll.find({"candidate_id": cand_id, "status": "APPROVED"}).sort("created_at", -1).limit(5))
     for t in recent_ts:
@@ -321,14 +299,14 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
 
     return {
         "candidate": {
-            "id": cand_id or "BEAR-c7a70f8a",
-            "name": cand_name or ob.get("candidate_name") or "Sreehari P S",
-            "first_name": cand_name.split()[0] if cand_name else "Sreehari",
+            "id": cand_id or "",
+            "name": cand_name or ob.get("candidate_name") or "Candidate",
+            "first_name": cand_name.split()[0] if cand_name else "Candidate",
             "email": cand_email,
-            "company": safe_wo.get("company_name") or ob.get("company_name") or "Bearitt",
-            "vendor": safe_wo.get("vendor_name") or ob.get("vendor_name") or "Bridgeon",
-            "requisition_title": safe_wo.get("requisition_title") or ob.get("requisition_title") or "DevOps Engineer",
-            "onboarding_status": ob.get("status") or "completed",
+            "company": safe_wo.get("company_name") or ob.get("company_name") or "",
+            "vendor": safe_wo.get("vendor_name") or ob.get("vendor_name") or "",
+            "requisition_title": safe_wo.get("requisition_title") or ob.get("requisition_title") or "",
+            "onboarding_status": ob.get("status") or "not_started",
             "status": "ACTIVE",
             "active_badge": "Active candidate",
         },
@@ -336,7 +314,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             "assignment": {
                 "label": "ASSIGNMENT",
                 "value": safe_wo.get("status", "ACTIVE"),
-                "subtext": safe_wo.get("work_order_number", "WO-2026-00124"),
+                "subtext": safe_wo.get("work_order_number", ""),
             },
             "this_week": {
                 "label": "THIS WEEK",
@@ -457,7 +435,7 @@ def list_candidate_timesheets(current_user: User = Depends(get_current_user)):
     _ensure_seed_history(cand_id, current_user.tenant_id, raw_wo)
 
     ts_coll = db["timesheets"]
-    timesheets = list(ts_coll.find({"candidate_id": cand_id, "status": "APPROVED"}).sort("created_at", -1))
+    timesheets = list(ts_coll.find({"candidate_id": cand_id, "status": {"$in": ["SUBMITTED", "APPROVED", "INVOICED"]}}).sort("created_at", -1))
     for t in timesheets:
         t.pop("_id", None)
     return {"status": "success", "timesheets": timesheets}
@@ -787,56 +765,7 @@ def list_candidate_notifications(
         n.pop("_id", None)
 
     if not notifs:
-        initial_notifs = [
-            {
-                "id": f"notif_{uuid.uuid4().hex[:10]}",
-                "candidate_id": cand_id,
-                "title": "Assignment Starts Tomorrow",
-                "message": "Your DevOps Engineer assignment at Bearitt begins on 25 Aug 2026. Review work order & workspace access.",
-                "category": "assignment",
-                "timestamp_label": "Today · 10:30 AM",
-                "is_read": False,
-                "target_tab": "assignment",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            },
-            {
-                "id": f"notif_{uuid.uuid4().hex[:10]}",
-                "candidate_id": cand_id,
-                "title": "Timesheet Cycle Initialized",
-                "message": "Weekly timesheet cycle (24–30 Aug) initialized. Daily time capture unlocks tomorrow 25 Aug.",
-                "category": "timesheet",
-                "timestamp_label": "Today · 09:00 AM",
-                "is_read": False,
-                "target_tab": "timesheet",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            },
-            {
-                "id": f"notif_{uuid.uuid4().hex[:10]}",
-                "candidate_id": cand_id,
-                "title": "Onboarding Clearance Complete",
-                "message": "Background verification, identity KYC, and NDA compliance completed successfully.",
-                "category": "compliance",
-                "timestamp_label": "Yesterday",
-                "is_read": True,
-                "target_tab": "dashboard",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            },
-            {
-                "id": f"notif_{uuid.uuid4().hex[:10]}",
-                "candidate_id": cand_id,
-                "title": "Work Order Confirmed",
-                "message": "Bridgeon confirmed onboarding paperwork and work order WO-2026-00124.",
-                "category": "contract",
-                "timestamp_label": "22 Aug 2026",
-                "is_read": True,
-                "target_tab": "assignment",
-                "created_at": datetime.now(timezone.utc).isoformat()
-            }
-        ]
-        for n in initial_notifs:
-            notif_coll.insert_one(n.copy())
-            n.pop("_id", None)
-        notifs = initial_notifs
+        notifs = []
 
     unread_count = sum(1 for n in notifs if not n.get("is_read", False))
 

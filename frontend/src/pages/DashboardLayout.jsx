@@ -85,6 +85,12 @@ const Icons = {
       <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
     </svg>
   ),
+  Flag: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+      <line x1="4" y1="22" x2="4" y2="15"/>
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -95,7 +101,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dynamic live count badges for Hiring Manager
-  const [hmCounts, setHmCounts] = useState({ requisitions: 12, candidates: 251 });
+  const [hmCounts, setHmCounts] = useState({ requisitions: 12, candidates: 251, openIssues: 0 });
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
@@ -103,13 +109,16 @@ export default function DashboardLayout() {
         request('/requisitions', { token }).catch(() => []),
         request('/candidates/shortlisted', { token }).catch(() => []),
         request('/candidates?status=Accepted', { token }).catch(() => []),
-      ]).then(([reqs, shortlisted, accepted]) => {
+        request('/api/onboarding/issues', { token }).catch(() => []),
+      ]).then(([reqs, shortlisted, accepted, issuesData]) => {
         const rCount = Array.isArray(reqs) ? reqs.length : 12;
         const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
-        const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
+        const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
+        const openIssues = issueList.filter((i) => i.status === 'open').length;
         setHmCounts({
           requisitions: rCount || 12,
           candidates: 250 + (sList.length || 1),
+          openIssues: openIssues,
         });
       }).catch(() => {});
     }
@@ -152,6 +161,7 @@ export default function DashboardLayout() {
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
+        { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
       ]
       : userRole === 'Recruiter'
         ? [
@@ -271,6 +281,11 @@ export default function DashboardLayout() {
                           <div className="flex items-center gap-2.5">
                             {IconComp && <IconComp className="shrink-0" size={15} />}
                             <span className="font-semibold text-[13px]">{item.label}</span>
+                            {item.badge > 0 && (
+                              <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
+                                {item.badge}
+                              </span>
+                            )}
                           </div>
                           {item.count !== undefined && (
                             <span
