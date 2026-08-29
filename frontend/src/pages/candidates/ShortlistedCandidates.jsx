@@ -50,38 +50,27 @@ export default function ShortlistedCandidates() {
 
   // Derived real KPI metrics
   const stats = useMemo(() => {
-    // If database returned candidates, use real lengths; otherwise fallback to reference default
-    const count = candidates.length || 1;
+    const count = candidates.length;
     const strong = candidates.filter((c) => (c.match_score || 0) >= 70).length;
     const moderate = candidates.filter((c) => (c.match_score || 0) >= 50 && (c.match_score || 0) < 70).length;
 
-    let avg = 41;
-    if (candidates.length > 0) {
+    let avg = 0;
+    if (count > 0) {
       const sum = candidates.reduce((acc, c) => acc + (c.match_score || 0), 0);
-      avg = Math.round(sum / candidates.length);
+      avg = Math.round(sum / count);
     }
 
     return {
       shortlisted: count,
       strong,
       moderate,
-      avgMatch: avg || 41,
+      avgMatch: avg,
     };
   }, [candidates]);
 
-  // Display candidate list with reference fallback
+  // Display candidate list (strictly real candidates from DB)
   const displayCandidates = useMemo(() => {
-    if (candidates.length > 0) return candidates;
-    return [
-      {
-        id: 'surajkumar-1',
-        candidate_name: 'SURAJKUMAR K S',
-        requisition_ref: 'REQ-F7F406',
-        requisition_title: 'DevOps Engineer',
-        vendor_name: 'bridgeon',
-        match_score: 41,
-      },
-    ];
+    return candidates;
   }, [candidates]);
 
   const handleOpenWorkspace = (cand) => {
@@ -327,6 +316,15 @@ export default function ShortlistedCandidates() {
           {loading ? (
             <div className="py-16 text-center text-[#8A8A85] text-[13px] font-medium">
               Loading shortlisted candidates...
+            </div>
+          ) : displayCandidates.length === 0 ? (
+            <div className="py-16 px-4 text-center bg-[#FBFBFA] rounded-2xl border border-[#EAEAE6] my-auto">
+              <div className="text-[15px] font-extrabold text-[#0A0A0A] mb-1">
+                No Shortlisted Candidates
+              </div>
+              <p className="text-[12.5px] text-[#8A8A85] max-w-md mx-auto">
+                Candidates shortlisted by vendor recruiters for your open requisitions will appear here for review and workspace actions.
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

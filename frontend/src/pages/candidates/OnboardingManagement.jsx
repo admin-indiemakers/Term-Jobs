@@ -92,10 +92,10 @@ export default function OnboardingManagement() {
 
   // Derived Real KPI Metrics
   const metrics = useMemo(() => {
-    const totalAccepted = candidates.length || 250;
+    const totalAccepted = candidates.length;
     const obValues = Object.values(onboardingDocs);
     const inProgress = obValues.filter((o) => o.status === 'in_progress').length;
-    const completed = obValues.filter((o) => o.status === 'completed').length || 251;
+    const completed = obValues.filter((o) => o.status === 'completed').length;
     const openIssues = issues.filter((i) => i.status === 'open').length;
 
     return {
@@ -106,17 +106,9 @@ export default function OnboardingManagement() {
     };
   }, [candidates, onboardingDocs, issues]);
 
-  // Display Table Rows matching Image 3
+  // Display Table Rows (strictly real candidates from DB)
   const displayRows = useMemo(() => {
-    if (candidates.length > 0) return candidates;
-    return [
-      { id: '07fa08', candidate_id: 'BEAR-07fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: 57, forceStatus: 'completed' },
-      { id: '17fa08', candidate_id: 'BEAR-17fa08', candidate_name: 'Hashil', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: 53, forceStatus: 'completed' },
-      { id: '27fa08', candidate_id: 'BEAR-27fa08', candidate_name: 'arjun m', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: 48, forceStatus: 'not_set_up' },
-      { id: '37fa08', candidate_id: 'BEAR-37fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: null, forceStatus: 'not_set_up' },
-      { id: '47fa08', candidate_id: 'BEAR-47fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: null, forceStatus: 'not_set_up' },
-      { id: '57fa08', candidate_id: 'BEAR-57fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: null, forceStatus: 'not_set_up' },
-    ];
+    return candidates;
   }, [candidates]);
 
   // Open Onboarding Setup Modal

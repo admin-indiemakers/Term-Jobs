@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText } from 'lucide-react';
+import { ArrowRight, ChevronDown, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle } from 'lucide-react';
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -159,6 +159,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [reqCandidateSearch, setReqCandidateSearch] = useState('');
   const [selectedCandidateIds, setSelectedCandidateIds] = useState([]);
   const [selectedCompanyTab, setSelectedCompanyTab] = useState('All');
+  const [limitReachedModal, setLimitReachedModal] = useState(null);
+  const [shortlistQuota, setShortlistQuota] = useState({ limit: 3, used: 0, is_limit_reached: false });
   const [workspaceActiveTab, setWorkspaceActiveTab] = useState('requirements'); // 'requirements' | 'candidates'
   const [screenedReqSummary, setScreenedReqSummary] = useState({});
 
@@ -678,6 +680,23 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setMatching(false);
     }
   }
+
+  const fetchShortlistQuota = (reqId) => {
+    if (!reqId || !authToken) return;
+    request(`/candidates/shortlist-quota/${reqId}`, { token: authToken })
+      .then((data) => {
+        if (data?.status === 'success') {
+          setShortlistQuota(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    if (selectedReqId) {
+      fetchShortlistQuota(selectedReqId);
+    }
+  }, [selectedReqId, authToken]);
 
   async function updateCandidateStatus(sub, newStatus) {
     try {
@@ -1421,6 +1440,83 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               </div>
             </div>
           </div>
+
+{/* Limit Reached Modal Popup */}
+          {limitReachedModal && (
+            <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 22,
+                  boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.3)',
+                  maxWidth: 480,
+                  width: '100%',
+                }}
+                className="p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200"
+              >
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+                    <AlertCircle size={24} strokeWidth={2.2} />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-[17px] font-extrabold text-[#0A0A0A] tracking-tight">
+                      {limitReachedModal.title || 'Maximum Shortlist Limit Reached'}
+                    </h3>
+                    <p className="text-[12.5px] text-[#64748B] font-medium mt-0.5">
+                      Requisition: <strong className="text-[#0A0A0A] font-bold">{selected?.title || 'Selected Role'}</strong>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLimitReachedModal(null)}
+                    className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 rounded-lg hover:bg-[#F5F5F2] cursor-pointer transition-colors"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="p-4 bg-amber-50/70 border border-amber-200/80 rounded-xl space-y-2 text-[13px] text-amber-950 leading-relaxed">
+                  <p className="font-bold">
+                    {limitReachedModal.message}
+                  </p>
+                  <p className="text-[12px] text-amber-900/80 font-normal">
+                    The Super Admin has set a submission cap of <strong>{limitReachedModal.limit} candidates</strong> for this requisition. To shortlist <strong>{limitReachedModal.candidateName || 'this candidate'}</strong>, please remove or reject an existing shortlisted submission first.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F2F2EE]">
+                  <button
+                    type="button"
+                    onClick={() => setLimitReachedModal(null)}
+                    style={{
+                      backgroundColor: '#F5F5F2',
+                      color: '#4B5563',
+                      borderRadius: 12,
+                    }}
+                    className="px-4 py-2 text-[12.5px] font-bold hover:bg-[#EAEAE6] cursor-pointer transition-colors"
+                  >
+                    Dismiss
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLimitReachedModal(null);
+                      navigate('/dashboard/recruiter/shortlisted');
+                    }}
+                    style={{
+                      backgroundColor: '#0A0A0A',
+                      color: '#FFFFFF',
+                      borderRadius: 12,
+                    }}
+                    className="px-5 py-2 text-[12.5px] font-extrabold hover:bg-[#262626] cursor-pointer transition-colors shadow-2xs flex items-center gap-1.5"
+                  >
+                    <span>View Shortlisted</span>
+                    <ArrowRight size={13} strokeWidth={2.5} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* View Details Modal */}
           {showJdDetails && (
@@ -2186,8 +2282,10 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   const subId = sub.id || sub.submission_id || sub.candidate_id;
                   const isExpanded = expandedScreenedId === subId;
                   const score = sub.match_score || 0;
-                  const isShortlisted = sub.status === 'Shortlisted';
-                  const isRejected = sub.status === 'Rejected';
+                  const statusLower = (sub.status || '').toLowerCase();
+                  const isAccepted = statusLower === 'accepted' || statusLower === 'hired' || statusLower === 'completed';
+                  const isShortlisted = statusLower === 'shortlisted' || statusLower === 'under review';
+                  const isRejected = statusLower === 'rejected';
 
                   const targetCandidateId = sub.candidate_id || (String(sub.id).startsWith('temp_') ? String(sub.id).replace('temp_', '') : sub.id);
                   const matchedSkillsList = sub.matched_skills && sub.matched_skills.length ? sub.matched_skills : (sub.skills || []).slice(0, 5);
@@ -2199,7 +2297,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       key={subId}
                       style={{
                         backgroundColor: '#FFFFFF',
-                        border: isExpanded ? '1px solid #0A0A0A' : isShortlisted ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
+                        border: isExpanded ? '1px solid #0A0A0A' : isAccepted ? '1px solid #059669' : isShortlisted ? '1px solid #0A0A0A' : isRejected ? '1px solid #FECACA' : '1px solid #E2E2DC',
                         borderRadius: 16,
                         boxShadow: isExpanded ? '0 4px 16px rgba(0, 0, 0, 0.06)' : '0 1px 3px rgba(0, 0, 0, 0.02)',
                       }}
@@ -2278,7 +2376,19 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                           className="flex items-center gap-2 self-start sm:self-auto shrink-0 flex-wrap"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          {isShortlisted ? (
+                          {isAccepted ? (
+                            <span
+                              style={{
+                                backgroundColor: '#059669',
+                                color: '#FFFFFF',
+                                borderRadius: 12,
+                              }}
+                              className="px-4 py-2 text-[12px] font-bold flex items-center gap-1.5 shadow-2xs"
+                            >
+                              <span>✓</span>
+                              <span>Selected by HR (Onboarding)</span>
+                            </span>
+                          ) : isShortlisted ? (
                             <span
                               style={{
                                 backgroundColor: '#0A0A0A',
@@ -5493,7 +5603,7 @@ function PortalAccessView({ authToken }) {
   const loadData = () => {
     setLoading(true);
     Promise.all([
-      request('/candidates', { token: authToken }).catch(() => []),
+      request('/candidates?status=Accepted', { token: authToken }).catch(() => []),
       request('/api/auth/portal-users', { token: authToken }).catch(() => []),
     ])
       .then(([cands, users]) => {

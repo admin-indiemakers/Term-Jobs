@@ -207,6 +207,8 @@ def list_candidates(
 @router.get("/shortlisted")
 def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dict]:
     """Shortcut for the shortlisted candidates queue (optimized direct Mongo query)."""
+    if current_user.role in ("Recruiter", "Vendor"):
+        return _fetch_candidate_submissions_mongo({"status": {"$in": ["Shortlisted", "Accepted", "Under Review", "Hired"]}}, current_user)
     return _fetch_candidate_submissions_mongo({"status": "Shortlisted"}, current_user)
 
 
@@ -349,6 +351,16 @@ def update_submission_status(
         sub.updated_at = datetime.now(timezone.utc)
         session.add(sub)
         session.commit()
+
+    # Sync status change to MongoDB candidate_submissions
+    try:
+        from modules.shared.db import db
+        db["candidate_submissions"].update_one(
+            {"id": submission_id},
+            {"$set": {"status": new_status, "updated_at": datetime.now(timezone.utc).isoformat()}}
+        )
+    except Exception as mongo_err:
+        print(f"Failed to sync status update to MongoDB: {mongo_err}")
 
     # Notify the opposite party: company actions reach the vendor recruiters,
     # recruiter shortlist actions reach the company side.
@@ -622,6 +634,42 @@ def get_screened_summary(
         }
 
 
+def _enrich_screened_with_live_status(session, requisition_id: str, candidates: list[dict]) -> list[dict]:
+    """Enrich screened candidate cards with live submission status (Shortlisted, Accepted, Rejected) from database."""
+    if not requisition_id or not candidates:
+        return candidates
+    subs = session.query(CandidateSubmission).filter(
+        CandidateSubmission.requisition_id == requisition_id
+    ).all()
+    sub_map_email = {}
+    sub_map_name = {}
+    sub_map_sub_id = {}
+    for s in subs:
+        if s.candidate_email:
+            sub_map_email[s.candidate_email.strip().lower()] = s
+        if s.candidate_name:
+            sub_map_name[s.candidate_name.strip().lower()] = s
+        if s.id:
+            sub_map_sub_id[str(s.id).strip().lower()] = s
+
+    enriched = []
+    for c in candidates:
+        cand_dict = dict(c)
+        email = (cand_dict.get("candidate_email") or cand_dict.get("email") or "").strip().lower()
+        name = (cand_dict.get("candidate_name") or cand_dict.get("name") or "").strip().lower()
+        cid = str(cand_dict.get("candidate_id") or cand_dict.get("id") or cand_dict.get("submission_id") or "").strip().lower()
+
+        sub = sub_map_email.get(email) or sub_map_name.get(name) or sub_map_sub_id.get(cid)
+        if sub:
+            cand_dict["status"] = sub.status
+            cand_dict["id"] = sub.id
+            cand_dict["submission_id"] = sub.id
+            if sub.vendor_name:
+                cand_dict["vendor_name"] = sub.vendor_name
+        enriched.append(cand_dict)
+    return enriched
+
+
 @router.get("/bank/screening-cache/{requisition_id}")
 def get_screening_cache(
     requisition_id: str,
@@ -644,12 +692,13 @@ def get_screening_cache(
             is_active = (exp > now) if (exp and exp.tzinfo) else (exp > datetime.utcnow()) if exp else False
             if is_active and cache_doc.results:
                 print(f"[SCREENING CACHE] Page load HIT requisition_id={requisition_id} candidate_count={len(cache_doc.results)}")
+                enriched_results = _enrich_screened_with_live_status(session, requisition_id, cache_doc.results)
                 return {
                     "status": "success",
                     "has_cache": True,
                     "source": "cache",
                     "cache_hit": True,
-                    "screened_candidates": cache_doc.results
+                    "screened_candidates": enriched_results
                 }
         return {
             "status": "success",
@@ -693,11 +742,12 @@ async def match_bulk_candidates(
         is_active = (exp > now) if (exp and exp.tzinfo) else (exp > datetime.utcnow()) if exp else False
         if is_active and exact_cache.results:
             print(f"[SCREENING CACHE] HIT requisition_id={requisition_id} candidate_count={len(exact_cache.results)}")
+            enriched_results = _enrich_screened_with_live_status(session, requisition_id, exact_cache.results)
             return {
                 "status": "success",
                 "source": "cache",
                 "cache_hit": True,
-                "screened_candidates": exact_cache.results
+                "screened_candidates": enriched_results
             }
 
         # 2. Check Candidate-Level Partial Cache Hits
@@ -918,11 +968,51 @@ async def match_bulk_candidates(
 
         print(f"[SCREENING CACHE] Saved {len(all_screened)} screening results expires_at={expires_at.isoformat()}")
 
+        enriched_screened = _enrich_screened_with_live_status(session, requisition_id, all_screened)
         return {
             "status": "success",
             "source": "ai" if not reused_results else "hybrid",
             "cache_hit": False,
-            "screened_candidates": all_screened
+            "screened_candidates": enriched_screened
+        }
+
+
+
+@router.get("/shortlist-quota/{requisition_id}")
+def get_shortlist_quota(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Return the candidate shortlist quota and current count for this vendor/requisition."""
+    from modules.shared.settings import get_max_candidates_per_requisition
+    from modules.identity.domain.models import VendorEngagement
+    from modules.requisition.domain.models import Requisition
+
+    limit = current_user.candidate_limit or get_max_candidates_per_requisition()
+    with get_session() as session:
+        req_obj = session.get(Requisition, requisition_id)
+        if req_obj and req_obj.tenant_id and current_user.tenant_id:
+            eng = session.query(VendorEngagement).filter(
+                VendorEngagement.tenant_id == req_obj.tenant_id,
+                VendorEngagement.vendor_tenant_id == current_user.tenant_id
+            ).first()
+            if eng and eng.candidate_limit is not None:
+                limit = eng.candidate_limit
+
+        all_subs = session.query(CandidateSubmission).filter(
+            CandidateSubmission.requisition_id == requisition_id,
+            CandidateSubmission.status.in_(["Shortlisted", "Accepted", "Under Review"])
+        ).all()
+        if current_user.tenant_id and current_user.role != "Super Admin":
+            all_subs = [s for s in all_subs if s.tenant_id == current_user.tenant_id or (not s.tenant_id)]
+
+        count = len(all_subs)
+        return {
+            "status": "success",
+            "limit": limit,
+            "used": count,
+            "remaining": max(0, limit - count),
+            "is_limit_reached": count >= limit
         }
 
 
@@ -944,10 +1034,48 @@ def shortlist_candidate(
     if not requisition_id or not candidate_name:
         raise HTTPException(status_code=400, detail="requisition_id and candidate_name are required")
 
+    from modules.shared.settings import get_max_candidates_per_requisition
+    from modules.identity.domain.models import VendorEngagement
+    from modules.requisition.domain.models import Requisition
+
+    limit = current_user.candidate_limit or get_max_candidates_per_requisition()
+
     with get_session() as session:
+        req_obj = session.get(Requisition, requisition_id)
+        if req_obj and req_obj.tenant_id and current_user.tenant_id:
+            eng = session.query(VendorEngagement).filter(
+                VendorEngagement.tenant_id == req_obj.tenant_id,
+                VendorEngagement.vendor_tenant_id == current_user.tenant_id
+            ).first()
+            if eng and eng.candidate_limit is not None:
+                limit = eng.candidate_limit
+
         all_subs = session.query(CandidateSubmission).filter(
             CandidateSubmission.requisition_id == requisition_id
         ).all()
+
+        cand_email_clean = (candidate_email or "").strip().lower()
+        cand_name_clean = (candidate_name or "").strip().lower()
+
+        existing_sub = next(
+            (s for s in all_subs if 
+             (s.candidate_email and s.candidate_email.strip().lower() == cand_email_clean) or
+             (s.candidate_name and (cand_name_clean in s.candidate_name.strip().lower() or s.candidate_name.strip().lower() in cand_name_clean))
+            ),
+            None
+        )
+
+        active_subs = [s for s in all_subs if s.status in ("Shortlisted", "Accepted", "Under Review")]
+        if current_user.tenant_id and current_user.role != "Super Admin":
+            active_subs = [s for s in active_subs if s.tenant_id == current_user.tenant_id or (not s.tenant_id)]
+
+        is_already_shortlisted = existing_sub is not None and existing_sub.status in ("Shortlisted", "Accepted", "Under Review")
+
+        if not is_already_shortlisted and len(active_subs) >= limit:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Maximum candidate shortlist limit of {limit} reached for this requisition. You cannot shortlist more candidates."
+            )
         
         cand_email_clean = (candidate_email or "").strip().lower()
         cand_name_clean = (candidate_name or "").strip().lower()
@@ -1033,6 +1161,34 @@ def shortlist_candidate(
             session.add(new_sub)
             
         session.commit()
+
+        # Seamlessly sync/upsert candidate submission into MongoDB
+        try:
+            from modules.shared.db import db
+            mongo_doc = {
+                "id": sub_id,
+                "submission_id": sub_id,
+                "requisition_id": requisition_id,
+                "candidate_name": candidate_name,
+                "candidate_email": candidate_email or "",
+                "vendor_name": vendor_name or current_user.tenant_name or "bridgeon",
+                "filename": filename or "",
+                "fingerprint": "",
+                "match_score": match_score or 0,
+                "recommendation": recommendation or "Recommended",
+                "status": "Shortlisted",
+                "summary": summary or "",
+                "tenant_id": current_user.tenant_id,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            db["candidate_submissions"].update_one(
+                {"id": sub_id},
+                {"$set": mongo_doc},
+                upsert=True
+            )
+        except Exception as mongo_err:
+            print(f"Failed to sync shortlisted candidate to MongoDB: {mongo_err}")
+
         notify_candidate_shortlisted(
             requisition_id=requisition_id,
             candidate_name=candidate_name,
@@ -1041,6 +1197,6 @@ def shortlist_candidate(
         )
         return {
             "status": "success",
-            "message": f"Candidate {candidate_name} shortlisted and saved to candidate_submissions table",
+            "message": f"Candidate {candidate_name} shortlisted and saved to candidate_submissions",
             "submission_id": sub_id
         }

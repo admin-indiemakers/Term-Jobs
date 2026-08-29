@@ -89,7 +89,7 @@ export default function AcceptedCandidates() {
 
   // Derived Real KPI Metrics
   const metrics = useMemo(() => {
-    const totalAccepted = candidates.length || 250;
+    const totalAccepted = candidates.length;
     
     // Count onboarding statuses
     const obValues = Object.values(onboardingDocs);
@@ -98,23 +98,15 @@ export default function AcceptedCandidates() {
 
     return {
       accepted: totalAccepted,
-      started: started || 18,
-      completed: completed || 18,
-      openIssues: issues.length || 0,
+      started: started,
+      completed: completed,
+      openIssues: issues.length,
     };
   }, [candidates, onboardingDocs, issues]);
 
-  // Display Table Rows
+  // Display Table Rows (strictly real candidates from DB)
   const displayRows = useMemo(() => {
-    if (candidates.length > 0) return candidates;
-    return [
-      { id: '17fa08', candidate_id: 'BEAR-17fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: 57 },
-      { id: '27fa08', candidate_id: 'BEAR-27fa08', candidate_name: 'Hashil', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: 53 },
-      { id: '37fa08', candidate_id: 'BEAR-37fa08', candidate_name: 'arjun m', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: 48 },
-      { id: '47fa08', candidate_id: 'BEAR-47fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: null },
-      { id: '57fa08', candidate_id: 'BEAR-57fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: null },
-      { id: '67fa08', candidate_id: 'BEAR-67fa08', candidate_name: 'Sreehari P S', vendor_name: 'bridgeon', requisition_ref: 'REQ-F7F406', requisition_title: 'DevOps Engineer', match_score: null },
-    ];
+    return candidates;
   }, [candidates]);
 
   // Open Onboarding Setup Modal
