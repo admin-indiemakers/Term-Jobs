@@ -2752,7 +2752,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               className="px-4 py-2 text-[12px] font-bold flex items-center gap-1.5 shadow-2xs"
                             >
                               <span>✓</span>
-                              <span>Shortlisted (Sent to HR)</span>
+                              <span>✓ Shortlisted</span>
                             </span>
                           ) : isRejected ? (
                             <span
