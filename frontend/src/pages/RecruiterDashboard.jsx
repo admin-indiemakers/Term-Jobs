@@ -546,7 +546,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               priority: 1,
               type: 'deadline',
               badge: diffDays < 0 ? 'Expired' : diffDays === 0 ? 'Due Today' : `${diffDays}d Left`,
-              badgeColor: isUrgent ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-orange-50 text-orange-700 border-orange-200',
+              badgeColor: 'bg-[#F5F5F2] text-[#0A0A0A] border-[#E2E2DC]',
               title: req.title || 'Requisition Role',
               subtitle: `${req.company_name || 'Client'} • Deadline: ${dStr}`,
               actionLabel: 'Screen',
@@ -584,7 +584,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         priority: 2,
         type: 'accepted',
         badge: 'HR Accepted',
-        badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+        badgeColor: 'bg-[#0A0A0A] text-[#FFFFFF] border-[#0A0A0A]',
         title: candName,
         subtitle: `${compName} • ${roleName}`,
         actionLabel: 'Grant Access',
@@ -606,7 +606,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         priority: 3,
         type: 'interview',
         badge: 'Interview',
-        badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+        badgeColor: 'bg-[#F5F5F2] text-[#0A0A0A] border-[#E2E2DC]',
         title: candName,
         subtitle: `${compName} • Scheduled`,
         actionLabel: 'View',
@@ -1391,16 +1391,16 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               </div>
                             </div>
 
-                            {/* 4. Status (Screened vs Published) */}
+                            {/* 4. Status (Screened vs Published) - Monochrome */}
                             <div className="col-span-2 text-center">
                               {isScreened ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs">
-                                  <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-emerald-500" />
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-black border bg-[#0A0A0A] text-[#FFFFFF] border-[#0A0A0A] shadow-2xs">
+                                  <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-white" />
                                   Screened
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-extrabold border bg-zinc-100 text-zinc-600 border-zinc-200">
-                                  <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-zinc-400" />
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[#F5F5F2] text-[#737373] border-[#E2E2DC]">
+                                  <span className="w-1.5 h-1.5 rounded-full mr-1.5 bg-[#A1A1AA]" />
                                   Published
                                 </span>
                               )}
@@ -1516,25 +1516,25 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 </div>
               </div>
 
-              {/* Live Alerts & Notifications Card (Compact & Streamlined) */}
+              {/* Live Alerts Card (Modern Monochrome Black & White UI) */}
               <div
                 style={{
                   backgroundColor: '#FFFFFF',
-                  borderRadius: 20,
+                  borderRadius: 22,
                   border: '1px solid #E2E2DC',
                   boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
                 }}
-                className="p-4 space-y-3"
+                className="p-5 space-y-3.5"
               >
                 {/* Header */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-md bg-amber-500/10 text-amber-600 flex items-center justify-center">
-                      <Bell size={12} strokeWidth={2.5} />
-                    </div>
-                    <h3 className="text-[13px] font-extrabold text-[#0A0A0A] tracking-tight">
+                  <div>
+                    <h3 className="text-[13.5px] font-black text-[#0A0A0A] tracking-tight uppercase">
                       Live Alerts
                     </h3>
+                    <p className="text-[11px] text-[#8A8A85] font-medium mt-0.5">
+                      Pending recruiter actions & client updates
+                    </p>
                   </div>
 
                   <span
@@ -1543,9 +1543,12 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       color: notifications.length ? '#FFFFFF' : '#8A8A85',
                       borderRadius: 9999,
                     }}
-                    className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider"
+                    className="px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5"
                   >
-                    {notifications.length} {notifications.length === 1 ? 'Alert' : 'Alerts'}
+                    {notifications.length > 0 && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                    )}
+                    {notifications.length} {notifications.length === 1 ? 'ALERT' : 'ALERTS'}
                   </span>
                 </div>
 
