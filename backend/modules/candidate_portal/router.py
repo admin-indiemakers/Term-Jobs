@@ -23,69 +23,15 @@ def _get_current_week_bounds():
 
 
 def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_email: str, tenant_id: str):
+    """Return the active work order for this candidate, or None if none exists.
+    Does NOT auto-create fake work orders — shows 'No Active Assignment' instead.
+    """
     wo_coll = db["work_orders"]
     existing = wo_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"candidate_email": candidate_email}]})
     if existing:
         existing.pop("_id", None)
         return existing
-
-    ob = db["onboarding_checklists"].find_one({"candidate_id": candidate_id}) or {}
-    sub = db["candidate_submissions"].find_one({"$or": [{"id": candidate_id}, {"candidate_email": candidate_email}]}) or {}
-
-    role_title = ob.get("requisition_title") or sub.get("requisition_title") or ""
-    comp_name = ob.get("company_name") or ""
-    vend_name = ob.get("vendor_name") or sub.get("vendor_name") or ""
-    req_id = ob.get("requisition_id") or sub.get("requisition_id") or ""
-
-    manager_name = (
-        ob.get("hiring_manager_name") or ob.get("hiring_manager")
-        or sub.get("hiring_manager_name") or sub.get("hiring_manager") or ""
-    )
-    if not manager_name and req_id:
-        req_doc = db["requisitions"].find_one({"id": req_id}) or {}
-        manager_name = req_doc.get("hiring_manager") or req_doc.get("hiring_manager_name") or ""
-
-    if not manager_name:
-        hm_user = db["users"].find_one({"role": "Hiring Manager"})
-        if hm_user:
-            manager_name = hm_user.get("name") or hm_user.get("email") or ""
-
-    today_iso = datetime.now(timezone.utc).strftime("%d %b %Y")
-    new_wo = {
-        "id": f"wo_{uuid.uuid4().hex[:12]}",
-        "work_order_number": f"WO-{datetime.now(timezone.utc).year}-{uuid.uuid4().hex[:5].upper()}",
-        "tenant_id": tenant_id or "default-tenant",
-        "requisition_id": req_id,
-        "requisition_title": role_title,
-        "offer_id": "",
-        "candidate_id": candidate_id,
-        "candidate_name": candidate_name or "Candidate",
-        "candidate_email": candidate_email,
-        "vendor_id": sub.get("vendor_id", ""),
-        "vendor_name": vend_name,
-        "company_name": comp_name,
-        "bill_rate": 0.0,
-        "rate_basis": "hourly",
-        "currency": "INR",
-        "start_date": today_iso,
-        "end_date": "",
-        "weekly_hours": 40.0,
-        "location": "",
-        "work_arrangement": "Remote",
-        "reporting_manager": manager_name,
-        "overtime_eligible": True,
-        "overtime_policy": "Allowed",
-        "engagement_type": "Contractor",
-        "status": "ACTIVE",
-        "is_conditional_start": False,
-        "conditional_expiry_date": "",
-        "activated_at": datetime.now(timezone.utc).isoformat(),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }
-    wo_coll.insert_one(new_wo)
-    new_wo.pop("_id", None)
-    return new_wo
+    return None
 
 
 def _sanitize_work_order_for_candidate(wo: dict) -> dict:
@@ -104,43 +50,27 @@ def _sanitize_work_order_for_candidate(wo: dict) -> dict:
         "work_arrangement": wo.get("work_arrangement", ""),
         "reporting_manager": wo.get("reporting_manager", ""),
         "overtime_eligible": wo.get("overtime_eligible", True),
-        "overtime_policy": wo.get("overtime_policy", "Allowed"),
-        "engagement_type": wo.get("engagement_type", "Contractor"),
+        "overtime_policy": wo.get("overtime_policy", ""),
+        "engagement_type": wo.get("engagement_type", ""),
         "status": wo.get("status", "ACTIVE"),
         "activated_at": wo.get("activated_at"),
     }
 
 
-def _generate_smart_draft_entries(week_start: str, start_date_str: str = "2026-08-25"):
+def _generate_smart_draft_entries(week_start: str, start_date_str: str = ""):
     start_dt = datetime.fromisoformat(week_start).date()
-    today_dt = datetime.now(timezone.utc).date()
-    assignment_start_dt = datetime.fromisoformat(start_date_str).date() if start_date_str else start_dt
     days_labels = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
-    default_tasks = [
-        "Infrastructure monitoring & deployment pipelines",
-        "CI/CD workflow optimization & test runs",
-        "Container security & Kubernetes cluster audit",
-        "Service reliability & cloud resource configuration",
-        "Release readiness review & sprint retro",
-        "",
-        ""
-    ]
     entries = []
     for i in range(7):
         cur_date = start_dt + timedelta(days=i)
         is_weekend = i >= 5
-        is_future = cur_date > today_dt
-        is_before_start = cur_date < assignment_start_dt
-        
-        # Only log hours if the date is >= assignment start date, <= today, and not weekend
-        hrs = 8.0 if (not is_weekend and not is_future and not is_before_start) else 0.0
         entries.append({
             "day": days_labels[i],
             "day_number": cur_date.strftime("%d"),
             "date": cur_date.isoformat(),
-            "hours": hrs,
+            "hours": 0.0,
             "category": "Weekend" if is_weekend else "Regular",
-            "task": default_tasks[i] if hrs > 0 else "",
+            "task": "",
             "note": "",
         })
     return entries
@@ -239,7 +169,12 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
 
     raw_wo = _ensure_active_work_order(cand_id, cand_name, cand_email, current_user.tenant_id)
     safe_wo = _sanitize_work_order_for_candidate(raw_wo)
-    _ensure_seed_history(cand_id, current_user.tenant_id, safe_wo)
+
+    # If no work order exists, candidate has no active assignment yet
+    has_assignment = raw_wo is not None
+
+    if has_assignment:
+        _ensure_seed_history(cand_id, current_user.tenant_id, safe_wo)
 
     mon_str, sun_str = _get_current_week_bounds()
     ts_coll = db["timesheets"]
@@ -248,7 +183,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         "week_start_date": mon_str
     })
 
-    if not current_ts:
+    if not current_ts and has_assignment:
         entries = _generate_smart_draft_entries(mon_str)
         analysis = _analyze_timesheet_with_assistant(entries, expected_hours=40.0)
         from datetime import datetime as _dt
@@ -279,25 +214,32 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
 
     daily_status = []
     logged_hrs = 0.0
-    for e in current_ts.get("daily_entries", [])[:5]:
-        h = float(e.get("hours", 0.0))
-        logged_hrs += h
-        daily_status.append({
-            "day": e.get("day"),
-            "date": e.get("date"),
-            "hours": h,
-            "status": "logged" if h > 0 else "action_needed",
-            "label": f"{int(h)}h" if h > 0 else "Action needed"
-        })
+    if current_ts:
+        for e in current_ts.get("daily_entries", [])[:5]:
+            h = float(e.get("hours", 0.0))
+            logged_hrs += h
+            daily_status.append({
+                "day": e.get("day"),
+                "date": e.get("date"),
+                "hours": h,
+                "status": "logged" if h > 0 else "action_needed",
+                "label": f"{int(h)}h" if h > 0 else "Action needed"
+            })
 
-    expected_h = safe_wo.get("weekly_hours", 40.0)
+    expected_h = safe_wo.get("weekly_hours", 40.0) if safe_wo else 40.0
     progress_pct = int(round((logged_hrs / expected_h) * 100)) if expected_h > 0 else 0
 
     recent_ts = list(ts_coll.find({"candidate_id": cand_id, "status": "APPROVED"}).sort("created_at", -1).limit(5))
     for t in recent_ts:
         t.pop("_id", None)
 
+    exp_coll = db["candidate_expenses"]
+    user_expenses = list(exp_coll.find({"candidate_id": cand_id}))
+    exp_sum = sum(float(e.get("amount", 0)) for e in user_expenses if e.get("status") in ["Submitted", "Pending", "Approved"])
+    exp_formatted = f"₹{exp_sum/1000:.1f}K" if exp_sum >= 1000 else f"₹{int(exp_sum)}"
+
     return {
+        "has_assignment": has_assignment,
         "candidate": {
             "id": cand_id or "",
             "name": cand_name or ob.get("candidate_name") or "Candidate",
@@ -328,7 +270,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             },
             "expenses": {
                 "label": "EXPENSES",
-                "value": "₹1.2K",
+                "value": exp_formatted,
                 "subtext": "this month",
             }
         },
@@ -338,14 +280,14 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             "progress_pct": progress_pct,
             "logged_hours": int(logged_hrs) if logged_hrs.is_integer() else logged_hrs,
             "expected_hours": int(expected_h),
-            "week_range": "24–30 Aug",
+            "week_range": f"{mon_str} – {sun_str}",
             "daily_entries": daily_status,
         },
         "assignment_snapshot": {
-            "work_arrangement": safe_wo.get("work_arrangement", "Hybrid"),
+            "work_arrangement": safe_wo.get("work_arrangement", ""),
             "weekly_expectation": f"{int(expected_h)}h",
             "overtime": safe_wo.get("overtime_policy", "Allowed"),
-            "engagement": safe_wo.get("engagement_type", "Contractor"),
+            "engagement": safe_wo.get("engagement_type", ""),
         },
         "smart_actions": {
             "ai_title": "Time Assistant",
@@ -372,14 +314,23 @@ def get_candidate_assignment(current_user: User = Depends(get_current_user)):
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
     safe_wo = _sanitize_work_order_for_candidate(raw_wo)
 
+    if not safe_wo:
+        return {
+            "status": "success",
+            "has_assignment": False,
+            "assignment": {},
+            "timeline": {},
+        }
+
     return {
         "status": "success",
+        "has_assignment": True,
         "assignment": safe_wo,
         "timeline": {
-            "started_at": safe_wo.get("start_date", "25 Aug 2026"),
+            "started_at": safe_wo.get("start_date", ""),
             "current_phase": "Active Delivery & Sprint Execution",
-            "target_completion": safe_wo.get("end_date", "25 Feb 2027"),
-            "progress_pct": 15,
+            "target_completion": safe_wo.get("end_date", ""),
+            "progress_pct": 0,
         }
     }
 
@@ -399,19 +350,23 @@ def get_current_timesheet(current_user: User = Depends(get_current_user)):
         return {"status": "success", "is_smart_draft": False, "timesheet": ts}
 
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
+
+    if not raw_wo:
+        return {"status": "success", "is_smart_draft": False, "timesheet": None, "has_assignment": False}
+
     entries = _generate_smart_draft_entries(mon_str)
     analysis = _analyze_timesheet_with_assistant(entries, expected_hours=40.0)
 
     draft_ts = {
         "id": f"ts_{uuid.uuid4().hex[:12]}",
-        "timesheet_number": "TS-2026-W35-8910",
+        "timesheet_number": f"TS-{mon_str[:4]}-W{_dt.fromisoformat(mon_str).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
         "work_order_id": raw_wo.get("id"),
-        "work_order_number": raw_wo.get("work_order_number", "WO-2026-00124"),
+        "work_order_number": raw_wo.get("work_order_number", ""),
         "tenant_id": current_user.tenant_id,
         "week_start_date": mon_str,
         "week_end_date": sun_str,
-        "period_label": "24 – 30 August 2026",
+        "period_label": f"{mon_str} – {sun_str}",
         "daily_entries": entries,
         "total_regular_hours": analysis["total_regular_hours"],
         "total_overtime_hours": analysis["total_overtime_hours"],
@@ -432,7 +387,8 @@ def list_candidate_timesheets(current_user: User = Depends(get_current_user)):
 
     cand_id = current_user.candidate_id or ""
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
-    _ensure_seed_history(cand_id, current_user.tenant_id, raw_wo)
+    if raw_wo:
+        _ensure_seed_history(cand_id, current_user.tenant_id, raw_wo)
 
     ts_coll = db["timesheets"]
     timesheets = list(ts_coll.find({"candidate_id": cand_id, "status": {"$in": ["SUBMITTED", "APPROVED", "INVOICED"]}}).sort("created_at", -1))
@@ -445,7 +401,7 @@ class SaveTimesheetRequest(BaseModel):
     id: str | None = None
     week_start_date: str
     week_end_date: str
-    period_label: str | None = "24 – 30 August 2026"
+    period_label: str | None = ""
     daily_entries: list[dict]
     notes: str | None = ""
 
@@ -461,6 +417,9 @@ def save_timesheet_draft(
     cand_id = current_user.candidate_id or ""
     ts_coll = db["timesheets"]
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
+
+    if not raw_wo:
+        raise HTTPException(status_code=400, detail="No active work order. Cannot save timesheet without an assignment.")
 
     today_str = datetime.now(timezone.utc).date().isoformat()
 
@@ -481,15 +440,15 @@ def save_timesheet_draft(
 
     ts_data = {
         "id": payload.id or (existing.get("id") if existing else f"ts_{uuid.uuid4().hex[:12]}"),
-        "timesheet_number": existing.get("timesheet_number") if existing else "TS-2026-W35-8910",
+        "timesheet_number": existing.get("timesheet_number") if existing else f"TS-{datetime.now(timezone.utc).year}-W{datetime.now(timezone.utc).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
         "worker_name": current_user.name,
         "work_order_id": raw_wo.get("id"),
-        "work_order_number": raw_wo.get("work_order_number", "WO-2026-00124"),
+        "work_order_number": raw_wo.get("work_order_number", ""),
         "tenant_id": current_user.tenant_id,
         "week_start_date": payload.week_start_date,
         "week_end_date": payload.week_end_date,
-        "period_label": payload.period_label or "24 – 30 August 2026",
+        "period_label": payload.period_label or "",
         "daily_entries": payload.daily_entries,
         "total_regular_hours": analysis["total_regular_hours"],
         "total_overtime_hours": analysis["total_overtime_hours"],
@@ -522,6 +481,9 @@ def submit_timesheet(
     ts_coll = db["timesheets"]
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
 
+    if not raw_wo:
+        raise HTTPException(status_code=400, detail="No active work order. Cannot save timesheet without an assignment.")
+
     today_str = datetime.now(timezone.utc).date().isoformat()
 
     for entry in payload.daily_entries:
@@ -541,15 +503,15 @@ def submit_timesheet(
 
     ts_data = {
         "id": payload.id or (existing.get("id") if existing else f"ts_{uuid.uuid4().hex[:12]}"),
-        "timesheet_number": existing.get("timesheet_number") if existing else "TS-2026-W35-8910",
+        "timesheet_number": existing.get("timesheet_number") if existing else f"TS-{datetime.now(timezone.utc).year}-W{datetime.now(timezone.utc).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
         "worker_name": current_user.name,
         "work_order_id": raw_wo.get("id"),
-        "work_order_number": raw_wo.get("work_order_number", "WO-2026-00124"),
+        "work_order_number": raw_wo.get("work_order_number", ""),
         "tenant_id": current_user.tenant_id,
         "week_start_date": payload.week_start_date,
         "week_end_date": payload.week_end_date,
-        "period_label": payload.period_label or "24 – 30 August 2026",
+        "period_label": payload.period_label or "",
         "daily_entries": payload.daily_entries,
         "total_regular_hours": analysis["total_regular_hours"],
         "total_overtime_hours": analysis["total_overtime_hours"],
@@ -733,7 +695,7 @@ def create_candidate_expense(
         "id": payload.id or f"exp_{uuid.uuid4().hex[:10]}",
         "candidate_id": cand_id,
         "candidate_name": current_user.name,
-        "work_order_number": "WO-2026-00124",
+        "work_order_number": raw_wo.get("work_order_number", ""),
         "date": payload.date,
         "date_label": date_label,
         "category": payload.category or "Travel",

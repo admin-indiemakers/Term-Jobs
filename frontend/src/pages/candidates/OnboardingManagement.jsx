@@ -459,7 +459,7 @@ export default function OnboardingManagement() {
                   const id = cand.id || cand.candidate_id || `cand-${idx}`;
                   const rawId = cand.candidate_id || cand.id || `${idx}7fa08`;
                   const candCode = String(rawId).startsWith('BEAR-') ? String(rawId) : `BEAR-${String(rawId).slice(0, 6)}`;
-                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Sreehari P S';
+                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
                   const vendorName = cand.vendor_name || 'bridgeon';
                   const reqRef = cand.requisition_ref || 'REQ-F7F406';
                   const reqTitle = cand.requisition_title || 'DevOps Engineer';

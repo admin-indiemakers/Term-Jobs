@@ -91,6 +91,22 @@ const Icons = {
       <line x1="4" y1="22" x2="4" y2="15"/>
     </svg>
   ),
+  Team: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </svg>
+  ),
+  Timesheet: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -101,7 +117,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dynamic live count badges for Hiring Manager
-  const [hmCounts, setHmCounts] = useState({ requisitions: 12, candidates: 251, openIssues: 0 });
+  const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0 });
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
@@ -110,15 +126,19 @@ export default function DashboardLayout() {
         request('/candidates/shortlisted', { token }).catch(() => []),
         request('/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
-      ]).then(([reqs, shortlisted, accepted, issuesData]) => {
-        const rCount = Array.isArray(reqs) ? reqs.length : 12;
+        request('/api/workforce/stats', { token }).catch(() => null),
+      ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
+        const rCount = Array.isArray(reqs) ? reqs.length : 0;
         const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
+        const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
         const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
         const openIssues = issueList.filter((i) => i.status === 'open').length;
+        const pendingTs = wfStats?.stats?.pending_timesheets || 0;
         setHmCounts({
-          requisitions: rCount || 12,
-          candidates: 250 + (sList.length || 1),
+          requisitions: rCount,
+          candidates: sList.length + aList.length,
           openIssues: openIssues,
+          pendingTimesheets: pendingTs,
         });
       }).catch(() => {});
     }
@@ -162,6 +182,8 @@ export default function DashboardLayout() {
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
         { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
+        { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
+        { to: '/dashboard/workforce/timesheets', label: 'Timesheets', end: false, section: 'WORKFORCE', icon: Icons.Timesheet, badge: hmCounts.pendingTimesheets },
       ]
       : userRole === 'Recruiter'
         ? [
