@@ -131,21 +131,24 @@ export default function RequisitionCandidates() {
     if (!window.confirm(`${status === 'Shortlisted' ? 'Shortlist' : 'Reject'} ${c.candidate_name || 'this candidate'}?`)) return;
     setActing(submissionId);
     setError('');
+    const prevStatus = c.status;
+    // Optimistically update candidate status immediately to show ? Shortlisted and disable button
+    setCandidates((prev) => prev.map((item) => ((item.submission_id || item.id) === submissionId ? { ...item, status } : item)));
+    setExpanded(null);
     try {
       await request(`/candidates/${submissionId}/status`, {
         method: 'PATCH',
         token,
         body: { status },
       });
-      setCandidates((prev) => prev.map((item) => ((item.submission_id || item.id) === submissionId ? { ...item, status } : item)));
-      setExpanded(null);
     } catch (err) {
+      // Revert on error
+      setCandidates((prev) => prev.map((item) => ((item.submission_id || item.id) === submissionId ? { ...item, status: prevStatus } : item)));
       setError(err.message);
     } finally {
       setActing(null);
     }
   };
-
   const handleViewResume = async (c) => {
     setError('');
     try {

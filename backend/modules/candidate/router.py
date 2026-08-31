@@ -1036,7 +1036,8 @@ def shortlist_candidate(
     body: dict,
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Save/persist candidate submission to candidate_submissions collection in MongoDB when recruiter clicks Shortlist."""
+    """Save/persist candidate submission to candidate_submissions collection in MongoDB and SQL, checking for existing records first to prevent duplicates."""
+    import re as _re
     requisition_id = body.get("requisition_id")
     candidate_name = body.get("candidate_name")
     candidate_email = body.get("candidate_email")
@@ -1045,6 +1046,7 @@ def shortlist_candidate(
     recommendation = body.get("recommendation")
     summary = body.get("summary")
     filename = body.get("filename")
+    cand_id = body.get("candidate_id") or body.get("submission_id") or body.get("id")
 
     if not requisition_id or not candidate_name:
         raise HTTPException(status_code=400, detail="requisition_id and candidate_name are required")
@@ -1072,37 +1074,34 @@ def shortlist_candidate(
         cand_email_clean = (candidate_email or "").strip().lower()
         cand_name_clean = (candidate_name or "").strip().lower()
 
-        existing_sub = next(
-            (s for s in all_subs if 
-             (s.candidate_email and s.candidate_email.strip().lower() == cand_email_clean) or
-             (s.candidate_name and (cand_name_clean in s.candidate_name.strip().lower() or s.candidate_name.strip().lower() in cand_name_clean))
-            ),
-            None
-        )
+        existing_sub = None
+        if cand_id:
+            existing_sub = next((s for s in all_subs if s.id == cand_id), None)
+        if not existing_sub and cand_email_clean:
+            existing_sub = next(
+                (s for s in all_subs if s.candidate_email and s.candidate_email.strip().lower() == cand_email_clean),
+                None
+            )
+        if not existing_sub and cand_name_clean:
+            existing_sub = next(
+                (s for s in all_subs if s.candidate_name and (cand_name_clean in s.candidate_name.strip().lower() or s.candidate_name.strip().lower() in cand_name_clean)),
+                None
+            )
+        if not existing_sub and filename:
+            existing_sub = next((s for s in all_subs if s.filename and s.filename == filename), None)
 
-        active_subs = [s for s in all_subs if s.status in ("Shortlisted", "Accepted", "Under Review")]
+        active_subs = [s for s in all_subs if s.status in ("Shortlisted", "Accepted", "Under Review", "Hired")]
         if current_user.tenant_id and current_user.role != "Super Admin":
             active_subs = [s for s in active_subs if s.tenant_id == current_user.tenant_id or (not s.tenant_id)]
 
-        is_already_shortlisted = existing_sub is not None and existing_sub.status in ("Shortlisted", "Accepted", "Under Review")
+        is_already_shortlisted = existing_sub is not None and existing_sub.status in ("Shortlisted", "Accepted", "Under Review", "Hired")
 
         if not is_already_shortlisted and len(active_subs) >= limit:
             raise HTTPException(
                 status_code=400,
                 detail=f"Maximum candidate shortlist limit of {limit} reached for this requisition. You cannot shortlist more candidates."
             )
-        
-        cand_email_clean = (candidate_email or "").strip().lower()
-        cand_name_clean = (candidate_name or "").strip().lower()
-        
-        existing_sub = next(
-            (s for s in all_subs if 
-             (s.candidate_email and s.candidate_email.strip().lower() == cand_email_clean) or
-             (s.candidate_name and (cand_name_clean in s.candidate_name.strip().lower() or s.candidate_name.strip().lower() in cand_name_clean))
-            ),
-            None
-        )
-        
+
         # Lookup resume PDF in Candidates bank or disk if not provided in request
         resume_pdf_data = body.get("resume_pdf") or body.get("pdf_base64")
         if not resume_pdf_data:
@@ -1149,6 +1148,8 @@ def shortlist_candidate(
                 existing_sub.summary = summary
             if resume_pdf_data:
                 existing_sub.resume_pdf = resume_pdf_data
+            if current_user.tenant_id and not existing_sub.tenant_id:
+                existing_sub.tenant_id = current_user.tenant_id
             existing_sub.updated_at = datetime.now(timezone.utc)
             session.add(existing_sub)
             sub_id = existing_sub.id
@@ -1177,12 +1178,31 @@ def shortlist_candidate(
             
         session.commit()
 
-        # Seamlessly sync/upsert candidate submission into MongoDB
+        # Seamlessly sync/upsert candidate submission into MongoDB with deduplication check
         try:
             from modules.shared.db import db
+            mongo_or_filters = []
+            if sub_id:
+                mongo_or_filters.append({"id": sub_id})
+                mongo_or_filters.append({"submission_id": sub_id})
+            if cand_id:
+                mongo_or_filters.append({"id": cand_id})
+                mongo_or_filters.append({"submission_id": cand_id})
+            if cand_email_clean:
+                mongo_or_filters.append({"candidate_email": {"$regex": f"^{_re.escape(cand_email_clean)}$", "$options": "i"}})
+            if cand_name_clean:
+                mongo_or_filters.append({"candidate_name": {"$regex": f"^{_re.escape(cand_name_clean)}$", "$options": "i"}})
+            if filename:
+                mongo_or_filters.append({"filename": filename})
+
+            existing_mongo = None
+            if mongo_or_filters:
+                existing_mongo = db["candidate_submissions"].find_one({
+                    "requisition_id": requisition_id,
+                    "$or": mongo_or_filters
+                })
+
             mongo_doc = {
-                "id": sub_id,
-                "submission_id": sub_id,
                 "requisition_id": requisition_id,
                 "candidate_name": candidate_name,
                 "candidate_email": candidate_email or "",
@@ -1196,11 +1216,26 @@ def shortlist_candidate(
                 "tenant_id": current_user.tenant_id,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }
-            db["candidate_submissions"].update_one(
-                {"id": sub_id},
-                {"$set": mongo_doc},
-                upsert=True
-            )
+            if resume_pdf_data:
+                mongo_doc["resume_pdf"] = resume_pdf_data
+
+            if existing_mongo:
+                final_id = existing_mongo.get("id") or existing_mongo.get("submission_id") or sub_id
+                mongo_doc["id"] = final_id
+                mongo_doc["submission_id"] = final_id
+                db["candidate_submissions"].update_one(
+                    {"_id": existing_mongo["_id"]},
+                    {"$set": mongo_doc}
+                )
+                sub_id = final_id
+            else:
+                mongo_doc["id"] = sub_id
+                mongo_doc["submission_id"] = sub_id
+                db["candidate_submissions"].update_one(
+                    {"id": sub_id},
+                    {"$set": mongo_doc},
+                    upsert=True
+                )
         except Exception as mongo_err:
             print(f"Failed to sync shortlisted candidate to MongoDB: {mongo_err}")
 

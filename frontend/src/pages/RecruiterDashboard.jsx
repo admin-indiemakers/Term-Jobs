@@ -165,6 +165,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [limitReachedModal, setLimitReachedModal] = useState(null);
   const [limitToast, setLimitToast] = useState(null);
   const [shortlistQuota, setShortlistQuota] = useState({ limit: 3, used: 0, is_limit_reached: false });
+  const [shortlistingCandidateIds, setShortlistingCandidateIds] = useState(new Set());
   const [workspaceActiveTab, setWorkspaceActiveTab] = useState('requirements'); // 'requirements' | 'candidates'
   const [screenedReqSummary, setScreenedReqSummary] = useState({});
 
@@ -805,6 +806,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   }, [selectedReqId, authToken]);
 
   async function updateCandidateStatus(sub, newStatus) {
+    const targetKey = sub.candidate_id || sub.id || sub.submission_id || sub.candidate_name;
+    if (shortlistingCandidateIds.has(targetKey)) {
+      return; // Prevent duplicate clicks or concurrent requests
+    }
+
     try {
       if (newStatus === 'Shortlisted') {
         // Active shortlisted + accepted candidate count check
@@ -827,35 +833,65 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           return;
         }
 
-        const res = await request('/candidates/shortlist', {
-          method: 'POST',
-          token: authToken,
-          body: {
-            requisition_id: selectedReqId,
-            candidate_name: sub.candidate_name,
-            candidate_email: sub.candidate_email,
-            vendor_name: sub.vendor_name,
-            match_score: sub.match_score,
-            recommendation: sub.recommendation,
-            summary: sub.summary,
-            filename: sub.filename,
-          },
-        });
-        if (res.status === 'success') {
+        // Immediately update button to ? Shortlisted and disable double-clicks
+        const originalStatus = sub.status;
+        setShortlistingCandidateIds((prev) => new Set(prev).add(targetKey));
+        setScreenedSubmissions((prev) =>
+          prev.map((item) =>
+            (item.candidate_id === sub.candidate_id || item.id === sub.id || (item.candidate_name && item.candidate_name === sub.candidate_name))
+              ? { ...item, status: 'Shortlisted' }
+              : item
+          )
+        );
+
+        try {
+          const res = await request('/candidates/shortlist', {
+            method: 'POST',
+            token: authToken,
+            body: {
+              requisition_id: selectedReqId,
+              candidate_id: sub.candidate_id || sub.id,
+              candidate_name: sub.candidate_name,
+              candidate_email: sub.candidate_email,
+              vendor_name: sub.vendor_name,
+              match_score: sub.match_score,
+              recommendation: sub.recommendation,
+              summary: sub.summary,
+              filename: sub.filename,
+            },
+          });
+          if (res.status === 'success') {
+            setScreenedSubmissions((prev) =>
+              prev.map((item) =>
+                (item.candidate_id === sub.candidate_id || item.id === sub.id || (item.candidate_name && item.candidate_name === sub.candidate_name))
+                  ? { ...item, status: 'Shortlisted', id: res.submission_id, submission_id: res.submission_id }
+                  : item
+              )
+            );
+            const data = await request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] }));
+            setShortlisted(Array.isArray(data) ? data : data?.shortlisted_candidates || []);
+            if (selectedReqId) {
+              fetchShortlistQuota(selectedReqId);
+            }
+          } else {
+            throw new Error(res.message || 'Failed to shortlist candidate.');
+          }
+        } catch (err) {
+          // Revert optimistic update on failure
           setScreenedSubmissions((prev) =>
             prev.map((item) =>
-              (item.candidate_id === sub.candidate_id || item.id === sub.id)
-                ? { ...item, status: 'Shortlisted', id: res.submission_id }
+              (item.candidate_id === sub.candidate_id || item.id === sub.id || (item.candidate_name && item.candidate_name === sub.candidate_name))
+                ? { ...item, status: originalStatus }
                 : item
             )
           );
-          const data = await request('/api/candidates/shortlisted', { token: authToken }).catch(() => ({ shortlisted_candidates: [] }));
-          setShortlisted(Array.isArray(data) ? data : data?.shortlisted_candidates || []);
-          if (selectedReqId) {
-            fetchShortlistQuota(selectedReqId);
-          }
-        } else {
-          throw new Error(res.message || 'Failed to shortlist candidate.');
+          throw err;
+        } finally {
+          setShortlistingCandidateIds((prev) => {
+            const next = new Set(prev);
+            next.delete(targetKey);
+            return next;
+          });
         }
       } else {
         const subId = sub.id || sub.submission_id;
@@ -885,7 +921,6 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setError(msg);
     }
   }
-
   async function runBulkScreening() {
     if (screening) return; // Prevent duplicate clicks or concurrent requests
     if (!selectedCandidateIds.length) return setError('Please select at least one candidate.');
