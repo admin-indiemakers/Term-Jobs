@@ -76,7 +76,7 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
 
     _fill("requisition_title", sub, ob, req_doc)
     if not keep.get("requisition_title"):
-        keep["requisition_title"] = sr.get("job_title") or ""
+        keep["requisition_title"] = sr.get("job_title") or sr.get("title") or req_doc.get("title") or ""
     _fill("vendor_name", sub, ob, req_doc)
     _fill("company_name", sub, ob, req_doc)
     if not keep.get("company_name") and comp_profile_name:
@@ -86,13 +86,22 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
     _fill("location", sr)
     if not keep.get("location"):
         locations = sr.get("work_locations") or []
-        keep["location"] = locations[0] if locations else ""
+        keep["location"] = locations[0] if locations else sr.get("location") or ""
     _fill("work_arrangement", sr, req_doc)
     if not keep.get("work_arrangement"):
-        keep["work_arrangement"] = sr.get("work_mode") or ""
+        keep["work_arrangement"] = sr.get("work_mode") or req_doc.get("work_mode") or ""
     _fill("reporting_manager", sr, req_doc)
+    if not keep.get("reporting_manager"):
+        keep["reporting_manager"] = sr.get("hiring_manager") or req_doc.get("hiring_manager") or ""
     _fill("overtime_policy", sr, req_doc)
+    if not keep.get("overtime_policy"):
+        keep["overtime_policy"] = sr.get("overtime_policy") or req_doc.get("overtime_policy") or ""
     _fill("engagement_type", sr, req_doc)
+    if not keep.get("engagement_type"):
+        keep["engagement_type"] = sr.get("engagement_type") or req_doc.get("engagement_type") or ""
+    _fill("end_date", sr, req_doc)
+    if not keep.get("end_date"):
+        keep["end_date"] = sr.get("ends_on") or req_doc.get("end_date") or ""
     if not keep.get("requisition_id"):
         keep["requisition_id"] = req_id
     if not keep.get("candidate_name"):
