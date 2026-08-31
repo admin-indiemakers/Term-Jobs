@@ -22,11 +22,11 @@ class Settings(BaseSettings):
     # Groq (cloud LLM)
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     groq_base_url: str = "https://api.groq.com/openai/v1"
-    groq_default_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+    groq_default_model: str = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
     model_tiers: dict[str, str] = {
-        "small": "openai/gpt-oss-120b",
-        "mid": "openai/gpt-oss-120b",
-        "large": "openai/gpt-oss-120b",
+        "small": "openai/gpt-oss-20b",
+        "mid": "openai/gpt-oss-20b",
+        "large": "openai/gpt-oss-20b",
     }
 
     # Agent guardrails

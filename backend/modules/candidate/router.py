@@ -724,6 +724,114 @@ def get_screening_cache(
         }
 
 
+
+
+@router.post("/bank/auto-screen")
+async def auto_screen_candidates(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Resolve eligible Candidate Bank candidates for a requisition and return their IDs.
+
+    Eligibility:
+    - 'all': returns all candidate bank candidates for this tenant.
+    - 'exclude_accepted': excludes candidates who are Accepted/Hired for another requisition.
+    - 'exclude_shortlisted': also excludes candidates shortlisted/under review for this req.
+    """
+    from modules.shared.db import db as mongo_db
+
+    requisition_id = body.get("requisition_id")
+    filter_mode = body.get("filter_mode", "all")
+
+    if not requisition_id:
+        raise HTTPException(status_code=400, detail="requisition_id is required")
+
+    bank_query: dict = {}
+    if current_user.role != "Super Admin" and current_user.tenant_id:
+        bank_query["tenant_id"] = current_user.tenant_id
+
+    bank_cursor = mongo_db["candidates"].find(
+        bank_query, {"id": 1, "candidate_email": 1, "candidate_name": 1, "_id": 0}
+    )
+    bank_candidates = list(bank_cursor)
+
+    if not bank_candidates:
+        return {
+            "status": "success",
+            "eligible_candidate_ids": [],
+            "eligible_count": 0,
+            "excluded_count": 0,
+            "message": "No candidates found in Candidate Bank.",
+        }
+
+    # Fetch accepted/hired submissions across other requisitions
+    ACCEPTED_STATUSES = ["Accepted", "Hired", "Selected by HR (Onboarding)"]
+    accepted_cursor = mongo_db["candidate_submissions"].find(
+        {"status": {"$in": ACCEPTED_STATUSES}},
+        {"candidate_email": 1, "candidate_name": 1, "requisition_id": 1, "_id": 0},
+    )
+    accepted_emails = set()
+    accepted_names = set()
+    for sub in accepted_cursor:
+        if sub.get("requisition_id") == requisition_id:
+            continue
+        em = (sub.get("candidate_email") or "").strip().lower()
+        nm = (sub.get("candidate_name") or "").strip().lower()
+        if em:
+            accepted_emails.add(em)
+        if nm:
+            accepted_names.add(nm)
+
+    shortlisted_emails = set()
+    shortlisted_names = set()
+    if filter_mode == "exclude_shortlisted":
+        sl_cursor = mongo_db["candidate_submissions"].find(
+            {
+                "requisition_id": requisition_id,
+                "status": {"$in": ["Shortlisted", "Under Review", "Accepted", "Hired"]},
+            },
+            {"candidate_email": 1, "candidate_name": 1, "_id": 0},
+        )
+        for sub in sl_cursor:
+            em = (sub.get("candidate_email") or "").strip().lower()
+            nm = (sub.get("candidate_name") or "").strip().lower()
+            if em:
+                shortlisted_emails.add(em)
+            if nm:
+                shortlisted_names.add(nm)
+
+    eligible_ids = []
+    excluded_count = 0
+    for cand in bank_candidates:
+        cand_email = (cand.get("candidate_email") or "").strip().lower()
+        cand_name = (cand.get("candidate_name") or "").strip().lower()
+        cand_id = cand.get("id")
+        if not cand_id:
+            continue
+
+        # Exclude accepted candidates if requested
+        if filter_mode in ("exclude_accepted", "exclude_shortlisted"):
+            if (cand_email and cand_email in accepted_emails) or (cand_name and cand_name in accepted_names):
+                excluded_count += 1
+                continue
+
+        if filter_mode == "exclude_shortlisted":
+            if (cand_email and cand_email in shortlisted_emails) or (cand_name and cand_name in shortlisted_names):
+                excluded_count += 1
+                continue
+
+        eligible_ids.append(cand_id)
+
+    return {
+        "status": "success",
+        "eligible_candidate_ids": eligible_ids,
+        "eligible_count": len(eligible_ids),
+        "excluded_count": excluded_count,
+        "total_bank_candidates": len(bank_candidates),
+        "message": f"{len(eligible_ids)} eligible candidate(s) found ({excluded_count} excluded).",
+    }
+
+
 @router.post("/bank/match-bulk")
 async def match_bulk_candidates(
     body: dict,

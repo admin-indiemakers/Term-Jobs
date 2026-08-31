@@ -166,6 +166,10 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [limitToast, setLimitToast] = useState(null);
   const [shortlistQuota, setShortlistQuota] = useState({ limit: 3, used: 0, is_limit_reached: false });
   const [shortlistingCandidateIds, setShortlistingCandidateIds] = useState(new Set());
+  const [autoScreenFilterMode, setAutoScreenFilterMode] = useState('all'); // 'all' | 'exclude_accepted'
+  const [rowFilterModes, setRowFilterModes] = useState({});
+  const [autoScreenStatus, setAutoScreenStatus] = useState(null); // null | 'preparing' | 'eligible' | 'screening' | 'done'
+  const [autoScreenEligibleCount, setAutoScreenEligibleCount] = useState(0);
   const [workspaceActiveTab, setWorkspaceActiveTab] = useState('requirements'); // 'requirements' | 'candidates'
   const [screenedReqSummary, setScreenedReqSummary] = useState({});
 
@@ -921,6 +925,106 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       setError(msg);
     }
   }
+  async function runAutoScreeningForReq(reqId) {
+    if (screening) return;
+    await runAutoScreening(reqId);
+  }
+
+  async function runAutoScreening(overrideReqId, overrideFilterMode) {
+    console.log('[AI Screen] runAutoScreening called, overrideReqId:', overrideReqId, 'screening:', screening, 'selectedReqId:', selectedReqId);
+    if (screening) { console.log('[AI Screen] Blocked: screening already in progress'); return; }
+    const activeReqId = overrideReqId || selectedReqId;
+    if (!activeReqId) { console.log('[AI Screen] Blocked: no activeReqId'); return setError('Please select a requisition first.'); }
+
+    const activeFilterMode = overrideFilterMode || rowFilterModes[activeReqId] || autoScreenFilterMode || 'all';
+    console.log('[AI Screen] Starting auto-screen for reqId:', activeReqId, 'filterMode:', activeFilterMode);
+
+    // Immediate UI feedback
+    setScreening(true);
+    setAutoScreenStatus('preparing');
+    setError('');
+    setScreeningProgress({ total: 1, processed: 0, pct: 5, stage: 'Extract' });
+
+    let currentPct = 5;
+    let currentStage = 'Extract';
+    let currentProcessed = 0;
+    let totalCount = 1;
+
+    const progressInterval = setInterval(() => {
+      currentPct = Math.min(92, currentPct + Math.floor(Math.random() * 5) + 3);
+      currentProcessed = Math.min(Math.max(1, totalCount) - 1, Math.floor((currentPct / 100) * Math.max(1, totalCount)));
+      if (currentPct < 20) currentStage = 'Extract';
+      else if (currentPct < 50) currentStage = 'LLM Structure';
+      else if (currentPct < 75) currentStage = 'GitHub Agent';
+      else if (currentPct < 90) currentStage = 'Score';
+      else currentStage = 'Rank';
+      setScreeningProgress({ total: totalCount, processed: currentProcessed, pct: currentPct, stage: currentStage });
+    }, 800);
+
+    try {
+      // Step 1: Resolve eligible candidates from Candidate Bank (server does eligibility check)
+      const eligRes = await request('/candidates/bank/auto-screen', {
+        method: 'POST',
+        token: authToken,
+        body: {
+          requisition_id: activeReqId,
+          filter_mode: activeFilterMode,
+        },
+      });
+
+      console.log('[AI Screen] auto-screen response:', eligRes);
+      if (eligRes.status !== 'success') {
+        throw new Error(eligRes.message || 'Failed to resolve eligible candidates.');
+      }
+
+      const eligibleIds = eligRes.eligible_candidate_ids || [];
+      const eligibleCount = eligRes.eligible_count || 0;
+      totalCount = eligibleCount || 1;
+      setAutoScreenEligibleCount(eligibleCount);
+      setAutoScreenStatus('eligible');
+
+      if (eligibleIds.length === 0) {
+        clearInterval(progressInterval);
+        setScreening(false);
+        setAutoScreenStatus('done');
+        setError('No eligible candidates found in the Candidate Bank for this requisition.');
+        return;
+      }
+
+      // Step 2: Run existing AI screening pipeline with eligible IDs
+      setAutoScreenStatus('screening');
+      const response = await request('/candidates/bank/match-bulk', {
+        method: 'POST',
+        token: authToken,
+        body: { candidate_ids: eligibleIds, requisition_id: activeReqId },
+      });
+
+      clearInterval(progressInterval);
+      if (response.status === 'success') {
+        setScreeningProgress({ total: totalCount, processed: totalCount, pct: 100, stage: 'Rank' });
+        if (Array.isArray(response.screened_candidates) && response.screened_candidates.length) {
+          setScreenedSubmissions(response.screened_candidates);
+          setScreenedReqSummary((prev) => ({
+            ...prev,
+            [activeReqId]: { screened_count: response.screened_candidates.length, has_cache: true },
+          }));
+        }
+        setAutoScreenStatus('done');
+      } else {
+        throw new Error(response.message || 'Screening failed.');
+      }
+    } catch (err) {
+      clearInterval(progressInterval);
+      console.error('[AI Screen] Error in runAutoScreening:', err);
+      setAutoScreenStatus(null);
+      setError(err.message || 'Auto screening failed. Please try again.');
+    } finally {
+      setTimeout(() => {
+        setScreening(false);
+      }, 600);
+    }
+  }
+
   async function runBulkScreening() {
     if (screening) return; // Prevent duplicate clicks or concurrent requests
     if (!selectedCandidateIds.length) return setError('Please select at least one candidate.');
@@ -1023,6 +1127,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   async function selectRequisition(id, source = requisitions) {
     const summary = source.find((item) => item.id === id);
     setSelectedReqId(id);
+    setAutoScreenStatus(null);
+    setAutoScreenEligibleCount(0);
     setFullReq(summary || null);
     setJdText(formatJd(summary));
     try {
@@ -1050,11 +1156,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         setScreenedSubmissions(merged);
       } else if (Array.isArray(subs) && subs.length) {
         setScreenedSubmissions(subs);
-      } else {
+      } else if (!screening) {
         setScreenedSubmissions([]);
       }
     } catch {
-      setScreenedSubmissions([]);
+      if (!screening) {
+        setScreenedSubmissions([]);
+      }
     }
   }
 
@@ -2092,6 +2200,120 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               </div>
             </div>
 
+
+            {/* SCREENING PROGRESS BAR — visible above both tabs */}
+            {screening && (
+              <div
+                style={{
+                  background: '#0a0f1d',
+                  border: '1px solid #1e293b',
+                  borderRadius: '16px',
+                  padding: '20px 24px',
+                  marginBottom: '8px',
+                  boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '12px',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: '#f8fafc',
+                      letterSpacing: '-0.01em',
+                    }}
+                  >
+                    {screeningProgress.pct >= 100
+                      ? 'Finalising results...'
+                      : `Processing candidates (${screeningProgress.pct}%)...`}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '15px',
+                      fontWeight: 700,
+                      color: '#38bdf8',
+                      letterSpacing: '0.02em',
+                    }}
+                  >
+                    {screeningProgress.processed} / {screeningProgress.total}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    height: '5px',
+                    background: '#1e293b',
+                    borderRadius: '999px',
+                    overflow: 'hidden',
+                    marginBottom: '16px',
+                    width: '100%',
+                  }}
+                >
+                  <div
+                    style={{
+                      height: '100%',
+                      width: `${screeningProgress.pct}%`,
+                      background: 'linear-gradient(90deg, #2563eb 0%, #38bdf8 100%)',
+                      borderRadius: '999px',
+                      transition: 'width 0.4s ease-in-out',
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  {['Extract', 'LLM Structure', 'GitHub Agent', 'Score', 'Rank'].map((stageName, idx, arr) => {
+                    const isCurrent = screeningProgress.stage === stageName;
+                    const stageOrder = ['Extract', 'LLM Structure', 'GitHub Agent', 'Score', 'Rank'];
+                    const currentIdx = stageOrder.indexOf(screeningProgress.stage);
+                    const isPassed = currentIdx > idx;
+
+                    return (
+                      <Fragment key={stageName}>
+                        <span
+                          style={{
+                            fontSize: '11.5px',
+                            padding: '4px 12px',
+                            borderRadius: '20px',
+                            fontWeight: 600,
+                            background: isCurrent
+                              ? 'rgba(56, 189, 248, 0.2)'
+                              : isPassed
+                                ? 'rgba(37, 99, 235, 0.15)'
+                                : 'rgba(30, 41, 59, 0.6)',
+                            border: isCurrent
+                              ? '1px solid #38bdf8'
+                              : isPassed
+                                ? '1px solid #2563eb'
+                                : '1px solid #1e293b',
+                            color: isCurrent ? '#38bdf8' : isPassed ? '#93c5fd' : '#64748b',
+                            transition: 'all 0.3s ease',
+                          }}
+                        >
+                          {stageName}
+                        </span>
+                        {idx < arr.length - 1 && (
+                          <span style={{ color: '#334155', fontSize: '10px' }}>→</span>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* TAB 1: OPEN REQUIREMENTS */}
             {workspaceActiveTab === 'requirements' && (
               <div className="space-y-4 pt-1 animate-in fade-in duration-200">
@@ -2254,32 +2476,79 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center gap-4 shrink-0 self-end sm:self-center">
-                                    <div className="text-right">
-                                      <div className="text-[14px] font-extrabold text-[#0A0A0A] tracking-tight">
-                                        {rateVal}
-                                      </div>
-                                      <div className="text-[11.5px] text-[#8A8A85] font-medium">
-                                        {durationVal}
-                                      </div>
+                                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center" onClick={(e) => e.stopPropagation()}>
+                                    {/* Per-row Filter selector */}
+                                    <div className="relative">
+                                      <select
+                                        value={rowFilterModes[req.id] || 'all'}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          const val = e.target.value;
+                                          setRowFilterModes((prev) => ({ ...prev, [req.id]: val }));
+                                          setAutoScreenFilterMode(val);
+                                          setAutoScreenStatus(null);
+                                        }}
+                                        style={{
+                                          backgroundColor: '#F5F5F2',
+                                          border: '1px solid #E2E2DC',
+                                          borderRadius: 9999,
+                                          color: '#4B5563',
+                                          fontSize: 11,
+                                          fontWeight: 700,
+                                          padding: '5px 24px 5px 10px',
+                                          cursor: 'pointer',
+                                          appearance: 'none',
+                                          whiteSpace: 'nowrap',
+                                        }}
+                                        className="focus:outline-none shadow-2xs"
+                                      >
+                                        <option value="all">All eligible</option>
+                                        <option value="exclude_accepted">Excl. accepted</option>
+                                      </select>
+                                      <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 8, color: '#8A8A85', pointerEvents: 'none' }}>▼</span>
                                     </div>
 
+                                    {/* Per-row AI Screening button — passes req.id directly, no state race */}
                                     <button
                                       type="button"
-                                      onClick={(e) => {
+                                      onClick={async (e) => {
                                         e.stopPropagation();
-                                        selectRequisition(req.id);
-                                        setWorkspaceActiveTab('candidates');
+                                        try {
+                                          const mode = rowFilterModes[req.id] || 'all';
+                                          setSelectedReqId(req.id);
+                                          const reqObj = requisitions.find((item) => item.id === req.id);
+                                          if (reqObj) {
+                                            setFullReq(reqObj);
+                                            setJdText(formatJd(reqObj));
+                                          }
+                                          await runAutoScreening(req.id, mode);
+                                        } catch (err) {
+                                          console.error('[AI Screen] Error:', err);
+                                          setError(err.message || 'AI screening failed.');
+                                        }
                                       }}
+                                      disabled={screening}
                                       style={{
-                                        backgroundColor: isSelected ? '#0A0A0A' : '#FFFFFF',
-                                        color: isSelected ? '#FFFFFF' : '#0A0A0A',
-                                        border: isSelected ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
+                                        background: screening ? '#E2E2DC' : '#0A0A0A',
+                                        color: screening ? '#8A8A85' : '#FFFFFF',
                                         borderRadius: 9999,
+                                        border: 'none',
+                                        padding: '5px 14px',
+                                        fontSize: 11.5,
+                                        fontWeight: 800,
+                                        cursor: screening ? 'not-allowed' : 'pointer',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 5,
+                                        whiteSpace: 'nowrap',
+                                        boxShadow: screening ? 'none' : '0 2px 8px rgba(0,0,0,0.18)',
                                       }}
-                                      className="px-4 py-1 text-[12px] font-extrabold hover:bg-[#0A0A0A] hover:text-white transition-colors cursor-pointer shadow-2xs"
                                     >
-                                      Open
+                                      {screening && selectedReqId === req.id ? (
+                                        <><span style={{ fontSize: 11 }}>⟳</span><span>Screening…</span></>
+                                      ) : (
+                                        <><span style={{ fontSize: 10 }}>✦</span><span>AI Screen</span></>
+                                      )}
                                     </button>
                                   </div>
                                 </div>

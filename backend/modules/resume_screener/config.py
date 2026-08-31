@@ -10,7 +10,7 @@ class ScreenerSettings(BaseSettings):
     github_pat: str = ""
     llm_provider: str = "groq"
     groq_api_key: str = ""
-    groq_model: str = "openai/gpt-oss-120b"
+    groq_model: str = "openai/gpt-oss-20b"
     ollama_base_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2:3b"
     tesseract_cmd: str = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
