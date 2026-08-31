@@ -107,6 +107,14 @@ const Icons = {
       <line x1="3" y1="10" x2="21" y2="10"/>
     </svg>
   ),
+  Receipt: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/>
+      <path d="M14 8H8"/>
+      <path d="M16 12H8"/>
+      <path d="M13 16H8"/>
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -117,7 +125,7 @@ export default function DashboardLayout() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dynamic live count badges for Hiring Manager
-  const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0 });
+  const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
@@ -134,11 +142,13 @@ export default function DashboardLayout() {
         const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
         const openIssues = issueList.filter((i) => i.status === 'open').length;
         const pendingTs = wfStats?.stats?.pending_timesheets || 0;
+        const pendingExp = wfStats?.stats?.pending_expenses || 0;
         setHmCounts({
           requisitions: rCount,
           candidates: sList.length + aList.length,
           openIssues: openIssues,
           pendingTimesheets: pendingTs,
+          pendingExpenses: pendingExp,
         });
       }).catch(() => {});
     }
@@ -184,6 +194,7 @@ export default function DashboardLayout() {
         { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
         { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
         { to: '/dashboard/workforce/timesheets', label: 'Timesheets', end: false, section: 'WORKFORCE', icon: Icons.Timesheet, badge: hmCounts.pendingTimesheets },
+        { to: '/dashboard/workforce/expenses', label: 'Expenses', end: false, section: 'WORKFORCE', icon: Icons.Receipt, badge: hmCounts.pendingExpenses },
       ]
       : userRole === 'Recruiter'
         ? [

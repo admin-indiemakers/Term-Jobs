@@ -69,7 +69,7 @@ export default function TimesheetApprovals() {
       await request(`/api/workforce/timesheets/${tsId}/approve`, {
         method: 'POST',
         token,
-        body: JSON.stringify({ notes: '' }),
+        body: { notes: '' },
       });
       await loadTimesheets();
     } catch (err) {
@@ -87,7 +87,7 @@ export default function TimesheetApprovals() {
       await request(`/api/workforce/timesheets/${rejectModal}/reject`, {
         method: 'POST',
         token,
-        body: JSON.stringify({ reason: rejectReason }),
+        body: { reason: rejectReason },
       });
       setRejectModal(null);
       setRejectReason('');

@@ -141,9 +141,11 @@ export default function OnboardingManagement() {
       const payload = {
         candidate_id: id,
         candidate_name: editingCandidate.candidate_name || editingCandidate.name,
-        vendor_name: editingCandidate.vendor_name || 'bridgeon',
-        requisition_ref: editingCandidate.requisition_ref || 'REQ-F7F406',
-        requisition_title: editingCandidate.requisition_title || 'DevOps Engineer',
+        company_name: editingCandidate.company_name || '',
+        requisition_id: editingCandidate.requisition_id || '',
+        vendor_name: editingCandidate.vendor_name || '',
+        requisition_ref: editingCandidate.requisition_ref || '',
+        requisition_title: editingCandidate.requisition_title || '',
         software: setupSoftware,
         training: setupTraining,
         status: setupSoftware.some((s) => s.enabled) || setupTraining.some((t) => t.enabled) ? 'completed' : 'in_progress',
@@ -460,9 +462,9 @@ export default function OnboardingManagement() {
                   const rawId = cand.candidate_id || cand.id || `${idx}7fa08`;
                   const candCode = String(rawId).startsWith('BEAR-') ? String(rawId) : `BEAR-${String(rawId).slice(0, 6)}`;
                   const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
-                  const vendorName = cand.vendor_name || 'bridgeon';
-                  const reqRef = cand.requisition_ref || 'REQ-F7F406';
-                  const reqTitle = cand.requisition_title || 'DevOps Engineer';
+                  const vendorName = cand.vendor_name || '';
+                  const reqRef = cand.requisition_ref || '';
+                  const reqTitle = cand.requisition_title || '';
 
                   const score = cand.match_score != null ? Math.round(cand.match_score) : null;
                   const obDoc = onboardingDocs[id] || (idx < 2 ? { status: 'completed' } : null);
@@ -676,7 +678,7 @@ export default function OnboardingManagement() {
                   Configure Onboarding Setup
                 </h3>
                 <p className="text-[12px] text-[#737373] font-medium mt-0.5">
-                  {editingCandidate.candidate_name || editingCandidate.name} • {editingCandidate.requisition_title || 'DevOps Engineer'}
+                  {editingCandidate.candidate_name || editingCandidate.name} • {editingCandidate.requisition_title || '—'}
                 </p>
               </div>
               <button

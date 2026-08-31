@@ -32,6 +32,7 @@ import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
 import ReportedIssues from './pages/candidates/ReportedIssues';
 import TeamOverview from './pages/workforce/TeamOverview';
 import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
+import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Archives from './pages/Archives';
 
 
@@ -107,6 +108,7 @@ export default function App() {
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="workforce/team" element={<TeamOverview />} />
           <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
+          <Route path="workforce/expenses" element={<ExpenseApprovals />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
           <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />

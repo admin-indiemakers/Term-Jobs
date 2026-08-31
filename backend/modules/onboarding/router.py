@@ -67,6 +67,13 @@ class OnboardingChecklist(BaseModel):
 
 class OnboardingUpdate(BaseModel):
     model_config = {"extra": "allow"}
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    requisition_id: str | None = None
+    requisition_ref: str | None = None
+    requisition_title: str | None = None
+    company_name: str | None = None
+    vendor_name: str | None = None
     laptop_required: bool | None = None
     laptop_spec: str | None = None
     badge_required: bool | None = None
@@ -354,6 +361,26 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
     if new_status != doc.get("status"):
         _coll().update_one({"candidate_id": candidate_id}, {"$set": {"status": new_status}})
         doc["status"] = new_status
+
+    # --- Sync enriched data to work order so the candidate portal shows it ---
+    try:
+        from modules.shared.db import db as _db
+        wo_update = {}
+        if updates.get("requisition_title"):
+            wo_update["requisition_title"] = updates["requisition_title"]
+        if updates.get("company_name"):
+            wo_update["company_name"] = updates["company_name"]
+        if updates.get("vendor_name"):
+            wo_update["vendor_name"] = updates["vendor_name"]
+        if updates.get("requisition_id"):
+            wo_update["requisition_id"] = updates["requisition_id"]
+        if wo_update:
+            _db["work_orders"].update_one(
+                {"candidate_id": candidate_id, "status": "ACTIVE"},
+                {"$set": wo_update},
+            )
+    except Exception:
+        pass
 
     return doc
 

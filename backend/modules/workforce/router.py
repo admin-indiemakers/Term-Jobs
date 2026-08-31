@@ -27,26 +27,46 @@ router = APIRouter(prefix="/workforce", tags=["Workforce"])
 # ---------------------------------------------------------------------------
 
 def _get_hm_team_candidate_ids(user: User) -> list[str]:
-    """Return candidate_ids for this HM's team."""
+    """Return candidate_ids for this HM's team.
+    
+    Deduplicates by email: if the same person appears in both candidate_submissions
+    and work_orders with different IDs, keeps the submission ID (canonical).
+    """
     sub_coll = db["candidate_submissions"]
     wo_coll = db["work_orders"]
+    users_coll = db["users"]
 
-    candidate_ids: set[str] = set()
+    # Build email -> canonical candidate_id mapping
+    email_to_id: dict[str, str] = {}
+    id_set: set[str] = set()
 
-    # ALL accepted / hired candidates from submissions
+    # Step 1: ALL accepted / hired candidates from submissions (canonical source)
     for status_val in ["Accepted", "Hired"]:
-        for doc in sub_coll.find({"status": status_val}, {"id": 1}):
+        for doc in sub_coll.find({"status": status_val}):
             cid = doc.get("id")
-            if cid:
-                candidate_ids.add(cid)
+            email = (doc.get("candidate_email") or doc.get("email") or "").lower().strip()
+            if cid and email:
+                email_to_id[email] = cid
+                id_set.add(cid)
+            elif cid:
+                id_set.add(cid)
 
-    # Any candidate with an active work order
-    for doc in wo_coll.find({"status": "ACTIVE"}, {"candidate_id": 1}):
+    # Step 2: Active work orders — merge by email to avoid duplicates
+    for doc in wo_coll.find({"status": "ACTIVE"}):
         cid = doc.get("candidate_id")
-        if cid:
-            candidate_ids.add(cid)
+        email = (doc.get("candidate_email") or "").lower().strip()
+        if not cid:
+            continue
+        if email and email in email_to_id:
+            # Same person already found via submissions — skip this work order ID
+            pass
+        else:
+            # New person only found via work orders
+            id_set.add(cid)
+            if email:
+                email_to_id[email] = cid
 
-    return list(candidate_ids)
+    return list(id_set)
 
 
 def _build_team_batch(cand_ids: list[str]) -> dict:
@@ -197,6 +217,141 @@ def get_team_overview(current_user: User = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/workforce/team/{candidate_id} — Premium Candidate Detail
+# ---------------------------------------------------------------------------
+
+@router.get("/team/{candidate_id}")
+def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_current_user)):
+    """Return ALL data for a single candidate — work order, timesheets,
+    attendance, expenses, onboarding, issues, notifications, graph data."""
+    if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    # Verify candidate belongs to HM's team
+    cand_ids = _get_hm_team_candidate_ids(current_user)
+    if candidate_id not in cand_ids:
+        raise HTTPException(status_code=403, detail="Candidate not in your team")
+
+    wo_coll = db["work_orders"]
+    ts_coll = db["timesheets"]
+    att_coll = db["attendance_sheets"]
+    exp_coll = db["candidate_expenses"]
+    ob_coll = db["onboarding_checklists"]
+    issue_coll = db["onboarding_issues"]
+    notif_coll = db["candidate_notifications"]
+    sub_coll = db["candidate_submissions"]
+    user_coll = db["users"]
+
+    # --- Work Order ---
+    wo = wo_coll.find_one({"candidate_id": candidate_id, "status": "ACTIVE"})
+    if wo:
+        wo.pop("_id", None)
+
+    # --- Candidate Submission ---
+    sub = sub_coll.find_one({"$or": [{"id": candidate_id}, {"candidate_email": wo.get("candidate_email") if wo else ""}]}) or {}
+    sub.pop("_id", None)
+
+    # --- User record ---
+    user_doc = user_coll.find_one({"candidate_id": candidate_id}) or {}
+    user_doc.pop("_id", None)
+
+    # --- Onboarding ---
+    ob = ob_coll.find_one({"candidate_id": candidate_id}) or {}
+    ob.pop("_id", None)
+    ob_items = ob.get("software", []) + ob.get("training", []) + ob.get("custom_items", [])
+    ob_enabled = [i for i in ob_items if i.get("enabled", True)]
+    ob_completed = [i for i in ob_enabled if i.get("completed", False) or i.get("enabled", False)]
+    ob_pct = round((len(ob_completed) / len(ob_enabled)) * 100) if ob_enabled else 0
+
+    # --- ALL Timesheets (for graph + summary) ---
+    all_ts = list(ts_coll.find({"candidate_id": candidate_id}).sort("week_start_date", -1))
+    for t in all_ts:
+        t.pop("_id", None)
+
+    ts_submitted = sum(1 for t in all_ts if t.get("status") == "SUBMITTED")
+    ts_approved = sum(1 for t in all_ts if t.get("status") == "APPROVED")
+    ts_rejected = sum(1 for t in all_ts if t.get("status") == "REJECTED")
+    total_hours_all = sum(float(t.get("total_hours", 0)) for t in all_ts)
+    total_ot_all = sum(float(t.get("total_overtime_hours", 0)) for t in all_ts)
+
+    # Graph data: last 12 weeks of hours
+    graph_data = []
+    for t in all_ts[:12]:
+        graph_data.append({
+            "week": t.get("week_start_date", ""),
+            "period_label": t.get("period_label", t.get("week_start_date", "")),
+            "hours": float(t.get("total_hours", 0)),
+            "regular": float(t.get("total_regular_hours", 0)),
+            "overtime": float(t.get("total_overtime_hours", 0)),
+            "status": t.get("status", ""),
+        })
+    graph_data.reverse()  # chronological order
+
+    # --- Attendance ---
+    attendance = list(att_coll.find({"candidate_id": candidate_id}).sort("created_at", -1).limit(6))
+    for a in attendance:
+        a.pop("_id", None)
+
+    # --- Expenses ---
+    expenses = list(exp_coll.find({"candidate_id": candidate_id}).sort("created_at", -1))
+    for e in expenses:
+        e.pop("_id", None)
+    exp_total = sum(float(e.get("amount", 0)) for e in expenses if e.get("status") in ["Submitted", "Pending", "Approved"])
+
+    # --- Issues ---
+    issues = list(issue_coll.find({"candidate_id": candidate_id}).sort("created_at", -1))
+    for i in issues:
+        i.pop("_id", None)
+    open_issues = sum(1 for i in issues if i.get("status") == "open")
+
+    # --- Notifications ---
+    notifs = list(notif_coll.find({"candidate_id": candidate_id}).sort("created_at", -1).limit(10))
+    for n in notifs:
+        n.pop("_id", None)
+
+    return {
+        "status": "success",
+        "candidate": {
+            "id": candidate_id,
+            "name": user_doc.get("name") or sub.get("candidate_name") or (wo.get("candidate_name") if wo else ""),
+            "email": user_doc.get("email") or sub.get("candidate_email") or (wo.get("candidate_email") if wo else ""),
+        },
+        "work_order": wo or {},
+        "submission": sub,
+        "onboarding": {
+            "status": ob.get("status", "not_started"),
+            "completion_pct": ob_pct,
+            "items_total": len(ob_enabled),
+            "items_completed": len(ob_completed),
+            "checklist": ob,
+        },
+        "timesheets": {
+            "all": all_ts,
+            "graph": graph_data,
+            "summary": {
+                "total_count": len(all_ts),
+                "submitted": ts_submitted,
+                "approved": ts_approved,
+                "rejected": ts_rejected,
+                "total_hours": round(total_hours_all, 1),
+                "total_overtime": round(total_ot_all, 1),
+                "avg_hours": round(total_hours_all / max(len(all_ts), 1), 1),
+            },
+        },
+        "attendance": attendance,
+        "expenses": {
+            "all": expenses,
+            "total": exp_total,
+        },
+        "issues": {
+            "all": issues,
+            "open_count": open_issues,
+        },
+        "notifications": notifs,
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/workforce/timesheets
 # ---------------------------------------------------------------------------
 
@@ -270,7 +425,7 @@ class ApproveTimesheetRequest(BaseModel):
 @router.post("/timesheets/{timesheet_id}/approve")
 def approve_timesheet(
     timesheet_id: str,
-    payload: ApproveTimesheetRequest | None = None,
+    payload: ApproveTimesheetRequest = ApproveTimesheetRequest(),
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
@@ -373,6 +528,141 @@ def reject_timesheet(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/workforce/expenses
+# ---------------------------------------------------------------------------
+
+class ExpenseActionRequest(BaseModel):
+    notes: str = ""
+
+
+@router.get("/expenses")
+def list_team_expenses(
+    current_user: User = Depends(get_current_user),
+    status: Optional[str] = Query(None, description="Filter by status: Pending, Approved, Rejected"),
+):
+    """List all expenses for the HM's team."""
+    if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    cand_ids = _get_hm_team_candidate_ids(current_user)
+    if not cand_ids:
+        return {"status": "success", "expenses": [], "pending_count": 0, "total_amount": 0}
+
+    exp_coll = db["candidate_expenses"]
+    query = {"candidate_id": {"$in": cand_ids}}
+    if status:
+        query["status"] = status
+
+    expenses = list(exp_coll.find(query).sort("created_at", -1))
+    for e in expenses:
+        e.pop("_id", None)
+
+    pending_count = sum(1 for e in expenses if e.get("status") in ("Pending", "Submitted"))
+    total_amount = sum(float(e.get("amount", 0)) for e in expenses if e.get("status") in ("Pending", "Submitted"))
+
+    return {
+        "status": "success",
+        "expenses": expenses,
+        "pending_count": pending_count,
+        "total_amount": total_amount,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/workforce/expenses/{expense_id}/approve
+# ---------------------------------------------------------------------------
+
+@router.post("/expenses/{expense_id}/approve")
+def approve_expense(
+    expense_id: str,
+    payload: ExpenseActionRequest = ExpenseActionRequest(),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    cand_ids = _get_hm_team_candidate_ids(current_user)
+    exp_coll = db["candidate_expenses"]
+
+    exp = exp_coll.find_one({"id": expense_id})
+    if not exp:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    if exp.get("candidate_id") not in cand_ids:
+        raise HTTPException(status_code=403, detail="Expense not in your team")
+
+    exp_coll.update_one(
+        {"id": expense_id},
+        {"$set": {
+            "status": "Approved",
+            "approved_by": current_user.name,
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "notes": payload.notes or exp.get("notes", ""),
+        }}
+    )
+
+    # Notify candidate
+    notif_coll = db["candidate_notifications"]
+    notif_coll.insert_one({
+        "id": f"notif_{uuid.uuid4().hex[:10]}",
+        "candidate_id": exp.get("candidate_id"),
+        "type": "expense_approved",
+        "title": "Expense Approved",
+        "message": f"Your expense of ₹{exp.get('amount', 0):,.0f} ({exp.get('category', '')}) has been approved by your hiring manager.",
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"status": "success", "message": "Expense approved"}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/workforce/expenses/{expense_id}/reject
+# ---------------------------------------------------------------------------
+
+@router.post("/expenses/{expense_id}/reject")
+def reject_expense(
+    expense_id: str,
+    payload: ExpenseActionRequest = ExpenseActionRequest(),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    cand_ids = _get_hm_team_candidate_ids(current_user)
+    exp_coll = db["candidate_expenses"]
+
+    exp = exp_coll.find_one({"id": expense_id})
+    if not exp:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    if exp.get("candidate_id") not in cand_ids:
+        raise HTTPException(status_code=403, detail="Expense not in your team")
+
+    exp_coll.update_one(
+        {"id": expense_id},
+        {"$set": {
+            "status": "Rejected",
+            "rejected_by": current_user.name,
+            "rejected_at": datetime.now(timezone.utc).isoformat(),
+            "rejection_reason": payload.notes or "",
+        }}
+    )
+
+    # Notify candidate
+    notif_coll = db["candidate_notifications"]
+    notif_coll.insert_one({
+        "id": f"notif_{uuid.uuid4().hex[:10]}",
+        "candidate_id": exp.get("candidate_id"),
+        "type": "expense_rejected",
+        "title": "Expense Rejected",
+        "message": f"Your expense of ₹{exp.get('amount', 0):,.0f} ({exp.get('category', '')}) was rejected.{' Reason: ' + payload.notes if payload.notes else ''}",
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"status": "success", "message": "Expense rejected"}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/workforce/stats
 # ---------------------------------------------------------------------------
 
@@ -383,7 +673,7 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
 
     cand_ids = _get_hm_team_candidate_ids(current_user)
     if not cand_ids:
-        return {"status": "success", "stats": {"total_team": 0, "active": 0, "onboarding": 0, "pending_timesheets": 0, "approved_this_week": 0}}
+        return {"status": "success", "stats": {"total_team": 0, "active": 0, "onboarding": 0, "pending_timesheets": 0, "pending_expenses": 0, "approved_this_week": 0}}
 
     # Batch: all onboardings
     ob_map = {}
@@ -407,6 +697,9 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
     ts_coll = db["timesheets"]
     pending_ts = ts_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": "SUBMITTED"})
 
+    exp_coll = db["candidate_expenses"]
+    pending_exp = exp_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": {"$in": ["Pending", "Submitted"]}})
+
     today = datetime.now(timezone.utc).date()
     week_monday = today - timedelta(days=today.weekday())
     week_start = week_monday.isoformat()
@@ -423,6 +716,7 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
             "active": active_count,
             "onboarding": onboarding_count,
             "pending_timesheets": pending_ts,
+            "pending_expenses": pending_exp,
             "approved_this_week": approved_week,
         },
     }
