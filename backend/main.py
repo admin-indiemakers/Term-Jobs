@@ -272,6 +272,12 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
     if current_user.role == "Super Admin":
         return req
     if req.tenant_id == current_user.tenant_id:
+        # Hiring Manager can only access requisitions they created
+        if current_user.role == "Hiring Manager" and req.created_by != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have access to this requisition",
+            )
         return req
     # Vendors may view requisitions of companies that engaged them.
     if current_user.role == "Recruiter":
@@ -667,7 +673,14 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 models.Requisition.tenant_id.in_(engaged_company_ids or {""}),
                 models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value,
             )
+        elif current_user.role == "Hiring Manager":
+            # Hiring Managers see only requisitions they created
+            query = query.filter(
+                models.Requisition.tenant_id == current_user.tenant_id,
+                models.Requisition.created_by == current_user.id,
+            )
         else:
+            # Admin, HR, Director, etc. see all requisitions in their tenant
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
         profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}
