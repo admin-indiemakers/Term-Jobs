@@ -111,6 +111,58 @@ def _build_team_batch(cand_ids: list[str]) -> dict:
         doc.pop("_id", None)
         ob_map[doc.get("candidate_id")] = doc
 
+    # Enrich work orders from requisition/submission/onboarding
+    for cid, wo in wo_map.items():
+        if not wo.get("requisition_title") or not wo.get("location") or not wo.get("company_name"):
+            sub = sub_map.get(cid, {})
+            ob = ob_map.get(cid, {})
+            req_id = wo.get("requisition_id") or sub.get("requisition_id") or ""
+            req_doc = db["requisitions"].find_one({"id": req_id}) if req_id else {}
+            sr = (req_doc or {}).get("structured_role") or {}
+
+            cp_name = ""
+            cp_id = (req_doc or {}).get("company_profile_id") or ""
+            if cp_id:
+                cp = db["company_profiles"].find_one({"id": cp_id}) or {}
+                cp_name = cp.get("name") or ""
+
+            def _fill_w(field, *sources):
+                if not wo.get(field):
+                    for src in sources:
+                        val = src.get(field) if src else None
+                        if val:
+                            wo[field] = val
+                            return
+
+            _fill_w("requisition_title", sub, ob, req_doc)
+            if not wo.get("requisition_title"):
+                wo["requisition_title"] = sr.get("job_title") or sr.get("title") or (req_doc or {}).get("title") or ""
+            _fill_w("vendor_name", sub, ob, req_doc)
+            _fill_w("company_name", sub, ob, req_doc)
+            if not wo.get("company_name") and cp_name:
+                wo["company_name"] = cp_name
+            _fill_w("location", sr)
+            if not wo.get("location"):
+                locations = sr.get("work_locations") or []
+                wo["location"] = locations[0] if locations else sr.get("location") or ""
+            _fill_w("work_arrangement", sr, req_doc)
+            if not wo.get("work_arrangement"):
+                wo["work_arrangement"] = sr.get("work_mode") or (req_doc or {}).get("work_mode") or ""
+            _fill_w("engagement_type", sr, req_doc)
+            if not wo.get("engagement_type"):
+                wo["engagement_type"] = sr.get("engagement_type") or (req_doc or {}).get("engagement_type") or ""
+            _fill_w("end_date", sr, req_doc)
+            if not wo.get("end_date"):
+                wo["end_date"] = sr.get("ends_on") or (req_doc or {}).get("end_date") or ""
+            _fill_w("reporting_manager", sr, req_doc)
+            if not wo.get("reporting_manager"):
+                wo["reporting_manager"] = sr.get("hiring_manager") or (req_doc or {}).get("hiring_manager") or ""
+            _fill_w("overtime_policy", sr, req_doc)
+            if not wo.get("overtime_policy"):
+                wo["overtime_policy"] = sr.get("overtime_policy") or (req_doc or {}).get("overtime_policy") or ""
+            if not wo.get("requisition_id"):
+                wo["requisition_id"] = req_id
+
     # Batch: latest timesheet per candidate (use aggregation pipeline)
     ts_map = {}
     pipeline = [
@@ -250,6 +302,54 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
     # --- Candidate Submission ---
     sub = sub_coll.find_one({"$or": [{"id": candidate_id}, {"candidate_email": wo.get("candidate_email") if wo else ""}]}) or {}
     sub.pop("_id", None)
+
+    # --- Enrich empty work order fields from requisition/submission/onboarding ---
+    if wo:
+        req_id = wo.get("requisition_id") or sub.get("requisition_id") or ""
+        req_doc = db["requisitions"].find_one({"id": req_id}) if req_id else {}
+        sr = (req_doc or {}).get("structured_role") or {}
+        ob_doc = ob_coll.find_one({"candidate_id": candidate_id}) or {}
+
+        comp_profile_name = ""
+        cp_id = (req_doc or {}).get("company_profile_id") or ""
+        if cp_id:
+            cp = db["company_profiles"].find_one({"id": cp_id}) or {}
+            comp_profile_name = cp.get("name") or ""
+
+        def _fill_w(field, *sources):
+            if not wo.get(field):
+                for src in sources:
+                    val = src.get(field) if src else None
+                    if val:
+                        wo[field] = val
+                        return
+
+        _fill_w("requisition_title", sub, ob_doc, req_doc)
+        if not wo.get("requisition_title"):
+            wo["requisition_title"] = sr.get("job_title") or sr.get("title") or (req_doc or {}).get("title") or ""
+        _fill_w("vendor_name", sub, ob_doc, req_doc)
+        _fill_w("company_name", sub, ob_doc, req_doc)
+        if not wo.get("company_name") and comp_profile_name:
+            wo["company_name"] = comp_profile_name
+        _fill_w("location", sr)
+        if not wo.get("location"):
+            locations = sr.get("work_locations") or []
+            wo["location"] = locations[0] if locations else sr.get("location") or ""
+        _fill_w("work_arrangement", sr, req_doc)
+        if not wo.get("work_arrangement"):
+            wo["work_arrangement"] = sr.get("work_mode") or (req_doc or {}).get("work_mode") or ""
+        _fill_w("reporting_manager", sr, req_doc)
+        if not wo.get("reporting_manager"):
+            wo["reporting_manager"] = sr.get("hiring_manager") or (req_doc or {}).get("hiring_manager") or ""
+        _fill_w("overtime_policy", sr, req_doc)
+        if not wo.get("overtime_policy"):
+            wo["overtime_policy"] = sr.get("overtime_policy") or (req_doc or {}).get("overtime_policy") or ""
+        _fill_w("engagement_type", sr, req_doc)
+        if not wo.get("engagement_type"):
+            wo["engagement_type"] = sr.get("engagement_type") or (req_doc or {}).get("engagement_type") or ""
+        _fill_w("end_date", sr, req_doc)
+        if not wo.get("end_date"):
+            wo["end_date"] = sr.get("ends_on") or (req_doc or {}).get("end_date") or ""
 
     # --- User record ---
     user_doc = user_coll.find_one({"candidate_id": candidate_id}) or {}
