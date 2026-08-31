@@ -29,39 +29,58 @@ router = APIRouter(prefix="/workforce", tags=["Workforce"])
 def _get_hm_team_candidate_ids(user: User) -> list[str]:
     """Return candidate_ids for this HM's team.
     
+    For Hiring Managers: scoped to only requisitions they created.
+    For Admin/HR/Director: scoped to their tenant.
+    For Super Admin: sees all.
+    
     Deduplicates by email: if the same person appears in both candidate_submissions
     and work_orders with different IDs, keeps the submission ID (canonical).
     """
     sub_coll = db["candidate_submissions"]
     wo_coll = db["work_orders"]
-    users_coll = db["users"]
+
+    # Determine tenant-scoped requisition IDs
+    from modules.requisition.domain.models import Requisition
+    tenant_req_ids: set[str] = set()
+    if user.role == "Super Admin":
+        tenant_req_ids = None  # no filter
+    else:
+        from modules.shared.db import get_session
+        with get_session() as session:
+            filters = [Requisition.tenant_id == user.tenant_id]
+            if user.role == "Hiring Manager":
+                filters.append(Requisition.created_by == user.id)
+            tenant_req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
 
     # Build email -> canonical candidate_id mapping
     email_to_id: dict[str, str] = {}
     id_set: set[str] = set()
 
-    # Step 1: ALL accepted / hired candidates from submissions (canonical source)
-    for status_val in ["Accepted", "Hired"]:
-        for doc in sub_coll.find({"status": status_val}):
-            cid = doc.get("id")
-            email = (doc.get("candidate_email") or doc.get("email") or "").lower().strip()
-            if cid and email:
-                email_to_id[email] = cid
-                id_set.add(cid)
-            elif cid:
-                id_set.add(cid)
+    # Step 1: Accepted / hired candidates from submissions (canonical source)
+    sub_filter: dict = {"status": {"$in": ["Accepted", "Hired"]}}
+    if tenant_req_ids is not None:
+        sub_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
+    for doc in sub_coll.find(sub_filter):
+        cid = doc.get("id")
+        email = (doc.get("candidate_email") or doc.get("email") or "").lower().strip()
+        if cid and email:
+            email_to_id[email] = cid
+            id_set.add(cid)
+        elif cid:
+            id_set.add(cid)
 
     # Step 2: Active work orders — merge by email to avoid duplicates
-    for doc in wo_coll.find({"status": "ACTIVE"}):
+    wo_filter: dict = {"status": "ACTIVE"}
+    if tenant_req_ids is not None:
+        wo_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
+    for doc in wo_coll.find(wo_filter):
         cid = doc.get("candidate_id")
         email = (doc.get("candidate_email") or "").lower().strip()
         if not cid:
             continue
         if email and email in email_to_id:
-            # Same person already found via submissions — skip this work order ID
             pass
         else:
-            # New person only found via work orders
             id_set.add(cid)
             if email:
                 email_to_id[email] = cid

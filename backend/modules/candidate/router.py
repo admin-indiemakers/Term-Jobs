@@ -40,9 +40,15 @@ RESUME_UPLOAD_DIRS = [
 ]
 
 
-def _tenant_requisition_ids(session, tenant_id: str) -> set[str]:
-    """IDs of all requisitions belonging to a tenant."""
-    rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
+def _tenant_requisition_ids(session, tenant_id: str, user_id: str | None = None, user_role: str | None = None) -> set[str]:
+    """IDs of all requisitions belonging to a tenant.
+    
+    When user_role is 'Hiring Manager', only returns requisitions created by that user.
+    """
+    filters = [Requisition.tenant_id == tenant_id]
+    if user_role == "Hiring Manager" and user_id:
+        filters.append(Requisition.created_by == user_id)
+    rows = session.query(Requisition).filter(*filters).all()
     return {r.id for r in rows}
 
 
@@ -110,7 +116,7 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
     if current_user.role != "Super Admin" and current_user.tenant_id:
         from modules.identity.domain.models import Tenant
         with get_session() as session:
-            tenant_reqs = list(_tenant_requisition_ids(session, current_user.tenant_id))
+            tenant_reqs = list(_tenant_requisition_ids(session, current_user.tenant_id, user_id=current_user.id, user_role=current_user.role))
             tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
             vendor_name = (tenant.name or "").lower().strip() if tenant else None
 
@@ -328,7 +334,7 @@ def get_candidate(candidate_id: str, current_user: User = Depends(get_current_us
         if row is None:
             raise HTTPException(status_code=404, detail="candidate not found")
         if current_user.role != "Super Admin":
-            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id)
+            tenant_reqs = _tenant_requisition_ids(session, current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
             if row.requisition_id not in tenant_reqs:
                 raise HTTPException(
                     status_code=403,

@@ -6,7 +6,7 @@ Status is auto-computed based on completion percentage.
 """
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 from modules.identity.domain.models import User
@@ -188,8 +188,24 @@ def raise_onboarding_issue(data: dict, authorization: str | None = None):
 
 @router.get("/issues")
 def list_onboarding_issues(authorization: str | None = None):
-    """List raised onboarding issues. Returns all issues."""
+    """List raised onboarding issues. Scoped by tenant and hiring manager."""
+    user = _get_current_user(authorization)
     docs = list(_issues_coll().find())
+    if user and user["role"] not in ("Super Admin", "Admin", "HR", "Director"):
+        # Hiring Manager: only see issues for candidates in their requisitions
+        from modules.requisition.domain.models import Requisition
+        from modules.shared.db import get_session as _gs
+        with _gs() as session:
+            filters = [Requisition.tenant_id == user["tenant_id"]]
+            if user["role"] == "Hiring Manager":
+                filters.append(Requisition.created_by == user["id"])
+            req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
+        # Get candidate_ids from those requisitions
+        from modules.shared.db import db as _db
+        cand_ids = set()
+        for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)} if req_ids else {"$in": []}}, {"id": 1}):
+            cand_ids.add(sd.get("id"))
+        docs = [d for d in docs if d.get("candidate_id") in cand_ids]
     for d in docs:
         d.pop("_id", None)
     return docs
@@ -523,9 +539,27 @@ Rules:
 
 
 @router.get("/")
-def list_onboarding():
-    """List all onboarding checklists."""
+def list_onboarding(authorization: str | None = None):
+    """List onboarding checklists. Scoped by tenant and hiring manager."""
+    user = _get_current_user(authorization)
     docs = list(_coll().find())
+    if user and user["role"] == "Hiring Manager":
+        from modules.requisition.domain.models import Requisition
+        from modules.shared.db import get_session as _gs
+        with _gs() as session:
+            req_ids = {r.id for r in session.query(Requisition).filter(
+                Requisition.tenant_id == user["tenant_id"],
+                Requisition.created_by == user["id"],
+            ).all()}
+        if req_ids:
+            # Get candidate_ids from those requisitions
+            from modules.shared.db import db as _db
+            cand_ids = set()
+            for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)}}, {"id": 1}):
+                cand_ids.add(sd.get("id"))
+            docs = [d for d in docs if d.get("candidate_id") in cand_ids]
+        else:
+            docs = []
     for d in docs:
         d.pop("_id", None)
     return docs
