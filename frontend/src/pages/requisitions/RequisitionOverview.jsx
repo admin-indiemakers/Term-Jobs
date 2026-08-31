@@ -149,9 +149,9 @@ export default function RequisitionOverview({ section }) {
     const history = requisitions.length;
     return {
       drafted,
-      published: published || 3,
-      completed: completed || 9,
-      history: history || 12,
+      published,
+      completed,
+      history,
     };
   }, [requisitions]);
 
@@ -164,93 +164,6 @@ export default function RequisitionOverview({ section }) {
     if (activeTab !== 'history') {
       const allowed = currentConfig.statuses;
       list = list.filter((r) => allowed.includes(r.status));
-    }
-
-    // Default fallback display items if database is empty
-    if (!list.length && (activeTab === 'published' || activeTab === 'history')) {
-      list = [
-        {
-          id: '39fffc',
-          req_id: 'REQ-39FFFC',
-          title: 'Mobile Engineer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Published',
-          created_at: '2026-08-26T10:00:00Z',
-          structured_role: { ceiling_internal: 17 },
-        },
-        {
-          id: 'be52c7',
-          req_id: 'REQ-BE52C7',
-          title: 'UI/UX Designer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Published',
-          created_at: '2026-08-25T14:30:00Z',
-          structured_role: { ceiling_internal: 15 },
-        },
-        {
-          id: 'f7f406',
-          req_id: 'REQ-F7F406',
-          title: 'DevOps Engineer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Closed',
-          created_at: '2026-08-22T11:20:00Z',
-          structured_role: { ceiling_internal: 21 },
-        },
-        {
-          id: 'e9001b',
-          req_id: 'REQ-E9001B',
-          title: 'UI/UX Designer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Closed',
-          created_at: '2026-08-21T16:00:00Z',
-          structured_role: { ceiling_internal: 15 },
-        },
-        {
-          id: '9dcd8b',
-          req_id: 'REQ-9DCD8B',
-          title: 'Backend Engineer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Closed',
-          created_at: '2026-08-21T12:00:00Z',
-          structured_role: { ceiling_internal: 16 },
-        },
-        {
-          id: '7544c0',
-          req_id: 'REQ-7544C0',
-          title: 'Scrum Master',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Closed',
-          created_at: '2026-08-18T10:00:00Z',
-          structured_role: { ceiling_internal: 17 },
-        },
-        {
-          id: '9f89bc',
-          req_id: 'REQ-9F89BC',
-          title: 'QA Automation Engineer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Closed',
-          created_at: '2026-08-18T09:00:00Z',
-          structured_role: { ceiling_internal: 13 },
-        },
-        {
-          id: '727c35',
-          req_id: 'REQ-727C35',
-          title: 'Mobile Engineer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Closed',
-          created_at: '2026-08-18T08:30:00Z',
-          structured_role: { ceiling_internal: 17 },
-        },
-        {
-          id: 'c64ec7',
-          req_id: 'REQ-C64EC7',
-          title: 'Data Engineer',
-          company_name: user?.tenant_name || 'Bearitt',
-          status: 'Published',
-          created_at: '2026-08-12T09:15:00Z',
-          structured_role: { ceiling_internal: 19 },
-        },
-      ];
     }
 
     if (searchQuery.trim()) {

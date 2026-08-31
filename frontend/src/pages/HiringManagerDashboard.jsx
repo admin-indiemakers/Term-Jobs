@@ -36,18 +36,20 @@ export default function HiringManagerDashboard() {
   const [acceptedCandidates, setAcceptedCandidates] = useState([]);
   const [onboardingList, setOnboardingList] = useState([]);
   const [openIssues, setOpenIssues] = useState([]);
+  const [workforceStats, setWorkforceStats] = useState({ total_team: 0, active: 0, onboarding: 0, pending_timesheets: 0 });
 
   // Fetch real data on mount
   const loadDashboardData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [reqsData, shortlistedData, acceptedData, obData, issuesData] = await Promise.all([
+      const [reqsData, shortlistedData, acceptedData, obData, issuesData, wfData] = await Promise.all([
         request('/requisitions', { token }).catch(() => []),
         request('/candidates/shortlisted', { token }).catch(() => []),
         request('/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
+        request('/api/workforce/stats', { token }).catch(() => null),
       ]);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
@@ -64,6 +66,7 @@ export default function HiringManagerDashboard() {
 
       const iList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
       setOpenIssues(iList.filter((i) => i.status === 'open'));
+      if (wfData?.stats) setWorkforceStats(wfData.stats);
     } catch (err) {
       console.error('Failed to load hiring manager dashboard data:', err);
       setError(err.message || 'Unable to load live dashboard statistics.');
@@ -331,6 +334,50 @@ export default function HiringManagerDashboard() {
             <span>{openIssues.length === 0 ? '7 open issues' : `${openIssues.length} open issues`}</span>
           </div>
         </div>
+
+        {/* 5. ACTIVE TEAM */}
+        <div
+          onClick={() => navigate('/dashboard/workforce/team')}
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: 22,
+            border: '1px solid #E2E2DC',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+          }}
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+        >
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+            {workforceStats.total_team}
+          </div>
+          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+            ACTIVE TEAM
+          </div>
+          <div className="text-[11.5px] text-[#10B981] font-bold pt-0.5 flex items-center gap-1">
+            <span>{workforceStats.active} active · {workforceStats.onboarding} onboarding</span>
+          </div>
+        </div>
+
+        {/* 6. PENDING TIMESHEETS */}
+        <div
+          onClick={() => navigate('/dashboard/workforce/timesheets')}
+          style={{
+            backgroundColor: '#FFFFFF',
+            borderRadius: 22,
+            border: '1px solid #E2E2DC',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
+          }}
+          className="p-3.5 sm:p-5 space-y-1.5 sm:space-y-2 bento-card-hover cursor-pointer transition-all hover:border-[#D5D5D0]"
+        >
+          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
+            {workforceStats.pending_timesheets}
+          </div>
+          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+            PENDING TIMESHEETS
+          </div>
+          <div className="text-[11.5px] text-[#EF4444] font-bold pt-0.5 flex items-center gap-1">
+            <span>Awaiting your approval</span>
+          </div>
+        </div>
       </div>
 
       {/* ========================================================
@@ -424,15 +471,12 @@ export default function HiringManagerDashboard() {
 
             {/* Internal Scrollable Requisitions List */}
             <div className="flex-1 overflow-y-auto custom-table-scroll divide-y divide-[#F2F2EE] pr-1">
-              {(liveRequisitions.length ? liveRequisitions : [
-                { id: '39fffc', req_id: 'REQ-39FFFC', title: 'Mobile Engineer', location: 'Remote', company_name: user?.tenant_name || 'Bearitt' },
-                { id: 'be52c7', req_id: 'REQ-BE52C7', title: 'UI/UX Designer', location: 'Remote', company_name: user?.tenant_name || 'Bearitt' },
-                { id: 'c64ec7', req_id: 'REQ-C64EC7', title: 'Data Engineer', location: 'Remote', company_name: user?.tenant_name || 'Bearitt' },
-                { id: '9dcd8b', req_id: 'REQ-9DCD8B', title: 'Backend Engineer', location: 'Remote', company_name: user?.tenant_name || 'Bearitt' },
-                { id: '7544c0', req_id: 'REQ-7544C0', title: 'Scrum Master', location: 'Remote', company_name: user?.tenant_name || 'Bearitt' },
-              ]).map((req, idx) => {
-                const tags = getRequisitionTags(req);
-                const reqCode = req.req_id || `REQ-${String(req.id || idx).slice(0, 6).toUpperCase()}`;
+              {!liveRequisitions.length ? (
+                <div className="py-8 text-center text-[13px] text-[#737373] font-medium">No active requisitions found.</div>
+              ) : (
+                liveRequisitions.map((req, idx) => {
+                  const tags = getRequisitionTags(req);
+                  const reqCode = req.req_id || `REQ-${String(req.id || idx).slice(0, 6).toUpperCase()}`;
 
                 return (
                   <div key={req.id || idx} className="py-3.5 first:pt-0.5 last:pb-0.5 pl-3.5 sm:pl-4 pr-1 flex flex-col sm:flex-row sm:items-center justify-between gap-3 group">
@@ -494,7 +538,7 @@ export default function HiringManagerDashboard() {
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
           </div>
         </div>

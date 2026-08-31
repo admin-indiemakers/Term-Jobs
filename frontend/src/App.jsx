@@ -30,6 +30,8 @@ import CandidatePortal from './pages/candidates/CandidatePortal';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
 import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
 import ReportedIssues from './pages/candidates/ReportedIssues';
+import TeamOverview from './pages/workforce/TeamOverview';
+import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import Archives from './pages/Archives';
 
 
@@ -103,6 +105,8 @@ export default function App() {
           <Route path="candidates/onboarding" element={<OnboardingManagement />} />
           <Route path="candidates/issues" element={<ReportedIssues />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
+          <Route path="workforce/team" element={<TeamOverview />} />
+          <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
           <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />

@@ -330,7 +330,7 @@ export default function ShortlistedCandidates() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {displayCandidates.map((cand, idx) => {
                 const reqCode = cand.requisition_ref || (cand.requisition_id ? `REQ-${String(cand.requisition_id).slice(0, 6).toUpperCase()}` : 'REQ-F7F406');
-                const candName = cand.candidate_name || cand.full_name || cand.name || 'SURAJKUMAR K S';
+                const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
                 const vendorName = cand.vendor_name || 'bridgeon';
                 const roleTitle = cand.requisition_title || 'DevOps Engineer';
                 const score = cand.match_score != null ? Math.round(cand.match_score) : 41;

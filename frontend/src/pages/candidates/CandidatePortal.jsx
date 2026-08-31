@@ -31,16 +31,12 @@ const generateInitialSevenDays = (startDateStr) => {
     d.setDate(monday.getDate() + i);
     const dateStr = d.toISOString().split('T')[0];
     const isWeekend = i >= 5;
-    const isFuture = dateStr > todayStr;
-    const isBeforeStart = dateStr < assignmentStart;
-    
-    const hrs = (!isWeekend && !isFuture && !isBeforeStart) ? 8.0 : 0.0;
 
     entries.push({
       day: daysLabels[i],
       day_number: String(d.getDate()).padStart(2, '0'),
       date: dateStr,
-      hours: hrs,
+      hours: 0.0,
       category: isWeekend ? 'Weekend' : 'Regular',
       note: '',
       task: '',
@@ -702,6 +698,61 @@ export default function CandidatePortal() {
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (timeCap.progress_pct / 100) * circumference;
+
+  const hasAssignment = data?.has_assignment !== false;
+
+  // ─── NO ACTIVE ASSIGNMENT STATE ─────────────────────────────────
+  if (data && !hasAssignment) {
+    return (
+      <div
+        style={{
+          backgroundColor: '#ECECE9',
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+          color: '#0A0A0A',
+        }}
+        className="fixed inset-0 w-screen h-screen flex items-center justify-center antialiased"
+      >
+        <div className="w-full max-w-lg mx-4">
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 24,
+              border: '1px solid #E2E2DC',
+              boxShadow: '0 8px 40px rgba(0,0,0,0.06)',
+            }}
+            className="p-10 text-center"
+          >
+            {/* Icon */}
+            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[#F5F5F2] border border-[#E2E2DC] flex items-center justify-center">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8A8A85" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+              </svg>
+            </div>
+
+            <h2 className="text-[1.35rem] font-extrabold text-[#0A0A0A] tracking-tight mb-2">
+              No Active Assignment
+            </h2>
+            <p className="text-[0.92rem] text-[#737373] leading-relaxed max-w-sm mx-auto mb-6">
+              You don't have an active work order yet. Your hiring manager will assign you to a role and your assignment details will appear here.
+            </p>
+
+            <div className="bg-[#F5F5F2] rounded-xl p-4 mb-6 border border-[#E2E2DC]">
+              <div className="text-[0.72rem] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">Candidate</div>
+              <div className="text-[0.95rem] font-semibold text-[#0A0A0A]">{cand.name}</div>
+              {cand.id && (
+                <div className="text-[0.78rem] font-mono text-[#737373] mt-1">{cand.id}</div>
+              )}
+            </div>
+
+            <p className="text-[0.78rem] text-[#A0A09A]">
+              Once your work order is created, you'll be able to track timesheets, log expenses, and view your assignment details.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

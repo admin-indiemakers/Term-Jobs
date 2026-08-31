@@ -64,9 +64,9 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
     if not comp_name and req:
         comp_name = getattr(req, "company_name", None) or getattr(req, "client_name", None)
     if not comp_name:
-        comp_name = "Bearitt"
+        comp_name = ""
 
-    req_title = (getattr(req, "title", None) if req else None) or "Senior Software Engineer"
+    req_title = (getattr(req, "title", None) if req else None) or ""
     hm_name = (req.structured_role or {}).get("hiring_manager") if req else ""
     details = row.details or {}
     return {
@@ -150,9 +150,9 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
     for doc in all_docs:
         req_id = doc.get("requisition_id")
         req_doc = req_cache.get(req_id, {})
-        req_title = req_doc.get("title") or "Senior Python Developer"
+        req_title = req_doc.get("title") or ""
         comp_id = req_doc.get("company_profile_id") or req_doc.get("company_id")
-        comp_name = comp_cache.get(comp_id) or req_doc.get("company_name") or req_doc.get("client_name") or "Bearitt"
+        comp_name = comp_cache.get(comp_id) or req_doc.get("company_name") or req_doc.get("client_name") or ""
         
         details = doc.get("details") or {}
         created_val = doc.get("created_at")
