@@ -1,17 +1,17 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import { Users, RefreshCw, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import CandidateDetailPanel from './CandidateDetailPanel';
 
 export default function TeamOverview() {
   const { token } = useAuth();
-  const navigate = useNavigate();
 
   const [team, setTeam] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState('');
+  const [selectedCandidate, setSelectedCandidate] = useState(null);
 
   const loadTeam = async () => {
     setLoading(true);
@@ -167,7 +167,7 @@ export default function TeamOverview() {
                     <tr
                       key={m.candidate_id}
                       className="border-t border-[#f0f0ec] hover:bg-[#fafaf8] transition cursor-pointer"
-                      onClick={() => navigate(`/dashboard/workforce/timesheets?candidate=${m.candidate_id}`)}
+                      onClick={() => setSelectedCandidate(m.candidate_id)}
                     >
                       <td className="px-5 py-3.5">
                         <div className="text-[0.88rem] font-semibold text-[#1a1a1a]">{m.candidate_name || '—'}</div>
@@ -221,6 +221,13 @@ export default function TeamOverview() {
           </div>
         </div>
       </div>
+      {/* Candidate Detail Panel */}
+      {selectedCandidate && (
+        <CandidateDetailPanel
+          candidateId={selectedCandidate}
+          onClose={() => setSelectedCandidate(null)}
+        />
+      )}
     </div>
   );
 }

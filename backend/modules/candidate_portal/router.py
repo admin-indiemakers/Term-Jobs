@@ -25,13 +25,82 @@ def _get_current_week_bounds():
 def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_email: str, tenant_id: str):
     """Return the active work order for this candidate, or None if none exists.
     Does NOT auto-create fake work orders — shows 'No Active Assignment' instead.
+    Deduplicates by keeping only the most recent work order per candidate.
+    Enriches empty fields from requisition and candidate submission data.
     """
     wo_coll = db["work_orders"]
-    existing = wo_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"candidate_email": candidate_email}]})
-    if existing:
-        existing.pop("_id", None)
-        return existing
-    return None
+    candidates = wo_coll.find({"candidate_id": candidate_id, "status": "ACTIVE"}).sort("created_at", -1)
+    candidates_list = list(candidates)
+    
+    if not candidates_list:
+        candidates_list = list(wo_coll.find({"candidate_email": candidate_email, "status": "ACTIVE"}).sort("created_at", -1))
+    
+    if not candidates_list:
+        return None
+    
+    # Keep only the most recent, delete duplicates
+    keep = candidates_list[0]
+    for dup in candidates_list[1:]:
+        wo_coll.delete_one({"_id": dup["_id"]})
+    keep.pop("_id", None)
+    
+    # Enrich empty fields from multiple sources
+    sub_coll = db["candidate_submissions"]
+    sub = sub_coll.find_one({"$or": [{"id": candidate_id}, {"candidate_email": candidate_email}]}) or {}
+    
+    req_id = keep.get("requisition_id") or sub.get("requisition_id") or ""
+    req_doc = {}
+    if req_id:
+        req_doc = db["requisitions"].find_one({"id": req_id}) or {}
+    
+    sr = req_doc.get("structured_role") or {}
+    
+    # Also pull from onboarding checklist (persists even when requisitions are deleted)
+    ob = db["onboarding_checklists"].find_one({"candidate_id": candidate_id}) or {}
+    
+    # Company profile name
+    comp_profile_name = ""
+    comp_profile_id = req_doc.get("company_profile_id") or sub.get("company_profile_id") or ""
+    if comp_profile_id:
+        cp = db["company_profiles"].find_one({"id": comp_profile_id}) or {}
+        comp_profile_name = cp.get("name") or ""
+
+    # Enrich — try work_order → submission → onboarding → requisition in order
+    def _fill(field, *sources):
+        if not keep.get(field):
+            for src in sources:
+                val = src.get(field) if src else None
+                if val:
+                    keep[field] = val
+                    return
+
+    _fill("requisition_title", sub, ob, req_doc)
+    if not keep.get("requisition_title"):
+        keep["requisition_title"] = sr.get("job_title") or ""
+    _fill("vendor_name", sub, ob, req_doc)
+    _fill("company_name", sub, ob, req_doc)
+    if not keep.get("company_name") and comp_profile_name:
+        keep["company_name"] = comp_profile_name
+    if not keep.get("company_name"):
+        keep["company_name"] = req_doc.get("client_name") or ""
+    _fill("location", sr)
+    if not keep.get("location"):
+        locations = sr.get("work_locations") or []
+        keep["location"] = locations[0] if locations else ""
+    _fill("work_arrangement", sr, req_doc)
+    if not keep.get("work_arrangement"):
+        keep["work_arrangement"] = sr.get("work_mode") or ""
+    _fill("reporting_manager", sr, req_doc)
+    _fill("overtime_policy", sr, req_doc)
+    _fill("engagement_type", sr, req_doc)
+    if not keep.get("requisition_id"):
+        keep["requisition_id"] = req_id
+    if not keep.get("candidate_name"):
+        keep["candidate_name"] = candidate_name or sub.get("candidate_name") or ob.get("candidate_name") or ""
+    if not keep.get("candidate_email"):
+        keep["candidate_email"] = candidate_email or sub.get("candidate_email") or ob.get("candidate_email") or ""
+    
+    return keep
 
 
 def _sanitize_work_order_for_candidate(wo: dict) -> dict:
@@ -286,7 +355,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         "assignment_snapshot": {
             "work_arrangement": safe_wo.get("work_arrangement", ""),
             "weekly_expectation": f"{int(expected_h)}h",
-            "overtime": safe_wo.get("overtime_policy", "Allowed"),
+            "overtime": safe_wo.get("overtime_policy", ""),
             "engagement": safe_wo.get("engagement_type", ""),
         },
         "smart_actions": {
@@ -666,7 +735,12 @@ def create_candidate_expense(
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Expense amount must be greater than 0")
 
-    assignment_start = "2026-08-25"
+    cand_id = current_user.candidate_id or ""
+    raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
+    if not raw_wo:
+        raise HTTPException(status_code=400, detail="No active assignment. Cannot log expenses without an assignment.")
+
+    assignment_start = raw_wo.get("start_date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
     today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     if payload.date < assignment_start:
@@ -681,7 +755,6 @@ def create_candidate_expense(
             detail="Cannot log expenses for a future date ahead of time."
         )
 
-    cand_id = current_user.candidate_id or ""
     exp_coll = db["candidate_expenses"]
     
     # Format date label (e.g. "2026-08-28" -> "28 Aug")
