@@ -59,11 +59,19 @@ export default function AdminDashboard() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([request('/api/auth/users', { token }), request('/requisitions', { token }), request('/api/auth/vendors', { token })])
-      .then(([usersRes, reqsRes, vendorsRes]) => {
+    Promise.all([
+      request('/api/auth/users', { token }),
+      request('/requisitions', { token }),
+      request('/api/auth/vendors', { token }),
+      request('/api/calendar/config', { token }).catch(() => ({ provider: null, status: 'disconnected', connected_email: null })),
+      request('/api/calendar/providers', { token }).catch(() => ({ providers: [] })),
+    ])
+      .then(([usersRes, reqsRes, vendorsRes, calConfigRes, calProvidersRes]) => {
         setUsers(usersRes || []);
         setRequisitions(reqsRes || []);
         setVendors(vendorsRes || []);
+        setCalConfig(calConfigRes || { provider: null, status: 'disconnected', connected_email: null });
+        setCalProviders(calProvidersRes?.providers || []);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -71,18 +79,6 @@ export default function AdminDashboard() {
   };
 
   useEffect(load, [token]);
-
-  useEffect(() => {
-    Promise.all([
-      request('/api/calendar/config', { token }),
-      request('/api/calendar/providers', { token }),
-    ])
-      .then(([config, providers]) => {
-        setCalConfig(config || { provider: null, status: 'disconnected', connected_email: null });
-        setCalProviders(providers?.providers || []);
-      })
-      .catch(() => {});
-  }, [token]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

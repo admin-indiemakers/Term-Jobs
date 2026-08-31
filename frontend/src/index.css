@@ -5439,3 +5439,12 @@ html, body, #root {
   height: 100% !important;
   max-height: 100vh !important;
 }
+
+/* ============ CANDIDATE DETAIL SLIDE-IN PANEL ============ */
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0.8; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-in {
+  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

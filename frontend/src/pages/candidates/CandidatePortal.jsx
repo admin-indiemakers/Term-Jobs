@@ -229,7 +229,7 @@ export default function CandidatePortal() {
       const parsed = new Date(data.work_order.end_date);
       if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
     }
-    return '2027-02-25';
+    return '';
   }, [data]);
 
   useEffect(() => {
@@ -363,7 +363,7 @@ export default function CandidatePortal() {
         })
         .catch(() => {});
 
-      request('/api/candidate-portal/attendance?month=2026-08', { token })
+      request(`/api/candidate-portal/attendance?month=${new Date().toISOString().slice(0, 7)}`, { token })
         .then((attRes) => {
           if (attRes?.attendance) setAttendanceData(attRes.attendance);
         })
@@ -1446,11 +1446,11 @@ export default function CandidatePortal() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-[#F2F2EE]">
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Start</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.start_date || '25 Aug 2026'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.start_date || '—'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">End</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.end_date || '25 Feb 2027'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.end_date || '—'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Location</div>
@@ -2340,7 +2340,7 @@ export default function CandidatePortal() {
                 <div className="flex items-center justify-between text-[12px] pt-1">
                   <div>
                     <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
+                    <span className="font-bold text-[#0A0A0A]">{wo.start_date || '—'}</span>
                   </div>
                   <div className="text-center">
                     <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
@@ -2348,7 +2348,7 @@ export default function CandidatePortal() {
                   </div>
                   <div className="text-right">
                     <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
+                    <span className="font-bold text-[#0A0A0A]">{wo.end_date || '—'}</span>
                   </div>
                 </div>
               </div>

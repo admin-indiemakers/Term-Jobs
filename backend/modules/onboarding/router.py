@@ -65,14 +65,32 @@ class OnboardingChecklist(BaseModel):
     updated_at: str = ""
 
 
+class ActivationGate(BaseModel):
+    id: str
+    label: str
+    responsible: str  # Worker | TalentBridge | Buyer IT | Buyer EHS | Manager
+    type: str = "blocking"  # blocking | warn_only
+    status: str = "pending"  # pending | cleared
+    cleared_at: str | None = None
+    cleared_by: str | None = None
+
+
 class OnboardingUpdate(BaseModel):
     model_config = {"extra": "allow"}
+    candidate_name: str | None = None
+    candidate_email: str | None = None
+    requisition_id: str | None = None
+    requisition_ref: str | None = None
+    requisition_title: str | None = None
+    company_name: str | None = None
+    vendor_name: str | None = None
     laptop_required: bool | None = None
     laptop_spec: str | None = None
     badge_required: bool | None = None
     software: list[SoftwareItem] | None = None
     training: list[TrainingItem] | None = None
     custom_items: list[CustomItem] | None = None
+    activation_gates: list[ActivationGate] | None = None
     notes: str | None = None
     completed_items: dict[str, bool] | None = None
     status: str | None = None
@@ -355,7 +373,93 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
         _coll().update_one({"candidate_id": candidate_id}, {"$set": {"status": new_status}})
         doc["status"] = new_status
 
+    # --- Sync enriched data to work order so the candidate portal shows it ---
+    try:
+        from modules.shared.db import db as _db
+        wo_update = {}
+        if updates.get("requisition_title"):
+            wo_update["requisition_title"] = updates["requisition_title"]
+        if updates.get("company_name"):
+            wo_update["company_name"] = updates["company_name"]
+        if updates.get("vendor_name"):
+            wo_update["vendor_name"] = updates["vendor_name"]
+        if updates.get("requisition_id"):
+            wo_update["requisition_id"] = updates["requisition_id"]
+        if wo_update:
+            _db["work_orders"].update_one(
+                {"candidate_id": candidate_id, "status": "ACTIVE"},
+                {"$set": wo_update},
+            )
+    except Exception:
+        pass
+
     return doc
+
+
+# ---------------------------------------------------------------------------
+# POST /onboarding/{candidate_id}/activate-gates
+# ---------------------------------------------------------------------------
+
+@router.post("/{candidate_id}/activate-gates")
+def activate_work_order(candidate_id: str, authorization: str | None = None):
+    """Check activation gates. If all blocking gates are cleared, activate the work order."""
+    user = _get_current_user(authorization)
+    if not user or user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    doc = _coll().find_one({"candidate_id": candidate_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Onboarding not found")
+
+    gates = doc.get("activation_gates", [])
+    blocking = [g for g in gates if g.get("type") == "blocking"]
+    blocking_cleared = [g for g in blocking if g.get("status") == "cleared"]
+    blocking_pending = [g for g in blocking if g.get("status") != "cleared"]
+
+    if blocking_pending:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{len(blocking_pending)} blocking gate(s) still open: {', '.join(g.get('label', '') for g in blocking_pending)}"
+        )
+
+    # All blocking gates cleared — activate the work order
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+
+    try:
+        db["work_orders"].update_one(
+            {"candidate_id": candidate_id, "status": {"$ne": "CLOSED"}},
+            {"$set": {
+                "status": "ACTIVE",
+                "activated_at": now,
+                "activation_gates_cleared": True,
+            }},
+        )
+    except Exception:
+        pass
+
+    # Update onboarding status
+    _coll().update_one(
+        {"candidate_id": candidate_id},
+        {"$set": {"activation_status": "activated", "activated_at": now, "updated_at": now}},
+    )
+
+    # Notify candidate
+    try:
+        notif_id = f"notif_{uuid.uuid4().hex[:10]}"
+        db["candidate_notifications"].insert_one({
+            "id": notif_id,
+            "candidate_id": candidate_id,
+            "type": "work_order_activated",
+            "title": "Work Order Activated",
+            "message": "Your work order has been activated. You can now log hours and submit timesheets.",
+            "is_read": False,
+            "created_at": now,
+        })
+    except Exception:
+        pass
+
+    return {"status": "success", "message": "Work order activated successfully"}
 
 
 @router.post("/generate")
