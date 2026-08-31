@@ -310,9 +310,10 @@ def _auto_close_expired() -> None:
     from modules.requisition.domain.state import StateMachine
 
     with get_session() as session:
-        for req in session.query(models.Requisition).all():
-            if req.status != schemas.RequisitionStatus.PUBLISHED.value:
-                continue
+        # Only query PUBLISHED requisitions (avoids full table scan)
+        for req in session.query(models.Requisition).filter(
+            models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value
+        ).all():
             deadline = (req.structured_role or {}).get("submission_deadline")
             if not deadline:
                 continue
