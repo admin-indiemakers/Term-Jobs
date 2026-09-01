@@ -38,8 +38,12 @@ def _get_client() -> "MongoClient":
         _client = MongoClient(
             settings.mongodb_url,
             serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
+            connectTimeoutMS=10000,
             maxPoolSize=50,
+            minPoolSize=5,
+            retryWrites=True,
+            retryReads=True,
+            tls=True,
         )
     return _client
 
