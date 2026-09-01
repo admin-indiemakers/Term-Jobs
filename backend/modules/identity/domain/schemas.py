@@ -24,6 +24,7 @@ class TenantResponse(BaseModel):
     id: str
     name: str
     tenant_type: str
+    created_at: str = ""
 
 class VendorResponse(BaseModel):
     id: str
