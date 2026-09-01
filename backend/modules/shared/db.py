@@ -286,7 +286,7 @@ def get_session() -> Session:
 
 
 def init_db() -> None:
-    """Create indexes. Idempotent â€” safe to call on every start."""
+    """Create indexes. Idempotent — safe to call on every start."""
     db["users"].create_index("email", unique=True)
     db["users"].create_index("tenant_id")
     db["tenants"].create_index("name")
@@ -300,6 +300,18 @@ def init_db() -> None:
     db["notifications"].create_index("user_id")
     db["notifications"].create_index("created_at")
     db["onboarding_checklists"].create_index("candidate_id")
+
+    # Candidate submissions compound indexes for high-throughput queries
+    try:
+        db["candidate_submissions"].create_index([("requisition_id", 1), ("status", 1), ("match_score", -1)])
+        db["candidate_submissions"].create_index([("tenant_id", 1), ("status", 1)])
+        db["candidate_submissions"].create_index([("vendor_name", 1), ("status", 1)])
+        db["candidate_submissions"].create_index("id", unique=True)
+        db["candidates"].create_index([("tenant_id", 1), ("created_at", -1)])
+        db["candidates"].create_index("id")
+    except Exception as e:
+        print(f"Index creation warning for candidate collections: {e}")
+
     try:
         db["screening_cache"].create_index("expires_at", expireAfterSeconds=0)
         db["screening_cache"].create_index("cache_key")

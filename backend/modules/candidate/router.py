@@ -110,7 +110,7 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
     }
 
 
-def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -> list[dict]:
+def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, include_details: bool = False) -> list[dict]:
     """Query candidate submissions directly from MongoDB with caching and permissions."""
     from modules.shared.db import db
     if current_user.role != "Super Admin" and current_user.tenant_id:
@@ -135,7 +135,11 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
         else:
             query_filter["$or"] = or_conditions
 
+    # Exclude heavy text and PDF fields for fast API responses unless detailed view requested
     projection = {"resume_pdf": 0}
+    if not include_details:
+        projection["resume_text"] = 0
+
     cursor = db["candidate_submissions"].find(query_filter, projection).sort([("match_score", -1), ("created_at", -1)])
 
     all_docs = list(cursor)
@@ -143,13 +147,13 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
     req_ids = list({doc.get("requisition_id") for doc in all_docs if doc.get("requisition_id")})
     req_cache = {}
     if req_ids:
-        for rd in db["requisitions"].find({"id": {"$in": req_ids}}):
+        for rd in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_profile_id": 1, "company_id": 1, "company_name": 1, "client_name": 1, "structured_role": 1, "generated_jd_markdown": 1}):
             req_cache[rd.get("id")] = rd
 
     comp_ids = list({r.get("company_profile_id") or r.get("company_id") for r in req_cache.values() if r.get("company_profile_id") or r.get("company_id")})
     comp_cache = {}
     if comp_ids:
-        for cd in db["company_profiles"].find({"id": {"$in": comp_ids}}):
+        for cd in db["company_profiles"].find({"id": {"$in": comp_ids}}, {"id": 1, "name": 1}):
             comp_cache[cd.get("id")] = cd.get("name")
 
     results = []
@@ -176,7 +180,7 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
             "candidate_phone": details.get("candidate_phone") or doc.get("candidate_phone") or "",
             "vendor_name": doc.get("vendor_name") or "bridgeon",
             "filename": doc.get("filename"),
-            "resume_text": doc.get("resume_text"),
+            "resume_text": doc.get("resume_text", ""),
             "jd_text": doc.get("jd_text") or req_doc.get("generated_jd_markdown") or "",
             "match_score": float(doc.get("match_score")) if doc.get("match_score") is not None else None,
             "recommendation": doc.get("recommendation"),
@@ -203,6 +207,7 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User) -
 def list_candidates(
     status: str | None = None,
     requisition_id: str | None = None,
+    include_details: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """List candidate submissions, optionally filtered by status and/or requisition."""
@@ -211,7 +216,7 @@ def list_candidates(
         query_filter["status"] = status
     if requisition_id:
         query_filter["requisition_id"] = requisition_id
-    return _fetch_candidate_submissions_mongo(query_filter, current_user)
+    return _fetch_candidate_submissions_mongo(query_filter, current_user, include_details=include_details)
 
 
 @router.get("/shortlisted")
