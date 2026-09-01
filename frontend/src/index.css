@@ -1431,7 +1431,7 @@
 
 .app-shell.console-superadmin .sidebar {
   background: #ffffff;
-  border-right: 1px solid #ededed;
+  border-radius: 28px;
 }
 
 .app-shell.console-superadmin .brand-mark {
@@ -1746,7 +1746,7 @@
 
 .app-shell.console-admin .sidebar {
   background: #ffffff;
-  border-right: 1px solid #e5e5e5;
+  border-radius: 28px;
 }
 
 .app-shell.console-admin .brand-mark {
@@ -2276,7 +2276,7 @@
 
 .app-shell.console-hiringmanager .sidebar {
   background: #ffffff;
-  border-right: 1px solid #e5e5e5;
+  border-radius: 28px;
 }
 
 .app-shell.console-hiringmanager .brand-mark {
@@ -3809,7 +3809,7 @@
 
 .app-shell.console-director .sidebar {
   background: #ffffff;
-  border-right: 1px solid #e5e5e5;
+  border-radius: 28px;
 }
 
 .app-shell.console-director .brand-mark {
@@ -5447,4 +5447,53 @@ html, body, #root {
 }
 .animate-slide-in {
   animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.app-shell.console-admin .nav-link.active,
+.app-shell.console-superadmin .nav-link.active,
+.app-shell.console-director .nav-link.active,
+.app-shell.console-hiringmanager .nav-link.active,
+.app-shell.console-recruiter .nav-link.active {
+  background: #0a0a0a !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+  border: none !important;
+}
+.app-shell.console-admin .nav-link.active *,
+.app-shell.console-superadmin .nav-link.active *,
+.app-shell.console-director .nav-link.active *,
+.app-shell.console-hiringmanager .nav-link.active *,
+.app-shell.console-recruiter .nav-link.active * {
+  color: #ffffff !important;
+}
+
+.sidebar a,
+.sidebar button,
+.nav-link,
+.sidebar-nav-btn {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+.sidebar a:focus,
+.sidebar a:focus-visible,
+.sidebar a:active,
+.sidebar button:focus,
+.sidebar button:focus-visible,
+.sidebar button:active,
+.nav-link:focus,
+.nav-link:focus-visible,
+.nav-link:active,
+.sidebar-nav-btn:focus,
+.sidebar-nav-btn:focus-visible,
+.sidebar-nav-btn:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+.nav-link:not(.active):not(.active-nav-tab),
+.sidebar-nav-btn:not(.active):not(.active-nav-tab) {
+  background: transparent !important;
+  box-shadow: none !important;
+  border: none !important;
 }

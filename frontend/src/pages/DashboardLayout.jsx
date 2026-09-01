@@ -560,6 +560,37 @@ export default function DashboardLayout() {
   return (
     <div className={`app-shell ${consoleClass}`}>
       <style>{`
+        /* Eliminate any lingering focus/active rectangle on nav links */
+        .sidebar a,
+        .sidebar button,
+        .nav-link,
+        .sidebar-nav-btn,
+        .active-nav-tab {
+          outline: none !important;
+          -webkit-tap-highlight-color: transparent !important;
+          border: none !important;
+        }
+        .sidebar a:focus,
+        .sidebar a:focus-visible,
+        .sidebar a:active,
+        .sidebar button:focus,
+        .sidebar button:focus-visible,
+        .sidebar button:active,
+        .nav-link:focus,
+        .nav-link:focus-visible,
+        .nav-link:active,
+        .sidebar-nav-btn:focus,
+        .sidebar-nav-btn:focus-visible,
+        .sidebar-nav-btn:active {
+          outline: none !important;
+          box-shadow: none !important;
+        }
+        .nav-link:not(.active-nav-tab):not(.active),
+        .sidebar-nav-btn:not(.active-nav-tab):not(.active) {
+          background-color: transparent !important;
+          box-shadow: none !important;
+          border: none !important;
+        }
         .recruiter-sidebar-container .nav-link {
           display: flex !important;
           align-items: center !important;
@@ -591,26 +622,34 @@ export default function DashboardLayout() {
           font-size: 13px !important;
           font-weight: 700 !important;
           border-radius: 14px !important;
-          padding: 10px 14px !important;
+          padding: 10px 14px 10px 16px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
           gap: 10px !important;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
           position: relative !important;
           overflow: hidden !important;
+          border: none !important;
+        }
+        .active-nav-tab * {
+          color: #FFFFFF !important;
         }
         .active-nav-tab::before {
-          content: '';
-          position: absolute;
-          left: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 3.5px;
-          height: 18px;
-          background-color: #FFFFFF;
-          border-radius: 0 4px 4px 0;
+          content: '' !important;
+          position: absolute !important;
+          left: 0 !important;
+          top: 50% !important;
+          transform: translateY(-50%) !important;
+          width: 3.5px !important;
+          height: 18px !important;
+          background-color: #FFFFFF !important;
+          border-radius: 0 4px 4px 0 !important;
+          display: block !important;
         }
+        .app-shell.console-admin,
+        .app-shell.console-superadmin,
+        .app-shell.console-director,
         .app-shell.console-recruiter,
         .app-shell.console-hiringmanager,
         .app-shell {
@@ -666,7 +705,12 @@ export default function DashboardLayout() {
           background: transparent !important;
           border-bottom: 1px solid #E2E2DC !important;
         }
-        .recruiter-sidebar-container {
+        .recruiter-sidebar-container,
+        .app-shell.console-admin .sidebar,
+        .app-shell.console-superadmin .sidebar,
+        .app-shell.console-director .sidebar,
+        .app-shell.console-hiringmanager .sidebar,
+        .app-shell.console-recruiter .sidebar {
           width: 272px !important;
           min-width: 272px !important;
           max-width: 272px !important;
@@ -690,7 +734,12 @@ export default function DashboardLayout() {
 
         /* Mobile & Tablet Responsiveness (< 1024px) */
         @media (max-width: 1023px) {
-          .recruiter-sidebar-container {
+          .recruiter-sidebar-container,
+        .app-shell.console-admin .sidebar,
+        .app-shell.console-superadmin .sidebar,
+        .app-shell.console-director .sidebar,
+        .app-shell.console-hiringmanager .sidebar,
+        .app-shell.console-recruiter .sidebar {
             display: none !important;
           }
           .app-shell.console-superadmin .content-area,
