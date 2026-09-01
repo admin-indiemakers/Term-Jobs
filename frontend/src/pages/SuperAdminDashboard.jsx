@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -43,10 +43,20 @@ export default function SuperAdminDashboard() {
     }
   };
 
-  const clientTenants = tenants.filter((t) => t.tenant_type === 'client');
-  const consultancyTenants = tenants.filter((t) => t.tenant_type === 'consultancy');
-  // Include both Admin and Recruiter roles for vendor admin visibility
-  const adminAccounts = users.filter((u) => u.role === 'Admin' || u.role === 'Recruiter');
+  const clientTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'client'), [tenants]);
+  const consultancyTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'consultancy'), [tenants]);
+  const adminAccounts = useMemo(() => users.filter((u) => u.role === 'Admin' || u.role === 'Recruiter'), [users]);
+
+  const tenantAdminsMap = useMemo(() => {
+    const map = {};
+    adminAccounts.forEach((a) => {
+      if (!a.tenant_id) return;
+      if (!map[a.tenant_id]) map[a.tenant_id] = { admins: [], recruiters: [] };
+      if (a.role === 'Admin') map[a.tenant_id].admins.push(a);
+      if (a.role === 'Recruiter') map[a.tenant_id].recruiters.push(a);
+    });
+    return map;
+  }, [adminAccounts]);
 
   const totalTenants = tenants.length;
   const buyerShare = totalTenants === 0 ? 0 : Math.round((clientTenants.length / totalTenants) * 100);
@@ -103,9 +113,9 @@ export default function SuperAdminDashboard() {
                 </thead>
                 <tbody>
                   {tenants.map((t) => {
-                    const tenantAdmins = adminAccounts.filter((a) => a.tenant_id === t.id);
-                    const admins = tenantAdmins.filter((a) => a.role === 'Admin');
-                    const recruiters = tenantAdmins.filter((a) => a.role === 'Recruiter');
+                    const group = tenantAdminsMap[t.id] || { admins: [], recruiters: [] };
+                    const admins = group.admins;
+                    const recruiters = group.recruiters;
                     return (
                       <tr key={t.id}>
                         <td className="td-title">{t.name}</td>

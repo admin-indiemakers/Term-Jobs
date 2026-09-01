@@ -314,6 +314,13 @@ def list_users(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list users",
         )
+    
+    tenant_ids = {u.tenant_id for u in users if u.tenant_id}
+    tenant_map = {}
+    if tenant_ids:
+        tenants = db.query(Tenant).filter(Tenant.id.in_(tenant_ids)).all()
+        tenant_map = {t.id: t for t in tenants}
+
     return [
         UserListResponse(
             id=u.id,
@@ -321,8 +328,8 @@ def list_users(
             name=u.name,
             role=u.role,
             tenant_id=u.tenant_id,
-            tenant_name=_tenant_name(u.tenant_id, db),
-            tenant_type=_tenant_type(u.tenant_id, db),
+            tenant_name=tenant_map[u.tenant_id].name if u.tenant_id in tenant_map else "Unknown Tenant",
+            tenant_type=tenant_map[u.tenant_id].tenant_type if u.tenant_id in tenant_map else "client",
             department=u.department or "",
             is_active=u.is_active,
             created_by=u.created_by,
