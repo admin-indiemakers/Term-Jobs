@@ -158,7 +158,7 @@ def _issues_coll():
 
 
 @router.post("/issues")
-def raise_onboarding_issue(data: dict, authorization: str | None = None):
+def raise_onboarding_issue(data: dict, authorization: str | None = Header(None)):
     """Candidate raises an issue regarding onboarding."""
     from datetime import datetime, timezone
     current_user = _get_current_user(authorization)
@@ -187,7 +187,7 @@ def raise_onboarding_issue(data: dict, authorization: str | None = None):
 
 
 @router.get("/issues")
-def list_onboarding_issues(authorization: str | None = None):
+def list_onboarding_issues(authorization: str | None = Header(None)):
     """List raised onboarding issues. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
     docs = list(_issues_coll().find())
@@ -298,7 +298,7 @@ def mark_notification_read(notification_id: str):
 # ── Onboarding Checklists ──────────────────────────────────────────────────
 
 @router.get("/{candidate_id}")
-def get_onboarding(candidate_id: str, authorization: str | None = None):
+def get_onboarding(candidate_id: str, authorization: str | None = Header(None)):
     doc = _coll().find_one({"candidate_id": candidate_id})
     if not doc:
         raise HTTPException(status_code=404, detail="No onboarding checklist found")
@@ -307,7 +307,7 @@ def get_onboarding(candidate_id: str, authorization: str | None = None):
 
 
 @router.post("/{candidate_id}")
-def create_onboarding(candidate_id: str, authorization: str | None = None):
+def create_onboarding(candidate_id: str, authorization: str | None = Header(None)):
     """Create a blank onboarding checklist for a candidate."""
     existing = _coll().find_one({"candidate_id": candidate_id})
     if existing:
@@ -417,7 +417,7 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
 # ---------------------------------------------------------------------------
 
 @router.post("/{candidate_id}/activate-gates")
-def activate_work_order(candidate_id: str, authorization: str | None = None):
+def activate_work_order(candidate_id: str, authorization: str | None = Header(None)):
     """Check activation gates. If all blocking gates are cleared, activate the work order."""
     user = _get_current_user(authorization)
     if not user or user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
@@ -539,7 +539,7 @@ Rules:
 
 
 @router.get("/")
-def list_onboarding(authorization: str | None = None):
+def list_onboarding(authorization: str | None = Header(None)):
     """List onboarding checklists. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
     docs = list(_coll().find())

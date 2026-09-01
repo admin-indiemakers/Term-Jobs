@@ -47,6 +47,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     wo_coll = db["work_orders"]
 
     # Determine tenant-scoped requisition IDs
+    # For team overview: HMs see ALL candidates in their tenant (not just their own reqs)
     from modules.requisition.domain.models import Requisition
     tenant_req_ids: set[str] = set()
     if user.role == "Super Admin":
@@ -55,8 +56,6 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
         from modules.shared.db import get_session
         with get_session() as session:
             filters = [Requisition.tenant_id == user.tenant_id]
-            if user.role == "Hiring Manager":
-                filters.append(Requisition.created_by == user.id)
             tenant_req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
 
     # Build email -> canonical candidate_id mapping
@@ -91,6 +90,13 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
             id_set.add(cid)
             if email:
                 email_to_id[email] = cid
+
+    # Fallback: if no candidates found via requisitions, show ALL active work orders for tenant
+    if not id_set and user.role != "Super Admin":
+        for doc in wo_coll.find({"status": "ACTIVE", "tenant_id": user.tenant_id}):
+            cid = doc.get("candidate_id")
+            if cid:
+                id_set.add(cid)
 
     result = list(id_set)
     if use_cache:
