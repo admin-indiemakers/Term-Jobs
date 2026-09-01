@@ -314,6 +314,13 @@ def list_users(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list users",
         )
+    
+    tenant_ids = {u.tenant_id for u in users if u.tenant_id}
+    tenant_map = {}
+    if tenant_ids:
+        tenants = db.query(Tenant).filter(Tenant.id.in_(tenant_ids)).all()
+        tenant_map = {t.id: t for t in tenants}
+
     return [
         UserListResponse(
             id=u.id,
@@ -321,8 +328,8 @@ def list_users(
             name=u.name,
             role=u.role,
             tenant_id=u.tenant_id,
-            tenant_name=_tenant_name(u.tenant_id, db),
-            tenant_type=_tenant_type(u.tenant_id, db),
+            tenant_name=tenant_map[u.tenant_id].name if u.tenant_id in tenant_map else "Unknown Tenant",
+            tenant_type=tenant_map[u.tenant_id].tenant_type if u.tenant_id in tenant_map else "client",
             department=u.department or "",
             is_active=u.is_active,
             created_by=u.created_by,
@@ -727,22 +734,85 @@ def list_portal_users(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """List all Candidate users created by this Recruiter's tenant."""
-    users = db.query(User).filter(
-        User.role == "Candidate",
-        User.tenant_id == current_user.tenant_id,
-    ).all()
-    return [
-        {
-            "id": u.id,
-            "email": u.email,
-            "name": u.name,
-            "candidate_id": getattr(u, 'candidate_id', '') or '',
-            "is_active": u.is_active,
-            "created_at": u.created_at.isoformat() if hasattr(u.created_at, 'isoformat') else str(u.created_at) if u.created_at else None,
-        }
-        for u in users
-    ]
+    """List accepted candidates with portal access status.
+    
+    For Hiring Managers: returns all accepted candidates from their requisitions.
+    For Recruiters: returns Candidate users in their tenant.
+    For Admin/Super Admin: returns all Candidate users in their tenant.
+    """
+    from modules.shared.db import db as mongo_db
+    
+    # Build accepted candidate IDs from submissions
+    accepted_subs = []
+    if current_user.role in ("Hiring Manager", "Admin", "HR", "Director", "Super Admin"):
+        # Get requisition IDs scoped to this user
+        from modules.requisition.domain.models import Requisition
+        with get_session() as req_session:
+            filters = [Requisition.tenant_id == current_user.tenant_id]
+            if current_user.role == "Hiring Manager":
+                filters.append(Requisition.created_by == current_user.id)
+            req_ids = {r.id for r in req_session.query(Requisition).filter(*filters).all()}
+        
+        # Get accepted submissions for these requisitions
+        sub_filter = {"status": {"$in": ["Accepted", "Hired"]}}
+        if current_user.role != "Super Admin":
+            if req_ids:
+                sub_filter["requisition_id"] = {"$in": list(req_ids)}
+            else:
+                sub_filter["requisition_id"] = {"$in": []}
+        
+        for sub in mongo_db["candidate_submissions"].find(sub_filter):
+            accepted_subs.append({
+                "candidate_id": sub.get("id"),
+                "candidate_name": sub.get("candidate_name", ""),
+                "candidate_email": sub.get("candidate_email", ""),
+                "requisition_id": sub.get("requisition_id", ""),
+                "vendor_name": sub.get("vendor_name", ""),
+            })
+    else:
+        # Recruiters see their own tenant's Candidate users
+        users = db.query(User).filter(
+            User.role == "Candidate",
+            User.tenant_id == current_user.tenant_id,
+        ).all()
+        return [
+            {
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "candidate_id": getattr(u, 'candidate_id', '') or '',
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat() if hasattr(u.created_at, 'isoformat') else str(u.created_at) if u.created_at else None,
+            }
+            for u in users
+        ]
+    
+    # Build map of existing portal users
+    portal_users = {}
+    for u in db.query(User).filter(User.role == "Candidate").all():
+        cid = getattr(u, 'candidate_id', '') or ''
+        if cid:
+            portal_users[cid] = u
+    
+    # Enrich accepted subs with portal user status + requisition title
+    results = []
+    for sub in accepted_subs:
+        cid = sub.get("candidate_id", "")
+        pu = portal_users.get(cid)
+        req_doc = mongo_db["requisitions"].find_one({"id": sub.get("requisition_id")}) if sub.get("requisition_id") else None
+        
+        results.append({
+            "candidate_id": cid,
+            "candidate_name": sub.get("candidate_name", ""),
+            "candidate_email": sub.get("candidate_email", ""),
+            "requisition_title": (req_doc or {}).get("title", ""),
+            "vendor_name": sub.get("vendor_name", ""),
+            "has_portal_access": pu is not None and pu.is_active,
+            "portal_user_id": pu.id if pu else None,
+            "portal_user_email": pu.email if pu else None,
+        })
+    
+    return results
 
 
 @router.post("/portal-users")
@@ -758,10 +828,10 @@ def create_or_update_portal_user(
       it updates the existing credentials and ensures is_active=True.
     - Otherwise, provisions a new Candidate user linked to this candidate_id.
     """
-    if current_user.role not in ("Recruiter", "Admin", "Super Admin"):
+    if current_user.role not in ("Recruiter", "Admin", "Super Admin", "Hiring Manager"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only recruiters and admins may provision candidate portal access",
+            detail="Only recruiters, admins, and hiring managers may provision candidate portal access",
         )
 
     email = (body.get("email") or "").strip().lower()
@@ -778,19 +848,17 @@ def create_or_update_portal_user(
 
     tenant_id = current_user.tenant_id
 
-    # 1. Search for existing Candidate user by candidate_id OR (tenant_id + email)
+    # 1. Search for existing Candidate user by candidate_id OR email (across all tenants)
     existing_user = None
     if candidate_id:
         existing_user = db.query(User).filter(
             User.role == "Candidate",
-            User.tenant_id == tenant_id,
             User.candidate_id == candidate_id,
         ).first()
 
     if not existing_user and email:
         existing_user = db.query(User).filter(
             User.role == "Candidate",
-            User.tenant_id == tenant_id,
             User.email == email,
         ).first()
 
@@ -799,6 +867,7 @@ def create_or_update_portal_user(
         existing_user.name = name
         existing_user.email = email
         existing_user.candidate_id = candidate_id
+        existing_user.tenant_id = tenant_id  # reassign to correct tenant
         if password:
             existing_user.password_hash = hash_password(password)
         existing_user.is_active = True
@@ -828,7 +897,32 @@ def create_or_update_portal_user(
             detail="Password must be at least 4 characters long",
         )
 
-    # 3. Create new Candidate user
+    # 3. Double-check via MongoDB directly (the ORM query might miss cross-tenant users)
+    from modules.shared.db import db as mongo_db
+    mongo_existing = mongo_db["users"].find_one({"email": email})
+    if mongo_existing:
+        # User exists in MongoDB but ORM didn't find it — update directly
+        mongo_db["users"].update_one(
+            {"_id": mongo_existing["_id"]},
+            {"$set": {
+                "name": name,
+                "candidate_id": candidate_id,
+                "tenant_id": tenant_id,
+                "password_hash": hash_password(password),
+                "is_active": True,
+            }}
+        )
+        return {
+            "ok": True,
+            "id": mongo_existing.get("id"),
+            "email": email,
+            "name": name,
+            "candidate_id": candidate_id,
+            "is_active": True,
+            "message": "Portal access created successfully",
+        }
+
+    # 4. Truly new user — create
     new_user = User(
         tenant_id=tenant_id,
         email=email,

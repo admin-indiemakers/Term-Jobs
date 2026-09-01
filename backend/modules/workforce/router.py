@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.shared.db import db
+from modules.shared.cache import cache
 
 router = APIRouter(prefix="/workforce", tags=["Workforce"])
 
@@ -26,56 +27,96 @@ router = APIRouter(prefix="/workforce", tags=["Workforce"])
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _get_hm_team_candidate_ids(user: User) -> list[str]:
+def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     """Return candidate_ids for this HM's team.
+    
+    For Hiring Managers: scoped to only requisitions they created.
+    For Admin/HR/Director: scoped to their tenant.
+    For Super Admin: sees all.
     
     Deduplicates by email: if the same person appears in both candidate_submissions
     and work_orders with different IDs, keeps the submission ID (canonical).
     """
+    cache_key = f"team_ids:{user.id}:{user.role}:{user.tenant_id}"
+    if use_cache:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
+
     sub_coll = db["candidate_submissions"]
     wo_coll = db["work_orders"]
-    users_coll = db["users"]
+
+    # Determine tenant-scoped requisition IDs
+    # For team overview: HMs see ALL candidates in their tenant (not just their own reqs)
+    from modules.requisition.domain.models import Requisition
+    tenant_req_ids: set[str] = set()
+    if user.role == "Super Admin":
+        tenant_req_ids = None  # no filter
+    else:
+        from modules.shared.db import get_session
+        with get_session() as session:
+            filters = [Requisition.tenant_id == user.tenant_id]
+            tenant_req_ids = {r.id for r in session.query(Requisition).filter(*filters).all()}
 
     # Build email -> canonical candidate_id mapping
     email_to_id: dict[str, str] = {}
     id_set: set[str] = set()
 
-    # Step 1: ALL accepted / hired candidates from submissions (canonical source)
-    for status_val in ["Accepted", "Hired"]:
-        for doc in sub_coll.find({"status": status_val}):
-            cid = doc.get("id")
-            email = (doc.get("candidate_email") or doc.get("email") or "").lower().strip()
-            if cid and email:
-                email_to_id[email] = cid
-                id_set.add(cid)
-            elif cid:
-                id_set.add(cid)
+    # Step 1: Accepted / hired candidates from submissions (canonical source)
+    sub_filter: dict = {"status": {"$in": ["Accepted", "Hired"]}}
+    if tenant_req_ids is not None:
+        sub_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
+    for doc in sub_coll.find(sub_filter):
+        cid = doc.get("id")
+        email = (doc.get("candidate_email") or doc.get("email") or "").lower().strip()
+        if cid and email:
+            email_to_id[email] = cid
+            id_set.add(cid)
+        elif cid:
+            id_set.add(cid)
 
     # Step 2: Active work orders — merge by email to avoid duplicates
-    for doc in wo_coll.find({"status": "ACTIVE"}):
+    wo_filter: dict = {"status": "ACTIVE"}
+    if tenant_req_ids is not None:
+        wo_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
+    for doc in wo_coll.find(wo_filter):
         cid = doc.get("candidate_id")
         email = (doc.get("candidate_email") or "").lower().strip()
         if not cid:
             continue
         if email and email in email_to_id:
-            # Same person already found via submissions — skip this work order ID
             pass
         else:
-            # New person only found via work orders
             id_set.add(cid)
             if email:
                 email_to_id[email] = cid
 
-    return list(id_set)
+    # Fallback: if no candidates found via requisitions, show ALL active work orders for tenant
+    if not id_set and user.role != "Super Admin":
+        for doc in wo_coll.find({"status": "ACTIVE", "tenant_id": user.tenant_id}):
+            cid = doc.get("candidate_id")
+            if cid:
+                id_set.add(cid)
+
+    result = list(id_set)
+    if use_cache:
+        cache.set(cache_key, result, ttl=30)  # cache for 30s
+    return result
 
 
-def _build_team_batch(cand_ids: list[str]) -> dict:
+def _build_team_batch(cand_ids: list[str], use_cache: bool = True) -> dict:
     """Batch-fetch all related data for a list of candidate IDs.
     Returns dict with keys: work_orders, submissions, onboardings, timesheets, users
     Each value is a dict keyed by candidate_id for O(1) lookup.
     """
     if not cand_ids:
         return {"work_orders": {}, "submissions": {}, "onboardings": {}, "timesheets": {}, "users": {}}
+
+    cache_key = f"team_batch:{':'.join(sorted(cand_ids[:20]))}"
+    if use_cache:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     wo_coll = db["work_orders"]
     ts_coll = db["timesheets"]
@@ -185,12 +226,133 @@ def _build_team_batch(cand_ids: list[str]) -> dict:
         doc.pop("_id", None)
         user_map[doc.get("candidate_id")] = doc
 
-    return {
+    result = {
         "work_orders": wo_map,
         "submissions": sub_map,
         "onboardings": ob_map,
         "timesheets": ts_map,
         "users": user_map,
+    }
+    if use_cache:
+        cache.set(cache_key, result, ttl=30)  # cache for 30s
+    return result
+
+
+# ---------------------------------------------------------------------------
+# GET /api/workforce/dashboard — combined team + stats (single fetch)
+# ---------------------------------------------------------------------------
+
+@router.get("/dashboard")
+def get_workforce_dashboard(current_user: User = Depends(get_current_user)):
+    """Combined endpoint: team list + stats + pending counts in ONE call.
+    Replaces 6 separate API calls the frontend was making."""
+    if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    cand_ids = _get_hm_team_candidate_ids(current_user)
+    if not cand_ids:
+        return {
+            "status": "success",
+            "team": [],
+            "stats": {"total_team": 0, "active": 0, "onboarding": 0, "pending_timesheets": 0, "pending_expenses": 0, "approved_this_week": 0},
+            "pending_issues": 0,
+        }
+
+    # Single batch fetch — covers team, work orders, timesheets, onboardings
+    batch = _build_team_batch(cand_ids)
+    wo_map = batch["work_orders"]
+    sub_map = batch["submissions"]
+    ob_map = batch["onboardings"]
+    ts_map = batch["timesheets"]
+    user_map = batch["users"]
+
+    # Build team list + compute stats in same pass
+    team = []
+    active_count = 0
+    onboarding_count = 0
+
+    for cid in cand_ids:
+        wo = wo_map.get(cid, {})
+        sub = sub_map.get(cid, {})
+        ob = ob_map.get(cid, {})
+
+        ob_items = ob.get("items", [])
+        ob_enabled = [i for i in ob_items if i.get("enabled", True)]
+        ob_completed = [i for i in ob_enabled if i.get("completed", False)]
+        ob_pct = round((len(ob_completed) / len(ob_enabled)) * 100) if ob_enabled else 0
+        ob_status = ob.get("status") or ("completed" if ob_pct == 100 else "in_progress" if ob_pct > 0 else "not_started")
+        overall_status = "ACTIVE" if ob_status == "completed" else "ONBOARDING"
+
+        if overall_status == "ACTIVE":
+            active_count += 1
+        else:
+            onboarding_count += 1
+
+        cand_user = user_map.get(cid, {})
+        cand_name = sub.get("candidate_name") or wo.get("candidate_name") or cand_user.get("name") or ""
+        cand_email = sub.get("candidate_email") or wo.get("candidate_email") or cand_user.get("email") or ""
+        latest_ts = ts_map.get(cid, {})
+
+        team.append({
+            "candidate_id": cid,
+            "candidate_name": cand_name,
+            "candidate_email": cand_email,
+            "requisition_title": wo.get("requisition_title") or sub.get("requisition_title") or "",
+            "vendor_name": wo.get("vendor_name") or sub.get("vendor_name") or "",
+            "company_name": wo.get("company_name") or "",
+            "work_order_number": wo.get("work_order_number", ""),
+            "start_date": wo.get("start_date", ""),
+            "end_date": wo.get("end_date", ""),
+            "location": wo.get("location", ""),
+            "work_arrangement": wo.get("work_arrangement", ""),
+            "engagement_type": wo.get("engagement_type", ""),
+            "status": overall_status,
+            "onboarding_status": ob_status,
+            "onboarding_pct": ob_pct,
+            "onboarding_items_total": len(ob_enabled),
+            "onboarding_items_completed": len(ob_completed),
+            "latest_timesheet_status": latest_ts.get("status", ""),
+            "latest_timesheet_id": latest_ts.get("id", ""),
+            "latest_timesheet_week": latest_ts.get("week_start_date", ""),
+            "latest_timesheet_hours": latest_ts.get("total_hours", 0),
+            "reporting_manager": wo.get("reporting_manager", ""),
+        })
+
+    team.sort(key=lambda t: (0 if t["status"] == "ONBOARDING" else 1, t["candidate_name"]))
+
+    # Stats — use cached counts where possible
+    ts_coll = db["timesheets"]
+    exp_coll = db["candidate_expenses"]
+    pending_ts = ts_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": "SUBMITTED"})
+    pending_exp = exp_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": {"$in": ["Pending", "Submitted"]}})
+
+    today = datetime.now(timezone.utc).date()
+    week_monday = today - timedelta(days=today.weekday())
+    week_start = week_monday.isoformat()
+    approved_week = ts_coll.count_documents({
+        "candidate_id": {"$in": cand_ids},
+        "status": "APPROVED",
+        "approved_at": {"$gte": week_start},
+    })
+
+    # Pending issues count
+    pending_issues = db["onboarding_issues"].count_documents({
+        "candidate_id": {"$in": cand_ids},
+        "status": {"$in": ["Open", "Pending", "In Progress"]}
+    })
+
+    return {
+        "status": "success",
+        "team": team,
+        "stats": {
+            "total_team": len(cand_ids),
+            "active": active_count,
+            "onboarding": onboarding_count,
+            "pending_timesheets": pending_ts,
+            "pending_expenses": pending_exp,
+            "approved_this_week": approved_week,
+        },
+        "pending_issues": pending_issues,
     }
 
 

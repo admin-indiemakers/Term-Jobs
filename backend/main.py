@@ -39,6 +39,7 @@ from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
 from modules.shared.db import get_session, init_db
+from modules.shared.cache import cache as _cache
 from modules.resume_screener.router import router as resume_screener_router
 from modules.interview.router import router as interview_router
 from modules.onboarding.router import router as onboarding_router
@@ -272,6 +273,12 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
     if current_user.role == "Super Admin":
         return req
     if req.tenant_id == current_user.tenant_id:
+        # Hiring Manager can only access requisitions they created
+        if current_user.role == "Hiring Manager" and req.created_by != current_user.id:
+            raise HTTPException(
+                status_code=403,
+                detail="You do not have access to this requisition",
+            )
         return req
     # Vendors may view requisitions of companies that engaged them.
     if current_user.role == "Recruiter":
@@ -299,15 +306,22 @@ def _require_writable(current_user: User) -> None:
         )
 
 
+_auto_close_last_run: float = 0.0  # module-level debounce
+
+
 def _auto_close_expired() -> None:
     """Auto-close Published requisitions whose submission deadline has passed.
 
-    Lazily swept on every list/detail read so vendors stop seeing expired roles
-    without a background scheduler. Safe to run repeatedly â€” idempotent.
+    Debounced: runs at most once per 5 minutes to avoid repeated DB scans.
     """
+    global _auto_close_last_run
+    import time as _time
     import datetime as _dt
 
-    from modules.requisition.domain.state import StateMachine
+    now = _time.time()
+    if now - _auto_close_last_run < 300:  # 5 min debounce
+        return
+    _auto_close_last_run = now
 
     with get_session() as session:
         # Only query PUBLISHED requisitions (avoids full table scan)
@@ -649,6 +663,12 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
 def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
+    # Cache requisitions per user for 30s to avoid repeated DB scans
+    _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    _cached = _cache.get(_cache_key)
+    if _cached is not None:
+        return _cached
+
     _auto_close_expired()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
@@ -667,12 +687,19 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 models.Requisition.tenant_id.in_(engaged_company_ids or {""}),
                 models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value,
             )
+        elif current_user.role == "Hiring Manager":
+            # Hiring Managers see only requisitions they created
+            query = query.filter(
+                models.Requisition.tenant_id == current_user.tenant_id,
+                models.Requisition.created_by == current_user.id,
+            )
         else:
+            # Admin, HR, Director, etc. see all requisitions in their tenant
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
         profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}
         is_vendor = current_user.role == "Recruiter"
-        return [
+        result = [
             {
                 "id": r.id,
                 "ref": f"REQ-{r.id[:6].upper()}",
@@ -691,6 +718,8 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             }
             for r in rows
         ]
+        _cache.set(_cache_key, result, ttl=30)  # 30s cache
+        return result
 
 
 @app.get("/requisitions/{requisition_id}")

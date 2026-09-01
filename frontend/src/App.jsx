@@ -28,6 +28,7 @@ import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
+import CandidatePortalAccess from './pages/candidates/CandidatePortalAccess';
 import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
 import ReportedIssues from './pages/candidates/ReportedIssues';
 import TeamOverview from './pages/workforce/TeamOverview';
@@ -104,6 +105,7 @@ export default function App() {
           <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
           <Route path="candidates/accepted" element={<AcceptedCandidates />} />
           <Route path="candidates/onboarding" element={<OnboardingManagement />} />
+          <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />
           <Route path="candidates/issues" element={<ReportedIssues />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
           <Route path="workforce/team" element={<TeamOverview />} />

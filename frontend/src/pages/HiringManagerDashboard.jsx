@@ -38,18 +38,17 @@ export default function HiringManagerDashboard() {
   const [openIssues, setOpenIssues] = useState([]);
   const [workforceStats, setWorkforceStats] = useState({ total_team: 0, active: 0, onboarding: 0, pending_timesheets: 0 });
 
-  // Fetch real data on mount
+  // Fetch real data on mount — uses combined dashboard endpoint to reduce cold starts
   const loadDashboardData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [reqsData, shortlistedData, acceptedData, obData, issuesData, wfData] = await Promise.all([
+      // Single combined endpoint replaces: stats + onboarding + issues + workforce
+      const [reqsData, shortlistedData, acceptedData, wfDash] = await Promise.all([
         request('/requisitions', { token }).catch(() => []),
         request('/candidates/shortlisted', { token }).catch(() => []),
         request('/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding', { token }).catch(() => []),
-        request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/workforce/stats', { token }).catch(() => null),
+        request('/api/workforce/dashboard', { token }).catch(() => null),
       ]);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
@@ -61,12 +60,24 @@ export default function HiringManagerDashboard() {
       const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
       setAcceptedCandidates(aList);
 
-      const oList = Array.isArray(obData) ? obData : obData?.candidates || [];
-      setOnboardingList(oList);
-
-      const iList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
-      setOpenIssues(iList.filter((i) => i.status === 'open'));
-      if (wfData?.stats) setWorkforceStats(wfData.stats);
+      if (wfDash) {
+        // Onboarding list from team data
+        const team = wfDash.team || [];
+        setOnboardingList(team.map(t => ({
+          candidate_id: t.candidate_id,
+          candidate_name: t.candidate_name,
+          requisition_title: t.requisition_title,
+          vendor_name: t.vendor_name,
+          status: t.onboarding_status,
+          completion_percentage: t.onboarding_pct,
+        })));
+        // Open issues
+        if (wfDash.pending_issues !== undefined) {
+          setOpenIssues([]); // count only; details loaded on demand
+        }
+        // Stats
+        if (wfDash.stats) setWorkforceStats(wfDash.stats);
+      }
     } catch (err) {
       console.error('Failed to load hiring manager dashboard data:', err);
       setError(err.message || 'Unable to load live dashboard statistics.');
@@ -168,6 +179,38 @@ export default function HiringManagerDashboard() {
 
   const tenantName = user?.tenant_name || 'Bearitt';
   const userName = user?.name || 'HR';
+
+  // Skeleton loading UI
+  if (loading) {
+    return (
+      <div className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0 p-1">
+        <div className="animate-pulse space-y-4">
+          {/* Header skeleton */}
+          <div className="flex justify-between items-center">
+            <div className="space-y-2">
+              <div className="h-3 w-32 bg-gray-200 rounded" />
+              <div className="h-8 w-64 bg-gray-200 rounded" />
+              <div className="h-3 w-80 bg-gray-100 rounded" />
+            </div>
+            <div className="h-10 w-36 bg-gray-200 rounded-xl" />
+          </div>
+          {/* Metric cards skeleton */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="h-24 bg-gray-100 rounded-2xl" />
+            ))}
+          </div>
+          {/* Table skeleton */}
+          <div className="space-y-2">
+            <div className="h-4 w-40 bg-gray-200 rounded" />
+            {[1, 2, 3, 4, 5].map(i => (
+              <div key={i} className="h-12 bg-gray-100 rounded-xl" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -17,7 +17,7 @@ export default function TeamOverview() {
     setLoading(true);
     setError('');
     try {
-      const data = await request('/api/workforce/team', { token });
+      const data = await request('/api/workforce/dashboard', { token });
       setTeam(data?.team || []);
     } catch (err) {
       console.error('Failed to load team:', err);
@@ -141,11 +141,19 @@ export default function TeamOverview() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-[0.88rem] text-[#8a8a85]">
-                      Loading team data...
-                    </td>
-                  </tr>
+                  <>
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="px-5 py-3"><div className="h-4 w-28 bg-gray-200 rounded" /></td>
+                        <td className="px-5 py-3"><div className="h-4 w-32 bg-gray-200 rounded" /></td>
+                        <td className="px-5 py-3"><div className="h-4 w-20 bg-gray-200 rounded" /></td>
+                        <td className="px-5 py-3"><div className="h-5 w-16 bg-gray-200 rounded-full" /></td>
+                        <td className="px-5 py-3"><div className="h-4 w-16 bg-gray-200 rounded" /></td>
+                        <td className="px-5 py-3"><div className="h-5 w-20 bg-gray-200 rounded-full" /></td>
+                        <td className="px-5 py-3"><div className="h-4 w-20 bg-gray-200 rounded" /></td>
+                      </tr>
+                    ))}
+                  </>
                 ) : error ? (
                   <tr>
                     <td colSpan={7} className="px-5 py-12 text-center">
