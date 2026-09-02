@@ -190,7 +190,6 @@ def raise_onboarding_issue(data: dict, authorization: str | None = Header(None))
 def list_onboarding_issues(authorization: str | None = Header(None)):
     """List raised onboarding issues. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
-    docs = list(_issues_coll().find())
     if user and user["role"] not in ("Super Admin", "Admin", "HR", "Director"):
         # Hiring Manager: only see issues for candidates in their requisitions
         from modules.requisition.domain.models import Requisition
@@ -205,7 +204,12 @@ def list_onboarding_issues(authorization: str | None = Header(None)):
         cand_ids = set()
         for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)} if req_ids else {"$in": []}}, {"id": 1}):
             cand_ids.add(sd.get("id"))
-        docs = [d for d in docs if d.get("candidate_id") in cand_ids]
+        if cand_ids:
+            docs = list(_issues_coll().find({"candidate_id": {"$in": list(cand_ids)}}))
+        else:
+            docs = []
+    else:
+        docs = list(_issues_coll().find())
     for d in docs:
         d.pop("_id", None)
     return docs
@@ -542,7 +546,6 @@ Rules:
 def list_onboarding(authorization: str | None = Header(None)):
     """List onboarding checklists. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
-    docs = list(_coll().find())
     if user and user["role"] == "Hiring Manager":
         from modules.requisition.domain.models import Requisition
         from modules.shared.db import get_session as _gs
@@ -557,9 +560,14 @@ def list_onboarding(authorization: str | None = Header(None)):
             cand_ids = set()
             for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)}}, {"id": 1}):
                 cand_ids.add(sd.get("id"))
-            docs = [d for d in docs if d.get("candidate_id") in cand_ids]
+            if cand_ids:
+                docs = list(_coll().find({"candidate_id": {"$in": list(cand_ids)}}))
+            else:
+                docs = []
         else:
             docs = []
+    else:
+        docs = list(_coll().find())
     for d in docs:
         d.pop("_id", None)
     return docs
