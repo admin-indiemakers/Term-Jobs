@@ -548,7 +548,12 @@ def list_tenants(
             detail="You are not allowed to list tenants",
         )
     result = [
-        TenantResponse(id=t.id, name=t.name, tenant_type=t.tenant_type)
+        TenantResponse(
+            id=t.id,
+            name=t.name,
+            tenant_type=t.tenant_type,
+            created_at=str(t.created_at or ""),
+        )
         for t in sorted(tenants, key=lambda t: (t.tenant_type, t.name))
     ]
     _cache.set(_cache_key, result, ttl=30)

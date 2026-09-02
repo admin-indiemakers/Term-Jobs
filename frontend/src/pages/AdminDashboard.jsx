@@ -1,61 +1,108 @@
-import { useEffect, useState } from 'react';
-import { request, API_BASE_URL } from '../api/client';
+import { useEffect, useState, useMemo } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import StatusBadge from '../components/StatusBadge';
-import { Icons, StatCard, WelcomeBanner } from '../components/Dashboard';
+import {
+  Users,
+  Building2,
+  Briefcase,
+  Layers,
+  Calendar,
+  KeyRound,
+  UserPlus,
+  ArrowRight,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Shield,
+  X,
+  Loader2,
+  Lock,
+  ChevronRight
+} from 'lucide-react';
 
 function formatDate(iso) {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso.slice(0, 10);
+    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
   } catch {
     return iso;
   }
 }
 
-function rolePill(role) {
-  const map = {
-    'Super Admin': 'role-superadmin',
-    Admin: 'role-admin',
-    HR: 'role-hr',
-    'Hiring Manager': 'role-hiringmanager',
-    Recruiter: 'role-recruiter',
-    Director: 'role-director',
-  };
-  return <span className={`role-pill ${map[role] || 'role-admin'}`}>{role}</span>;
+function StatusBadge({ status }) {
+  const s = (status || '').toLowerCase();
+  if (s === 'open' || s === 'published' || s === 'active') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        {status || 'Open'}
+      </span>
+    );
+  }
+  if (s === 'pending_approval' || s === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        Pending Approval
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+      {status || 'Draft'}
+    </span>
+  );
 }
 
-const EMPTY_FORM = {
-  email: '',
+const EMPTY_INVITE = {
+  role: 'Hiring Manager',
   name: '',
+  email: '',
   password: '',
-};
-
-const EMPTY_PWD = {
-  current_password: '',
-  new_password: '',
+  department: '',
 };
 
 export default function AdminDashboard() {
-  const { token, user } = useAuth();
+  const { user, token } = useAuth();
+  const navigate = useNavigate();
+
   const [users, setUsers] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
   const [vendors, setVendors] = useState([]);
+  const [calConfig, setCalConfig] = useState({ provider: null, status: 'disconnected', connected_email: null });
   const [loading, setLoading] = useState(true);
-  const [savingVendors, setSavingVendors] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-  const [pwdForm, setPwdForm] = useState(EMPTY_PWD);
+  const [teamTab, setTeamTab] = useState('managers'); // 'managers' | 'directors' | 'vendors'
+
+  // Modals state
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showCalModal, setShowCalModal] = useState(false);
+
+  // Invite Form
+  const [inviteForm, setInviteForm] = useState(EMPTY_INVITE);
+  const [submittingInvite, setSubmittingInvite] = useState(false);
+
+  // Password Form
+  const [pwdForm, setPwdForm] = useState({ current_password: '', new_password: '' });
   const [changingPwd, setChangingPwd] = useState(false);
-  const [edit, setEdit] = useState(null);
-  const [editing, setEditing] = useState(false);
-  const [calConfig, setCalConfig] = useState({ provider: null, status: 'disconnected', connected_email: null });
-  const [calProviders, setCalProviders] = useState([]);
-  const [savingCalendar, setSavingCalendar] = useState(false);
+
+  // Cal.com Form
+  const [calForm, setCalForm] = useState({
+    cal_link: '',
+    cal_username: '',
+    event_slug: '30min',
+    default_duration: 60,
+    default_timezone: 'Asia/Kolkata',
+    instructions: '',
+  });
+  const [savingCal, setSavingCal] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -63,39 +110,123 @@ export default function AdminDashboard() {
       request('/api/auth/users', { token }),
       request('/requisitions', { token }),
       request('/api/auth/vendors', { token }),
-      request('/api/calendar/config', { token }).catch(() => ({ provider: null, status: 'disconnected', connected_email: null })),
-      request('/api/calendar/providers', { token }).catch(() => ({ providers: [] })),
+      request('/api/calendar/config', { token }).catch(() => null),
     ])
-      .then(([usersRes, reqsRes, vendorsRes, calConfigRes, calProvidersRes]) => {
+      .then(([usersRes, reqsRes, vendorsRes, calConfigRes]) => {
         setUsers(usersRes || []);
         setRequisitions(reqsRes || []);
         setVendors(vendorsRes || []);
-        setCalConfig(calConfigRes || { provider: null, status: 'disconnected', connected_email: null });
-        setCalProviders(calProvidersRes?.providers || []);
+        if (calConfigRes) {
+          setCalConfig(calConfigRes);
+          setCalForm({
+            cal_link: calConfigRes.cal_link || '',
+            cal_username: calConfigRes.cal_username || '',
+            event_slug: calConfigRes.event_slug || '30min',
+            default_duration: calConfigRes.default_duration || 60,
+            default_timezone: calConfigRes.default_timezone || 'Asia/Kolkata',
+            instructions: calConfigRes.instructions || '',
+          });
+        }
         setError('');
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [token]);
-
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const cal = params.get('calendar');
-    if (cal === 'connected') {
-      setSuccess('Company calendar connected successfully.');
-    } else if (cal === 'error') {
-      setError('Could not connect the calendar. Please try again.');
+    load();
+  }, [token]);
+
+  // 2-second auto-dismiss timer for success notifications
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess('');
+      }, 2000);
+      return () => clearTimeout(timer);
     }
-    if (cal) {
-      window.history.replaceState({}, '', window.location.pathname);
+  }, [success]);
+
+  const hiringManagers = useMemo(() => users.filter((u) => u.role === 'Hiring Manager'), [users]);
+  const directors = useMemo(() => users.filter((u) => u.role === 'Director'), [users]);
+  const pendingApprovals = useMemo(
+    () => requisitions.filter((r) => (r.status || '').toLowerCase() === 'pending_approval'),
+    [requisitions]
+  );
+  const activePublished = useMemo(
+    () =>
+      requisitions.filter(
+        (r) =>
+          (r.status || '').toLowerCase() === 'open' ||
+          (r.status || '').toLowerCase() === 'published' ||
+          (r.status || '').toLowerCase() === 'active'
+      ),
+    [requisitions]
+  );
+  const engagedVendors = useMemo(() => vendors.filter((v) => v.engaged), [vendors]);
+
+  const displayedTeamMembers = useMemo(() => {
+    if (teamTab === 'managers') return hiringManagers;
+    if (teamTab === 'directors') return directors;
+    return engagedVendors;
+  }, [teamTab, hiringManagers, directors, engagedVendors]);
+
+  const handleInviteSubmit = async (e) => {
+    e.preventDefault();
+    if (!inviteForm.name.trim() || !inviteForm.email.trim() || !inviteForm.password.trim()) {
+      setError('Please fill in all required fields.');
+      return;
     }
-  }, []);
+    setSubmittingInvite(true);
+    setError('');
+    setSuccess('');
+    try {
+      await request('/api/auth/users', {
+        method: 'POST',
+        token,
+        body: {
+          role: inviteForm.role,
+          name: inviteForm.name.trim(),
+          email: inviteForm.email.trim(),
+          password: inviteForm.password,
+          department: inviteForm.role === 'Hiring Manager' ? inviteForm.department.trim() : undefined,
+        },
+      });
+      setSuccess(`${inviteForm.role} account created for ${inviteForm.email}.`);
+      setInviteForm(EMPTY_INVITE);
+      setShowInviteModal(false);
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to create team member');
+    } finally {
+      setSubmittingInvite(false);
+    }
+  };
+
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    setChangingPwd(true);
+    setError('');
+    setSuccess('');
+    try {
+      await request('/api/auth/change-password', {
+        method: 'POST',
+        token,
+        body: pwdForm,
+      });
+      setSuccess('Password updated successfully.');
+      setPwdForm({ current_password: '', new_password: '' });
+      setShowPasswordModal(false);
+    } catch (err) {
+      setError(err.message || 'Failed to update password');
+    } finally {
+      setChangingPwd(false);
+    }
+  };
 
   const handleSaveCalConfig = async (e) => {
     e?.preventDefault();
-    setSavingCalendar(true);
+    setSavingCal(true);
     setError('');
     setSuccess('');
     try {
@@ -105,579 +236,528 @@ export default function AdminDashboard() {
         body: {
           provider: 'cal',
           status: 'connected',
-          cal_link: calConfig.cal_link || 'https://cal.com/',
-          cal_username: calConfig.cal_username || '',
-          event_slug: calConfig.event_slug || '30min',
-          default_duration: Number(calConfig.default_duration) || 60,
-          default_timezone: calConfig.default_timezone || 'Asia/Kolkata',
-          instructions: calConfig.instructions || '',
+          cal_link: calForm.cal_link || 'https://cal.com/',
+          cal_username: calForm.cal_username || '',
+          event_slug: calForm.event_slug || '30min',
+          default_duration: Number(calForm.default_duration) || 60,
+          default_timezone: calForm.default_timezone || 'Asia/Kolkata',
+          instructions: calForm.instructions || '',
         },
       });
       setCalConfig(updated);
-      setSuccess('Cal.com / Cal.diy scheduling settings saved successfully.');
+      setSuccess('Cal.com scheduling settings updated successfully.');
+      setShowCalModal(false);
     } catch (err) {
-      setError(err.message || 'Failed to save Cal.com settings.');
+      setError(err.message || 'Failed to save scheduling configuration.');
     } finally {
-      setSavingCalendar(false);
+      setSavingCal(false);
     }
   };
-
-  const toggleVendor = (id) => {
-    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, engaged: !v.engaged } : v)));
-    setError('');
-    setSuccess('');
-  };
-
-  const setVendorCandidateLimit = (id, val) => {
-    const num = val === '' ? null : Math.max(1, Math.round(Number(val) || 0));
-    setVendors((prev) => prev.map((v) => (v.id === id ? { ...v, candidate_limit: num } : v)));
-    setError('');
-    setSuccess('');
-  };
-
-  const saveVendors = async () => {
-    setSavingVendors(true);
-    setError('');
-    setSuccess('');
-    try {
-      const selected = vendors.filter((v) => v.engaged);
-      const payload = {
-        vendor_tenant_ids: selected.map((v) => v.id),
-        engagements: selected.map((v) => ({
-          vendor_tenant_id: v.id,
-          candidate_limit: v.candidate_limit != null && v.candidate_limit !== '' ? Number(v.candidate_limit) : null,
-        })),
-      };
-      const updated = await request('/api/auth/vendors', {
-        method: 'PUT',
-        token,
-        body: payload,
-      });
-      setVendors(updated || []);
-      setSuccess(`Vendor partnerships updated — ${updated.filter((v) => v.engaged).length} engaged.`);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSavingVendors(false);
-    }
-  };
-
-  const handleInput = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError('');
-    setSuccess('');
-  };
-
-  const handleCreateUser = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError('');
-    setSuccess('');
-    try {
-      const payload = {
-        email: form.email,
-        name: form.name,
-        password: form.password,
-        role: 'Hiring Manager',
-      };
-      await request('/api/auth/users', {
-        method: 'POST',
-        token,
-        body: payload,
-      });
-      setSuccess(`Hiring Manager account created for ${form.email}.`);
-      setForm({ ...EMPTY_FORM });
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDeleteUser = async () => {
-    if (!confirmDelete) return;
-    setDeleting(true);
-    setError('');
-    setSuccess('');
-    try {
-      await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
-      setSuccess(`${confirmDelete.role} account ${confirmDelete.email} deleted.`);
-      setConfirmDelete(null);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  const handlePwdInput = (e) => {
-    setPwdForm({ ...pwdForm, [e.target.name]: e.target.value });
-    setError('');
-    setSuccess('');
-    
-  };
-
-  const openEdit = (u) => {
-    setEdit({ id: u.id, email: u.email, name: u.name || '', password: '' });
-    setError('');
-    setSuccess('');
-  };
-
-  const handleEditInput = (e) => {
-    setEdit({ ...edit, [e.target.name]: e.target.value });
-  };
-
-  const handleSaveEdit = async (e) => {
-    e.preventDefault();
-    if (!edit) return;
-    setEditing(true);
-    setError('');
-    setSuccess('');
-    try {
-      const payload = {};
-      if (edit.email !== '') payload.email = edit.email;
-      if (edit.name !== '') payload.name = edit.name;
-      if (edit.password) payload.password = edit.password;
-      await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
-      setSuccess(`Hiring Manager account ${edit.email} updated.`);
-      setEdit(null);
-      load();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setEditing(false);
-    }
-  };
-
-  const handleChangePassword = async (e) => {
-    e.preventDefault();
-    setChangingPwd(true);
-    setError('');
-    setSuccess('');
-    try {
-      await request('/api/auth/change-password', {
-        method: 'POST',
-        token,
-        body: { current_password: pwdForm.current_password, new_password: pwdForm.new_password },
-      });
-      setSuccess('Your password has been updated.');
-      setPwdForm({ ...EMPTY_PWD });
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setChangingPwd(false);
-    }
-  };
-
-  const scrollToAddTeam = () => {
-    document.getElementById('add-team')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  const scrollToVendors = () => {
-    document.getElementById('vendor-grid')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
-  const hiringManagers = users.filter((u) => u.role === 'Hiring Manager');
-  const directors = users.filter((u) => u.role === 'Director');
-  const published = requisitions.filter((r) => r.status === 'Published').length;
-  const pending = requisitions.filter((r) => r.status === 'PendingApproval').length;
 
   return (
-    <div className="page">
-      <WelcomeBanner
-        title="Admin Console"
-        subtitle={`${user.tenant_name} workspace — manage your Hiring Managers and Directors, and oversee requisitions.`}
-      >
-        <button className="glow-btn" onClick={scrollToAddTeam}>
-          + Invite Team Member
-        </button>
-      </WelcomeBanner>
-
-      <div className="stat-grid">
-        <StatCard label="Hiring Managers" value={hiringManagers.length} icon={Icons.usersPlus} />
-        <StatCard label="Directors" value={directors.length} icon={Icons.shield} />
-        <StatCard label="Requisitions" value={requisitions.length} icon={Icons.briefcase} />
-        <StatCard label="Pending Approval" value={pending} icon={Icons.clock} />
-        <StatCard label="Published" value={published} icon={Icons.check} />
-      </div>
-
-      {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
-
-      <div className="glass-panel" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div className="form-panel-icon" style={{ width: '44px', height: '44px', borderRadius: '12px', background: '#eff6ff', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {Icons.users}
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a', margin: 0 }}>Partner Vendors</h3>
-              <p className="muted" style={{ fontSize: '0.84rem', margin: '3px 0 0' }}>
-                {vendors.filter((v) => v.engaged).length} of {vendors.length} consultancy vendors engaged.
-              </p>
-            </div>
+    <div
+      className="w-full min-w-0 pb-8 space-y-4 text-left"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      {/* Top Header Card */}
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • COMPANY GOVERNANCE
           </div>
-          <button className="glow-btn" onClick={() => navigate('/dashboard/admin/partner-vendors')}>
-            Manage Vendors & Partnerships →
+          <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
+            {user?.tenant_name || 'Company'} Admin Console
+          </h1>
+          <p className="text-xs text-gray-500 font-normal mt-0.5 max-w-2xl">
+            Oversee team member provisioning, vendor consultancy partnerships, and candidate scheduling.
+          </p>
+
+          <div className="flex items-center gap-2 mt-3.5 flex-wrap">
+            <span className="px-3 py-1 rounded-full bg-black text-white text-xs font-bold shadow-2xs">
+              ● Admin
+            </span>
+            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+              {user?.tenant_name || 'Client'}
+            </span>
+            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+              {hiringManagers.length + directors.length} team members
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowPasswordModal(true)}
+            className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <KeyRound size={13} />
+            <span>Password</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowInviteModal(true)}
+            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <UserPlus size={14} />
+            <span>+ Invite Team Member</span>
           </button>
         </div>
       </div>
 
-      <div className="glass-panel" style={{ borderRadius: '18px', padding: '26px', marginBottom: '24px', background: '#ffffff', border: '1px solid #e2e8f0' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            <div style={{ width: '48px', height: '48px', borderRadius: '12px', background: '#0f172a', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800 }}>
-              📅
-            </div>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                  Cal.com / Cal.diy Integration
-                </h3>
-                <span style={{ background: '#ecfdf5', color: '#059669', fontSize: '0.72rem', fontWeight: 800, padding: '3px 10px', borderRadius: '999px', border: '1px solid #a7f3d0' }}>
-                  ✓ Connected & Active
-                </span>
+      {/* 5 Stat Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            HIRING MANAGERS
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {hiringManagers.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Department leads
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            DIRECTORS
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {directors.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Executive reviewers
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            REQUISITIONS
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {requisitions.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Total job requisitions
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            PENDING APPROVAL
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {pendingApprovals.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Awaiting sign-off
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            ACTIVE / OPEN
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {activePublished.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Live pipeline
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+          <AlertCircle size={15} className="shrink-0 text-red-500" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {success && (
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
+          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+          <span>{success}</span>
+        </div>
+      )}
+
+      {/* Middle Row: 2 Quick Action Hubs (Partner Vendors & Cal.com Scheduling) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+        {/* Partner Vendors Banner */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Layers size={15} />
               </div>
-              <p style={{ color: '#64748b', fontSize: '0.86rem', margin: '4px 0 0 0' }}>
-                Connect your Cal.com (or self-hosted Cal.diy) scheduling link. Hiring Managers will use this to generate live candidate booking slots.
-              </p>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-gray-900">Partner Vendors</div>
+                <div className="text-[11px] text-gray-500 truncate">
+                  {engagedVendors.length} of {vendors.length} consultancies engaged
+                </div>
+              </div>
             </div>
+            <Link
+              to="/dashboard/admin/partner-vendors"
+              className="px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-2xs transition-colors shrink-0 flex items-center gap-1"
+            >
+              <span>Manage</span>
+              <ChevronRight size={12} />
+            </Link>
           </div>
 
-          {calConfig.cal_link && calConfig.cal_link !== 'https://cal.com/' && (
-            <a
-              href={calConfig.cal_link.startsWith('http') ? calConfig.cal_link : `https://cal.com/${calConfig.cal_link}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '8px 16px',
-                borderRadius: '10px',
-                background: '#f1f5f9',
-                color: '#0f172a',
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                textDecoration: 'none',
-                border: '1px solid #cbd5e1',
-              }}
+          {/* Engaged Vendor Badges */}
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+            {engagedVendors.length === 0 ? (
+              <span className="text-[11px] text-gray-400 italic">No vendors engaged yet.</span>
+            ) : (
+              engagedVendors.map((v) => (
+                <span
+                  key={v.id}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200/90 text-[11px] font-semibold text-gray-800"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="font-bold text-gray-900">{v.name}</span>
+                  {v.candidate_limit != null && (
+                    <span className="text-[10px] text-gray-400 font-medium font-mono">({v.candidate_limit}/req)</span>
+                  )}
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Cal.com Integration Banner */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex items-center justify-between gap-3 hover:bg-gray-50/40 transition-colors">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0 shadow-2xs">
+              <Calendar size={16} />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-bold text-gray-900">Cal.com Scheduling</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              </div>
+              <div className="text-[11px] text-gray-500 truncate font-mono">
+                {calConfig?.cal_username ? `cal.com/${calConfig.cal_username}` : '30min interview configured'}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowCalModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-white border border-gray-200 hover:bg-gray-100 text-gray-800 text-xs font-bold shadow-2xs transition-colors shrink-0 cursor-pointer"
+          >
+            Configure
+          </button>
+        </div>
+      </div>
+
+      {/* Bottom Main 2-Column Overview (Balanced Height & Screen-Fitted) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left Column (6 cols): Requisitions Pipeline Table */}
+        <div className="lg:col-span-6 bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 tracking-tight">Requisitions Pipeline</h2>
+              <p className="text-[11px] text-gray-500 mt-0.5">Active hiring demands</p>
+            </div>
+            <Link
+              to="/dashboard/requisitions"
+              className="text-xs font-bold text-gray-900 hover:text-black flex items-center gap-1 transition-colors"
             >
-              🔗 Test Live Booking Page ↗
-            </a>
+              View all <ArrowRight size={12} />
+            </Link>
+          </div>
+
+          {loading ? (
+            <div className="py-10 text-center text-xs text-gray-400">Loading requisitions...</div>
+          ) : requisitions.length === 0 ? (
+            <div className="py-8 text-center text-xs text-gray-400">No requisitions in this workspace yet.</div>
+          ) : (
+            <div
+              className="overflow-x-auto overflow-y-auto pr-1"
+              style={{ maxHeight: '260px', minHeight: '200px' }}
+            >
+              <table className="w-full text-left text-xs border-collapse relative">
+                <thead className="sticky top-0 bg-white z-10 shadow-2xs">
+                  <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
+                    <th className="py-2.5 px-3">TITLE</th>
+                    <th className="py-2.5 px-3">STATUS</th>
+                    <th className="py-2.5 px-3 text-right">CREATED</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {requisitions.map((r) => (
+                    <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
+                      <td className="py-2.5 px-3">
+                        <div className="font-bold text-gray-900">{r.title || 'Untitled Requisition'}</div>
+                        <div className="text-[10px] text-gray-400">{r.department || 'General'}</div>
+                      </td>
+                      <td className="py-2.5 px-3">
+                        <StatusBadge status={r.status} />
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-gray-500 font-medium text-[11px]">
+                        {formatDate(r.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
 
-        <form onSubmit={handleSaveCalConfig}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '18px' }}>
+        {/* Right Column (6 cols): Team Members Tabbed Table Card */}
+        <div className="lg:col-span-6 bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between space-y-3">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
             <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Cal.com / Cal.diy Base URL or Handle
-              </label>
-              <input
-                type="text"
-                className="auth-input"
-                style={{ width: '100%', padding: '10px 14px', fontSize: '0.88rem' }}
-                placeholder="e.g. https://cal.com/bearitt-team or bearitt-hiring"
-                value={calConfig.cal_link || ''}
-                onChange={(e) => setCalConfig({ ...calConfig, cal_link: e.target.value })}
-              />
-              <span style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
-                Enter your free Cal.com URL (e.g. <code>https://cal.com/your-name</code>) or self-hosted Cal.diy link.
-              </span>
+              <h2 className="text-sm font-bold text-gray-900 tracking-tight">Team Members</h2>
+              <p className="text-[11px] text-gray-500 mt-0.5">Managers and Directors in this company</p>
             </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Default Event Type Slug
-              </label>
-              <input
-                type="text"
-                className="auth-input"
-                style={{ width: '100%', padding: '10px 14px', fontSize: '0.88rem' }}
-                placeholder="e.g. 30min or technical-interview"
-                value={calConfig.event_slug || '30min'}
-                onChange={(e) => setCalConfig({ ...calConfig, event_slug: e.target.value })}
-              />
-              <span style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '4px', display: 'block' }}>
-                The event type name on Cal.com (e.g. <code>30min</code>, <code>technical-round</code>).
-              </span>
+            {/* Tabs for Managers / Directors / Vendors */}
+            <div className="flex items-center gap-1 bg-gray-100/90 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setTeamTab('managers')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamTab === 'managers'
+                    ? 'bg-white text-black shadow-2xs'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Managers ({hiringManagers.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTeamTab('directors')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamTab === 'directors'
+                    ? 'bg-white text-black shadow-2xs'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Directors ({directors.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTeamTab('vendors')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamTab === 'vendors'
+                    ? 'bg-white text-black shadow-2xs'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Vendors ({engagedVendors.length})
+              </button>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '18px' }}>
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Default Interview Duration
-              </label>
-              <select
-                className="auth-input"
-                style={{ width: '100%', padding: '9px 12px', fontSize: '0.85rem' }}
-                value={calConfig.default_duration || 60}
-                onChange={(e) => setCalConfig({ ...calConfig, default_duration: Number(e.target.value) })}
-              >
-                <option value={30}>30 Minutes</option>
-                <option value={45}>45 Minutes</option>
-                <option value={60}>60 Minutes (1 Hour)</option>
-                <option value={90}>90 Minutes (1.5 Hours)</option>
-              </select>
+          {loading ? (
+            <div className="py-10 text-center text-xs text-gray-400">Loading data...</div>
+          ) : displayedTeamMembers.length === 0 ? (
+            <div className="py-8 text-center text-xs text-gray-400">
+              No {teamTab === 'managers' ? 'Hiring Managers' : teamTab === 'directors' ? 'Directors' : 'engaged Partner Vendors'} found.
             </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Company Timezone
-              </label>
-              <select
-                className="auth-input"
-                style={{ width: '100%', padding: '9px 12px', fontSize: '0.85rem' }}
-                value={calConfig.default_timezone || 'Asia/Kolkata'}
-                onChange={(e) => setCalConfig({ ...calConfig, default_timezone: e.target.value })}
-              >
-                <option value="Asia/Kolkata">Asia/Kolkata (IST - UTC+5:30)</option>
-                <option value="America/New_York">America/New York (EST - UTC-5)</option>
-                <option value="America/Los_Angeles">America/Los Angeles (PST - UTC-8)</option>
-                <option value="Europe/London">Europe/London (GMT - UTC+0)</option>
-                <option value="Asia/Dubai">Asia/Dubai (GST - UTC+4)</option>
-                <option value="Asia/Singapore">Asia/Singapore (SGT - UTC+8)</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-            <button
-              type="submit"
-              className="glow-btn"
-              style={{ padding: '10px 24px', fontSize: '0.88rem' }}
-              disabled={savingCalendar}
+          ) : (
+            <div
+              className="overflow-x-auto overflow-y-auto pr-1"
+              style={{ maxHeight: '260px', minHeight: '200px' }}
             >
-              {savingCalendar ? 'Saving...' : '💾 Save Cal.com Settings'}
-            </button>
-          </div>
-        </form>
+              <table className="w-full text-left text-xs border-collapse relative">
+                <thead className="sticky top-0 bg-white z-10 shadow-2xs">
+                  <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
+                    <th className="py-2.5 px-3">{teamTab === 'vendors' ? 'VENDOR / CONSULTANCY' : 'NAME'}</th>
+                    <th className="py-2.5 px-3">{teamTab === 'vendors' ? 'SUBMISSION LIMIT' : 'EMAIL'}</th>
+                    <th className="py-2.5 px-3 text-right">STATUS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {displayedTeamMembers.map((item) => {
+                    const isVendor = teamTab === 'vendors';
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
+                        {/* Name / Vendor Title with Avatar */}
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-lg bg-black text-white font-bold text-[11px] flex items-center justify-center shrink-0 shadow-2xs">
+                              {(item.name || item.email || '?').slice(0, 1).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-bold text-gray-900">{item.name || '—'}</div>
+                              {isVendor ? (
+                                <div className="text-[10px] text-gray-400 capitalize">{item.tenant_type || 'Consultancy'}</div>
+                              ) : (
+                                item.department && <div className="text-[10px] text-gray-400">{item.department}</div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Email or Candidate Limit */}
+                        <td className="py-2.5 px-3 text-gray-600 font-medium">
+                          {isVendor ? (
+                            <span className="font-bold text-gray-900">
+                              {item.candidate_limit != null ? `${item.candidate_limit} / req` : '3 / req (default)'}
+                            </span>
+                          ) : (
+                            item.email
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-2.5 px-3 text-right">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {isVendor ? 'Engaged' : item.is_active !== false ? 'Active' : 'Deactivated'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
 
-      
-
-      
-
-      {loading ? (
-        <p className="muted" style={{ padding: 24 }}>Loading workspace...</p>
-      ) : (
-        <>
-          <div className="glass-panel" id="add-team">
-            <div className="card-head-row">
-              <div className="form-panel-head">
-                <div className="form-panel-icon">{Icons.users}</div>
-                <div>
-                  <div className="form-panel-title">Add Hiring Manager</div>
-                  <div className="form-panel-caption">Create a Hiring Manager account to manage requisitions. Directors are managed from the Workspace menu.</div>
-                </div>
+      {/* Invite Team Member Modal Popup */}
+      {showInviteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          onClick={() => setShowInviteModal(false)}
+        >
+          <div
+            className="relative w-full max-w-[500px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 tracking-tight">Invite Team Member</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Provision an account for {user?.tenant_name || 'your company'}.</p>
               </div>
-              <button type="submit" form="add-team-form" className="glow-btn" disabled={submitting} style={{ flexShrink: 0 }}>
-                {submitting ? 'Creating...' : 'Create Hiring Manager Account'}
+              <button
+                type="button"
+                onClick={() => setShowInviteModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
               </button>
             </div>
-            <form id="add-team-form" onSubmit={handleCreateUser}>
-              <div className="form-grid">
-                <div>
-                  <label className="form-label">Full Name</label>
-                  <input type="text" name="name" required value={form.name} onChange={handleInput} className="auth-input" placeholder="e.g. Rahul Sharma" />
-                </div>
-                <div>
-                  <label className="form-label">Email Address</label>
-                  <input type="text" name="email" required inputMode="email" value={form.email} onChange={handleInput} className="auth-input" placeholder="manager@company.com" />
-                </div>
-                <div>
-                  <label className="form-label">Password</label>
-                  <input type="password" name="password" required minLength={4} value={form.password} onChange={handleInput} className="auth-input" placeholder="••••••••" />
-                </div>
-              </div>
-            </form>
-          </div>
 
-          <div className="glass-panel table-card">
-            <div className="table-head">
+            <form onSubmit={handleInviteSubmit} className="space-y-3.5">
+              {/* Role Select */}
               <div>
-                <h2 className="card-title">Hiring Managers</h2>
-                <p className="muted" style={{ fontSize: '0.82rem' }}>{hiringManagers.length} total</p>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Account Role *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Hiring Manager' }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      inviteForm.role === 'Hiring Manager'
+                        ? 'bg-black text-white shadow-2xs'
+                        : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    Hiring Manager
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Director' }))}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      inviteForm.role === 'Director'
+                        ? 'bg-black text-white shadow-2xs'
+                        : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    Director
+                  </button>
+                </div>
               </div>
-            </div>
-            {hiringManagers.length === 0 ? (
-              <p className="muted" style={{ padding: 16 }}>No Hiring Manager accounts yet.</p>
-            ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Department</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {hiringManagers.map((u) => (
-                    <tr key={u.id}>
-                      <td className="td-title">{u.name || '—'}</td>
-                      <td>{u.email}</td>
-                      <td>{u.department || <span className="muted">—</span>}</td>
-                      <td>{rolePill(u.role)}</td>
-                      <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
-                      <td className="td-date">{formatDate(u.created_at)}</td>
-                      <td className="td-action">
-                        <div className="row-actions">
-                          <span
-                            className="row-action row-action-danger"
-                            onClick={() => setConfirmDelete(u)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            Remove
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
 
-          <div className="glass-panel table-card">
-            <div className="table-head">
+              {/* Full Name */}
               <div>
-                <h2 className="card-title">Directors</h2>
-                <p className="muted" style={{ fontSize: '0.82rem' }}>{directors.length} total</p>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={inviteForm.name}
+                  onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
+                  placeholder="e.g. Maya Patel"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
               </div>
-            </div>
-            {directors.length === 0 ? (
-              <p className="muted" style={{ padding: 16 }}>
-                No Director accounts yet. Directors log in at the Director Portal (read-only executive access).
-              </p>
-            ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {directors.map((u) => (
-                    <tr key={u.id}>
-                      <td className="td-title">{u.name || '—'}</td>
-                      <td>{u.email}</td>
-                      <td>{rolePill(u.role)}</td>
-                      <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
-                      <td className="td-date">{formatDate(u.created_at)}</td>
-                      <td className="td-action">
-                        <div className="row-actions">
-                          <span
-                            className="row-action row-action-danger"
-                            onClick={() => setConfirmDelete(u)}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            Remove
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
 
-          <div className="glass-panel">
-            <div className="form-panel-head">
-              <div className="form-panel-icon">{Icons.shield}</div>
+              {/* Email */}
               <div>
-                <div className="form-panel-title">Change Password</div>
-                <div className="form-panel-caption">Update your own Admin account password. You'll need to re-verify your current password.</div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={inviteForm.email}
+                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                  placeholder="maya@company.com"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
               </div>
-            </div>
-            <form onSubmit={handleChangePassword}>
-              <div className="form-grid">
-                <div>
-                  <label className="form-label">Current Password</label>
-                  <input type="password" name="current_password" required value={pwdForm.current_password} onChange={handlePwdInput} className="auth-input" placeholder="••••••••" />
-                </div>
-                <div>
-                  <label className="form-label">New Password</label>
-                  <input type="password" name="new_password" required minLength={4} value={pwdForm.new_password} onChange={handlePwdInput} className="auth-input" placeholder="••••••••" />
-                </div>
-              </div>
-              <button type="submit" className="ghost-btn" disabled={changingPwd} style={{ marginTop: 18 }}>
-                {changingPwd ? 'Updating...' : 'Update Password'}
-              </button>
-            </form>
-          </div>
 
-          <div className="glass-panel table-card">
-            <div className="table-head">
+              {/* Password */}
               <div>
-                <h2 className="card-title">Requisitions</h2>
-                <p className="muted" style={{ fontSize: '0.82rem' }}>Read-only — view requisitions and their status</p>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Initial Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={4}
+                  value={inviteForm.password}
+                  onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
               </div>
-            </div>
-            {requisitions.length === 0 ? (
-              <p className="muted" style={{ padding: 16 }}>No requisitions in this workspace yet.</p>
-            ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Title</th>
-                    <th>Status</th>
-                    <th>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requisitions.map((r) => (
-                    <tr key={r.id}>
-                      <td className="td-title">{r.title || 'Untitled'}</td>
-                      <td><StatusBadge status={r.status} /></td>
-                      <td className="td-date">{formatDate(r.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </>
-      )}
 
-      {edit && (
-        <div className="modal-overlay" onClick={() => setEdit(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Edit Hiring Manager Account</h3>
-            <form onSubmit={handleSaveEdit}>
-              <div className="modal-fields">
+              {/* Department (for HM) */}
+              {inviteForm.role === 'Hiring Manager' && (
                 <div>
-                  <label className="form-label">Full Name</label>
-                  <input type="text" name="name" value={edit.name} onChange={handleEditInput} className="auth-input" />
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Department (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={inviteForm.department}
+                    onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })}
+                    placeholder="e.g. Engineering, Product, Marketing"
+                    className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  />
                 </div>
-                <div>
-                  <label className="form-label">Email</label>
-                  <input type="text" name="email" required inputMode="email" value={edit.email} onChange={handleEditInput} className="auth-input" />
-                </div>
-                <div>
-                  <label className="form-label">New Password</label>
-                  <input type="password" name="password" minLength={4} value={edit.password} onChange={handleEditInput} className="auth-input" placeholder="Leave blank to keep current" />
-                </div>
-              </div>
-              <div className="modal-actions">
-                <button type="button" className="ghost-btn" onClick={() => setEdit(null)}>
+              )}
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteModal(false)}
+                  disabled={submittingInvite}
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="glow-btn" disabled={editing}>
-                  {editing ? 'Saving...' : 'Save Changes'}
+                <button
+                  type="submit"
+                  disabled={submittingInvite}
+                  className="px-4 py-2 text-xs font-bold text-white bg-black hover:bg-gray-900 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {submittingInvite && <Loader2 size={13} className="animate-spin text-white" />}
+                  <span>Create Account</span>
                 </button>
               </div>
             </form>
@@ -685,22 +765,185 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {confirmDelete && (
-        <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">Remove {confirmDelete.role} account?</h3>
-            <p className="modal-text">
-              This will permanently delete the account <strong>{confirmDelete.name || confirmDelete.email}</strong>{' '}
-              ({confirmDelete.email}). This action cannot be undone.
-            </p>
-            <div className="modal-actions">
-              <button className="ghost-btn" onClick={() => setConfirmDelete(null)}>
-                Cancel
-              </button>
-              <button className="danger-btn" onClick={handleDeleteUser} disabled={deleting}>
-                {deleting ? 'Removing...' : 'Remove Account'}
+      {/* Change Password Modal */}
+      {showPasswordModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          onClick={() => setShowPasswordModal(false)}
+        >
+          <div
+            className="relative w-full max-w-[460px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 tracking-tight">Change Password</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Update credentials for {user?.email}.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPasswordModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
               </button>
             </div>
+
+            <form onSubmit={handlePasswordSubmit} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Current Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={pwdForm.current_password}
+                  onChange={(e) => setPwdForm({ ...pwdForm, current_password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  New Password *
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={4}
+                  value={pwdForm.new_password}
+                  onChange={(e) => setPwdForm({ ...pwdForm, new_password: e.target.value })}
+                  placeholder="••••••••"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  disabled={changingPwd}
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={changingPwd}
+                  className="px-4 py-2 text-xs font-bold text-white bg-black hover:bg-gray-900 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {changingPwd && <Loader2 size={13} className="animate-spin text-white" />}
+                  <span>Update Password</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cal.com Scheduling Modal */}
+      {showCalModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          onClick={() => setShowCalModal(false)}
+        >
+          <div
+            className="relative w-full max-w-[560px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900 tracking-tight">Cal.com Scheduling Integration</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Connect scheduling link to generate live candidate booking slots.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCalModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCalConfig} className="space-y-3.5">
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Cal.com / Cal.diy Base URL or Handle *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={calForm.cal_username}
+                  onChange={(e) => setCalForm({ ...calForm, cal_username: e.target.value })}
+                  placeholder="e.g. cal.com/mohammed-hashil"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Default Event Slug
+                  </label>
+                  <input
+                    type="text"
+                    value={calForm.event_slug}
+                    onChange={(e) => setCalForm({ ...calForm, event_slug: e.target.value })}
+                    placeholder="30min"
+                    className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                    Interview Duration
+                  </label>
+                  <select
+                    value={calForm.default_duration}
+                    onChange={(e) => setCalForm({ ...calForm, default_duration: Number(e.target.value) })}
+                    className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  >
+                    <option value={30}>30 Minutes</option>
+                    <option value={45}>45 Minutes</option>
+                    <option value={60}>60 Minutes (1 Hour)</option>
+                    <option value={90}>90 Minutes</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                  Company Timezone
+                </label>
+                <input
+                  type="text"
+                  value={calForm.default_timezone}
+                  onChange={(e) => setCalForm({ ...calForm, default_timezone: e.target.value })}
+                  placeholder="Asia/Kolkata (IST - UTC+5:30)"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCalModal(false)}
+                  disabled={savingCal}
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCal}
+                  className="px-4 py-2 text-xs font-bold text-white bg-black hover:bg-gray-900 rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {savingCal && <Loader2 size={13} className="animate-spin text-white" />}
+                  <span>Save Settings</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
