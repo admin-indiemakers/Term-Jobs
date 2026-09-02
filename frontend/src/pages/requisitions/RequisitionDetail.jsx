@@ -1,47 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/StatusBadge';
 import RequisitionEditor from '../../components/RequisitionEditor';
 import JdPreview from '../../components/JdPreview';
-import {
-  ArrowLeft,
-  Sparkles,
-  HelpCircle,
-  AlertCircle,
-  CheckCircle2,
-  Send,
-  RefreshCw,
-  XCircle,
-  FileCheck,
-  Users,
-  Eye,
-  Check,
-  Layers,
-  Clock,
-  ArrowRight,
-  FileText,
-  ChevronRight,
-  ShieldCheck,
-  DollarSign,
-  Edit3
-} from 'lucide-react';
 
-const STATE_STEPS = [
-  { id: 'Draft', label: 'Draft', num: '1' },
-  { id: 'Intake', label: 'AI Intake', num: '2' },
-  { id: 'Structuring', label: 'Structuring', num: '3' },
-  { id: 'PendingApproval', label: 'Approval', num: '4' },
-  { id: 'Published', label: 'Published', num: '5' },
-];
-
+const STATE_STEPS = ['Draft', 'Intake', 'Structuring', 'PendingApproval', 'Published', 'Closed'];
 const NORMALIZED = {
   Draft: 'Draft',
   Intake: 'Intake',
   Structuring: 'Structuring',
   PendingApproval: 'PendingApproval',
-  Pending_Approval: 'PendingApproval',
   Published: 'Published',
   Closed: 'Closed',
 };
@@ -49,13 +19,7 @@ const NORMALIZED = {
 function formatDate(iso) {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
   } catch {
     return iso;
   }
@@ -78,8 +42,6 @@ export default function RequisitionDetail() {
   const [info, setInfo] = useState('');
   const [shortlisted, setShortlisted] = useState([]);
   const [shortlistLoading, setShortlistLoading] = useState(false);
-  const [activeReviewTab, setActiveReviewTab] = useState('structured'); // 'structured' | 'jd'
-  const [showRefineBox, setShowRefineBox] = useState(false);
 
   const load = () => {
     setLoading(true);
@@ -106,605 +68,355 @@ export default function RequisitionDetail() {
       .finally(() => setShortlistLoading(false));
   }, [id, token]);
 
-  // Auto-dismiss notification alerts after 2 seconds
-  useEffect(() => {
-    if (!info) return;
-    const timer = setTimeout(() => {
-      setInfo('');
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [info]);
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => {
-      setError('');
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [error]);
-
-  const rawStatus = req?.status || 'Draft';
-  const status = NORMALIZED[rawStatus] || rawStatus;
-  const structuredRole = draftRole || req?.structured_role;
-
-  const currentStepIndex = Math.max(
-    0,
-    STATE_STEPS.findIndex((s) => s.id === status)
-  );
-
-  const currentQuestion = req?.pending_question || req?.current_question;
-
-  // API Action Handlers
-  const handleStart = async () => {
-    setBusy('start');
+  const run = async (path, method, body) => {
     setError('');
     setInfo('');
     try {
-      const data = await request(`/requisitions/${id}/start`, { method: 'POST', token });
-      setReq((prev) => ({ ...prev, ...data }));
-      if (data.structured_role) {
-        setDraftRole(data.structured_role);
-      }
-      setInfo('AI intake initialized. Check the question below.');
+      await request(`/requisitions/${id}${path}`, { method, body, token });
       load();
+      return true;
     } catch (err) {
-      setError(err.message || 'Failed to start AI intake');
-    } finally {
-      setBusy('');
+      setError(err.message);
+      return false;
     }
+  };
+
+  const handleStart = async () => {
+    setBusy('start');
+    const ok = await run('/start', 'POST');
+    if (ok) setInfo('Agent started.');
+    setBusy('');
   };
 
   const handleAnswer = async (e) => {
-    if (e) e.preventDefault();
+    e.preventDefault();
     if (!answer.trim()) return;
     setBusy('answer');
-    setError('');
-    setInfo('');
-    try {
-      const data = await request(`/requisitions/${id}/answer`, {
-        method: 'POST',
-        body: { answer: answer.trim() },
-        token,
-      });
-      setAnswer('');
-      setInfo('Answer submitted. Requisition criteria updated by AI.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to submit answer');
-    } finally {
-      setBusy('');
-    }
+    const ok = await run('/answer', 'POST', { answer: answer.trim() });
+    if (ok) setAnswer('');
+    setBusy('');
   };
 
   const handleRefine = async (e) => {
-    if (e) e.preventDefault();
+    e.preventDefault();
     if (!instruction.trim()) return;
     setBusy('refine');
-    setError('');
-    setInfo('');
-    try {
-      const data = await request(`/requisitions/${id}/refine`, {
-        method: 'POST',
-        body: { instruction: instruction.trim() },
-        token,
-      });
-      setInstruction('');
-      setShowRefineBox(false);
-      setInfo('Requisition refined successfully.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to refine requisition');
-    } finally {
-      setBusy('');
-    }
+    const ok = await run('/refine', 'POST', { instruction: instruction.trim() });
+    if (ok) setInstruction('');
+    setBusy('');
   };
 
   const handleApprove = async () => {
     setBusy('approve');
-    setError('');
-    setInfo('');
-    try {
-      const payload = draftRole ? { edited_role: draftRole, reviewer: user?.email || user?.name } : {};
-      await request(`/requisitions/${id}/approve`, {
-        method: 'POST',
-        body: payload,
-        token,
-      });
-      setInfo('Requisition criteria approved and moved to review.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to approve requisition');
-    } finally {
-      setBusy('');
+    const body = {};
+    if (editing && draftRole) {
+      const normPair = (arr) =>
+        arr && arr[0] != null && arr[1] != null ? [arr[0], arr[1]] : null;
+      body.edited_role = {
+        ...draftRole,
+        rate_band: normPair(draftRole.rate_band),
+        range_vendors_see: normPair(draftRole.range_vendors_see),
+      };
     }
+    const ok = await run('/approve', 'POST', { ...body, reviewer: user.id });
+    if (!ok) {
+      setBusy('');
+      return;
+    }
+    const published = await run('/publish', 'POST', { by: user.id });
+    setInfo(published ? 'Role approved and published.' : 'Role approved. Publish failed.');
+    setBusy('');
+  };
+
+  const handleReject = async () => {
+    setBusy('reject');
+    const ok = await run('/reject', 'POST', { reviewer: user.id });
+    if (ok) setInfo('Role rejected — moved back to Draft.');
+    setBusy('');
   };
 
   const handlePublish = async () => {
     setBusy('publish');
-    setError('');
-    setInfo('');
-    try {
-      await request(`/requisitions/${id}/publish`, { method: 'POST', token });
-      setInfo('Requisition published! Partner vendors can now submit candidates.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to publish requisition');
-    } finally {
-      setBusy('');
-    }
+    const ok = await run('/publish', 'POST', { by: user.id });
+    if (ok) setInfo('Requisition published.');
+    setBusy('');
   };
 
   const handleClose = async () => {
-    if (!window.confirm('Are you sure you want to close this requisition?')) return;
     setBusy('close');
-    setError('');
-    setInfo('');
+    const ok = await run('/close', 'POST');
+    if (ok) setInfo('Requisition closed.');
+    setBusy('');
+  };
+
+  const handleReset = async () => {
+    setBusy('reset');
+    const ok = await run('/reset', 'POST');
+    if (ok) setInfo('Requisition reset to Draft.');
+    setBusy('');
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Delete this requisition and its decision records permanently?')) return;
+    setBusy('delete');
     try {
-      await request(`/requisitions/${id}/close`, { method: 'POST', token });
-      setInfo('Requisition marked as closed.');
-      load();
+      await request(`/requisitions/${id}`, { method: 'DELETE', token });
+      const section = req?.status === 'Closed' ? 'completed' : req?.status === 'Published' ? 'published' : 'drafted';
+      navigate(`/dashboard/requisitions/${section}`);
     } catch (err) {
-      setError(err.message || 'Failed to close requisition');
-    } finally {
+      setError(err.message);
       setBusy('');
     }
   };
 
-  if (loading) {
-    return (
-      <div className="w-full py-20 text-center text-xs text-gray-400">
-        Loading requisition details...
-      </div>
-    );
-  }
+  if (loading) return <p className="muted">Loading requisition...</p>;
+  if (error && !req) return <div className="alert alert-error">{error}</div>;
+  if (!req) return <p className="muted">Requisition not found.</p>;
 
-  if (!req) {
-    return (
-      <div className="w-full py-16 text-center space-y-3">
-        <AlertCircle size={28} className="mx-auto text-red-500" />
-        <div className="text-sm font-bold text-gray-900">Requisition Not Found</div>
-        <p className="text-xs text-gray-400">{error || 'This requisition may have been removed.'}</p>
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/requisitions')}
-          className="px-4 py-2 rounded-xl bg-black text-white text-xs font-bold shadow-xs hover:bg-gray-900"
-        >
-          Back to Requisitions
-        </button>
-      </div>
-    );
-  }
+  const status = req.status || 'Draft';
+  const normStatus = NORMALIZED[status] || status;
+  const currentStep = STATE_STEPS.indexOf(normStatus);
+  const coverage = req.coverage_result;
+  const canShowReview = (req.structured_role || req.generated_jd_markdown) && ['Structuring', 'PendingApproval', 'Published', 'Closed'].includes(normStatus);
+  const isReadOnly = user.role === 'Director';
+
+  const intakeMeta = req.intake_meta || {};
+  const sourceLabel = intakeMeta.source_filename
+    ? intakeMeta.source_filename
+    : intakeMeta.background_profile_id || intakeMeta.reference_documents?.length || intakeMeta.context_notes
+      ? 'Company Background sources'
+      : null;
 
   return (
-    <div
-      className="w-full min-w-0 pb-16 space-y-4 text-left"
-      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
-    >
-      {/* Top Header Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="page page-narrow">
+      <div className="page-header">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
-            <Link to="/dashboard/requisitions" className="hover:text-black transition-colors">
-              Requisitions
-            </Link>
-            <span>•</span>
-            <span>REQ #{id.slice(0, 8)}</span>
-          </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
-              {req.title || structuredRole?.title || 'Untitled Requisition'}
+          <div className="detail-title-row">
+            <h1 className="page-title">
+              <span className="req-ref-pill">{req.ref || `REQ-${(id || '').slice(0, 6).toUpperCase()}`}</span>
+              {req.title || 'Untitled Requisition'}
             </h1>
-            <StatusBadge status={req.status} />
+            <StatusBadge status={normStatus} />
           </div>
-          <p className="text-xs text-gray-500 font-normal mt-0.5">
-            {req.department || structuredRole?.department || 'Engineering'} • Created {formatDate(req.created_at)}
+          <p className="page-subtitle">
+            {req.company?.name || 'Company'} · Created {formatDate(req.created_at)}
           </p>
-
-          {/* Workflow Stepper Bar */}
-          <div className="flex items-center gap-1.5 mt-3.5 flex-wrap">
-            {STATE_STEPS.map((st, i) => {
-              const isPastOrCurrent = i <= currentStepIndex;
-              const isCurrent = st.id === status;
-              return (
-                <div key={st.id} className="flex items-center gap-1.5">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                      isCurrent
-                        ? 'bg-black text-white shadow-2xs'
-                        : isPastOrCurrent
-                        ? 'bg-gray-100 text-gray-800'
-                        : 'bg-white border border-gray-200 text-gray-400'
-                    }`}
-                  >
-                    <span className="text-[10px]">{st.num}.</span>
-                    <span>{st.label}</span>
-                  </span>
-                  {i < STATE_STEPS.length - 1 && (
-                    <ChevronRight size={12} className="text-gray-300 shrink-0" />
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </div>
+        <Link to="/dashboard/requisitions/drafted" className="ghost-btn-link">← Back to list</Link>
+      </div>
 
-        {/* Action Buttons Header */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/requisitions')}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
-          >
-            Back
-          </button>
+      {error && <div className="alert alert-error">{error}</div>}
+      {info && <div className="alert alert-success">{info}</div>}
 
-          {status === 'Draft' && (
-            <button
-              type="button"
-              onClick={handleStart}
-              disabled={Boolean(busy)}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Sparkles size={13} />
-              <span>{busy === 'start' ? 'Starting AI...' : 'Start AI Intake →'}</span>
-            </button>
-          )}
+      {isReadOnly && (
+        <div className="alert" style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', color: '#fbbf24' }}>
+          Read-only view — Directors can review requisitions but cannot make changes.
+        </div>
+      )}
 
-          {(status === 'Intake' || status === 'Structuring') && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowRefineBox(!showRefineBox)}
-                className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <Sparkles size={13} />
-                <span>Refine with AI</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={Boolean(busy)}
-                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Check size={13} />
-                <span>{busy === 'approve' ? 'Approving...' : 'Proceed to Approval →'}</span>
-              </button>
-            </>
-          )}
-
-          {status === 'PendingApproval' && (
-            <button
-              type="button"
-              onClick={handlePublish}
-              disabled={Boolean(busy)}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Sparkles size={13} />
-              <span>{busy === 'publish' ? 'Publishing...' : 'Publish to Vendors →'}</span>
-            </button>
-          )}
-
-          {status === 'Published' && (
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={Boolean(busy)}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Close Requisition
-            </button>
-          )}
+      <div className="glass-panel timeline-card">
+        <div className="timeline">
+          {STATE_STEPS.map((step, i) => (
+            <div key={step} className={`timeline-step ${i <= currentStep ? 'done' : ''} ${i === currentStep ? 'current' : ''}`}>
+              <div className="timeline-dot"></div>
+              <span className="timeline-label">{NORMALIZED[step] === 'PendingApproval' ? 'Pending Approval' : step}</span>
+            </div>
+          ))}
         </div>
       </div>
 
-      {info && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-          <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
-          <span>{info}</span>
-        </div>
-      )}
-
-      {error && (
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-          <AlertCircle size={15} className="shrink-0 text-red-500" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Refine with AI Modal Box */}
-      {showRefineBox && (
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <Sparkles size={14} className="text-gray-900" />
-              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                Refine Requisition with AI Instruction
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowRefineBox(false)}
-              className="text-gray-400 hover:text-black text-xs font-bold"
-            >
-              Cancel
-            </button>
-          </div>
-
-          <form onSubmit={handleRefine} className="space-y-2.5">
-            <textarea
-              rows="3"
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder="e.g. Change experience requirement to 4+ years, add PostgreSQL and GraphQL to must-haves, and adjust duration to 12 months."
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
-            />
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowRefineBox(false)}
-                className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-semibold"
-              >
-                Close
-              </button>
-              <button
-                type="submit"
-                disabled={!instruction.trim() || Boolean(busy)}
-                className="px-4 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-              >
-                <Sparkles size={12} />
-                <span>{busy === 'refine' ? 'Refining...' : 'Apply Refinements'}</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* Main Grid: Content (8 cols) + Copilot Guide (4 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left 8 Cols: AI Intake Q&A & Structured Requisition Data */}
-        <div className="lg:col-span-8 space-y-4">
-          {/* AI Intake Q&A Card (When in Intake or Draft state) - Ultra Compact & Modern */}
-          {(status === 'Intake' || status === 'Draft' || currentQuestion) && (
-            <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-4.5 shadow-xs space-y-2.5">
-              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-md bg-black text-white flex items-center justify-center shrink-0">
-                    <Sparkles size={11} />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                      AI Intake Assistant
-                    </h3>
-                  </div>
-                </div>
-                <span className="text-[10px] text-gray-400 font-medium">Targeted Gap Question</span>
-              </div>
-
-              {currentQuestion ? (
-                <div className="space-y-2">
-                  <div className="px-3.5 py-2.5 rounded-xl bg-gray-50/90 border border-gray-200/80 text-xs text-gray-900 leading-relaxed font-semibold">
-                    {currentQuestion}
-                  </div>
-
-                  <form onSubmit={handleAnswer} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="Type your answer (e.g. 2-4 years with production experience)..."
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all font-medium"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!answer.trim() || Boolean(busy)}
-                      className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shrink-0"
-                    >
-                      <Send size={12} />
-                      <span>{busy === 'answer' ? 'Submitting...' : 'Submit'}</span>
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs text-gray-600 flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                    <span>All intake questions answered. Ready to proceed to approval.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={Boolean(busy)}
-                    className="px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-                  >
-                    Proceed to Approval →
-                  </button>
-                </div>
-              )}
+      {coverage && normStatus === 'Intake' && (
+        <div className="glass-panel info-card">
+          <h3 className="card-title">Coverage check</h3>
+          <p>
+            {coverage.covered
+              ? 'The requested stack is covered by your company profile — no intake needed.'
+              : 'Some skills are outside your registered stack. Answer the intake questions to complete the role.'}
+          </p>
+          {!coverage.covered && coverage.missing_skills?.length > 0 && (
+            <div className="chips">
+              {coverage.missing_skills.map((s, i) => (
+                <span key={i} className="chip chip-amber">{s}</span>
+              ))}
             </div>
           )}
+        </div>
+      )}
 
-          {/* Structured Role & JD Preview Tabs */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setActiveReviewTab('structured')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeReviewTab === 'structured'
-                      ? 'bg-black text-white shadow-xs'
-                      : 'text-gray-600 hover:text-black'
-                  }`}
-                >
-                  Structured Role Data
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveReviewTab('jd')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeReviewTab === 'jd'
-                      ? 'bg-black text-white shadow-xs'
-                      : 'text-gray-600 hover:text-black'
-                  }`}
-                >
-                  Generated JD Preview
-                </button>
-              </div>
+      {!isReadOnly && normStatus === 'Draft' && (
+        <div className="glass-panel action-card">
+          <h3 className="card-title">Run the Job Requirement Agent</h3>
+          <p className="card-text">
+            The agent will analyse this role against your company profile, ask targeted questions if needed, and generate a structured role plus a ready-to-publish JD for your review.
+          </p>
+          <button className="glow-btn" onClick={handleStart} disabled={busy === 'start'}>
+            {busy === 'start' ? 'Running...' : 'Run Agent'}
+          </button>
+        </div>
+      )}
 
-              {status === 'Published' && (
-                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Live to Vendors
-                </span>
-              )}
-            </div>
-
-            {/* Structured Role (Fixed Tabs + Scrollable Fields) or JD Preview */}
-            <div>
-              {activeReviewTab === 'structured' ? (
-                <RequisitionEditor
-                  role={structuredRole}
-                  editable={editing || status === 'Draft' || status === 'Structuring' || status === 'Intake'}
-                  onChange={(updated) => setDraftRole(updated)}
+      {!isReadOnly && normStatus === 'Intake' && (
+        <div className="glass-panel action-card">
+          <div className="assistant-head">
+            <span className="assistant-avatar">AI</span>
+            <span className="assistant-name">Job Requirement Agent</span>
+          </div>
+          {req.pending_question ? (
+            <>
+              <p className="question-text">{req.pending_question}</p>
+              <form onSubmit={handleAnswer} className="answer-form">
+                <input
+                  className="auth-input"
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                  placeholder="Type your answer..."
+                  disabled={busy === 'answer'}
+                  autoFocus
                 />
-              ) : (
-                <div
-                  className="overflow-y-auto pr-1.5 custom-scrollbar"
-                  style={{ maxHeight: '380px' }}
-                >
-                  <JdPreview
-                    markdown={req.generated_jd_markdown}
-                    role={structuredRole}
-                    rawJd={req.raw_jd}
-                  />
-                </div>
-              )}
-            </div>
+                <button type="submit" className="glow-btn" disabled={busy === 'answer' || !answer.trim()}>
+                  {busy === 'answer' ? 'Sending...' : 'Send'}
+                </button>
+              </form>
+            </>
+          ) : (
+            <p className="card-text">Processing your answers — one moment.</p>
+          )}
+        </div>
+      )}
+
+      {!isReadOnly && normStatus === 'Structuring' && (
+        <div className="glass-panel action-card">
+          <h3 className="card-title">Review the generated role</h3>
+          <p className="card-text">The AI has drafted a structured role and JD. Edit before approving, or request a refinement.</p>
+          <div className="refine-form">
+            <input
+              className="auth-input"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder="e.g. Add AWS experience, change rate band to 18–24 LPA"
+            />
+            <button className="ghost-btn" onClick={handleRefine} disabled={busy === 'refine' || !instruction.trim()}>
+              {busy === 'refine' ? 'Refining...' : 'Refine'}
+            </button>
+          </div>
+          <div className="approval-actions">
+            <button className="danger-btn" onClick={handleReject} disabled={busy === 'reject'}>
+              Reject
+            </button>
+            <button className="glow-btn" onClick={handleApprove} disabled={busy === 'approve'}>
+              {busy === 'approve' ? 'Approving & publishing...' : 'Approve & Publish'}
+            </button>
           </div>
         </div>
+      )}
 
-        {/* Right 4 Cols: Copilot & Assistant Side Tab */}
-        <div className="lg:col-span-4 space-y-3.5">
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3.5 sticky top-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-black text-white flex items-center justify-center shrink-0">
-                  <Sparkles size={13} />
-                </div>
-                <div>
-                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Workflow Assistant
-                  </h3>
-                  <p className="text-[10px] text-gray-400">Current state guidance</p>
-                </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-900 text-[10px] font-extrabold">
-                {status}
-              </span>
-            </div>
-
-            {/* Stage Guidance */}
-            <div className="space-y-2 text-xs">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                Stage Instructions
-              </div>
-
-              {status === 'Draft' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Drafting Phase</div>
-                  <p className="text-[11px] text-gray-500">
-                    Review basic job criteria. When ready, click "Start AI Intake" to allow AI to generate targeted gap questions.
-                  </p>
-                </div>
-              )}
-
-              {status === 'Intake' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Answering Intake / Structuring</div>
-                  <p className="text-[11px] text-gray-500">
-                    Once intake questions are answered, click "Proceed to Approval →" to lock the criteria.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={Boolean(busy)}
-                    className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                  >
-                    Proceed to Approval →
-                  </button>
-                </div>
-              )}
-
-              {status === 'Structuring' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Review & Approve</div>
-                  <p className="text-[11px] text-gray-500">
-                    Verify the structured criteria and JD preview. Click "Approve Requisition" once you're satisfied.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={Boolean(busy)}
-                    className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                  >
-                    Approve Requisition →
-                  </button>
-                </div>
-              )}
-
-              {status === 'PendingApproval' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Publish to Partners</div>
-                  <p className="text-[11px] text-gray-500">
-                    Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handlePublish}
-                    disabled={Boolean(busy)}
-                    className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                  >
-                    Publish to Vendors →
-                  </button>
-                </div>
-              )}
-
-              {status === 'Published' && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 space-y-1 text-emerald-900">
-                  <div className="font-bold text-emerald-900">Live Sourcing</div>
-                  <p className="text-[11px] text-emerald-700">
-                    Engaged partner vendors are submitting matched candidate profiles. Review submissions under Candidates.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Quick Stats Widget */}
-            <div className="space-y-2 pt-2 border-t border-gray-100 text-xs">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                Key Parameters
-              </div>
-
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Duration</span>
-                  <span className="font-bold text-gray-900">{structuredRole?.duration || '6 months'}</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Work Mode</span>
-                  <span className="font-bold text-gray-900">{structuredRole?.work_mode || 'Remote'}</span>
-                </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Ceiling Rate</span>
-                  <span className="font-bold text-gray-900">
-                    {structuredRole?.ceiling_internal ? `₹${structuredRole.ceiling_internal}` : 'Not set'}
-                  </span>
-                </div>
-              </div>
-            </div>
+      {!isReadOnly && normStatus === 'PendingApproval' && (
+        <div className="glass-panel action-card">
+          <h3 className="card-title">Approved — publishing</h3>
+          <p className="card-text">This requisition is being published to your consultancy partners.</p>
+          <div className="approval-actions">
+            <button className="danger-btn" onClick={handleReject} disabled={busy === 'reject'}>
+              Reject
+            </button>
+            <button className="glow-btn" onClick={handlePublish} disabled={busy === 'publish'}>
+              {busy === 'publish' ? 'Publishing...' : 'Retry Publish'}
+            </button>
           </div>
         </div>
+      )}
+
+      {!isReadOnly && normStatus === 'Published' && (
+        <div className="glass-panel action-card">
+          <h3 className="card-title">Published</h3>
+          <p className="card-text">This requisition is live. Close it when the position is filled.</p>
+          <button className="glow-btn" onClick={handleClose} disabled={busy === 'close'}>
+            {busy === 'close' ? 'Closing...' : 'Close Requisition'}
+          </button>
+        </div>
+      )}
+
+      {!isReadOnly && normStatus === 'Closed' && (
+        <div className="glass-panel action-card">
+          <h3 className="card-title">Closed</h3>
+          <p className="card-text">This requisition is finished. Reset to draft to re-run the flow.</p>
+          <div className="approval-actions">
+            <button className="danger-btn" onClick={handleDelete} disabled={busy === 'delete'}>
+              Delete
+            </button>
+            <button className="glow-btn" onClick={handleReset} disabled={busy === 'reset'}>
+              {busy === 'reset' ? 'Resetting...' : 'Reset to Draft'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {canShowReview && (
+        <div className="glass-panel review-card">
+          <div className="review-tabs">
+            <span className="review-tab active">Structured Role</span>
+            <span className="review-tab">Job Description</span>
+          </div>
+
+          <div className="editor-panel">
+            <RequisitionEditor
+              role={draftRole}
+              editable={normStatus === 'Structuring' && !isReadOnly}
+              onChange={setDraftRole}
+              sourceLabel={sourceLabel}
+              onReplace={() => setInfo('Replace sources from the New Requisition intake screen.')}
+            />
+          </div>
+
+          <div className="jd-section">
+            <h3 className="card-title">Generated JD</h3>
+            <JdPreview markdown={req.generated_jd_markdown} />
+          </div>
+        </div>
+      )}
+
+      {req.refinement_log?.length > 0 && (
+        <div className="glass-panel">
+          <h3 className="card-title">Refinement history</h3>
+          <ul className="log-list">
+            {req.refinement_log.map((entry, i) => (
+              <li key={i} className="log-item">
+                <span className="log-index">{i + 1}.</span>
+                {entry.instruction}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="glass-panel">
+        <div className="shortlist-head">
+          <h3 className="card-title">Shortlisted Candidates</h3>
+          <span className="muted">{req.ref || `REQ-${(id || '').slice(0, 6).toUpperCase()}`}</span>
+        </div>
+        <div className="shortlist-actions">
+          <Link to={`/dashboard/requisitions/${id}/candidates`} className="btn-secondary-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 16px', fontSize: '0.85rem', borderRadius: '8px', background: '#2563eb', color: '#ffffff', textDecoration: 'none', fontWeight: 700, boxShadow: '0 2px 6px rgba(37,99,235,0.25)' }}>
+            📋 Review & Shortlist Candidates
+          </Link>
+        </div>
+        {shortlistLoading ? (
+          <p className="muted" style={{ padding: 12 }}>Loading shortlisted candidates...</p>
+        ) : shortlisted.length === 0 ? (
+          <p className="muted" style={{ padding: 12 }}>No shortlisted candidates for this requisition yet.</p>
+        ) : (
+          <div className="shortlist-list">
+            {shortlisted.map((c) => (
+              <div key={c.submission_id || c.id} className="shortlist-item">
+                <div className="shortlist-item-main">
+                  <span className="shortlist-name">{c.candidate_name || 'Candidate'}</span>
+                  <span className="muted">{c.vendor_name || 'Vendor A'}</span>
+                </div>
+                <span className="chip chip-primary">
+                  {c.match_score != null ? `${Math.round(c.match_score)}% match` : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

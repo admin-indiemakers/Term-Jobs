@@ -239,7 +239,7 @@ export default function CandidatePortal() {
 
   // Redirect to onboarding if not completed
   useEffect(() => {
-    if (data?.candidate?.onboarding_status && data.candidate.onboarding_status !== 'completed') {
+    if (data && data.candidate && data.candidate.onboarding_status !== 'completed') {
       navigate('/candidate/onboarding', { replace: true });
     }
   }, [data, navigate]);

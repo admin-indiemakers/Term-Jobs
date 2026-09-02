@@ -118,6 +118,9 @@ def _get_current_user(authorization: str | None) -> dict | None:
 
 def _auto_status(doc: dict) -> str:
     """Compute onboarding status based on completed items."""
+    if doc.get("status") == "completed":
+        return "completed"
+
     required = []
     # Equipment
     if doc.get("laptop_required"):
@@ -138,7 +141,7 @@ def _auto_status(doc: dict) -> str:
             required.append(ci["id"])
 
     if not required:
-        return "not_started"
+        return doc.get("status") or "in_progress"
 
     completed = doc.get("completed_items", {})
     done_count = sum(1 for r in required if completed.get(r))
@@ -190,7 +193,6 @@ def raise_onboarding_issue(data: dict, authorization: str | None = Header(None))
 def list_onboarding_issues(authorization: str | None = Header(None)):
     """List raised onboarding issues. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
-    docs = list(_issues_coll().find())
     if user and user["role"] not in ("Super Admin", "Admin", "HR", "Director"):
         # Hiring Manager: only see issues for candidates in their requisitions
         from modules.requisition.domain.models import Requisition
@@ -205,7 +207,12 @@ def list_onboarding_issues(authorization: str | None = Header(None)):
         cand_ids = set()
         for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)} if req_ids else {"$in": []}}, {"id": 1}):
             cand_ids.add(sd.get("id"))
-        docs = [d for d in docs if d.get("candidate_id") in cand_ids]
+        if cand_ids:
+            docs = list(_issues_coll().find({"candidate_id": {"$in": list(cand_ids)}}))
+        else:
+            docs = []
+    else:
+        docs = list(_issues_coll().find())
     for d in docs:
         d.pop("_id", None)
     return docs
@@ -299,9 +306,53 @@ def mark_notification_read(notification_id: str):
 
 @router.get("/{candidate_id}")
 def get_onboarding(candidate_id: str, authorization: str | None = Header(None)):
-    doc = _coll().find_one({"candidate_id": candidate_id})
+    doc = _coll().find_one({"$or": [{"candidate_id": candidate_id}, {"candidate_email": candidate_id}]})
     if not doc:
-        raise HTTPException(status_code=404, detail="No onboarding checklist found")
+        # Auto-create a checklist so the candidate page never gets stuck on 404.
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+
+        # Try to enrich with data from the candidate submission and requisition.
+        sub = db["candidate_submissions"].find_one(
+            {"$or": [{"id": candidate_id}, {"candidate_email": candidate_id}]}
+        ) or {}
+        req_id = sub.get("requisition_id") or ""
+        req_doc = db["requisitions"].find_one({"id": req_id}) or {} if req_id else {}
+        cp_id = req_doc.get("company_profile_id") or sub.get("company_profile_id") or ""
+        cp_doc = db["company_profiles"].find_one({"id": cp_id}) or {} if cp_id else {}
+
+        doc = {
+            "candidate_id": candidate_id,
+            "candidate_name": sub.get("candidate_name") or "",
+            "candidate_email": sub.get("candidate_email") or "",
+            "requisition_id": req_id,
+            "requisition_title": req_doc.get("title") or (req_doc.get("structured_role") or {}).get("job_title") or "",
+            "company_name": cp_doc.get("name") or req_doc.get("client_name") or "",
+            "vendor_name": sub.get("vendor_name") or req_doc.get("vendor_name") or "",
+            "laptop_required": True,
+            "laptop_spec": "Standard build",
+            "badge_required": True,
+            "software": [
+                {"id": "vpn", "label": "VPN access", "enabled": True, "note": ""},
+                {"id": "email", "label": "Company email", "enabled": True, "note": ""},
+                {"id": "github", "label": "GitHub / repo access", "enabled": True, "note": ""},
+                {"id": "slack", "label": "Slack / Teams", "enabled": True, "note": ""},
+                {"id": "client", "label": "Client / dept system", "enabled": True, "note": ""},
+            ],
+            "training": [
+                {"id": "posh", "label": "POSH training", "enabled": True, "mandatory": True, "note": ""},
+                {"id": "codeofconduct", "label": "Code of conduct & data privacy", "enabled": True, "mandatory": True, "note": ""},
+                {"id": "induction", "label": "Company induction", "enabled": True, "mandatory": False, "note": ""},
+                {"id": "security", "label": "Security & data-handling awareness", "enabled": True, "mandatory": False, "note": ""},
+            ],
+            "custom_items": [],
+            "notes": "",
+            "completed_items": {},
+            "status": "not_started",
+            "created_at": now,
+            "updated_at": now,
+        }
+        _coll().insert_one(doc)
     doc.pop("_id", None)
     return doc
 
@@ -542,7 +593,6 @@ Rules:
 def list_onboarding(authorization: str | None = Header(None)):
     """List onboarding checklists. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
-    docs = list(_coll().find())
     if user and user["role"] == "Hiring Manager":
         from modules.requisition.domain.models import Requisition
         from modules.shared.db import get_session as _gs
@@ -557,9 +607,14 @@ def list_onboarding(authorization: str | None = Header(None)):
             cand_ids = set()
             for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)}}, {"id": 1}):
                 cand_ids.add(sd.get("id"))
-            docs = [d for d in docs if d.get("candidate_id") in cand_ids]
+            if cand_ids:
+                docs = list(_coll().find({"candidate_id": {"$in": list(cand_ids)}}))
+            else:
+                docs = []
         else:
             docs = []
+    else:
+        docs = list(_coll().find())
     for d in docs:
         d.pop("_id", None)
     return docs

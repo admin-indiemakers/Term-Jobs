@@ -242,7 +242,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
     cand_name = current_user.name or ""
     cand_email = current_user.email
 
-    ob = db["onboarding_checklists"].find_one({"candidate_id": cand_id}) or {}
+    ob = db["onboarding_checklists"].find_one({"$or": [{"candidate_id": cand_id}, {"candidate_email": cand_email}]}) or {}
     sub = db["candidate_submissions"].find_one({"$or": [{"id": cand_id}, {"candidate_email": cand_email}]}) or {}
 
     raw_wo = _ensure_active_work_order(cand_id, cand_name, cand_email, current_user.tenant_id)

@@ -248,23 +248,13 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
 def _interrupt_payload(state: dict, interrupt: Any) -> dict:
     """Normalise an agent result into a consumer-friendly checkpoint."""
     payload: dict[str, Any] = {"status": state.get("status")}
-    
-    # Handle LangGraph Interrupt objects or tuple of interrupts
-    if isinstance(interrupt, (list, tuple)) and len(interrupt) > 0:
-        interrupt = interrupt[0]
-    if hasattr(interrupt, "value"):
-        interrupt_val = interrupt.value
-    else:
-        interrupt_val = interrupt
-
-    if isinstance(interrupt_val, str):
+    if isinstance(interrupt, str):
         payload["type"] = "intake_question"
-        payload["question"] = interrupt_val
-        payload["current_question"] = interrupt_val
-    elif isinstance(interrupt_val, dict) and interrupt_val.get("checkpoint") == "approval":
+        payload["question"] = interrupt
+    elif isinstance(interrupt, dict) and interrupt.get("checkpoint") == "approval":
         payload["type"] = "approval"
-        payload["structured_role"] = interrupt_val.get("structured_role")
-        payload["generated_jd_markdown"] = interrupt_val.get("jd_markdown")
+        payload["structured_role"] = interrupt.get("structured_role")
+        payload["generated_jd_markdown"] = interrupt.get("jd_markdown")
     else:
         payload["type"] = "completed"
     return payload
@@ -707,7 +697,13 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             # Admin, HR, Director, etc. see all requisitions in their tenant
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
-        profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}
+        # Only fetch company profiles referenced by the returned requisitions (not ALL profiles)
+        needed_cp_ids = {r.company_profile_id for r in rows if r.company_profile_id}
+        profiles = {}
+        if needed_cp_ids:
+            profiles = {p.id: p for p in session.query(models.CompanyProfile).filter(
+                models.CompanyProfile.id.in_(list(needed_cp_ids))
+            ).all()}
         is_vendor = current_user.role == "Recruiter"
         result = [
             {

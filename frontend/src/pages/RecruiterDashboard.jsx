@@ -642,42 +642,43 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     setLoading(true);
     const activeToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token');
     try {
-      const [rawRequisitions, candidateData, limitData, bankData, interviewData, screenedSummaryData, acceptedData, portalUsersData] = await Promise.all([
+      // 1. Fetch core essentials first for instant UI render
+      const [rawRequisitions, candidateData] = await Promise.all([
         request('/requisitions', { token: activeToken }).catch(() => []),
         request('/candidates/shortlisted', { token: activeToken })
           .catch(() => request('/api/candidates/shortlisted', { token: activeToken }))
           .catch(() => []),
-        request('/api/settings/candidate-limit', { token: activeToken }).catch(() => ({ limit: null })),
-        request('/candidates/bank', { token: activeToken }).catch(() => []),
-        request('/api/interviews/vendor', { token: activeToken }).catch(() => []),
-        request('/candidates/bank/screened-summary', { token: activeToken }).catch(() => ({ screened_requisitions: {} })),
-        request('/candidates?status=Accepted', { token: activeToken }).catch(() => []),
-        request('/api/auth/portal-users', { token: activeToken }).catch(() => []),
       ]);
 
       const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
       setRequisitions(list);
       let listShortlisted = Array.isArray(candidateData) ? candidateData : candidateData?.shortlisted_candidates || [];
-      if (!listShortlisted.length && activeToken) {
-        const fallbackSubs = await request('/candidates?status=Shortlisted', { token: activeToken }).catch(() => []);
-        if (Array.isArray(fallbackSubs) && fallbackSubs.length) {
-          listShortlisted = fallbackSubs;
-        }
-      }
       setShortlisted(listShortlisted);
-      setCandidateLimit(limitData?.limit ?? null);
-      setBankCandidates(bankData || []);
-      setInterviews(Array.isArray(interviewData) ? interviewData : []);
-      const acceptedList = Array.isArray(acceptedData) ? acceptedData : (acceptedData?.candidates || []);
-      setAcceptedCandidates(acceptedList);
-      setPortalUsers(Array.isArray(portalUsersData) ? portalUsersData : []);
-      setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
       setLoading(false);
 
       if (list.length) {
         const defaultReq = list.find((item) => item.status === 'Published') || list[0];
         selectRequisition(defaultReq.id, list);
       }
+
+      // 2. Defer non-critical background data fetches to prevent blocking workspace render
+      Promise.all([
+        request('/api/settings/candidate-limit', { token: activeToken }).catch(() => ({ limit: null })),
+        request('/candidates/bank', { token: activeToken }).catch(() => []),
+        request('/api/interviews/vendor', { token: activeToken }).catch(() => []),
+        request('/candidates/bank/screened-summary', { token: activeToken }).catch(() => ({ screened_requisitions: {} })),
+        request('/candidates?status=Accepted', { token: activeToken }).catch(() => []),
+        request('/api/auth/portal-users', { token: activeToken }).catch(() => []),
+      ]).then(([limitData, bankData, interviewData, screenedSummaryData, acceptedData, portalUsersData]) => {
+        setCandidateLimit(limitData?.limit ?? null);
+        setBankCandidates(bankData || []);
+        setInterviews(Array.isArray(interviewData) ? interviewData : []);
+        const acceptedList = Array.isArray(acceptedData) ? acceptedData : (acceptedData?.candidates || []);
+        setAcceptedCandidates(acceptedList);
+        setPortalUsers(Array.isArray(portalUsersData) ? portalUsersData : []);
+        setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
+      });
+
     } catch (err) {
       setError(err.message || 'Unable to load your recruiter workspace.');
       setLoading(false);
@@ -1131,18 +1132,19 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     setAutoScreenEligibleCount(0);
     setFullReq(summary || null);
     setJdText(formatJd(summary));
+
+    // Fire all 3 requests in parallel instead of sequentially
     try {
-      const details = await request(`/requisitions/${id}`, { token: authToken });
-      setFullReq(details);
-      setJdText(formatJd(details));
-    } catch {
-      // The summarized published requisition remains fully usable for screening.
-    }
-    try {
-      const [subs, cacheRes] = await Promise.all([
+      const [details, subs, cacheRes] = await Promise.all([
+        request(`/requisitions/${id}`, { token: authToken }).catch(() => null),
         request(`/candidates?requisition_id=${id}`, { token: authToken }).catch(() => []),
         request(`/candidates/bank/screening-cache/${id}`, { token: authToken }).catch(() => ({ has_cache: false, screened_candidates: [] })),
       ]);
+
+      if (details) {
+        setFullReq(details);
+        setJdText(formatJd(details));
+      }
 
       if (cacheRes?.has_cache && Array.isArray(cacheRes.screened_candidates) && cacheRes.screened_candidates.length) {
         const permanentMap = new Map((subs || []).map((s) => [s.candidate_name?.toLowerCase() || s.id, s]));
