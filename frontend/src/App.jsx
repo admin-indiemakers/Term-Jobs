@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import JoinHiringManager from './pages/JoinHiringManager';
+import JoinDirector from './pages/JoinDirector';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
 import CandidateLogin from './pages/CandidateLogin';
@@ -83,6 +84,8 @@ export default function App() {
         <Route path="/login" element={<AuthPage />} />
         <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
         <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
+        <Route path="/join/director" element={<JoinDirector />} />
+        <Route path="/invite/director" element={<JoinDirector />} />
         <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />

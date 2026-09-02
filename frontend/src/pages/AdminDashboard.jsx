@@ -609,9 +609,19 @@ export default function AdminDashboard() {
 
                         {/* Status */}
                         <td className="py-2.5 px-3 text-right">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            {isVendor ? 'Engaged' : item.is_active !== false ? 'Active' : 'Deactivated'}
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isVendor || item.is_active !== false
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-gray-100 text-gray-600 border border-gray-200'
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isVendor || item.is_active !== false ? 'bg-emerald-500' : 'bg-gray-400'
+                              }`}
+                            />
+                            {isVendor ? 'Engaged' : item.is_active !== false ? 'Active' : 'Not Active'}
                           </span>
                         </td>
                       </tr>

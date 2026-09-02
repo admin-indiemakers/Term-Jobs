@@ -96,7 +96,7 @@ export default function HRDashboard() {
                       <td className="td-title">{u.name || '—'}</td>
                       <td>{u.email}</td>
                       <td>{rolePill(u.role)}</td>
-                      <td>{u.is_active ? 'Active' : 'Deactivated'}</td>
+                      <td>{u.is_active ? 'Active' : 'Not Active'}</td>
                     </tr>
                   ))}
                 </tbody>

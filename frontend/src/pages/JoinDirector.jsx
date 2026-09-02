@@ -13,10 +13,10 @@ import {
   User,
   Mail,
   Briefcase,
-  Sparkles
+  Shield
 } from 'lucide-react';
 
-export default function JoinHiringManager() {
+export default function JoinDirector() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
@@ -82,13 +82,13 @@ export default function JoinHiringManager() {
       const payload = {
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        department: department.trim() || 'General',
+        department: department.trim() || 'Executive',
         password,
         company_name: companyName,
         tenant_id: tenantId || undefined,
       };
 
-      await request('/api/auth/join/hiring-manager', {
+      await request('/api/auth/join/director', {
         method: 'POST',
         body: payload,
       });
@@ -136,7 +136,7 @@ export default function JoinHiringManager() {
             <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={() => navigate('/login')}
+                onClick={() => navigate('/director/login')}
                 className="w-full sm:w-auto px-6 py-3 rounded-xl bg-black hover:bg-gray-900 text-white text-xs sm:text-sm font-bold shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Proceed to Login</span>
@@ -149,7 +149,7 @@ export default function JoinHiringManager() {
             {/* Title & Subtitle */}
             <div className="mt-4 mb-6">
               <h1 className="text-2xl sm:text-[1.85rem] font-extrabold text-gray-900 tracking-tight">
-                Join as a Hiring Manager
+                Join as a Director
               </h1>
               <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1.5 leading-relaxed">
                 Complete the form below. Your account will be created as a pending request and activated after company admin approval.
@@ -159,14 +159,17 @@ export default function JoinHiringManager() {
             {/* Info Callout Card */}
             <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-4.5 flex items-center gap-4 mb-6 shadow-2xs">
               <div className="w-10 h-10 rounded-xl bg-black text-white font-extrabold text-base flex items-center justify-center shrink-0">
-                H
+                D
               </div>
               <div>
-                <div className="text-xs sm:text-sm font-bold text-gray-900">
-                  Hiring Manager access
+                <div className="text-xs sm:text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <span>Director access</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 font-semibold text-gray-600 border border-gray-200">
+                    Executive Oversight
+                  </span>
                 </div>
                 <div className="text-[11px] sm:text-xs text-gray-500 mt-0.5">
-                  You can create and manage job requisitions after approval.
+                  You can review and oversee executive job requisitions after approval.
                 </div>
               </div>
             </div>
@@ -191,7 +194,7 @@ export default function JoinHiringManager() {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Rahul Sharma"
+                    placeholder="e.g. Anand Menon"
                     className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black transition-all font-medium"
                   />
                 </div>
@@ -205,7 +208,7 @@ export default function JoinHiringManager() {
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@company.com"
+                    placeholder="director@company.com"
                     className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black transition-all font-medium"
                   />
                 </div>
@@ -215,13 +218,13 @@ export default function JoinHiringManager() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-900 mb-1.5">
-                    Department
+                    Department / Area
                   </label>
                   <input
                     type="text"
                     value={department}
                     onChange={(e) => setDepartment(e.target.value)}
-                    placeholder="e.g. Engineering, HR, Product"
+                    placeholder="e.g. Executive, Engineering, Product"
                     className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black transition-all font-medium"
                   />
                 </div>
@@ -294,8 +297,8 @@ export default function JoinHiringManager() {
             {/* Footer Existing Account Link */}
             <div className="mt-8 pt-5 border-t border-gray-100 text-center text-xs text-gray-500">
               Already have an account?{' '}
-              <Link to="/login" className="font-bold text-black hover:underline">
-                Use your existing {companyName} login.
+              <Link to="/director/login" className="font-bold text-black hover:underline">
+                Use your existing {companyName} director login.
               </Link>
             </div>
           </>

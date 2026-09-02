@@ -328,7 +328,7 @@ export default function ConfigureAccounts({ defaultTab }) {
                             className={`w-1.5 h-1.5 rounded-full ${u.is_active !== false ? 'bg-emerald-500' : 'bg-gray-400'
                               }`}
                           />
-                          {u.is_active !== false ? 'Active' : 'Deactivated'}
+                          {u.is_active !== false ? 'Active' : 'Not Active'}
                         </span>
                       </td>
 

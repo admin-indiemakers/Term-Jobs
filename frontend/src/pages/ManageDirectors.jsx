@@ -4,6 +4,8 @@ import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   Users,
+  Link2,
+  Check,
   UserPlus,
   ArrowLeft,
   Search,
@@ -48,6 +50,34 @@ export default function ManageDirectors() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [copied, setCopied] = useState(false);
+  const [approvingId, setApprovingId] = useState(null);
+
+  const handleCopyInviteLink = () => {
+    const inviteUrl = `${window.location.origin}/join/director?company=${encodeURIComponent(user?.tenant_name || 'Bearitt')}`;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setSuccess('Invite link copied to clipboard! Anyone with this link can request Director access.');
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleApproveDirector = async (director) => {
+    setApprovingId(director.id);
+    setError('');
+    setSuccess('');
+    try {
+      await request(`/api/auth/users/${director.id}/approve`, {
+        method: 'POST',
+        token,
+      });
+      setSuccess(`Director "${director.name || director.email}" approved and activated successfully.`);
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to approve director account');
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -213,13 +243,17 @@ export default function ManageDirectors() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <Link
-            to="/dashboard/admin"
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5"
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={handleCopyInviteLink}
+            className="px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            title="Copy public invite link for new Directors"
           >
-            Back to Dashboard
-          </Link>
+            <Link2 size={14} className="text-gray-500" />
+            <span>{copied ? 'Link Copied!' : 'Copy Invite Link'}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
@@ -359,10 +393,17 @@ export default function ManageDirectors() {
 
                     {/* Status Badge */}
                     <td className="py-3.5 px-3">
-                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        {u.is_active !== false ? 'Active' : 'Deactivated'}
-                      </span>
+                      {u.is_active !== false ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Pending Approval
+                        </span>
+                      )}
                     </td>
 
                     {/* Created Date */}
@@ -370,24 +411,45 @@ export default function ManageDirectors() {
                       {formatDate(u.created_at)}
                     </td>
 
-                    {/* Actions (Edit & Remove) */}
+                    {/* Actions (Approve / Reject for pending, Edit / Remove for active) */}
                     <td className="py-3.5 px-3 text-right">
-                      <div className="inline-flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setEdit({ ...u, password: '' })}
-                          className="font-bold text-gray-900 hover:text-black text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDelete(u)}
-                          className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                        >
-                          Remove
-                        </button>
-                      </div>
+                      {u.is_active === false ? (
+                        <div className="inline-flex items-center gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => handleApproveDirector(u)}
+                            disabled={approvingId === u.id}
+                            className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <Check size={13} />
+                            <span>{approvingId === u.id ? 'Approving...' : 'Approve'}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(u)}
+                            className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setEdit({ ...u, password: '' })}
+                            className="font-bold text-gray-900 hover:text-black text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(u)}
+                            className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
