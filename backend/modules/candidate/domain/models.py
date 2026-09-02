@@ -1,35 +1,122 @@
-from enum import Enum
-from datetime import datetime
-from typing import Optional, List
-from pydantic import BaseModel, Field
+"""Candidate submission model (MongoDB collection).
 
-class SubmissionStatus(str, Enum):
-    SUBMITTED = "Submitted"
-    SCREENED = "Screened"
-    SHORTLISTED = "Shortlisted"
-    INTERVIEW_SCHEDULED = "InterviewScheduled"
-    INTERVIEW_COMPLETED = "InterviewCompleted"
-    REJECTED = "Rejected"
-    SELECTED = "Selected"
+The ``candidate_submissions`` collection is produced by the Candidate
+Screening Agent (vendor recruiter submissions). This module reads it from the
+main app so the Hiring Manager dashboard can surface shortlisted candidates.
+"""
+from typing import ClassVar
 
-class Recommendation(str, Enum):
-    SHORTLIST = "SHORTLIST"
-    REVIEW = "REVIEW"
-    REJECT = "REJECT"
+from ...shared.db import Column, Model, _utcnow, _uuid
 
-class Candidate(BaseModel):
-    id: str = Field(..., description="Unique Candidate ID")
-    tenant_id: str = Field(..., description="Tenant ID (Client / Consultancy)")
-    name: str = Field(..., description="Full Name of candidate")
-    email: str = Field(..., description="Candidate email address")
-    phone: str = Field(..., description="Candidate phone number")
-    resume_text: str = Field(..., description="Raw parsed text from PDF resume")
-    skills: List[str] = Field(default_factory=list, description="Extracted skills")
 
-class Submission(BaseModel):
-    id: str = Field(..., description="Unique Submission ID")
-    candidate_id: str = Field(..., description="Linked Candidate ID")
-    requisition_id: str = Field(..., description="Linked Requisition ID")
-    status: SubmissionStatus = Field(default=SubmissionStatus.SUBMITTED, description="Current submission state")
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+class CandidateSubmission(Model):
+    __tablename__ = "candidate_submissions"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "requisition_id": None,
+        "candidate_name": "",
+        "candidate_email": None,
+        "vendor_name": "Vendor A",
+        "filename": None,
+        "fingerprint": None,
+        "resume_text": None,
+        "jd_text": None,
+        "match_score": None,
+        "recommendation": None,
+        "status": "Screened",
+        "summary": None,
+        "details": dict,
+        "matched_skills": list,
+        "missing_skills": list,
+        "hiring_manager_notes": None,
+        "resume_pdf": None,  # Base64-encoded PDF data
+        "created_at": _utcnow,
+        "updated_at": _utcnow,
+    }
+
+    id = Column("id")
+    requisition_id = Column("requisition_id")
+    candidate_name = Column("candidate_name")
+    candidate_email = Column("candidate_email")
+    vendor_name = Column("vendor_name")
+    filename = Column("filename")
+    fingerprint = Column("fingerprint")
+    resume_text = Column("resume_text")
+    jd_text = Column("jd_text")
+    match_score = Column("match_score")
+    recommendation = Column("recommendation")
+    status = Column("status")
+    summary = Column("summary")
+    details = Column("details")
+    matched_skills = Column("matched_skills")
+    missing_skills = Column("missing_skills")
+    hiring_manager_notes = Column("hiring_manager_notes")
+    resume_pdf = Column("resume_pdf")
+    created_at = Column("created_at")
+    updated_at = Column("updated_at")
+
+
+class Candidate(Model):
+    __tablename__ = "candidates"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "candidate_name": "",
+        "candidate_title": "",
+        "candidate_email": None,
+        "candidate_phone": None,
+        "vendor_company_name": "",
+        "skills": list,
+        "filename": None,
+        "summary": None,
+        "extracted_text": "",
+        "details": dict,
+        "tenant_id": None,
+        "resume_pdf": None,  # Base64-encoded PDF data
+        "created_at": _utcnow,
+        "updated_at": _utcnow,
+    }
+
+    id = Column("id")
+    candidate_name = Column("candidate_name")
+    candidate_title = Column("candidate_title")
+    candidate_email = Column("candidate_email")
+    candidate_phone = Column("candidate_phone")
+    vendor_company_name = Column("vendor_company_name")
+    skills = Column("skills")
+    filename = Column("filename")
+    summary = Column("summary")
+    extracted_text = Column("extracted_text")
+    details = Column("details")
+    tenant_id = Column("tenant_id")
+    resume_pdf = Column("resume_pdf")
+    created_at = Column("created_at")
+    updated_at = Column("updated_at")
+
+
+
+class ScreeningCache(Model):
+    __tablename__ = "screening_cache"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "cache_key": "",
+        "recruiter_id": "",
+        "tenant_id": None,
+        "requisition_id": "",
+        "candidate_ids": list,
+        "results": list,
+        "created_at": _utcnow,
+        "expires_at": _utcnow,
+    }
+
+    id = Column("id")
+    cache_key = Column("cache_key")
+    recruiter_id = Column("recruiter_id")
+    tenant_id = Column("tenant_id")
+    requisition_id = Column("requisition_id")
+    candidate_ids = Column("candidate_ids")
+    results = Column("results")
+    created_at = Column("created_at")
+    expires_at = Column("expires_at")

@@ -1,7 +1,7 @@
 """LLM client interface.
 
 The agent depends on this abstraction, not on any concrete provider, so
-offline tests run against MockLLM and dev/prod runs use the Ollama client.
+offline tests run against MockLLM and dev/prod runs use the Groq client.
 """
 from abc import ABC, abstractmethod
 from typing import Any

@@ -1,27 +1,21 @@
 """Shared pytest fixtures.
 
-Tests run against an in-memory SQLite database (the models only use portable
-column types) and a deterministic MockLLM, so the whole suite is offline.
-Integration against Postgres + Ollama is covered by @pytest.mark.ollama tests
-and the golden eval harness.
+Tests run against an in-memory MongoDB mock (mongomock) and a deterministic
+MockLLM, so the whole suite is offline. Integration against MongoDB Atlas +
+Groq is covered by @pytest.mark.groq tests and the golden eval harness.
 """
+import mongomock
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from modules.requisition.domain import models
 from modules.requisition.llm.mock import MockLLM
-from modules.shared.db import Base
+from modules.shared.db import Session
 
 
 @pytest.fixture
 def session_factory():
-    engine = create_engine(
-        "sqlite:///:memory:", connect_args={"check_same_thread": False}, future=True
-    )
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine, expire_on_commit=False, future=True)
-    return factory
+    database = mongomock.MongoClient()["test"]
+    return lambda: Session(database)
 
 
 @pytest.fixture
@@ -48,7 +42,6 @@ def company_profile(session_factory):
             )
             s.add(prof)
             s.commit()
-            s.refresh(prof)
             return prof.id
 
     return _make

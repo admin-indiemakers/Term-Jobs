@@ -21,11 +21,12 @@ class ConfidenceBlocked(GuardrailError):
     pass
 
 
-def enforce_budget(intake_turns: int, tool_calls: int) -> None:
-    if intake_turns > settings.max_intake_turns:
-        raise BudgetExceeded(
-            f"intake turns {intake_turns} exceed budget {settings.max_intake_turns}"
-        )
+def enforce_budget(
+    intake_turns: int, tool_calls: int, turns_label: str = "intake turns"
+) -> None:
+    limit = settings.max_refinements if turns_label == "refinement" else settings.max_intake_turns
+    if intake_turns > limit:
+        raise BudgetExceeded(f"{turns_label} {intake_turns} exceed budget {limit}")
     if tool_calls > settings.max_tool_calls:
         raise BudgetExceeded(f"tool calls {tool_calls} exceed budget {settings.max_tool_calls}")
 
