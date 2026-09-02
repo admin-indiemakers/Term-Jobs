@@ -30,7 +30,6 @@ import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
 import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
-import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
 import CandidatePortalAccess from './pages/candidates/CandidatePortalAccess';
 import ReportedIssues from './pages/candidates/ReportedIssues';
 import TeamOverview from './pages/workforce/TeamOverview';
