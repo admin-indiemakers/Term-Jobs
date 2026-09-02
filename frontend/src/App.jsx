@@ -28,6 +28,7 @@ import RequisitionCandidates from './pages/candidates/RequisitionCandidates';
 import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
+import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
 import Archives from './pages/Archives';
 
@@ -55,7 +56,7 @@ function HomeRedirect() {
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
-  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -66,7 +67,7 @@ function DashboardIndex() {
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
-  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -129,6 +130,14 @@ export default function App() {
           element={
             <RequireAuth>
               <CandidatePortal />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate/onboarding"
+          element={
+            <RequireAuth>
+              <CandidateOnboarding />
             </RequireAuth>
           }
         />
