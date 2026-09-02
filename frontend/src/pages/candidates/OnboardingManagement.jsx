@@ -117,14 +117,14 @@ export default function OnboardingManagement() {
     const existing = onboardingDocs[id];
 
     setEditingCandidate(cand);
-    if (existing?.software_access?.length) {
-      setSetupSoftware(existing.software_access);
+    if (existing?.software?.length) {
+      setSetupSoftware(existing.software);
     } else {
       setSetupSoftware(DEFAULT_SOFTWARE.map((s) => ({ ...s, enabled: false })));
     }
 
-    if (existing?.training_modules?.length) {
-      setSetupTraining(existing.training_modules);
+    if (existing?.training?.length) {
+      setSetupTraining(existing.training);
     } else {
       setSetupTraining(DEFAULT_TRAINING.map((t) => ({ ...t, enabled: t.mandatory || false })));
     }
@@ -141,11 +141,13 @@ export default function OnboardingManagement() {
       const payload = {
         candidate_id: id,
         candidate_name: editingCandidate.candidate_name || editingCandidate.name,
-        vendor_name: editingCandidate.vendor_name || 'bridgeon',
-        requisition_ref: editingCandidate.requisition_ref || 'REQ-F7F406',
-        requisition_title: editingCandidate.requisition_title || 'DevOps Engineer',
-        software_access: setupSoftware,
-        training_modules: setupTraining,
+        company_name: editingCandidate.company_name || '',
+        requisition_id: editingCandidate.requisition_id || '',
+        vendor_name: editingCandidate.vendor_name || '',
+        requisition_ref: editingCandidate.requisition_ref || '',
+        requisition_title: editingCandidate.requisition_title || '',
+        software: setupSoftware,
+        training: setupTraining,
         status: setupSoftware.some((s) => s.enabled) || setupTraining.some((t) => t.enabled) ? 'completed' : 'in_progress',
       };
 
@@ -459,10 +461,10 @@ export default function OnboardingManagement() {
                   const id = cand.id || cand.candidate_id || `cand-${idx}`;
                   const rawId = cand.candidate_id || cand.id || `${idx}7fa08`;
                   const candCode = String(rawId).startsWith('BEAR-') ? String(rawId) : `BEAR-${String(rawId).slice(0, 6)}`;
-                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Sreehari P S';
-                  const vendorName = cand.vendor_name || 'bridgeon';
-                  const reqRef = cand.requisition_ref || 'REQ-F7F406';
-                  const reqTitle = cand.requisition_title || 'DevOps Engineer';
+                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
+                  const vendorName = cand.vendor_name || '';
+                  const reqRef = cand.requisition_ref || '';
+                  const reqTitle = cand.requisition_title || '';
 
                   const score = cand.match_score != null ? Math.round(cand.match_score) : null;
                   const obDoc = onboardingDocs[id] || (idx < 2 ? { status: 'completed' } : null);
@@ -513,7 +515,7 @@ export default function OnboardingManagement() {
                           </span>
                         ) : (
                           <span className="text-[12px] font-bold text-[#D97706]">
-                            —%
+                            â€”%
                           </span>
                         )}
                       </td>
@@ -585,7 +587,7 @@ export default function OnboardingManagement() {
                 onClick={() => setShowIssuesModal(false)}
                 className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold"
               >
-                ✕
+                âœ•
               </button>
             </div>
 
@@ -676,14 +678,14 @@ export default function OnboardingManagement() {
                   Configure Onboarding Setup
                 </h3>
                 <p className="text-[12px] text-[#737373] font-medium mt-0.5">
-                  {editingCandidate.candidate_name || editingCandidate.name} • {editingCandidate.requisition_title || 'DevOps Engineer'}
+                  {editingCandidate.candidate_name || editingCandidate.name} â€¢ {editingCandidate.requisition_title || 'â€”'}
                 </p>
               </div>
               <button
                 onClick={() => setEditingCandidate(null)}
                 className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold"
               >
-                ✕
+                âœ•
               </button>
             </div>
 

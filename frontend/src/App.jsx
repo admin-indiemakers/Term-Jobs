@@ -29,6 +29,12 @@ import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
+import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
+import CandidatePortalAccess from './pages/candidates/CandidatePortalAccess';
+import ReportedIssues from './pages/candidates/ReportedIssues';
+import TeamOverview from './pages/workforce/TeamOverview';
+import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
+import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Archives from './pages/Archives';
 
 
@@ -102,7 +108,12 @@ export default function App() {
           <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
           <Route path="candidates/accepted" element={<AcceptedCandidates />} />
           <Route path="candidates/onboarding" element={<OnboardingManagement />} />
+          <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />
+          <Route path="candidates/issues" element={<ReportedIssues />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
+          <Route path="workforce/team" element={<TeamOverview />} />
+          <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
+          <Route path="workforce/expenses" element={<ExpenseApprovals />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
           <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
