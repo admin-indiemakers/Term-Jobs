@@ -92,10 +92,16 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         if not user:
             user = db.query(User).filter(User.email == lookup).first()
 
-    if not user or not user.is_active or not verify_password(body.password, user.password_hash):
+    if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is pending approval by the company administrator. Please wait for approval before logging in.",
         )
 
     comp = _get_company_profile(user.tenant_id, db)
@@ -1210,8 +1216,8 @@ def register_hiring_manager(
         password_hash=hash_password(body.password),
         role="Hiring Manager",
         department=body.department.strip() or "General",
-        created_by=created_by_id,
-        is_active=True,
+        created_by="self_invite",
+        is_active=False,
     )
     db.add(user)
     db.commit()
@@ -1230,3 +1236,48 @@ def register_hiring_manager(
             "tenant_name": target_tenant.name if target_tenant else "Bearitt",
         }
     }
+
+@router.post("/users/{user_id}/approve", response_model=UserResponse)
+def approve_user(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Approve a self-registered hiring manager or user access request."""
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    if current_user.role not in ("Super Admin", "Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company administrators can approve user access requests",
+        )
+
+    if current_user.role == "Admin" and target.tenant_id != current_user.tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only approve accounts in your company workspace",
+        )
+
+    target.is_active = True
+    db.commit()
+    db.refresh(target)
+    _cache.invalidate_prefix("users:")
+
+    return UserResponse(
+        id=target.id,
+        email=target.email,
+        name=target.name,
+        role=target.role,
+        tenant_id=target.tenant_id,
+        tenant_name=_tenant_name(target.tenant_id, db),
+        tenant_type=_tenant_type(target.tenant_id, db),
+        department=target.department or "",
+        created_by=target.created_by,
+        is_active=target.is_active,
+        candidate_limit=target.candidate_limit,
+    )
