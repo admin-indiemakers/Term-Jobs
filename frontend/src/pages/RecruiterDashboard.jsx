@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle, Bell, Clock } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronUp, Zap, Building2, Phone, Mail as MailIcon, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle, Bell, Clock } from 'lucide-react';
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +19,7 @@ function ScoreBar({ score }) {
       <div className="score-track">
         <div className="score-fill" style={{ width: `${score ?? 0}%`, background: color }}></div>
       </div>
-      <span className="score-value" style={{ color }}>{score != null ? `${Math.round(score)}%` : 'â€”'}</span>
+      <span className="score-value" style={{ color }}>{score != null ? `${Math.round(score)}%` : '—'}</span>
     </div>
   );
 }
@@ -92,13 +92,13 @@ function getDeadlineInfo(deadlineStr) {
 }
 
 function formatBankDate(dateStr) {
-  if (!dateStr) return 'â€”';
+  if (!dateStr) return '—';
   try {
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr.split('T')[0] || 'â€”';
+    if (isNaN(d.getTime())) return dateStr.split('T')[0] || '—';
     return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: '2-digit' }).replace(',', '');
   } catch {
-    return dateStr.split('T')[0] || 'â€”';
+    return dateStr.split('T')[0] || '—';
   }
 }
 
@@ -553,7 +553,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               badge: diffDays < 0 ? 'Expired' : diffDays === 0 ? 'Due Today' : `${diffDays}d Left`,
               badgeColor: 'bg-[#F5F5F2] text-[#0A0A0A] border-[#E2E2DC]',
               title: req.title || 'Requisition Role',
-              subtitle: `${req.company_name || 'Client'} â€¢ Deadline: ${dStr}`,
+              subtitle: `${req.company_name || 'Client'} • Deadline: ${dStr}`,
               actionLabel: 'Screen',
               actionUrl: '/dashboard/recruiter/requisitions',
               reqId: req.id,
@@ -592,7 +592,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         badge: 'HR Accepted',
         badgeColor: 'bg-[#0A0A0A] text-[#FFFFFF] border-[#0A0A0A]',
         title: candName,
-        subtitle: `${compName} â€¢ ${roleName}`,
+        subtitle: `${compName} • ${roleName}`,
         actionLabel: 'Grant Access',
         actionUrl: '/dashboard/recruiter/portal-access',
         candId,
@@ -614,7 +614,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         badge: 'Interview',
         badgeColor: 'bg-[#F5F5F2] text-[#0A0A0A] border-[#E2E2DC]',
         title: candName,
-        subtitle: `${compName} â€¢ Scheduled`,
+        subtitle: `${compName} • Scheduled`,
         actionLabel: 'View',
         actionUrl: '/dashboard/recruiter/interviews',
       });
@@ -2086,7 +2086,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       </div>
                       <div className="space-y-0.5">
                         <div className="text-[9.5px] font-extrabold uppercase text-[#8A8A85]">EXPERIENCE</div>
-                        <div className="text-[13.5px] font-extrabold text-[#0A0A0A]">{detail.experience || detail.seniority || selected?.experience || selected?.structured_role?.experience || '3â€“6 yrs'}</div>
+                        <div className="text-[13.5px] font-extrabold text-[#0A0A0A]">{detail.experience || detail.seniority || selected?.experience || selected?.structured_role?.experience || '3–6 yrs'}</div>
                       </div>
                       <div className="space-y-0.5">
                         <div className="text-[9.5px] font-extrabold uppercase text-[#8A8A85]">OPENINGS</div>
@@ -2203,7 +2203,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             </div>
 
 
-            {/* SCREENING PROGRESS BAR â€” visible above both tabs */}
+            {/* SCREENING PROGRESS BAR — visible above both tabs */}
             {screening && (
               <div
                 style={{
@@ -2307,7 +2307,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                           {stageName}
                         </span>
                         {idx < arr.length - 1 && (
-                          <span style={{ color: '#334155', fontSize: '10px' }}>â†’</span>
+                          <span style={{ color: '#334155', fontSize: '10px' }}>→</span>
                         )}
                       </Fragment>
                     );
@@ -2324,7 +2324,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                     Open requirements
                   </h2>
                   <span className="text-[12px] text-[#8A8A85] font-medium">
-                    {visibleRequisitions.length} roles Â· grouped by company
+                    {visibleRequisitions.length} roles • grouped by company
                   </span>
                 </div>
 
@@ -2459,7 +2459,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
                                       <div className="text-[12px] text-[#8A8A85] font-medium flex items-center gap-1.5">
                                         <span className="capitalize">{workModelVal}</span>
-                                        <span>Â·</span>
+                                        <span>•</span>
                                         <span>{expVal}</span>
                                       </div>
 
@@ -2507,10 +2507,10 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                         <option value="all">All eligible</option>
                                         <option value="exclude_accepted">Excl. accepted</option>
                                       </select>
-                                      <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 8, color: '#8A8A85', pointerEvents: 'none' }}>â–¼</span>
+                                      <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 8, color: '#8A8A85', pointerEvents: 'none' }}>▼</span>
                                     </div>
 
-                                    {/* Per-row AI Screening button â€” passes req.id directly, no state race */}
+                                    {/* Per-row AI Screening button — passes req.id directly, no state race */}
                                     <button
                                       type="button"
                                       onClick={async (e) => {
@@ -2547,9 +2547,9 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                       }}
                                     >
                                       {screening && selectedReqId === req.id ? (
-                                        <><span style={{ fontSize: 11 }}>âŸ³</span><span>Screeningâ€¦</span></>
+                                        <><Sparkles size={11} className="animate-spin" /><span>Screening...</span></>
                                       ) : (
-                                        <><span style={{ fontSize: 10 }}>âœ¦</span><span>AI Screen</span></>
+                                        <><Sparkles size={11} /><span>AI Screen</span></>
                                       )}
                                     </button>
                                   </div>
@@ -2614,7 +2614,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       }}
                       className="px-3.5 py-2 text-[12.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0"
                     >
-                      <span>â€”</span>
+                      <span>—</span>
                       <span>Requirements</span>
                     </button>
                   </div>
@@ -2756,7 +2756,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               {stageName}
                             </span>
                             {idx < arr.length - 1 && (
-                              <span style={{ color: '#475569', fontSize: '12px' }}>â†’</span>
+                              <span style={{ color: '#475569', fontSize: '12px' }}>→</span>
                             )}
                           </Fragment>
                         );
@@ -2895,7 +2895,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       }`}
                   >
                     <span>Run AI screening</span>
-                    <span>â†’</span>
+                    <span>→</span>
                   </button>
                 </div>
               </div>
@@ -2999,7 +2999,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 }}
                                 className="px-2.5 py-0.5 text-[11px] font-extrabold tracking-tight inline-flex items-center gap-1 shadow-2xs"
                               >
-                                <span>âš¡</span>
+                                <span>⚡</span>
                                 <span>{score}% Match</span>
                               </span>
 
@@ -3020,12 +3020,12 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               {sub.candidate_email && (
                                 <span>{sub.candidate_email}</span>
                               )}
-                              <span>â€¢</span>
+                              <span>•</span>
                               <span>Vendor: <strong className="text-[#0A0A0A] font-semibold">{sub.vendor_name || 'bridgeon'}</strong></span>
                               {sub.filename && (
                                 <>
-                                  <span>â€¢</span>
-                                  <span className="truncate max-w-[200px]">ðŸ“„ {sub.filename}</span>
+                                  <span>•</span>
+                                  <span className="truncate max-w-[200px]">📄 {sub.filename}</span>
                                 </>
                               )}
                             </div>
@@ -3046,7 +3046,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               }}
                               className="px-4 py-2 text-[12px] font-bold flex items-center gap-1.5 shadow-2xs"
                             >
-                              <span>âœ“</span>
+                              <span>✓</span>
                               <span>Selected by HR (Onboarding)</span>
                             </span>
                           ) : isShortlisted ? (
@@ -3058,8 +3058,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               }}
                               className="px-4 py-2 text-[12px] font-bold flex items-center gap-1.5 shadow-2xs"
                             >
-                              <span>âœ“</span>
-                              <span>âœ“ Shortlisted</span>
+                              <CheckCheck size={13} />
+                              <span>Shortlisted</span>
                             </span>
                           ) : isRejected ? (
                             <span
@@ -3071,7 +3071,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               }}
                               className="px-4 py-2 text-[12px] font-bold flex items-center gap-1.5 line-through"
                             >
-                              <span>âœ•</span>
+                              <span>✕</span>
                               <span>Rejected</span>
                             </span>
                           ) : (
@@ -3086,7 +3086,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 }}
                                 className="px-4 py-2 text-[12px] font-extrabold hover:bg-[#262626] transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                               >
-                                <span>â­�</span>
+                                <span>⭐</span>
                                 <span>Shortlist (Submit to HR)</span>
                               </button>
 
@@ -3101,7 +3101,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 }}
                                 className="px-3.5 py-2 text-[12px] font-bold hover:text-[#0A0A0A] hover:bg-[#F5F5F2] transition-all flex items-center gap-1 cursor-pointer"
                               >
-                                <span>âœ•</span>
+                                <X size={12} />
                                 <span>Reject</span>
                               </button>
                             </>
@@ -3118,7 +3118,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             }}
                             className="px-3.5 py-2 text-[12px] font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                           >
-                            <span>{isExpanded ? 'â–² Hide Details' : 'â–¼ Details & Breakdown'}</span>
+                            {isExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            <span>{isExpanded ? 'Hide Details' : 'Details & Breakdown'}</span>
                           </button>
                         </div>
                       </div>
@@ -3137,14 +3138,14 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                           >
                             {sub.candidate_email && (
                               <div className="text-[12px] text-[#4A4A45] font-semibold flex items-center gap-1.5">
-                                <span>âœ‰ï¸�</span>
+                                <span>✉</span>
                                 <span>{sub.candidate_email}</span>
                               </div>
                             )}
 
                             {sub.candidate_phone && (
                               <div className="text-[12px] text-[#4A4A45] font-semibold flex items-center gap-1.5">
-                                <span>ðŸ“±</span>
+                                <span>📱</span>
                                 <span>{sub.candidate_phone}</span>
                               </div>
                             )}
@@ -3162,7 +3163,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 }}
                                 className="px-2.5 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors inline-flex items-center gap-1.5 shadow-2xs"
                               >
-                                <span>ðŸ�™</span>
+                                <span></span>
                                 <span>GitHub: {sub.github_evidence?.username || (sub.github_url ? sub.github_url.split('/').pop() : 'Profile')}</span>
                                 {sub.github_evidence?.verified && (
                                   <span
@@ -3176,7 +3177,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                     Verified
                                   </span>
                                 )}
-                                <span>â†—</span>
+                                <span>↗</span>
                               </a>
                             )}
 
@@ -3193,14 +3194,14 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 }}
                                 className="px-2.5 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors inline-flex items-center gap-1.5 shadow-2xs"
                               >
-                                <span>ðŸ’¼</span>
-                                <span>LinkedIn Profile â†—</span>
+                                <span>💼</span>
+                                <span>LinkedIn Profile ↗</span>
                               </a>
                             )}
 
                             {sub.candidate_title && (
                               <span className="text-[12px] text-[#8A8A85] font-medium">
-                                ðŸ�·ï¸� {sub.candidate_title}
+                                 {sub.candidate_title}
                               </span>
                             )}
                           </div>
@@ -3208,7 +3209,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                           {/* 1. Score Breakdown Cards Grid */}
                           <div>
                             <h4 className="text-[11.5px] font-extrabold text-[#0A0A0A] uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-                              <span>ðŸ“Š</span>
+                              <span>📊</span>
                               <span>AI Match Score Breakdown</span>
                             </h4>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -3285,7 +3286,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               className="p-4"
                             >
                               <h5 className="text-[12px] font-extrabold text-[#0A0A0A] mb-2.5 flex items-center gap-1.5">
-                                <span>âœ“</span>
+                                <span>✓</span>
                                 <span>Matched Technical Skills ({matchedSkillsList.length})</span>
                               </h5>
                               {matchedSkillsList.length ? (
@@ -3300,7 +3301,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                       }}
                                       className="text-[11px] font-bold px-2.5 py-1 tracking-tight"
                                     >
-                                      âœ“ {skill}
+                                      ✓ {skill}
                                     </span>
                                   ))}
                                 </div>
@@ -3318,7 +3319,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               className="p-4"
                             >
                               <h5 className="text-[12px] font-extrabold text-[#737373] mb-2.5 flex items-center gap-1.5">
-                                <span>âš ï¸�</span>
+                                <span>⚠️</span>
                                 <span>Missing / Skill Gaps ({missingSkillsList.length})</span>
                               </h5>
                               {missingSkillsList.length ? (
@@ -3334,7 +3335,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                       }}
                                       className="text-[11px] font-semibold px-2.5 py-1"
                                     >
-                                      âš ï¸� {skill}
+                                      ⚠️ {skill}
                                     </span>
                                   ))}
                                 </div>
@@ -3344,7 +3345,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             </div>
                           </div>
 
-                          {/* 3. ðŸ�™ GitHub Code Evidence & Public Repositories (If available) */}
+                          {/* 3.  GitHub Code Evidence & Public Repositories (If available) */}
                           {(sub.github_evidence || sub.github_url) && (
                             <div
                               style={{
@@ -3356,13 +3357,13 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             >
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3.5">
                                 <div className="flex items-center gap-2.5">
-                                  <span className="text-[1.3rem]">ðŸ�™</span>
+                                  <span className="text-[1.3rem]"></span>
                                   <div>
                                     <h4 className="text-[13px] font-extrabold text-white">
                                       GitHub Verified Code Proof & Repositories
                                     </h4>
                                     <p className="text-[11px] text-[#A3A3A3] mt-0.5">
-                                      Profile: <strong className="text-white font-semibold">@{sub.github_evidence?.username || (sub.github_url ? sub.github_url.split('/').pop() : 'Candidate')}</strong> â€¢ {sub.github_evidence?.public_repos || 0}+ Public Repositories
+                                      Profile: <strong className="text-white font-semibold">@{sub.github_evidence?.username || (sub.github_url ? sub.github_url.split('/').pop() : 'Candidate')}</strong> • {sub.github_evidence?.public_repos || 0}+ Public Repositories
                                     </p>
                                   </div>
                                 </div>
@@ -3380,7 +3381,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   className="px-3 py-1.5 text-[11.5px] font-bold text-white hover:bg-[#333333] transition-colors inline-flex items-center gap-1.5 self-start sm:self-auto"
                                 >
                                   <span>Open GitHub Profile</span>
-                                  <span>â†—</span>
+                                  <span>↗</span>
                                 </a>
                               </div>
 
@@ -3426,11 +3427,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                             onClick={(e) => e.stopPropagation()}
                                             className="text-white text-[12.5px] font-extrabold hover:underline break-all"
                                           >
-                                            ðŸ“¦ {repo.name} â†—
+                                            📦 {repo.name} ↗
                                           </a>
                                           {repo.stars > 0 && (
                                             <span className="text-[11px] text-[#FBBF24] font-bold flex items-center gap-1 shrink-0">
-                                              â˜… {repo.stars}
+                                              ★ {repo.stars}
                                             </span>
                                           )}
                                         </div>
@@ -3477,7 +3478,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               className="p-4"
                             >
                               <h5 className="text-[12px] font-extrabold text-[#0A0A0A] mb-3 flex items-center gap-1.5">
-                                <span>ðŸ’¼</span>
+                                <span>💼</span>
                                 <span>Notable Projects & Professional Experience</span>
                               </h5>
                               <div className="space-y-2.5">
@@ -3492,7 +3493,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                     className="p-3"
                                   >
                                     <div className="font-bold text-[12.5px] text-[#0A0A0A] mb-1">
-                                      ðŸš€ {proj.name || 'Technical Project'}
+                                      🚀 {proj.name || 'Technical Project'}
                                     </div>
                                     {proj.description && (
                                       <p className="text-[11.5px] text-[#737373] mb-1.5 leading-relaxed">
@@ -3532,7 +3533,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             className="p-4"
                           >
                             <h5 className="text-[12px] font-extrabold text-[#0A0A0A] mb-1.5 flex items-center gap-1.5">
-                              <span>ðŸ’¡</span>
+                              <span>💡</span>
                               <span>AI Evaluation Summary & Rationale</span>
                             </h5>
                             <p className="text-[12.5px] text-[#4A4A45] leading-relaxed">
@@ -3567,7 +3568,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 }}
                                 className="px-3.5 py-2 text-[12px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                               >
-                                <span>â¬‡ï¸�</span>
+                                <span>⬇</span>
                                 <span>Download PDF</span>
                               </button>
                             </div>
@@ -3584,7 +3585,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   }}
                                   className="px-4 py-2 text-[12px] font-extrabold hover:bg-[#262626] transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs"
                                 >
-                                  <span>â­�</span>
+                                  <span>⭐</span>
                                   <span>Shortlist (Submit to HR)</span>
                                 </button>
                               )}
@@ -3600,7 +3601,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   }}
                                   className="px-3.5 py-2 text-[12px] font-bold hover:text-[#0A0A0A] hover:bg-[#F5F5F2] transition-all flex items-center gap-1 cursor-pointer"
                                 >
-                                  <span>âœ•</span>
+                                  <span>✕</span>
                                   <span>Reject</span>
                                 </button>
                               )}
@@ -3622,7 +3623,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 className="p-8 text-center"
               >
                 <p className="text-[13px] text-[#8A8A85]">
-                  No candidates screened yet for <strong className="text-[#0A0A0A] font-semibold">{selected?.title || 'this role'}</strong>. Select candidates from the Candidate Pool above and click <strong className="text-[#0A0A0A]">Run AI screening â†’</strong>.
+                  No candidates screened yet for <strong className="text-[#0A0A0A] font-semibold">{selected?.title || 'this role'}</strong>. Select candidates from the Candidate Pool above and click <strong className="text-[#0A0A0A]">Run AI screening →</strong>.
                 </p>
               </div>
             )}
@@ -3920,18 +3921,18 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             <td className="px-6 py-4.5 align-middle">
                               <div className="space-y-1">
                                 <div className="text-[11.5px] text-[#4A4A45] font-medium flex items-center gap-1.5 truncate max-w-[220px]">
-                                  <span>âœ‰</span>
+                                  <span>✉</span>
                                   <span className="truncate">{candidate.candidate_email || 'No email'}</span>
                                 </div>
                                 {candidate.candidate_phone ? (
                                   <div className="text-[11.5px] text-[#4A4A45] font-medium flex items-center gap-1.5">
-                                    <span>ðŸ“±</span>
+                                    <span>📱</span>
                                     <span>{candidate.candidate_phone}</span>
                                   </div>
                                 ) : (
                                   <div className="text-[11.5px] text-[#A3A3A3] font-medium flex items-center gap-1.5">
-                                    <span>ðŸ“±</span>
-                                    <span>â€”</span>
+                                    <span>📱</span>
+                                    <span>—</span>
                                   </div>
                                 )}
                               </div>
@@ -4069,7 +4070,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                       }}
                                       className="px-3 py-1.5 text-[11.5px] font-bold text-[#0A0A0A] cursor-pointer"
                                     >
-                                      â¬‡ï¸� Download PDF
+                                      ⬇ Download PDF
                                     </button>
                                     <button
                                       type="button"
@@ -4084,7 +4085,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                       }}
                                       className="px-3 py-1.5 text-[11.5px] font-bold text-[#0A0A0A] cursor-pointer"
                                     >
-                                      âš¡ Match to Requisition
+                                      ⚡ Match to Requisition
                                     </button>
                                   </div>
                                 </div>
@@ -4100,7 +4101,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
             ) : (
               <div className="p-12 text-center">
                 <div className="w-12 h-12 rounded-full bg-[#F5F5F2] text-[#8A8A85] flex items-center justify-center mx-auto mb-3 text-lg">
-                  ðŸ‘¥
+                  👥
                 </div>
                 <h3 className="text-[15px] font-extrabold text-[#0A0A0A] mb-1">
                   {bankSearch || skillFilter !== 'all' ? 'No candidates found' : 'No candidates yet'}
@@ -4252,7 +4253,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               </span>
               <div className="mt-3">
                 <span className="text-[2.25rem] font-black text-[#0A0A0A] leading-none tracking-tight">
-                  {shortlistedPipelineStats.avg > 0 ? `${shortlistedPipelineStats.avg}%` : 'â€”'}
+                  {shortlistedPipelineStats.avg > 0 ? `${shortlistedPipelineStats.avg}%` : '—'}
                 </span>
                 <p className="text-[12px] text-[#737373] font-medium mt-1">
                   Current shortlisted pool
@@ -4492,7 +4493,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               <div className="flex items-center justify-between shrink-0 mb-3">
                 <div>
                   <h3 className="text-[15px] font-black text-[#0A0A0A]">All shortlisted candidates</h3>
-                  <p className="text-[11.5px] text-[#8A8A85]">Company â†’ requisition â†’ candidate</p>
+                  <p className="text-[11.5px] text-[#8A8A85]">Company → requisition → candidate</p>
                 </div>
                 <span className="text-[11.5px] text-[#8A8A85] font-semibold">
                   {shortlistedTotalFilteredCount} shown
@@ -4555,7 +4556,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               <div className="text-[11.5px] text-[#737373] mt-0.5 truncate">
                                 <span>{group.candidates.length} shortlisted</span>
                                 {group.skills.length > 0 && (
-                                  <span> Â· {group.skills.join(' Â· ')}</span>
+                                  <span> • {group.skills.join(' • ')}</span>
                                 )}
                               </div>
                             </div>
@@ -4575,7 +4576,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                               }}
                               className="flex items-center justify-center text-[10px] text-[#0A0A0A] font-black"
                             >
-                              {isOpen ? 'âˆ§' : 'âˆ¨'}
+                              {isOpen ? '▲' : '▼'}
                             </div>
                           </div>
                         </div>
@@ -4677,7 +4678,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 ) : (
                   <div className="p-8 text-center">
                     <div className="w-10 h-10 rounded-full bg-[#F5F5F2] text-[#8A8A85] flex items-center justify-center mx-auto mb-2 text-base">
-                      â­�
+                      ⭐
                     </div>
                     <h4 className="text-[14px] font-extrabold text-[#0A0A0A] mb-1">
                       No shortlisted candidates found
@@ -4747,7 +4748,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                 }}
                 className="flex items-center justify-center text-[12px] text-[#0A0A0A] font-bold hover:bg-[#F5F5F2] cursor-pointer"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -4906,7 +4907,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           <div className="modal-content glass-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px', width: '90%', padding: '24px', background: '#fff', borderRadius: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '12px' }}>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#1e293b' }}>Match {selectedMatchCandidate.candidate_name}</h3>
-              <button onClick={() => setSelectedMatchCandidate(null)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>Ã—</button>
+              <button onClick={() => setSelectedMatchCandidate(null)} style={{ background: 'none', border: 0, fontSize: '1.5rem', color: '#94a3b8', cursor: 'pointer', padding: 0 }}>×</button>
             </div>
             <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
               <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: 1.5 }}>Select an open job position to screen <strong>{selectedMatchCandidate.candidate_name}</strong> against using AI extraction and ranking.</p>
@@ -5013,16 +5014,16 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       {showResumeModal.candidate_title || 'Software Engineer'}
                     </span>
                     <span style={{ fontSize: '0.82rem', color: '#2563eb', fontWeight: 500 }}>
-                      ðŸ�¢ {showResumeModal.vendor_company_name || 'bridgeon'}
+                       {showResumeModal.vendor_company_name || 'bridgeon'}
                     </span>
                     {showResumeModal.candidate_email && (
                       <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-                        âœ‰ï¸� {showResumeModal.candidate_email}
+                        ✉ {showResumeModal.candidate_email}
                       </span>
                     )}
                     {showResumeModal.candidate_phone && (
                       <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-                        ðŸ“ž {showResumeModal.candidate_phone}
+                        📞 {showResumeModal.candidate_phone}
                       </span>
                     )}
                   </div>
@@ -5050,7 +5051,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         gap: '6px',
                       }}
                     >
-                      <span>ðŸ”—</span>
+                      <span>🔗</span>
                       <span>Open in New Tab</span>
                     </button>
                     <button
@@ -5075,7 +5076,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         gap: '6px',
                       }}
                     >
-                      <span>â¬‡ï¸�</span>
+                      <span>⬇</span>
                       <span>Download</span>
                     </button>
                   </>
@@ -5097,7 +5098,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                     justifyContent: 'center',
                   }}
                 >
-                  âœ•
+                  ✕
                 </button>
               </div>
             </div>
@@ -5133,7 +5134,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                     gap: '6px',
                   }}
                 >
-                  <span>ðŸ“„</span>
+                  <span>📄</span>
                   <span>Original PDF Resume</span>
                 </button>
                 <button
@@ -5154,7 +5155,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                     gap: '6px',
                   }}
                 >
-                  <span>âœ¨</span>
+                  <span>✨</span>
                   <span>AI Extracted Profile &amp; Skills</span>
                 </button>
               </div>
@@ -5178,7 +5179,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       textDecoration: 'none',
                     }}
                   >
-                    <span>â†—</span> Open Full PDF
+                    <span>↗</span> Open Full PDF
                   </a>
                 </div>
               )}
@@ -5218,7 +5219,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   </object>
                 ) : (
                   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '30px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>ðŸ“„</div>
+                    <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>📄</div>
                     <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#1e293b', margin: '0 0 6px 0' }}>
                       No direct PDF data stored for this profile
                     </h4>
@@ -5345,7 +5346,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   justifyContent: 'center',
                 }}
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -5381,7 +5382,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   transition: 'all 0.2s ease',
                 }}
               >
-                <span>âœ¨ AI Auto-Extract (Bulk Resumes)</span>
+                <span>✨ AI Auto-Extract (Bulk Resumes)</span>
                 <span
                   style={{
                     background: '#dbeafe',
@@ -5413,7 +5414,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                   transition: 'all 0.2s ease',
                 }}
               >
-                âœ�ï¸� Manual Form Entry
+                 Manual Form Entry
               </button>
             </div>
 
@@ -5495,7 +5496,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       }}
                       style={{ display: 'none' }}
                     />
-                    <div style={{ fontSize: '2.2rem', marginBottom: '8px' }}>ðŸ“‚</div>
+                    <div style={{ fontSize: '2.2rem', marginBottom: '8px' }}>📝‚</div>
                     <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
                       Drag &amp; Drop Resumes Here, or <span style={{ color: '#2563eb' }}>Browse Files</span>
                     </div>
@@ -5561,7 +5562,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             }}
                           >
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
-                              <span>ðŸ“„</span>
+                              <span>📄</span>
                               <span
                                 style={{
                                   fontWeight: 600,
@@ -5593,7 +5594,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 padding: '2px 4px',
                               }}
                             >
-                              âœ•
+                              ✕
                             </button>
                           </div>
                         ))}
@@ -5615,7 +5616,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                       gap: '8px',
                     }}
                   >
-                    <span>âš¡</span>
+                    <span>⚡</span>
                     <span>
                       Groq AI will automatically extract Name, Email, Phone, Job Title &amp; Skills from each resume and store them in the Candidate Bank table.
                     </span>
@@ -5849,7 +5850,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                     </>
                   ) : addCandidateMode === 'ai' ? (
                     <>
-                      <span>âœ¨ Ingest {bulkFiles.length > 0 ? `${bulkFiles.length} Resume(s)` : 'Resumes'}</span>
+                      <span>✨ Ingest {bulkFiles.length > 0 ? `${bulkFiles.length} Resume(s)` : 'Resumes'}</span>
                     </>
                   ) : (
                     'Save Candidate'
@@ -5943,7 +5944,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
               if (filtered.length === 0) {
                 return (
                   <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', background: '#ffffff', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
-                    <span style={{ fontSize: '2.5rem' }}>ðŸ“…</span>
+                    <span style={{ fontSize: '2.5rem' }}>📝…</span>
                     <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#0f172a', margin: '10px 0 4px 0' }}>
                       No Interview Requests Found
                     </h3>
@@ -5987,11 +5988,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   borderRadius: '6px',
                                 }}
                               >
-                                {isConfirmed ? 'âœ“ CONFIRMED' : 'â�³ PENDING CONFIRMATION'}
+                                {isConfirmed ? '✓ CONFIRMED' : ' PENDING CONFIRMATION'}
                               </span>
                             </div>
                             <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
-                              Role: <strong style={{ color: '#1e293b' }}>{inv.requisition_title}</strong> â€¢ Client: <strong style={{ color: '#1e293b' }}>{inv.company_name || 'Client HR'}</strong>
+                              Role: <strong style={{ color: '#1e293b' }}>{inv.requisition_title}</strong> • Client: <strong style={{ color: '#1e293b' }}>{inv.company_name || 'Client HR'}</strong>
                             </p>
                           </div>
 
@@ -6013,7 +6014,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                   boxShadow: '0 4px 12px rgba(5,150,105,0.25)',
                                 }}
                               >
-                                {confirmingId === inv.id ? 'Confirming...' : 'ðŸŸ¢ Confirm Slot with Candidate'}
+                                {confirmingId === inv.id ? 'Confirming...' : '🟢 Confirm Slot with Candidate'}
                               </button>
                             )}
                           </div>
@@ -6022,19 +6023,19 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         {/* Meeting Details Grid */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', background: '#f8fafc', padding: '14px', borderRadius: '12px', marginBottom: '14px', fontSize: '0.82rem', color: '#475569' }}>
                           <div>
-                            <strong style={{ color: '#1e293b' }}>ðŸŽ¯ Round:</strong> {inv.interview_round || 'Round 1'}
+                            <strong style={{ color: '#1e293b' }}>🎯 Round:</strong> {inv.interview_round || 'Round 1'}
                           </div>
                           <div>
-                            <strong style={{ color: '#1e293b' }}>ðŸ•’ Slot:</strong> {slot.date} ({slot.start_time} - {slot.end_time} {slot.timezone || 'IST'})
+                            <strong style={{ color: '#1e293b' }}>🕒 Slot:</strong> {slot.date} ({slot.start_time} - {slot.end_time} {slot.timezone || 'IST'})
                           </div>
                           <div>
-                            <strong style={{ color: '#1e293b' }}>ðŸ‘¤ Interviewer:</strong> {inv.interviewer_name || 'Hiring Team'} ({inv.interviewer_email || 'HR'})
+                            <strong style={{ color: '#1e293b' }}>👤 Interviewer:</strong> {inv.interviewer_name || 'Hiring Team'} ({inv.interviewer_email || 'HR'})
                           </div>
                           {inv.meeting_link && (
                             <div>
-                              <strong style={{ color: '#1e293b' }}>ðŸŽ¥ Platform:</strong>{' '}
+                              <strong style={{ color: '#1e293b' }}>🎥 Platform:</strong>{' '}
                               <a href={inv.meeting_link} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', fontWeight: 700, textDecoration: 'none' }}>
-                                Join Meeting â†—
+                                Join Meeting ↗
                               </a>
                             </div>
                           )}
@@ -6043,7 +6044,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                         {/* Notes */}
                         {inv.notes && (
                           <div style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '12px', background: '#ffffff', border: '1px dashed #cbd5e1', padding: '8px 12px', borderRadius: '8px' }}>
-                            ðŸ“� <strong>Client Notes:</strong> {inv.notes}
+                            📝 <strong>Client Notes:</strong> {inv.notes}
                           </div>
                         )}
 
@@ -6064,7 +6065,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                                 gap: '6px',
                               }}
                             >
-                              ðŸ”— Open Cal.com Live Booking Link â†—
+                              🔗 Open Cal.com Live Booking Link ↗
                             </a>
                           )}
 
@@ -6072,12 +6073,12 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b' }}>1-Click Sync:</span>
                               {inv.calendar_links.google && (
-                                <a href={inv.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>ðŸŸ¢ Google</a>
+                                <a href={inv.calendar_links.google} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🟢 Google</a>
                               )}
                               {inv.calendar_links.outlook && (
-                                <a href={inv.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>ðŸ”µ Outlook</a>
+                                <a href={inv.calendar_links.outlook} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>🔵 Outlook</a>
                               )}
-                              <a href={`/api/interviews/${inv.id}/invite.ics`} download style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>âšª .ICS File</a>
+                              <a href={`/api/interviews/${inv.id}/invite.ics`} download style={{ fontSize: '0.74rem', fontWeight: 700, padding: '4px 8px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: '6px', textDecoration: 'none', color: '#0f172a' }}>⚪ .ICS File</a>
                             </div>
                           )}
                         </div>
@@ -6091,12 +6092,12 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         </div>
       )}
 
-      {/* â”€â”€â”€ Accepted Candidates View â”€â”€â”€ */}
+      {/* ─── Accepted Candidates View ─── */}
       {showAccepted && (
         <AcceptedCandidatesView authToken={authToken} />
       )}
 
-      {/* â”€â”€â”€ Portal Access View â”€â”€â”€ */}
+      {/* ─── Portal Access View ─── */}
       {showPortal && (
         <PortalAccessView authToken={authToken} />
       )}
@@ -6148,7 +6149,7 @@ function AcceptedCandidatesView({ authToken }) {
 
         {loading ? <p style={{ padding: 24, color: '#64748b' }}>Loading...</p> : error ? <p style={{ color: '#dc2626', padding: 24 }}>{error}</p> : candidates.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 12 }}>ðŸ“‹</div>
+            <div style={{ fontSize: '2rem', marginBottom: 12 }}>📝‹</div>
             <div style={{ fontWeight: 600 }}>No accepted candidates yet</div>
           </div>
         ) : (
@@ -6159,7 +6160,7 @@ function AcceptedCandidatesView({ authToken }) {
                 onClick={() => setSelectedCompany(null)}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff', fontSize: '0.82rem', fontWeight: 600, color: '#475569', cursor: 'pointer', marginBottom: 16 }}
               >
-                â†� Back to companies
+                ← Back to companies
               </button>
             )}
 
@@ -6223,11 +6224,11 @@ function AcceptedCandidatesView({ authToken }) {
                             </td>
                             <td style={{ padding: '12px 16px', fontFamily: 'monospace', fontSize: '0.82rem', color: '#475569' }}>{cid}</td>
                             <td style={{ padding: '12px 16px' }}>
-                              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.8rem' }}>{c.requisition_ref || 'â€”'}</div>
+                              <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.8rem' }}>{c.requisition_ref || '—'}</div>
                               <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{c.requisition_title || ''}</div>
                             </td>
                             <td style={{ padding: '12px 16px', fontWeight: 800, color: c.match_score >= 70 ? '#059669' : c.match_score >= 40 ? '#d97706' : '#dc2626' }}>
-                              {c.match_score != null ? `${Math.round(c.match_score)}%` : 'â€”'}
+                              {c.match_score != null ? `${Math.round(c.match_score)}%` : '—'}
                             </td>
                           </tr>
                         );
@@ -6293,7 +6294,7 @@ function PortalAccessView({ authToken }) {
           candidate_id: createCandidateId.trim(),
         },
       });
-      setToast('âœ“ Portal access created successfully');
+      setToast('✓ Portal access created successfully');
       setShowCreate(false);
       setCreateName('');
       setCreateEmail('');
@@ -6320,7 +6321,7 @@ function PortalAccessView({ authToken }) {
         token: authToken,
         body,
       });
-      setToast('âœ“ Portal credentials updated successfully');
+      setToast('✓ Portal credentials updated successfully');
       setEditUser(null);
       loadData();
       setTimeout(() => setToast(''), 3500);
@@ -6338,7 +6339,7 @@ function PortalAccessView({ authToken }) {
         token: authToken,
         body: { is_active: activate },
       });
-      setToast(activate ? 'âœ“ Portal access re-activated' : 'âœ“ Portal access revoked');
+      setToast(activate ? '✓ Portal access re-activated' : '✓ Portal access revoked');
       loadData();
       setTimeout(() => setToast(''), 3500);
     } catch (err) {
@@ -6353,7 +6354,7 @@ function PortalAccessView({ authToken }) {
         method: 'DELETE',
         token: authToken,
       });
-      setToast('âœ“ Portal account deleted');
+      setToast('✓ Portal account deleted');
       loadData();
       setTimeout(() => setToast(''), 3500);
     } catch (err) {
@@ -6428,7 +6429,7 @@ function PortalAccessView({ authToken }) {
             <span className="text-[10px] font-black tracking-widest text-[#8A8A85] uppercase">
               CANDIDATE MANAGEMENT
             </span>
-            <span className="text-[#8A8A85]">â€º</span>
+            <span className="text-[#8A8A85]">›</span>
             <span className="text-[11px] font-bold text-[#0A0A0A]">
               PORTAL ACCESS & CREDENTIALS
             </span>
@@ -6566,7 +6567,7 @@ function PortalAccessView({ authToken }) {
             onClick={() => setToast('')}
             className="text-white/70 hover:text-white ml-3 text-sm cursor-pointer"
           >
-            âœ•
+            ✕
           </button>
         </div>
       )}
@@ -6588,7 +6589,7 @@ function PortalAccessView({ authToken }) {
             onClick={() => setError('')}
             className="text-red-600 hover:text-red-900 ml-3 text-sm cursor-pointer"
           >
-            âœ•
+            ✕
           </button>
         </div>
       )}
@@ -6660,7 +6661,7 @@ function PortalAccessView({ authToken }) {
               onClick={() => setSearchQuery('')}
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#8A8A85] hover:text-[#0A0A0A] cursor-pointer"
             >
-              âœ•
+              ✕
             </button>
           )}
         </div>
@@ -6682,7 +6683,7 @@ function PortalAccessView({ authToken }) {
           </div>
         ) : filteredCandidates.length === 0 ? (
           <div className="p-12 text-center">
-            <div className="text-3xl mb-2">ðŸ‘¤</div>
+            <div className="text-3xl mb-2">👤</div>
             <div className="text-base font-black text-[#0A0A0A]">
               No Candidates Found
             </div>
@@ -6966,7 +6967,7 @@ function PortalAccessView({ authToken }) {
                 onClick={() => setShowCreate(false)}
                 className="text-[#8A8A85] hover:text-[#0A0A0A] text-lg font-bold cursor-pointer"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
@@ -7091,7 +7092,7 @@ function PortalAccessView({ authToken }) {
                 onClick={() => setEditUser(null)}
                 className="text-[#8A8A85] hover:text-[#0A0A0A] text-lg font-bold cursor-pointer"
               >
-                âœ•
+                ✕
               </button>
             </div>
 
