@@ -60,7 +60,7 @@ function HomeRedirect() {
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
-  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -71,7 +71,7 @@ function DashboardIndex() {
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
-  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -122,7 +122,6 @@ export default function App() {
           <Route path="admin/directors" element={<ManageDirectors />} />
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
-          <Route path="admin/vendors" element={<ManagePartnerVendors />} />
           <Route path="director" element={<DirectorDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />

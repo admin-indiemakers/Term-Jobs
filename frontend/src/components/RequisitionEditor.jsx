@@ -472,8 +472,7 @@ case 'Work setup':
         </div>
       )}
 
-      {/* Fixed Sticky Sub-Tabs Header (Never Scrolls) */}
-      <div className="editor-tabs" role="tablist" style={{ marginBottom: '16px', paddingBottom: '14px' }}>
+      <div className="editor-tabs" role="tablist">
         {TABS.map((t) => (
           <button
             key={t}
@@ -488,13 +487,7 @@ case 'Work setup':
         ))}
       </div>
 
-      {/* In-built Scrollable Body for Fields */}
-      <div
-        className="editor-tab-body overflow-y-auto pr-1.5 custom-scrollbar"
-        style={{ maxHeight: '380px' }}
-      >
-        {renderTab()}
-      </div>
+      {renderTab()}
     </div>
   );
 }

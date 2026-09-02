@@ -3,8 +3,6 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import AssistantWidget from '../components/AssistantWidget';
-import OnboardCompanyModal from '../components/OnboardCompanyModal';
-import OnboardVendorModal from '../components/OnboardVendorModal';
 import { Sparkles, Menu, X } from 'lucide-react';
 import { request } from '../api/client';
 
@@ -87,6 +85,14 @@ const Icons = {
       <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
     </svg>
   ),
+  Onboarding: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="9" y1="15" x2="15" y2="15"/>
+      <line x1="9" y1="11" x2="12" y2="11"/>
+    </svg>
+  ),
   Flag: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
@@ -124,8 +130,6 @@ export default function DashboardLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
-  const [isOnboardCompanyModalOpen, setIsOnboardCompanyModalOpen] = useState(false);
-  const [isOnboardVendorModalOpen, setIsOnboardVendorModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Dynamic live count badges for Hiring Manager
@@ -186,7 +190,7 @@ export default function DashboardLayout() {
 
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
-  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
+  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager';
 
   const navItems =
     userRole === 'Hiring Manager'
@@ -197,6 +201,7 @@ export default function DashboardLayout() {
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
         { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
         { to: '/dashboard/candidates/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATES', icon: Icons.PortalAccess },
+        { to: '/dashboard/candidates/onboarding', label: 'Onboarding', end: true, section: 'CANDIDATES', icon: Icons.Onboarding },
         { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
         { to: '/dashboard/workforce/timesheets', label: 'Timesheets', end: false, section: 'WORKFORCE', icon: Icons.Timesheet, badge: hmCounts.pendingTimesheets },
         { to: '/dashboard/workforce/expenses', label: 'Expenses', end: false, section: 'WORKFORCE', icon: Icons.Receipt, badge: hmCounts.pendingExpenses },
@@ -215,11 +220,11 @@ export default function DashboardLayout() {
           ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
           : userRole === 'Super Admin'
             ? [
-              { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
-              { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
-              { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
-              { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
-              { to: '/dashboard/superadmin/archives', label: 'Archives', end: true, icon: Icons.Shortlisted },
+              { to: '/dashboard/superadmin', label: 'Dashboard', end: true },
+              { to: '/dashboard/superadmin/onboard', label: 'Onboard Company', end: true },
+              { to: '/dashboard/superadmin/onboard-vendor', label: 'Onboard Vendor', end: true },
+              { to: '/dashboard/superadmin/accounts', label: 'Company Accounts', end: true },
+              { to: '/dashboard/superadmin/archives', label: 'Archives', end: true },
             ]
             : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
 
@@ -275,25 +280,6 @@ export default function DashboardLayout() {
                 <span className="brand-sub">{userRole} Console</span>
               </div>
             </>
-          ) : userRole === 'Super Admin' ? (
-            <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-              >
-                SA
-              </div>
-              <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
-                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Super Admin</div>
-              </div>
-            </div>
           ) : (
             <div className="brand-text">
               <span className="brand-name">Term Jobs</span>
@@ -328,22 +314,7 @@ export default function DashboardLayout() {
                           {item.section}
                         </div>
                       )}
-                      {item.action ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            item.action();
-                            if (onLinkClick) onLinkClick();
-                          }}
-                          className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            {IconComp && <IconComp className="shrink-0" size={15} />}
-                            <span className="font-semibold text-[13px]">{item.label}</span>
-                          </div>
-                        </button>
-                      ) : item.to ? (
+                      {item.to ? (
                         <NavLink
                           to={item.to}
                           end={item.end}
@@ -382,89 +353,52 @@ export default function DashboardLayout() {
             </>
           ) : userRole === 'Super Admin' ? (
             <>
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-2 pb-1.5">
-                OVERVIEW
-              </div>
+              <div className="nav-section-label">Overview</div>
               <NavLink
                 to="/dashboard/superadmin"
                 end
                 onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Dashboard size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Dashboard</span>
-                </div>
+                Dashboard
               </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                COMPANIES
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOnboardCompanyModalOpen(true);
-                  if (onLinkClick) onLinkClick();
-                }}
-                className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Plus size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Onboard Company</span>
-                </div>
-              </button>
+              <div className="nav-section-label">Companies</div>
               <NavLink
-                to="/dashboard/superadmin/accounts?tab=buyers"
+                to="/dashboard/superadmin/onboard"
                 onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive && location.search.includes('buyers') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Requisitions size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Company Accounts</span>
-                </div>
+                Onboard Company
               </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                VENDORS
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOnboardVendorModalOpen(true);
-                  if (onLinkClick) onLinkClick();
-                }}
-                className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Plus size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Onboard Vendor</span>
-                </div>
-              </button>
               <NavLink
-                to="/dashboard/superadmin/vendor-accounts?tab=vendors"
+                to="/dashboard/superadmin/accounts"
                 onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive && location.search.includes('vendors') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icons.CandidatesBank size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Vendor Accounts</span>
-                </div>
+                Company Accounts
               </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                ARCHIVES
-              </div>
+              <div className="nav-section-label">Vendors</div>
+              <NavLink
+                to="/dashboard/superadmin/onboard-vendor"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Onboard Vendor
+              </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/vendor-accounts"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Vendor Accounts
+              </NavLink>
+              <div className="nav-section-label">Archives</div>
               <NavLink
                 to="/dashboard/superadmin/archives"
                 onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Shortlisted size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">View All Archives</span>
-                </div>
+                View All Archives
               </NavLink>
             </>
           ) : userRole === 'Admin' ? (
@@ -560,37 +494,6 @@ export default function DashboardLayout() {
   return (
     <div className={`app-shell ${consoleClass}`}>
       <style>{`
-        /* Eliminate any lingering focus/active rectangle on nav links */
-        .sidebar a,
-        .sidebar button,
-        .nav-link,
-        .sidebar-nav-btn,
-        .active-nav-tab {
-          outline: none !important;
-          -webkit-tap-highlight-color: transparent !important;
-          border: none !important;
-        }
-        .sidebar a:focus,
-        .sidebar a:focus-visible,
-        .sidebar a:active,
-        .sidebar button:focus,
-        .sidebar button:focus-visible,
-        .sidebar button:active,
-        .nav-link:focus,
-        .nav-link:focus-visible,
-        .nav-link:active,
-        .sidebar-nav-btn:focus,
-        .sidebar-nav-btn:focus-visible,
-        .sidebar-nav-btn:active {
-          outline: none !important;
-          box-shadow: none !important;
-        }
-        .nav-link:not(.active-nav-tab):not(.active),
-        .sidebar-nav-btn:not(.active-nav-tab):not(.active) {
-          background-color: transparent !important;
-          box-shadow: none !important;
-          border: none !important;
-        }
         .recruiter-sidebar-container .nav-link {
           display: flex !important;
           align-items: center !important;
@@ -622,34 +525,26 @@ export default function DashboardLayout() {
           font-size: 13px !important;
           font-weight: 700 !important;
           border-radius: 14px !important;
-          padding: 10px 14px 10px 16px !important;
+          padding: 10px 14px !important;
           display: flex !important;
           align-items: center !important;
           justify-content: space-between !important;
           gap: 10px !important;
-          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
           position: relative !important;
           overflow: hidden !important;
-          border: none !important;
-        }
-        .active-nav-tab * {
-          color: #FFFFFF !important;
         }
         .active-nav-tab::before {
-          content: '' !important;
-          position: absolute !important;
-          left: 0 !important;
-          top: 50% !important;
-          transform: translateY(-50%) !important;
-          width: 3.5px !important;
-          height: 18px !important;
-          background-color: #FFFFFF !important;
-          border-radius: 0 4px 4px 0 !important;
-          display: block !important;
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 50%;
+          transform: translateY(-50%);
+          width: 3.5px;
+          height: 18px;
+          background-color: #FFFFFF;
+          border-radius: 0 4px 4px 0;
         }
-        .app-shell.console-admin,
-        .app-shell.console-superadmin,
-        .app-shell.console-director,
         .app-shell.console-recruiter,
         .app-shell.console-hiringmanager,
         .app-shell {
@@ -674,7 +569,6 @@ export default function DashboardLayout() {
           margin-right: 0 !important;
           min-width: 0 !important;
         }
-        .app-shell.console-superadmin .content-area,
         .app-shell.console-recruiter .content-area,
         .app-shell.console-hiringmanager .content-area {
           padding-left: 20px !important;
@@ -685,7 +579,6 @@ export default function DashboardLayout() {
           width: 100% !important;
           box-sizing: border-box !important;
         }
-        .app-shell.console-superadmin .recruiter-topbar,
         .app-shell.console-recruiter .recruiter-topbar,
         .app-shell.console-hiringmanager .recruiter-topbar {
           margin-left: 20px !important;
@@ -693,7 +586,6 @@ export default function DashboardLayout() {
           padding-left: 0 !important;
           padding-right: 0 !important;
         }
-        .app-shell.console-superadmin .topbar,
         .app-shell.console-recruiter .topbar,
         .app-shell.console-hiringmanager .topbar,
         .recruiter-topbar {
@@ -705,12 +597,7 @@ export default function DashboardLayout() {
           background: transparent !important;
           border-bottom: 1px solid #E2E2DC !important;
         }
-        .recruiter-sidebar-container,
-        .app-shell.console-admin .sidebar,
-        .app-shell.console-superadmin .sidebar,
-        .app-shell.console-director .sidebar,
-        .app-shell.console-hiringmanager .sidebar,
-        .app-shell.console-recruiter .sidebar {
+        .recruiter-sidebar-container {
           width: 272px !important;
           min-width: 272px !important;
           max-width: 272px !important;
@@ -734,16 +621,10 @@ export default function DashboardLayout() {
 
         /* Mobile & Tablet Responsiveness (< 1024px) */
         @media (max-width: 1023px) {
-          .recruiter-sidebar-container,
-        .app-shell.console-admin .sidebar,
-        .app-shell.console-superadmin .sidebar,
-        .app-shell.console-director .sidebar,
-        .app-shell.console-hiringmanager .sidebar,
-        .app-shell.console-recruiter .sidebar {
+          .recruiter-sidebar-container {
             display: none !important;
           }
-          .app-shell.console-superadmin .content-area,
-        .app-shell.console-recruiter .content-area,
+          .app-shell.console-recruiter .content-area,
           .app-shell.console-hiringmanager .content-area {
             padding-left: 12px !important;
             padding-right: 12px !important;
@@ -752,8 +633,7 @@ export default function DashboardLayout() {
             width: 100% !important;
             overflow-x: hidden !important;
           }
-          .app-shell.console-superadmin .recruiter-topbar,
-        .app-shell.console-recruiter .recruiter-topbar,
+          .app-shell.console-recruiter .recruiter-topbar,
           .app-shell.console-hiringmanager .recruiter-topbar {
             margin-left: 12px !important;
             margin-right: 12px !important;
@@ -830,6 +710,7 @@ export default function DashboardLayout() {
                 : location.pathname.includes('/interviews') ? 'Interview Requests'
                 : location.pathname.includes('/accepted') ? 'Accepted Candidates'
                 : location.pathname.includes('/portal-access') ? 'Portal Access'
+                : location.pathname.includes('/onboarding') ? 'Onboarding'
                 : 'Dashboard'}
             </span>
             <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
@@ -876,25 +757,6 @@ export default function DashboardLayout() {
       </div>
 
       <AssistantWidget isOpen={isAssistantOpen} setIsOpen={setIsAssistantOpen} />
-      {userRole === 'Super Admin' && (
-        <>
-          <OnboardVendorModal
-            isOpen={isOnboardVendorModalOpen}
-            onClose={() => setIsOnboardVendorModalOpen(false)}
-            onSuccess={() => {
-              window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
-            }}
-          />
-          <OnboardCompanyModal
-            isOpen={isOnboardCompanyModalOpen}
-            onClose={() => setIsOnboardCompanyModalOpen(false)}
-            onSuccess={() => {
-              // Dispatches custom event to notify SuperAdminDashboard to reload
-              window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
-            }}
-          />
-        </>
-      )}
     </div>
   );
 }

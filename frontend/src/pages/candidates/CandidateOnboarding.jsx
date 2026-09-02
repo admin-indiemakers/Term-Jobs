@@ -121,6 +121,13 @@ export default function CandidateOnboarding() {
     }
   }
 
+  // If onboarding is already completed, redirect to the portal
+  useEffect(() => {
+    if (!loading && onboarding && onboarding.status === 'completed') {
+      navigate('/dashboard/candidate', { replace: true });
+    }
+  }, [loading, onboarding]);
+
   // Build the list of enabled onboarding items
   const items = useMemo(() => {
     if (!onboarding) return [];
@@ -187,13 +194,16 @@ export default function CandidateOnboarding() {
       const res = await request(`/api/onboarding/${candId}`, {
         method: 'PUT',
         token,
-        body: { completed_items: allDone },
+        body: { completed_items: allDone, status: 'completed' },
       });
       if (res) {
         setOnboarding(res);
         if (res.completed_items) setCompletedItems(res.completed_items);
       }
-      setSuccessMsg('All items marked as complete!');
+      setSuccessMsg('Onboarding completed! Redirecting...');
+      setTimeout(() => {
+        navigate('/dashboard/candidate');
+      }, 1000);
     } catch (err) {
       setError(err.message || 'Failed to save.');
       setCompletedItems(onboarding?.completed_items || {});
@@ -404,10 +414,21 @@ export default function CandidateOnboarding() {
         })}
 
         {totalItems === 0 && (
-          <div style={{ backgroundColor: '#FFFFFF', borderRadius: 20, border: '1px solid #E2E2DC' }} className="p-8 text-center">
-            <Info size={28} className="mx-auto mb-3 text-[#8A8A85]" />
-            <p className="text-[14px] font-semibold text-[#0A0A0A] mb-1">No onboarding items yet</p>
-            <p className="text-[12.5px] text-[#737373]">Your hiring manager is setting up your onboarding checklist. Check back soon.</p>
+          <div style={{ backgroundColor: '#FFFFFF', borderRadius: 20, border: '1px solid #E2E2DC' }} className="p-8 text-center space-y-4">
+            <CheckCircle2 size={32} className="mx-auto text-[#10B981]" />
+            <div>
+              <p className="text-[14px] font-semibold text-[#0A0A0A] mb-1">Onboarding Checklist Ready</p>
+              <p className="text-[12.5px] text-[#737373]">No specific pending action items assigned by your hiring manager. You are ready to access your candidate workspace!</p>
+            </div>
+            <button
+              onClick={handleCompleteAll}
+              disabled={saving}
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-[13px] font-semibold bg-[#0A0A0A] text-white hover:bg-[#1A1A1A] transition-colors"
+            >
+              <CheckCircle2 size={15} />
+              Confirm & Access Candidate Dashboard
+              <ArrowRight size={14} />
+            </button>
           </div>
         )}
 

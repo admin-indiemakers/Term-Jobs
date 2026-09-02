@@ -248,23 +248,13 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
 def _interrupt_payload(state: dict, interrupt: Any) -> dict:
     """Normalise an agent result into a consumer-friendly checkpoint."""
     payload: dict[str, Any] = {"status": state.get("status")}
-    
-    # Handle LangGraph Interrupt objects or tuple of interrupts
-    if isinstance(interrupt, (list, tuple)) and len(interrupt) > 0:
-        interrupt = interrupt[0]
-    if hasattr(interrupt, "value"):
-        interrupt_val = interrupt.value
-    else:
-        interrupt_val = interrupt
-
-    if isinstance(interrupt_val, str):
+    if isinstance(interrupt, str):
         payload["type"] = "intake_question"
-        payload["question"] = interrupt_val
-        payload["current_question"] = interrupt_val
-    elif isinstance(interrupt_val, dict) and interrupt_val.get("checkpoint") == "approval":
+        payload["question"] = interrupt
+    elif isinstance(interrupt, dict) and interrupt.get("checkpoint") == "approval":
         payload["type"] = "approval"
-        payload["structured_role"] = interrupt_val.get("structured_role")
-        payload["generated_jd_markdown"] = interrupt_val.get("jd_markdown")
+        payload["structured_role"] = interrupt.get("structured_role")
+        payload["generated_jd_markdown"] = interrupt.get("jd_markdown")
     else:
         payload["type"] = "completed"
     return payload
