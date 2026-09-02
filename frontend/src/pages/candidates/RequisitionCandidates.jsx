@@ -84,8 +84,8 @@ export default function RequisitionCandidates() {
   const [candJdExpanded, setCandJdExpanded] = useState(null);
   const [acting, setActing] = useState(null);
 
-  const load = (silent = false) => {
-    if (!silent) setLoading(true);
+  const load = () => {
+    setLoading(true);
     setError('');
     Promise.all([
       request(`/requisitions/${id}`, { token }).catch(() => null),
@@ -98,21 +98,11 @@ export default function RequisitionCandidates() {
         setCandidates(list);
         setInterviews(Array.isArray(intRes) ? intRes : intRes?.interviews || []);
       })
-      .catch((err) => {
-        if (!silent) setError(err.message);
-      })
-      .finally(() => {
-        if (!silent) setLoading(false);
-      });
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
   };
 
-  useEffect(() => {
-    load(false);
-    const timer = setInterval(() => {
-      load(true);
-    }, 10000);
-    return () => clearInterval(timer);
-  }, [id, token]);
+  useEffect(load, [id, token]);
 
   const stats = useMemo(() => {
     const byStatus = {};

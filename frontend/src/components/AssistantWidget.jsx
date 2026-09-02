@@ -31,12 +31,11 @@ export default function AssistantWidget({ isOpen, setIsOpen }) {
     }
   };
 
+  // Only fetch onboarding issues when the assistant widget is explicitly opened by the user
   useEffect(() => {
-    if (!token) return;
+    if (!token || !isOpen) return;
     fetchIssues();
-    const interval = setInterval(fetchIssues, 10000);
-    return () => clearInterval(interval);
-  }, [token]);
+  }, [token, isOpen]);
 
   useEffect(() => {
     if (isOpen) {

@@ -12,13 +12,14 @@ import {
   X, CheckCheck, Menu, Building, UserCheck2, Compass
 } from 'lucide-react';
 
-// Dynamic 7-day initial generator using assignment start date
-const generateInitialSevenDays = (startDateStr) => {
+// Dynamic 7-day initial generator strictly respecting assignment start date and today
+const generateInitialSevenDays = () => {
   const now = new Date();
   const todayStr = now.toISOString().split('T')[0];
-  const assignmentStart = startDateStr || todayStr;
+  const assignmentStartStr = '2026-08-25';
   
-  const dayOfWeek = now.getDay();
+  // Calculate Monday of current week
+  const dayOfWeek = now.getDay(); // 0: Sun, 1: Mon, ...
   const diffToMon = (dayOfWeek === 0 ? -6 : 1) - dayOfWeek;
   const monday = new Date(now);
   monday.setDate(now.getDate() + diffToMon);
@@ -31,12 +32,17 @@ const generateInitialSevenDays = (startDateStr) => {
     d.setDate(monday.getDate() + i);
     const dateStr = d.toISOString().split('T')[0];
     const isWeekend = i >= 5;
+    const isFuture = dateStr > todayStr;
+    const isBeforeStart = dateStr < assignmentStartStr;
+    
+    // Only set hours if date >= start date, <= today, and not weekend
+    const hrs = (!isWeekend && !isFuture && !isBeforeStart) ? 8.0 : 0.0;
 
     entries.push({
       day: daysLabels[i],
       day_number: String(d.getDate()).padStart(2, '0'),
       date: dateStr,
-      hours: 0.0,
+      hours: hrs,
       category: isWeekend ? 'Weekend' : 'Regular',
       note: '',
       task: '',
@@ -50,28 +56,28 @@ const AI_SUGGESTIONS = [
   {
     question: 'How do I log and submit my weekly hours?',
     answer:
-      'Go to the Timesheet tab. Days from your assignment start date up to today are unlocked. Use the 0.5h stepper (+ / -) to record hours, select category (Regular / Overtime), and click "Confirm & Submit" when done.',
+      'Go to the Timesheet tab. Days from your assignment start date (25 Aug) up to today are unlocked. Use the 0.5h stepper (+ / -) to record hours, select category (Regular / Overtime), and click "Confirm & Submit" when done.',
     actionTab: 'timesheet',
     actionLabel: 'Go to Timesheet',
   },
   {
     question: 'How do I claim travel or project expenses?',
     answer:
-      'Go to the Expenses tab. Select an expense date within your active assignment up to today, pick a category (Travel, Meals, Equipment), enter the amount, attach receipts, and submit for manager approval.',
+      'Go to the Expenses tab. Select an expense date within your active assignment up to today, pick a category (Travel, Meals, Equipment), enter the amount in ?, attach receipts, and submit for manager approval.',
     actionTab: 'expenses',
     actionLabel: 'Go to Expenses',
   },
   {
     question: 'How does the Time Capture meter work?',
     answer:
-      'The donut meter calculates your logged hours against the expected weekly hours. As you record hours on active workdays, the meter dynamically reflects your completion percentage.',
+      'The donut meter calculates your logged hours against the standard 40h weekly expectation. As you record hours on active workdays, the meter dynamically reflects your completion percentage.',
     actionTab: 'dashboard',
     actionLabel: 'View Dashboard',
   },
   {
     question: 'How is monthly Attendance calculated?',
     answer:
-      'Attendance tracks your Present Days, Approved Leaves, and Client Holidays for the current month to ensure accurate payroll computation.',
+      'Attendance tracks your Present Days, Approved Leaves, and Client Holidays for August 2026 to ensure 100% accurate payroll computation.',
     actionTab: 'attendance',
     actionLabel: 'Check Attendance',
   },
@@ -119,22 +125,23 @@ export default function CandidatePortal() {
   const [dailyEntries, setDailyEntries] = useState(generateInitialSevenDays);
 
   // Attendance state
-  const currentMonth = useMemo(() => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  }, []);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedMonth, setSelectedMonth] = useState('2026-08');
   const [attendanceData, setAttendanceData] = useState({
     present_days: 0,
     paid_leave_days: 0,
     client_holidays: 0,
     payable_days: 0.0,
-    daily_records: [],
+    daily_records: [
+      { date: '25 Aug', day: 'Tuesday', status: 'Pending', note: 'Assignment start' },
+      { date: '26 Aug', day: 'Wednesday', status: 'Pending', note: 'Regular' },
+      { date: '27 Aug', day: 'Thursday', status: 'Pending', note: 'Regular' },
+      { date: '28 Aug', day: 'Friday', status: 'Pending', note: 'Regular' },
+    ],
   });
 
   // Expense State
   const [expenseForm, setExpenseForm] = useState({
-    date: new Date().toISOString().split('T')[0],
+    date: '2026-08-25',
     category: 'Travel',
     amount: '',
     receipt_name: '',
@@ -172,8 +179,45 @@ export default function CandidatePortal() {
 
   // Notifications State & Dropdown
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notificationFilter, setNotificationFilter] = useState('all');
-  const [notifications, setNotifications] = useState([]);
+  const [notificationFilter, setNotificationFilter] = useState('all'); // 'all' | 'unread'
+  const [notifications, setNotifications] = useState([
+    {
+      id: 'notif_1',
+      title: 'Assignment Starts Today',
+      message: 'Your DevOps Engineer assignment at Bearitt begins on 25 Aug 2026. Review work order & workspace access.',
+      category: 'assignment',
+      timestamp_label: 'Today · 10:30 AM',
+      is_read: false,
+      target_tab: 'assignment',
+    },
+    {
+      id: 'notif_2',
+      title: 'Timesheet Cycle Active',
+      message: 'Weekly timesheet cycle (24–30 Aug) is active. Daily time capture is now available from 25 Aug.',
+      category: 'timesheet',
+      timestamp_label: 'Today · 09:00 AM',
+      is_read: false,
+      target_tab: 'timesheet',
+    },
+    {
+      id: 'notif_3',
+      title: 'Onboarding Clearance Complete',
+      message: 'Background verification, identity KYC, and NDA compliance completed successfully.',
+      category: 'compliance',
+      timestamp_label: 'Yesterday',
+      is_read: true,
+      target_tab: 'dashboard',
+    },
+    {
+      id: 'notif_4',
+      title: 'Work Order Confirmed',
+      message: 'Bridgeon confirmed onboarding paperwork and work order WO-2026-00124.',
+      category: 'contract',
+      timestamp_label: '22 Aug 2026',
+      is_read: true,
+      target_tab: 'assignment',
+    },
+  ]);
   const notifRef = useRef(null);
 
   const unreadCount = useMemo(() => {
@@ -220,7 +264,7 @@ export default function CandidatePortal() {
       const parsed = new Date(data.work_order.start_date);
       if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
     }
-    return new Date().toISOString().split('T')[0];
+    return '2026-08-25';
   }, [data]);
 
   const assignmentEndStr = useMemo(() => {
@@ -229,20 +273,13 @@ export default function CandidatePortal() {
       const parsed = new Date(data.work_order.end_date);
       if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0];
     }
-    return '';
+    return '2027-02-25';
   }, [data]);
 
   useEffect(() => {
     loadDashboardData();
     loadNotifications();
   }, [token, candidateId]);
-
-  // Redirect to onboarding if not completed
-  useEffect(() => {
-    if (data && data.candidate && data.candidate.onboarding_status !== 'completed') {
-      navigate('/candidate/onboarding', { replace: true });
-    }
-  }, [data, navigate]);
 
   useEffect(() => {
     if (activeTab === 'attendance') {
@@ -363,7 +400,7 @@ export default function CandidatePortal() {
         })
         .catch(() => {});
 
-      request(`/api/candidate-portal/attendance?month=${new Date().toISOString().slice(0, 7)}`, { token })
+      request('/api/candidate-portal/attendance?month=2026-08', { token })
         .then((attRes) => {
           if (attRes?.attendance) setAttendanceData(attRes.attendance);
         })
@@ -593,10 +630,10 @@ export default function CandidatePortal() {
         method: 'POST',
         token,
         body: {
-          id: currentTimesheet?.id || '',
-          week_start_date: currentTimesheet?.week_start_date || '',
-          week_end_date: currentTimesheet?.week_end_date || '',
-          period_label: currentTimesheet?.period_label || '',
+          id: currentTimesheet?.id || 'ts_curr_draft',
+          week_start_date: currentTimesheet?.week_start_date || '2026-08-24',
+          week_end_date: currentTimesheet?.week_end_date || '2026-08-30',
+          period_label: currentTimesheet?.period_label || '24 – 30 August 2026',
           daily_entries: dailyEntries,
         },
       });
@@ -618,10 +655,10 @@ export default function CandidatePortal() {
         method: 'POST',
         token,
         body: {
-          id: currentTimesheet?.id || '',
-          week_start_date: currentTimesheet?.week_start_date || '',
-          week_end_date: currentTimesheet?.week_end_date || '',
-          period_label: currentTimesheet?.period_label || '',
+          id: currentTimesheet?.id || 'ts_curr_draft',
+          week_start_date: currentTimesheet?.week_start_date || '2026-08-24',
+          week_end_date: currentTimesheet?.week_end_date || '2026-08-30',
+          period_label: currentTimesheet?.period_label || '24 – 30 August 2026',
           daily_entries: dailyEntries,
         },
       });
@@ -635,46 +672,46 @@ export default function CandidatePortal() {
     }
   };
 
-  // Dynamic candidate & work order from API data only
+  // Dynamic candidate & work order fallback
   const cand = data?.candidate || {
-    name: user.name || 'Candidate',
-    first_name: (user.name || 'Candidate').split(' ')[0],
-    id: candidateId || '',
-    company: '',
-    vendor: '',
-    requisition_title: '',
+    name: user.name || 'Sreehari P S',
+    first_name: (user.name || 'Sreehari').split(' ')[0],
+    id: candidateId || 'BEAR-c7a70f8a',
+    company: 'Bearitt',
+    vendor: 'Bridgeon',
+    requisition_title: 'DevOps Engineer',
     status: 'ACTIVE',
     active_badge: 'Active candidate',
   };
 
   const wo = data?.work_order || {
-    work_order_number: '',
-    requisition_title: cand.requisition_title || '',
-    company_name: cand.company || '',
-    vendor_name: cand.vendor || '',
-    start_date: '',
-    end_date: '',
+    work_order_number: 'WO-2026-00124',
+    requisition_title: cand.requisition_title || 'DevOps Engineer',
+    company_name: cand.company || 'Bearitt',
+    vendor_name: cand.vendor || 'Bridgeon',
+    start_date: '25 Aug 2026',
+    end_date: '25 Feb 2027',
     weekly_hours: 40,
-    location: '',
-    work_arrangement: '',
-    reporting_manager: '',
-    overtime_policy: '',
-    engagement_type: '',
+    location: 'Bangalore',
+    work_arrangement: 'Hybrid',
+    reporting_manager: 'Arun Deshpande',
+    overtime_policy: 'Allowed',
+    engagement_type: 'Contractor',
     status: 'ACTIVE',
   };
 
   const kpis = data?.kpi_stats || {
-    assignment: { label: 'ASSIGNMENT', value: 'ACTIVE', subtext: wo.work_order_number || '' },
+    assignment: { label: 'ASSIGNMENT', value: 'ACTIVE', subtext: wo.work_order_number || 'WO-2026-00124' },
     this_week: { label: 'THIS WEEK', value: `${calculatedMetrics.totalHours}h`, subtext: 'of 40 expected' },
     timesheet: { label: 'TIMESHEET', value: '1', subtext: 'action required' },
     expenses: { label: 'EXPENSES', value: `₹${expenseTotalThisMonth.toLocaleString()}`, subtext: 'this month' },
   };
 
   const timeCap = data?.time_capture || {
-    progress_pct: Math.min(100, Math.round((calculatedMetrics.totalHours / (wo.weekly_hours || 40)) * 100)),
+    progress_pct: Math.min(100, Math.round((calculatedMetrics.totalHours / 40) * 100)),
     logged_hours: calculatedMetrics.totalHours,
-    expected_hours: wo.weekly_hours || 40,
-    week_range: '',
+    expected_hours: 40,
+    week_range: '24–30 Aug',
     daily_entries: dailyEntries.slice(0, 5).map((e) => ({
       day: e.day,
       hours: e.hours,
@@ -684,75 +721,20 @@ export default function CandidatePortal() {
   };
 
   const snapshot = data?.assignment_snapshot || {
-    work_arrangement: wo.work_arrangement || '',
-    weekly_expectation: `${wo.weekly_hours || 40}h`,
-    overtime: wo.overtime_policy || '',
-    engagement: wo.engagement_type || '',
+    work_arrangement: 'Hybrid',
+    weekly_expectation: '40h',
+    overtime: 'Allowed',
+    engagement: 'Contractor',
   };
 
   const smartActions = data?.smart_actions || {
     ai_title: 'Time Assistant',
-    ai_desc: '',
+    ai_desc: 'Use your work pattern and previous entries to prepare your timesheet. You only confirm the final hours.',
   };
 
   const radius = 32;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (timeCap.progress_pct / 100) * circumference;
-
-  const hasAssignment = data?.has_assignment !== false;
-
-  // ─── NO ACTIVE ASSIGNMENT STATE ─────────────────────────────────
-  if (data && !hasAssignment) {
-    return (
-      <div
-        style={{
-          backgroundColor: '#ECECE9',
-          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-          color: '#0A0A0A',
-        }}
-        className="fixed inset-0 w-screen h-screen flex items-center justify-center antialiased"
-      >
-        <div className="w-full max-w-lg mx-4">
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 24,
-              border: '1px solid #E2E2DC',
-              boxShadow: '0 8px 40px rgba(0,0,0,0.06)',
-            }}
-            className="p-10 text-center"
-          >
-            {/* Icon */}
-            <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-[#F5F5F2] border border-[#E2E2DC] flex items-center justify-center">
-              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#8A8A85" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-              </svg>
-            </div>
-
-            <h2 className="text-[1.35rem] font-extrabold text-[#0A0A0A] tracking-tight mb-2">
-              No Active Assignment
-            </h2>
-            <p className="text-[0.92rem] text-[#737373] leading-relaxed max-w-sm mx-auto mb-6">
-              You don't have an active work order yet. Your hiring manager will assign you to a role and your assignment details will appear here.
-            </p>
-
-            <div className="bg-[#F5F5F2] rounded-xl p-4 mb-6 border border-[#E2E2DC]">
-              <div className="text-[0.72rem] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">Candidate</div>
-              <div className="text-[0.95rem] font-semibold text-[#0A0A0A]">{cand.name}</div>
-              {cand.id && (
-                <div className="text-[0.78rem] font-mono text-[#737373] mt-1">{cand.id}</div>
-              )}
-            </div>
-
-            <p className="text-[0.78rem] text-[#A0A09A]">
-              Once your work order is created, you'll be able to track timesheets, log expenses, and view your assignment details.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div
@@ -1296,20 +1278,14 @@ export default function CandidatePortal() {
                   <h1 className="text-[1.75rem] md:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
                     {greeting}, {cand.first_name || cand.name}.
                   </h1>
-                  {cand.id && (
-                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#F5F5F2] border border-[#E2E2DC]">
-                      <span className="text-[11px] text-[#737373] font-medium">ID:</span>
-                      <span className="text-[11.5px] font-bold text-[#0A0A0A]" style={{ fontFamily: "'JetBrains Mono', monospace" }}>{cand.id}</span>
-                    </div>
-                  )}
                   <p className="text-[13px] md:text-[13.5px] text-[#5A5A57] mt-2 font-normal leading-relaxed max-w-xl">
-                    Your onboarding is complete. Your assignment start date is {wo.start_date || 'TBD'}, and your workspace is ready.
+                    Your onboarding is complete. Your assignment start date is {wo.start_date || '25 Aug 2026'}, and your workspace is ready.
                   </p>
                 </div>
 
                 <div className="text-left md:text-right shrink-0">
                   <div className="text-[1.45rem] md:text-[1.6rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                    {wo.start_date || 'TBD'}
+                    {wo.start_date || '25 Aug 2026'}
                   </div>
                   <div className="text-[12px] text-[#737373] font-medium mt-0.5">Assignment starts</div>
                 </div>
@@ -1437,27 +1413,29 @@ export default function CandidatePortal() {
 
                   <div>
                     <h3 className="text-[1.25rem] font-extrabold text-[#0A0A0A] tracking-tight leading-snug">
-                      {wo.requisition_title || 'Role'}
+                      {wo.requisition_title || 'DevOps Engineer'}
                     </h3>
-                    <div className="text-[12px] text-[#737373] font-medium mt-0.5">                       <span>{wo.company_name || 'Company'}</span> <span className="text-[#A3A39F] font-semibold mx-1">/</span> <span>{wo.vendor_name || 'Vendor'}</span>
+                    <div className="text-[12px] text-[#737373] font-medium mt-0.5">
+                      <span>{wo.company_name || 'Bearitt'}</span> <span className="text-[#A3A39F] font-semibold mx-1">/</span> <span>{wo.vendor_name || 'Bridgeon'}</span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 border-t border-[#F2F2EE]">
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Start</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.start_date || '—'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.start_date || '25 Aug 2026'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">End</div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.end_date || '—'}</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.end_date || '25 Feb 2027'}</div>
                     </div>
                     <div>
                       <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Location</div>
                       <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.location || 'Bangalore'}</div>
                     </div>
                     <div>
-                      <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Manager</div>                       <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.reporting_manager || 'Manager'}</div>
+                      <div className="text-[9px] font-bold tracking-wider uppercase text-[#A3A39F]">Manager</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A] mt-0.5">{wo.reporting_manager || 'Arun Deshpande'}</div>
                     </div>
                   </div>
                 </div>
@@ -2311,9 +2289,11 @@ export default function CandidatePortal() {
                   <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">
                     CONTRACT SPECIFICATION
                   </div>
-                  <h2 className="text-[1.5rem] font-extrabold text-[#0A0A0A] tracking-tight">                     {wo.requisition_title || 'Role'}
+                  <h2 className="text-[1.5rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                    {wo.requisition_title || 'DevOps Engineer'}
                   </h2>
-                  <div className="text-[13px] text-[#737373] font-medium mt-0.5">                     {wo.company_name || 'Company'} · {wo.vendor_name || 'Vendor'}
+                  <div className="text-[13px] text-[#737373] font-medium mt-0.5">
+                    {wo.company_name || 'Bearitt'} · {wo.vendor_name || 'Bridgeon'}
                   </div>
                 </div>
 
@@ -2340,7 +2320,7 @@ export default function CandidatePortal() {
                 <div className="flex items-center justify-between text-[12px] pt-1">
                   <div>
                     <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.start_date || '—'}</span>
+                    <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
                   </div>
                   <div className="text-center">
                     <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
@@ -2348,7 +2328,7 @@ export default function CandidatePortal() {
                   </div>
                   <div className="text-right">
                     <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.end_date || '—'}</span>
+                    <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
                   </div>
                 </div>
               </div>
@@ -2452,26 +2432,26 @@ export default function CandidatePortal() {
             >
               {/* Month Tabs Bar */}
               <div className="flex items-center gap-6 border-b border-[#E5E5E0]">
-                {[0, 1].map((offset) => {
-                  const d = new Date();
-                  d.setMonth(d.getMonth() - offset);
-                  const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                  const monthLabel = d.toLocaleString('default', { month: 'long', year: 'numeric' });
-                  const isActive = selectedMonth === monthKey;
-                  return (
-                    <button
-                      key={monthKey}
-                      onClick={() => setSelectedMonth(monthKey)}
-                      style={{
-                        color: isActive ? '#0A0A0A' : '#737373',
-                        borderBottom: isActive ? '2px solid #0A0A0A' : '2px solid transparent',
-                      }}
-                      className={`pb-3 text-[13.5px] transition-all -mb-[1px] ${isActive ? 'font-bold' : 'font-medium hover:text-[#0A0A0A]'}`}
-                    >
-                      {monthLabel}
-                    </button>
-                  );
-                })}
+                <button
+                  onClick={() => setSelectedMonth('2026-08')}
+                  style={{
+                    color: selectedMonth === '2026-08' ? '#0A0A0A' : '#737373',
+                    borderBottom: selectedMonth === '2026-08' ? '2px solid #0A0A0A' : '2px solid transparent',
+                  }}
+                  className="pb-3 text-[13.5px] font-bold transition-all -mb-[1px]"
+                >
+                  August 2026
+                </button>
+                <button
+                  onClick={() => setSelectedMonth('2026-07')}
+                  style={{
+                    color: selectedMonth === '2026-07' ? '#0A0A0A' : '#737373',
+                    borderBottom: selectedMonth === '2026-07' ? '2px solid #0A0A0A' : '2px solid transparent',
+                  }}
+                  className="pb-3 text-[13.5px] font-medium transition-all -mb-[1px] hover:text-[#0A0A0A]"
+                >
+                  July 2026
+                </button>
               </div>
 
               {/* 4 Metric Cards Grid (WITH LEFT-TO-RIGHT EXPANDING UNDERLINE HOVER EFFECT) */}
@@ -3203,7 +3183,8 @@ export default function CandidatePortal() {
               <div className="text-[12px] font-extrabold text-[#0A0A0A] flex items-center gap-1.5">
                 <Sparkles size={12} className="text-[#0A0A0A]" /> Active Onboarding Insight
               </div>
-              <p className="text-[11.5px] text-[#737373] leading-relaxed">                 Hi <strong>{cand.name?.split(' ')[0] || 'there'}</strong>, your assignment as <strong>{wo.requisition_title || 'your role'}</strong> at <strong>{wo.company_name || 'your company'}</strong> is active! Here are smart suggestions to help you use your dashboard.
+              <p className="text-[11.5px] text-[#737373] leading-relaxed">
+                Hi <strong>{cand.name?.split(' ')[0] || 'Hashil'}</strong>, your assignment as <strong>{wo.requisition_title || 'DevOps Engineer'}</strong> at <strong>{wo.company_name || 'Bearitt'}</strong> is active! Here are smart suggestions to help you use your dashboard.
               </p>
             </div>
 

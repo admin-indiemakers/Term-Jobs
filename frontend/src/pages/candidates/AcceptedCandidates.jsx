@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
-  Check, ArrowRight, AlertCircle, X, Shield, Laptop, BookOpen, CheckCircle2, Lock, Unlock, ShieldCheck
+  Check, ArrowRight, AlertCircle, X, Shield, Laptop, BookOpen, CheckCircle2
 } from 'lucide-react';
 
 const DEFAULT_SOFTWARE = [
@@ -22,17 +22,6 @@ const DEFAULT_TRAINING = [
   { id: 'nda', label: 'Client-specific NDA / compliance', enabled: false, mandatory: false },
 ];
 
-const DEFAULT_ACTIVATION_GATES = [
-  { id: 'pan_aadhaar_bank', label: 'PAN, Aadhaar, bank details', responsible: 'Worker', type: 'blocking', status: 'pending' },
-  { id: 'nda_ip', label: 'NDA and IP assignment', responsible: 'Worker', type: 'blocking', status: 'pending' },
-  { id: 'pf_esic', label: 'PF and ESIC declaration', responsible: 'TalentBridge', type: 'blocking', status: 'pending' },
-  { id: 'bgv', label: 'Background verification pack', responsible: 'TalentBridge', type: 'blocking', status: 'pending' },
-  { id: 'ad_vpn_badge', label: 'Access provisioning — AD, VPN, badge', responsible: 'Buyer IT', type: 'blocking', status: 'pending' },
-  { id: 'site_safety', label: 'Site safety induction', responsible: 'Buyer EHS', type: 'blocking', status: 'pending' },
-  { id: 'laptop', label: 'Laptop issuance', responsible: 'Buyer IT', type: 'warn_only', status: 'pending' },
-  { id: 'manager_orientation', label: 'Manager orientation', responsible: 'Manager', type: 'warn_only', status: 'pending' },
-];
-
 export default function AcceptedCandidates() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
@@ -48,9 +37,7 @@ export default function AcceptedCandidates() {
   const [editingCandidate, setEditingCandidate] = useState(null);
   const [setupSoftware, setSetupSoftware] = useState(DEFAULT_SOFTWARE);
   const [setupTraining, setSetupTraining] = useState(DEFAULT_TRAINING);
-  const [activationGates, setActivationGates] = useState(DEFAULT_ACTIVATION_GATES);
   const [savingSetup, setSavingSetup] = useState(false);
-  const [activatingWorkOrder, setActivatingWorkOrder] = useState(false);
 
   // Time-aware greeting
   const greetingText = useMemo(() => {
@@ -128,52 +115,16 @@ export default function AcceptedCandidates() {
     const existing = onboardingDocs[id];
 
     setEditingCandidate(cand);
-    if (existing?.software?.length) {
-      setSetupSoftware(existing.software);
+    if (existing?.software_access?.length) {
+      setSetupSoftware(existing.software_access);
     } else {
       setSetupSoftware(DEFAULT_SOFTWARE.map((s) => ({ ...s, enabled: false })));
     }
 
-    if (existing?.training?.length) {
-      setSetupTraining(existing.training);
+    if (existing?.training_modules?.length) {
+      setSetupTraining(existing.training_modules);
     } else {
       setSetupTraining(DEFAULT_TRAINING.map((t) => ({ ...t, enabled: t.mandatory || false })));
-    }
-
-    if (existing?.activation_gates?.length) {
-      setActivationGates(existing.activation_gates);
-    } else {
-      setActivationGates(DEFAULT_ACTIVATION_GATES.map((g) => ({ ...g })));
-    }
-  };
-
-  // Toggle activation gate status
-  const handleToggleGate = (gateId) => {
-    setActivationGates((prev) =>
-      prev.map((g) =>
-        g.id === gateId ? { ...g, status: g.status === 'cleared' ? 'pending' : 'cleared', cleared_at: g.status !== 'cleared' ? new Date().toISOString() : null, cleared_by: g.status !== 'cleared' ? (user?.name || 'HM') : null } : g
-      )
-    );
-  };
-
-  // Activate work order after all blocking gates cleared
-  const handleActivateWorkOrder = async () => {
-    if (!editingCandidate) return;
-    setActivatingWorkOrder(true);
-    try {
-      const id = editingCandidate.id || editingCandidate.candidate_id;
-      await request(`/api/onboarding/${id}/activate-gates`, {
-        method: 'POST',
-        token,
-      });
-      setSuccessInfo(`Work order activated for ${editingCandidate.candidate_name || 'candidate'}.`);
-      setEditingCandidate(null);
-      loadData();
-    } catch (err) {
-      console.error('Activation failed:', err);
-      alert(err.message || 'Failed to activate work order. Ensure all blocking gates are cleared.');
-    } finally {
-      setActivatingWorkOrder(false);
     }
   };
 
@@ -191,9 +142,8 @@ export default function AcceptedCandidates() {
         vendor_name: editingCandidate.vendor_name || 'bridgeon',
         requisition_ref: editingCandidate.requisition_ref || 'REQ-F7F406',
         requisition_title: editingCandidate.requisition_title || 'DevOps Engineer',
-        software: setupSoftware,
-        training: setupTraining,
-        activation_gates: activationGates,
+        software_access: setupSoftware,
+        training_modules: setupTraining,
         status: setupSoftware.some((s) => s.enabled) || setupTraining.some((t) => t.enabled) ? 'completed' : 'in_progress',
       };
 
@@ -486,7 +436,7 @@ export default function AcceptedCandidates() {
                   const id = cand.id || cand.candidate_id || `cand-${idx}`;
                   const rawId = cand.candidate_id || cand.id || `${idx}7fa08`;
                   const candCode = String(rawId).startsWith('BEAR-') ? String(rawId) : `BEAR-${String(rawId).slice(0, 6)}`;
-                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
+                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Sreehari P S';
                   const vendorName = cand.vendor_name || 'bridgeon';
                   const reqRef = cand.requisition_ref || 'REQ-F7F406';
                   const reqTitle = cand.requisition_title || 'DevOps Engineer';
@@ -679,83 +629,6 @@ export default function AcceptedCandidates() {
                         </span>
                       )}
                     </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Activation Gates */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <ShieldCheck size={13} />
-                    <span>ACTIVATION GATES</span>
-                  </div>
-                  <span className="text-[10.5px] font-bold text-[#8A8A85]">
-                    {activationGates.filter((g) => g.status === 'cleared').length}/{activationGates.length} cleared
-                  </span>
-                </div>
-                <div className="text-[11px] text-[#8A8A85] mb-2">
-                  No billable hours can be logged until all blocking gates are cleared.
-                </div>
-                <div className="space-y-1.5">
-                  {activationGates.map((gate) => (
-                    <div
-                      key={gate.id}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border transition-colors ${
-                        gate.status === 'cleared'
-                          ? 'border-[#BBF7D0] bg-[#F0FDF4]'
-                          : gate.type === 'blocking'
-                            ? 'border-[#FECACA] bg-[#FEF2F2]'
-                            : 'border-[#EAEAE6] bg-[#FFFBEB]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5">
-                        <button
-                          onClick={() => handleToggleGate(gate.id)}
-                          className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
-                            gate.status === 'cleared'
-                              ? 'bg-[#16A34A] text-white'
-                              : 'border-2 border-[#D1D5DB] hover:border-[#9CA3AF] bg-white'
-                          }`}
-                        >
-                          {gate.status === 'cleared' && <Check size={12} strokeWidth={3} />}
-                        </button>
-                        <div>
-                          <span className="text-[12px] font-semibold text-[#0A0A0A]">
-                            {gate.label}
-                          </span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <span className="text-[10px] font-bold text-[#8A8A85]">
-                              {gate.responsible}
-                            </span>
-                            {gate.type === 'blocking' && (
-                              <span className="px-1.5 py-0.5 bg-[#FEE2E2] text-[#DC2626] text-[9px] font-bold rounded">
-                                blocking
-                              </span>
-                            )}
-                            {gate.type === 'warn_only' && (
-                              <span className="px-1.5 py-0.5 bg-[#FEF3C7] text-[#D97706] text-[9px] font-bold rounded">
-                                warn only
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {gate.status === 'cleared' ? (
-                          <span className="flex items-center gap-1 px-2 py-0.5 bg-[#DCFCE7] text-[#16A34A] text-[10px] font-bold rounded-full">
-                            <Check size={10} /> cleared
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => handleToggleGate(gate.id)}
-                            className="px-2.5 py-1 bg-[#0A0A0A] text-white text-[10px] font-bold rounded-lg hover:bg-[#262626] transition-colors"
-                          >
-                            Clear
-                          </button>
-                        )}
-                      </div>
-                    </div>
                   ))}
                 </div>
               </div>

@@ -1,81 +1,45 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../../api/client';
-import { API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import {
+  ArrowLeft,
+  Sparkles,
+  HelpCircle,
+  AlertCircle,
+  CheckCircle2,
+  Plus,
+  X,
+  FileText,
+  Clock,
+  Briefcase,
+  DollarSign,
+  MapPin,
+  ShieldCheck,
+  Calendar,
+  Layers,
+  ChevronRight,
+  Info,
+  Check,
+  BookOpen
+} from 'lucide-react';
 
-const ENGAGEMENT_TYPES = ['Contract'];
+const TABS = [
+  { id: 'role', label: 'Role', icon: Briefcase },
+  { id: 'engagement', label: 'Engagement', icon: Clock },
+  { id: 'commercials', label: 'Commercials', icon: DollarSign },
+  { id: 'work_setup', label: 'Work setup', icon: MapPin },
+  { id: 'compliance', label: 'Compliance', icon: ShieldCheck },
+  { id: 'process', label: 'Process', icon: Calendar },
+];
+
+const ENGAGEMENT_TYPES = ['Contract', 'Contract-to-Hire', 'Full-time'];
 const WORK_MODES = ['Remote', 'Hybrid', 'Onsite'];
 const EQUIPMENT_OPTIONS = ['Company-provided', 'Vendor-provided', 'BYOD'];
 const CONTRACT_OPTIONS = ['Consultancy agreement', 'NDA-only', 'MSA-linked', 'Permanent offer'];
 const SENIORITY_OPTIONS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
 const PRIORITY_OPTIONS = ['High', 'Normal', 'Low'];
 const BOOL_OPTIONS = ['Yes', 'No'];
-
-const Section = ({ title, children, expanded, onToggle }) => (
-  <div className="intake-section" style={{ marginTop: 24 }}>
-    <div className="intake-section-head" onClick={onToggle} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <h2 className="intake-section-title" style={{ margin: 0 }}>{title}</h2>
-      <span style={{ fontSize: '1.2rem', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-    </div>
-    {expanded && <div className="intake-grid" style={{ marginTop: 16 }}>{children}</div>}
-  </div>
-);
-
-const Field = ({ label, hint, children, required }) => (
-  <div className="intake-field">
-    <label className="form-label">{label} {required && <span className="required">*</span>}</label>
-    {children}
-    {hint && <p className="field-hint">{hint}</p>}
-  </div>
-);
-
-const TextInput = ({ value, onChange, placeholder, type, min, ...props }) => (
-  <input className="auth-input" type={type || 'text'} min={min} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} {...props} />
-);
-
-const SelectInput = ({ value, onChange, options, placeholder, ...props }) => (
-  <select className="auth-input" value={value} onChange={(e) => onChange(e.target.value)} {...props}>
-    <option value="">{placeholder || 'Select...'}</option>
-    {options.map((o) => <option key={o} value={o}>{o}</option>)}
-  </select>
-);
-
-const ChipInput = ({ value, onChange, onRemove, placeholder }) => {
-  const [text, setText] = useState('');
-  const add = () => {
-    const v = text.trim();
-    if (v) {
-      onChange([...value, v]);
-      setText('');
-    }
-  };
-  return (
-    <div className="chips-input-row" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-      {value.map((s, i) => (
-        <span key={`${s}-${i}`} className="chip-tag" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--chip-bg)', padding: '4px 8px', borderRadius: 999, fontSize: '0.8rem' }}>
-          {s}
-          <button type="button" className="chip-tag-remove" onClick={() => onRemove(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, lineHeight: 1 }}>×</button>
-        </span>
-      ))}
-      <input
-        className="chip-adder auth-input" style={{ flex: 1, minWidth: 120 }}
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); add(); }}}
-        onBlur={add}
-        placeholder={placeholder || '+ add'}
-      />
-    </div>
-  );
-};
-
-const RangeInput = ({ minVal, maxVal, onMinChange, onMaxChange, placeholder }) => (
-  <div className="rate-band-input" style={{ display: 'flex', gap: 10 }}>
-    <input className="auth-input" type="number" min="0" placeholder={`${placeholder} min`} value={minVal} onChange={(e) => onMinChange(e.target.value === '' ? '' : Number(e.target.value))} />
-    <input className="auth-input" type="number" min="0" placeholder={`${placeholder} max`} value={maxVal} onChange={(e) => onMaxChange(e.target.value === '' ? '' : Number(e.target.value))} />
-  </div>
-);
 
 const toISODate = (d) => {
   const dt = d instanceof Date ? d : new Date(d);
@@ -100,543 +64,1089 @@ const addDuration = (duration, startDate) => {
   return toISODate(d);
 };
 
+const WORKFLOW_STEPS = [
+  { id: 'Draft', label: 'Draft', num: '1', active: true },
+  { id: 'Intake', label: 'AI Intake', num: '2' },
+  { id: 'Structuring', label: 'Structuring', num: '3' },
+  { id: 'PendingApproval', label: 'Approval', num: '4' },
+  { id: 'Published', label: 'Published', num: '5' },
+];
+
 export default function NewRequisition() {
-  const { token, user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [companyProfileId, setCompanyProfileId] = useState('');
-
-  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('role');
+  const [roleTitle, setRoleTitle] = useState('');
+  const [department, setDepartment] = useState('');
+  const [rawJd, setRawJd] = useState('');
+  const [templates, setTemplates] = useState([]);
+  const [companyProfiles, setCompanyProfiles] = useState([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
-  // Template import state
-  const [templates, setTemplates] = useState([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState('');
-  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  // Skill input tags
+  const [skillInput, setSkillInput] = useState('');
+  const [niceSkillInput, setNiceSkillInput] = useState('');
+  const [certInput, setCertInput] = useState('');
 
-  // Pre-fill structured role fields (all 6 tabs)
+  // 6-Section Requisition Prefill State
   const [prefill, setPrefill] = useState({
-    // Role tab
-    job_title: '',
+    // 1. Role
     job_family: '',
+    seniority: 'Senior',
+    experience_band: '3-6 yrs',
+    headcount: 1,
     must_have_skills: [],
     nice_to_have_skills: [],
-    seniority: '',
-    experience: '',
-    headcount: 1,
     certifications: [],
-    // Engagement tab
-    engagement_type: '',
-    duration: '',
-    start_date: '',
-    ends_on: '',
-    extension_likely: false,
-    max_notice_period: '',
-    // Commercials tab
+    // 2. Engagement
+    engagement_type: 'Contract',
+    duration: '6 months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('6 months', new Date()) || '',
+    extension_likely: 'Yes',
+    // 3. Commercials
+    rate_basis: 'Monthly rate',
     ceiling_internal: '',
-    range_vendors_see_min: '',
-    range_vendors_see_max: '',
-    rate_card_cap: '',
-    total_engagement_value: '',
-    cost_centre: '',
-    budget_approved: false,
-    budget_reference: '',
-    variance_approved: false,
-    // Work setup tab
-    work_mode: '',
-    work_locations: [],
-    working_hours: '',
-    location_remote_policy: '',
-    onsite_requirement: '',
-    equipment_provisioning: '',
-    // Compliance tab
-    background_check: '',
-    background_check_required: false,
-    nda_contract_type: '',
-    work_authorization: '',
-    client_site_access: false,
-    security_clearance_required: false,
-    security_clearance_notes: '',
-    // Process tab
-    hiring_manager: user?.name || '',
-    submission_deadline: '',
+    vendor_floor: '',
+    vendor_cap: '',
+    budget_cap_currency: 'INR',
+    // 4. Work Setup
+    work_mode: 'Remote',
+    primary_location: 'Bangalore, India',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM – 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    // 5. Compliance
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    // 6. Process
+    target_start_date: toISODate(new Date()),
+    submission_deadline: addDuration('7 days', new Date()) || '',
+    interview_rounds: '2 rounds (Technical + Managerial)',
     priority: 'Normal',
   });
 
-  const [expandedSections, setExpandedSections] = useState({
-    role: true,
-    engagement: true,
-    commercials: true,
-    workSetup: true,
-    compliance: true,
-    process: true,
-  });
-
-  const loadProfiles = () => {
-    setLoading(true);
-    request('/company-profiles', { token })
-      .then((profiles) => {
-        const own = (profiles || []).filter((p) => p.tenant_id === user.tenant_id);
-        const list = own.length ? own : profiles || [];
-        setCompanyProfileId((prev) => prev || (list[0]?.id || ''));
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  };
-
-  useEffect(loadProfiles, [token, user.tenant_id]);
-
-  // Load director-uploaded JSON templates for import
-  const loadTemplates = async () => {
-    if (!token) return;
-    setLoadingTemplates(true);
-    try {
-      const tpls = await request('/templates', { token });
-      const roleTpls = (tpls || []).map((t) => ({
-        ...t,
-        source: 'template',
-        status: 'Template',
-        company_name: 'Director template',
-      }));
-      setTemplates(roleTpls);
-    } catch (err) {
-      console.error('Failed to load templates:', err);
-    } finally {
-      setLoadingTemplates(false);
-    }
-  };
-
+  // Load Templates & Company Profiles
   useEffect(() => {
-    if (token) loadTemplates();
+    let isMounted = true;
+
+    // 1. Templates
+    request('/api/templates', { token })
+      .then((data) => {
+        if (isMounted) {
+          const list = Array.isArray(data) ? data : data?.templates || [];
+          setTemplates(list);
+        }
+      })
+      .catch(() => {
+        request('/templates', { token })
+          .then((data) => {
+            if (isMounted) {
+              const list = Array.isArray(data) ? data : data?.templates || [];
+              setTemplates(list);
+            }
+          })
+          .catch(() => {});
+      });
+
+    // 2. Company Profiles
+    request('/company-profiles', { token })
+      .then((data) => {
+        if (isMounted) {
+          const list = Array.isArray(data) ? data : data?.company_profiles || [];
+          setCompanyProfiles(list);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
 
-  const autoCalculatedEnds = useRef(false);
-
-  // Auto-set Start Date to today and compute Ends On from the duration.
-  useEffect(() => {
-    if (!prefill.duration) return;
-    const start = prefill.start_date || toISODate(new Date());
-    const end = addDuration(prefill.duration, start);
-    setPrefill((prev) => {
-      const updates = {};
-      if (!prev.start_date) updates.start_date = start;
-      if (end && (!prev.ends_on || autoCalculatedEnds.current)) {
-        updates.ends_on = end;
-        autoCalculatedEnds.current = true;
-      }
-      return Object.keys(updates).length ? { ...prev, ...updates } : prev;
-    });
-  }, [prefill.duration, prefill.start_date]);
-
-  const handleEndsOnChange = (v) => {
-    autoCalculatedEnds.current = false;
-    handlePrefillChange('engagement', 'ends_on', v);
-  };
-
-  const handleImportTemplate = (templateId) => {
-    if (!templateId) return;
-    const item = templates.find((t) => t.id === templateId);
-    if (!item || !item.structured_role) {
-      setError('Template not found');
-      return;
-    }
-    const role = item.structured_role;
-    const range = Array.isArray(role.range_vendors_see) && role.range_vendors_see.some(v => v != null)
-      ? role.range_vendors_see
-      : Array.isArray(role.rate_band) && role.rate_band.some(v => v != null)
-      ? role.rate_band
-      : [role.range_vendors_see_min ?? role.vendor_range_min, role.range_vendors_see_max ?? role.vendor_range_max];
-
-    setPrefill((prev) => ({
-      ...prev,
-      // Role tab
-      job_title: role.title || item.title || '',
-      job_family: role.job_family || '',
-      must_have_skills: role.must_have_skills || [],
-      nice_to_have_skills: role.nice_to_have_skills || [],
-      seniority: role.seniority || '',
-      experience: role.experience || '',
-      headcount: role.headcount || 1,
-      certifications: role.certifications || [],
-      // Engagement
-      engagement_type: role.engagement_type || 'Contract',
-      duration: role.duration || role.contract_duration || '',
-      start_date: role.start_date || '',
-      ends_on: role.ends_on || '',
-      extension_likely: Boolean(role.extension_likely),
-      max_notice_period: role.max_notice_period || '',
-      // Commercials
-      ceiling_internal: role.ceiling_internal ?? role.internal_ceiling ?? '',
-      range_vendors_see_min: range[0] ?? '',
-      range_vendors_see_max: range[1] ?? '',
-      rate_card_cap: role.rate_card_cap ?? role.cap ?? '',
-      total_engagement_value: role.total_engagement_value || '',
-      cost_centre: role.cost_centre || '',
-      budget_approved: Boolean(role.budget_approved),
-      budget_reference: role.budget_reference || '',
-      variance_approved: Boolean(role.variance_approved),
-      // Work setup
-      work_mode: role.work_mode || '',
-      work_locations: Array.isArray(role.work_locations) && role.work_locations.length ? role.work_locations : role.location ? [role.location] : [],
-      working_hours: role.working_hours || '',
-      location_remote_policy: role.location_remote_policy || '',
-      onsite_requirement: role.onsite_requirement || '',
-      equipment_provisioning: role.equipment_provisioning || '',
-      // Compliance
-      background_check: role.background_check || '',
-      background_check_required: Boolean(role.background_check_required),
-      nda_contract_type: role.nda_contract_type || '',
-      work_authorization: role.work_authorization || '',
-      client_site_access: Boolean(role.client_site_access),
-      security_clearance_required: Boolean(role.security_clearance_required),
-      security_clearance_notes: role.security_clearance_notes || '',
-      // Process
-      hiring_manager: role.hiring_manager || prev.hiring_manager,
-      submission_deadline: role.submission_deadline || '',
-      priority: role.priority || 'Normal',
-    }));
-    setSelectedTemplateId(templateId);
-  };
-
-  const roleTitle = prefill.job_title.trim();
-  const canSubmit = Boolean(companyProfileId) && roleTitle.length > 0 && Boolean(prefill.submission_deadline);
-
   const handlePrefillChange = (section, field, value) => {
+    setPrefill((prev) => {
+      const next = { ...prev, [field]: value };
+      if (field === 'duration' || field === 'start_date') {
+        const newDur = field === 'duration' ? value : prev.duration;
+        const newStart = field === 'start_date' ? value : prev.start_date;
+        const ends = addDuration(newDur, newStart);
+        if (ends) next.ends_on = ends;
+      }
+      return next;
+    });
+  };
+
+  const handleTemplateSelect = (templateId) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) return;
+
+    const tpl = templates.find((t) => String(t.id) === String(templateId));
+    if (!tpl) return;
+
+    const sr = tpl.structured_role || tpl.parsed_template || {};
+    const title = sr.title || sr.role_title || tpl.name || tpl.title || '';
+    const dept = sr.department || sr.job_family || tpl.department || 'Engineering';
+
+    setRoleTitle(title);
+    setDepartment(dept);
+    if (tpl.description || tpl.raw_jd) setRawJd(tpl.description || tpl.raw_jd || '');
+
     setPrefill((prev) => ({
       ...prev,
-      [field]: value,
+      job_family: sr.job_family || sr.department || dept,
+      seniority: sr.seniority || sr.seniority_level || prev.seniority,
+      experience_band: sr.experience_band || sr.years_experience || prev.experience_band,
+      headcount: sr.headcount || sr.openings || prev.headcount,
+      must_have_skills: Array.isArray(sr.must_have_skills) && sr.must_have_skills.length ? sr.must_have_skills : prev.must_have_skills,
+      nice_to_have_skills: Array.isArray(sr.nice_to_have_skills) && sr.nice_to_have_skills.length ? sr.nice_to_have_skills : prev.nice_to_have_skills,
+      certifications: Array.isArray(sr.certifications) && sr.certifications.length ? sr.certifications : prev.certifications,
+      engagement_type: sr.engagement_type || prev.engagement_type,
+      duration: sr.duration || prev.duration,
+      start_date: sr.start_date || prev.start_date,
+      extension_likely: sr.extension_likely || prev.extension_likely,
+      ceiling_internal: sr.ceiling_internal || sr.rate_card_cap || prev.ceiling_internal,
+      vendor_floor: sr.vendor_floor || sr.rate_card_floor || prev.vendor_floor,
+      vendor_cap: sr.vendor_cap || sr.rate_card_cap || prev.vendor_cap,
+      work_mode: sr.work_mode || prev.work_mode,
+      primary_location: sr.primary_location || sr.location || prev.primary_location,
+      timezone: sr.timezone || prev.timezone,
+      shift_hours: sr.shift_hours || prev.shift_hours,
+      equipment_provided: sr.equipment_provided || prev.equipment_provided,
+      bgv_required: sr.bgv_required || prev.bgv_required,
+      nda_required: sr.nda_required || prev.nda_required,
+      contract_template: sr.contract_template || prev.contract_template,
+      interview_rounds: sr.interview_rounds || prev.interview_rounds,
+      priority: sr.priority || prev.priority,
     }));
   };
 
-  const handleChipRemove = (field, index) => {
+  // Skill Add / Remove Handlers
+  const addMustHaveSkill = () => {
+    if (!skillInput.trim()) return;
+    if (!prefill.must_have_skills.includes(skillInput.trim())) {
+      setPrefill((prev) => ({
+        ...prev,
+        must_have_skills: [...prev.must_have_skills, skillInput.trim()],
+      }));
+    }
+    setSkillInput('');
+  };
+
+  const removeMustHaveSkill = (index) => {
     setPrefill((prev) => ({
       ...prev,
-      [field]: prev[field].filter((_, i) => i !== index),
+      must_have_skills: prev.must_have_skills.filter((_, i) => i !== index),
     }));
   };
 
+  const addNiceSkill = () => {
+    if (!niceSkillInput.trim()) return;
+    if (!prefill.nice_to_have_skills.includes(niceSkillInput.trim())) {
+      setPrefill((prev) => ({
+        ...prev,
+        nice_to_have_skills: [...prev.nice_to_have_skills, niceSkillInput.trim()],
+      }));
+    }
+    setNiceSkillInput('');
+  };
+
+  const removeNiceSkill = (index) => {
+    setPrefill((prev) => ({
+      ...prev,
+      nice_to_have_skills: prev.nice_to_have_skills.filter((_, i) => i !== index),
+    }));
+  };
+
+  const addCert = () => {
+    if (!certInput.trim()) return;
+    if (!prefill.certifications.includes(certInput.trim())) {
+      setPrefill((prev) => ({
+        ...prev,
+        certifications: [...prev.certifications, certInput.trim()],
+      }));
+    }
+    setCertInput('');
+  };
+
+  const removeCert = (index) => {
+    setPrefill((prev) => ({
+      ...prev,
+      certifications: prev.certifications.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Dynamic Live Assistant Checklist & Readiness Score
+  const checklist = useMemo(() => {
+    const items = [
+      {
+        id: 'job_title',
+        tab: 'role',
+        label: 'Job Title',
+        filled: Boolean(roleTitle.trim()),
+        detail: roleTitle.trim() ? `"${roleTitle.slice(0, 16)}..."` : 'Required to create role',
+        required: true,
+      },
+      {
+        id: 'job_family',
+        tab: 'role',
+        label: 'Job Family / Dept',
+        filled: Boolean(prefill.job_family.trim() || department.trim()),
+        detail: prefill.job_family || department || 'Recommended for categorization',
+        required: false,
+      },
+      {
+        id: 'skills',
+        tab: 'role',
+        label: 'Must-have Skills',
+        filled: prefill.must_have_skills.length > 0,
+        detail: prefill.must_have_skills.length > 0 ? `${prefill.must_have_skills.length} skills added` : 'Add at least 1 key skill',
+        required: true,
+      },
+      {
+        id: 'duration',
+        tab: 'engagement',
+        label: 'Engagement Duration',
+        filled: Boolean(prefill.duration),
+        detail: prefill.duration || 'Contract length',
+        required: true,
+      },
+      {
+        id: 'commercials',
+        tab: 'commercials',
+        label: 'Ceiling Rate / Budget',
+        filled: Boolean(prefill.ceiling_internal),
+        detail: prefill.ceiling_internal ? `₹${prefill.ceiling_internal}` : 'Rate cap per month/hr',
+        required: false,
+      },
+      {
+        id: 'deadline',
+        tab: 'process',
+        label: 'Submission Deadline',
+        filled: Boolean(prefill.submission_deadline),
+        detail: prefill.submission_deadline ? prefill.submission_deadline : 'Target submission cutoff',
+        required: true,
+      },
+    ];
+
+    const filledCount = items.filter((i) => i.filled).length;
+    const score = Math.round((filledCount / items.length) * 100);
+
+    return { items, filledCount, total: items.length, score };
+  }, [roleTitle, department, prefill]);
+
+  const canSubmit = Boolean(roleTitle.trim() && prefill.submission_deadline);
+
+  // Submit Handler
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (!companyProfileId) {
-      setError('No company profile available. Please register a company workspace first.');
+    if (e) e.preventDefault();
+    if (!roleTitle.trim()) {
+      setError('Please provide a Job Title before proceeding.');
+      setActiveTab('role');
       return;
     }
+    if (!prefill.submission_deadline) {
+      setError('Please provide a Submission Deadline in the Process tab.');
+      setActiveTab('process');
+      return;
+    }
+
     setSubmitting(true);
+    setError('');
+
     try {
-      const prefillData = { ...prefill };
-      // Convert chip arrays from state
-      const body = {
-        company_profile_id: companyProfileId,
-        title: roleTitle,
-        tech_stack_hint: [...prefill.must_have_skills, ...prefill.nice_to_have_skills].filter(Boolean),
+      // Retrieve active company profile ID
+      let profileId = companyProfiles[0]?.id;
+      if (!profileId) {
+        try {
+          const profList = await request('/company-profiles', { token });
+          if (Array.isArray(profList) && profList.length > 0) {
+            profileId = profList[0].id;
+          }
+        } catch (e) {}
+      }
+
+      const payload = {
+        company_profile_id: profileId || 'default',
+        title: roleTitle.trim(),
+        description: rawJd.trim() || `${roleTitle.trim()} contract requirement`,
+        tech_stack_hint: prefill.must_have_skills || [],
         intake_mode: 'guided',
-        source_filename: '',
-        prompt: '',
-        created_by: user.id,
-        prefill: prefillData,
-        // Pass all prefill fields in intake_meta for the agent to use
-        intake_meta: {
-          intake_mode: 'guided',
-          company_profile_id: companyProfileId,
-          source_filename: '',
-          // Pre-filled structured role fields
-          prefill: prefillData,
+        prefill: {
+          ...prefill,
+          title: roleTitle.trim(),
+          department: department.trim() || prefill.job_family || 'Engineering',
         },
       };
-      const req = await request('/requisitions', { method: 'POST', body, token });
-      try {
-        await request(`/requisitions/${req.id}/start`, { method: 'POST', token });
-      } catch {
-        // Draft-state fallback: the detail page offers "Run Agent" to retry.
+
+      const res = await request('/requisitions', {
+        method: 'POST',
+        body: payload,
+        token,
+      });
+
+      const newId = res.id || res.requisition_id;
+      if (newId) {
+        // Automatically start AI intake
+        try {
+          await request(`/requisitions/${newId}/start`, { method: 'POST', token });
+        } catch (e) {}
+        navigate(`/dashboard/requisitions/${newId}`);
+      } else {
+        navigate('/dashboard/requisitions/drafted');
       }
-      navigate(`/dashboard/requisitions/${req.id}`);
     } catch (err) {
-      setError(err.message);
+      console.error('Failed to create requisition draft:', err);
+      setError(err.message || 'Failed to create requisition. Please check your inputs.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const ToggleSection = (section) => () => setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
-
   return (
-    <div className="page page-narrow">
-      <div className="page-header">
+    <div
+      className="w-full min-w-0 pb-16 space-y-4 text-left"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      {/* Top Header Card */}
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="page-title">{roleTitle || 'New contract requirement'}</h1>
-          <p className="page-subtitle">Draft saved just now · Review the role details before sending to HR.</p>
+          <div className="flex items-center gap-2 text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            <Link to="/dashboard/requisitions" className="hover:text-black transition-colors">
+              Requisitions
+            </Link>
+            <span>•</span>
+            <span>CONTRACT ROLE DRAFTING</span>
+          </div>
+          <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
+            New Contract Requirement
+          </h1>
+          <p className="text-xs text-gray-500 font-normal mt-0.5 max-w-2xl">
+            Define role parameters and budget ceilings. The AI agent will auto-structure the JD and ask targeted intake questions.
+          </p>
+
+          {/* Workflow Step Indicator */}
+          <div className="flex items-center gap-1.5 mt-3.5 flex-wrap">
+            {WORKFLOW_STEPS.map((st, i) => (
+              <div key={st.id} className="flex items-center gap-1.5">
+                <span
+                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+                    st.active
+                      ? 'bg-black text-white shadow-2xs'
+                      : 'bg-white border border-gray-200 text-gray-400'
+                  }`}
+                >
+                  <span className="text-[10px]">{st.num}.</span>
+                  <span>{st.label}</span>
+                </span>
+                {i < WORKFLOW_STEPS.length - 1 && (
+                  <ChevronRight size={12} className="text-gray-300 shrink-0" />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="requisition-header-actions">
-          <button type="button" className="ghost-btn">Save draft</button>
-          <Link to="/dashboard/requisitions/drafted" className="ghost-btn-link">Back to list</Link>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/requisitions')}
+            className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
+          >
+            Back to list
+          </button>
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={submitting || !canSubmit}
+            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+          >
+            <Sparkles size={13} />
+            <span>{submitting ? 'Creating...' : 'Start AI Intake →'}</span>
+          </button>
         </div>
       </div>
 
-      {loading ? (
-        <p className="muted">Loading company profile...</p>
-      ) : (
-        <form onSubmit={handleSubmit} className="glass-panel form-card">
-          {error && <div className="alert alert-error" style={{ margin: '20px 32px 0' }}>{error}</div>}
-
-          <nav className="requisition-step-nav" aria-label="Requisition sections">
-            {['Role', 'Engagement', 'Commercials', 'Work setup', 'Compliance', 'Process'].map((step, i) => (
-              <span key={step} className={`requisition-step ${i === 0 ? 'active' : ''}`}>{step}</span>
-            ))}
-          </nav>
-
-          {/* A. How should the AI draft this JD? */}
-          <section className="intake-section">
-            <div className="intake-section-head">
-              <h2 className="intake-section-title">How should the AI draft this JD?</h2>
-              <span className="intake-section-caption">Guided intake</span>
-            </div>
-            <p className="intake-mode-note">
-              The agent will ask you a few targeted questions to fill any gaps, using your role brief and the company background from onboarding.
-            </p>
-
-            {/* Template Import Dropdown */}
-            <div className="intake-section" style={{ marginTop: 24 }}>
-              <div className="intake-section-head">
-                <h2 className="intake-section-title">Import from Template</h2>
-                <span className="intake-section-caption">Select an uploaded JSON template to pre-fill all fields as a starting point.</span>
-              </div>
-              <div className="template-selector" style={{ marginTop: 12 }}>
-                <label className="form-label">Select Template</label>
-                <select
-                  className="auth-input"
-                  value={selectedTemplateId}
-                  onChange={(e) => {
-                    setSelectedTemplateId(e.target.value);
-                    handleImportTemplate(e.target.value);
-                  }}
-                  disabled={loadingTemplates}
-                >
-                  <option value="">— Choose a template to import —</option>
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name || t.title || 'Untitled'} — {t.company_name || 'Director template'}
-                    </option>
-                  ))}
-                </select>
-                {loadingTemplates && <span className="field-hint">Loading templates...</span>}
-              </div>
-            </div>
-          </section>
-
-          {/* D. Pre-fill Structured Role Fields (Optional) */}
-          <section className="intake-section">
-            <div className="intake-section-head">
-              <h2 className="intake-section-title">Role definition</h2>
-              <span className="intake-section-caption">Fill any known fields now — the AI will ask only about gaps.</span>
-            </div>
-
-            <Section title="Role" expanded={expandedSections.role} onToggle={ToggleSection('role')}>
-              <Field label="Job Title" hint="e.g. Senior Backend Engineer">
-                <TextInput value={prefill.job_title} onChange={(v) => handlePrefillChange('role', 'job_title', v)} placeholder="Senior Backend Engineer" required />
-              </Field>
-              <Field label="Job Family" hint="e.g. Engineering / Platform">
-                <TextInput value={prefill.job_family} onChange={(v) => handlePrefillChange('role', 'job_family', v)} placeholder="Engineering / Platform" />
-              </Field>
-              <Field label="Must-have Skills">
-                <ChipInput
-                  value={prefill.must_have_skills}
-                  onChange={(v) => handlePrefillChange('role', 'must_have_skills', v)}
-                  onRemove={(i) => handleChipRemove('must_have_skills', i)}
-                  placeholder="+ add skill"
-                />
-              </Field>
-              <Field label="Nice-to-have Skills">
-                <ChipInput
-                  value={prefill.nice_to_have_skills}
-                  onChange={(v) => handlePrefillChange('role', 'nice_to_have_skills', v)}
-                  onRemove={(i) => handleChipRemove('nice_to_have_skills', i)}
-                  placeholder="+ add skill"
-                />
-              </Field>
-              <div className="editor-row-3" style={{ marginTop: 18 }}>
-                <Field label="Seniority Level">
-                  <SelectInput value={prefill.seniority} onChange={(v) => handlePrefillChange('role', 'seniority', v)} options={SENIORITY_OPTIONS} placeholder="Select level…" />
-                </Field>
-                <Field label="Experience" hint="e.g. 5–8 years">
-                  <TextInput value={prefill.experience} onChange={(v) => handlePrefillChange('role', 'experience', v)} placeholder="5–8 years" />
-                </Field>
-                <Field label="Headcount">
-                  <TextInput type="number" min="1" value={prefill.headcount} onChange={(v) => handlePrefillChange('role', 'headcount', v === '' ? 1 : Number(v))} placeholder="1" />
-                </Field>
-              </div>
-              <Field label="Certifications">
-                <ChipInput
-                  value={prefill.certifications}
-                  onChange={(v) => handlePrefillChange('role', 'certifications', v)}
-                  onRemove={(i) => handleChipRemove('certifications', i)}
-                  placeholder="+ add certification"
-                />
-              </Field>
-            </Section>
-
-            <Section title="Engagement" expanded={expandedSections.engagement} onToggle={ToggleSection('engagement')}>
-              <div className="editor-row-3">
-                <Field label="Engagement Type">
-                  <SelectInput value={prefill.engagement_type} onChange={(v) => handlePrefillChange('engagement', 'engagement_type', v)} options={ENGAGEMENT_TYPES} placeholder="Select…" />
-                </Field>
-                <Field label="Duration" hint="e.g. 6 months">
-                  <TextInput value={prefill.duration} onChange={(v) => handlePrefillChange('engagement', 'duration', v)} placeholder="6 months" />
-                </Field>
-                <Field label="Start Date">
-                  <TextInput type="date" value={prefill.start_date} onChange={(v) => handlePrefillChange('engagement', 'start_date', v)} />
-                </Field>
-              </div>
-              <div className="editor-row-3" style={{ marginTop: 18 }}>
-                <Field label="Ends On" hint="Auto-calculated from start + duration when left blank">
-                  <TextInput type="date" value={prefill.ends_on} onChange={handleEndsOnChange} />
-                </Field>
-                <Field label="Extension Likely">
-                  <SelectInput value={prefill.extension_likely ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('engagement', 'extension_likely', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
-                </Field>
-                <Field label="Max Notice Period" hint="e.g. 30 days">
-                  <TextInput value={prefill.max_notice_period} onChange={(v) => handlePrefillChange('engagement', 'max_notice_period', v)} placeholder="30 days" />
-                </Field>
-              </div>
-            </Section>
-
-            <Section title="Commercials" expanded={expandedSections.commercials} onToggle={ToggleSection('commercials')}>
-              <div className="editor-row" style={{ gap: 16 }}>
-                <Field label="Your Ceiling — Internal" hint="Only visible to internal HR; vendors see the range below (INR p.a.)">
-                  <TextInput type="number" min="0" value={prefill.ceiling_internal} onChange={(v) => handlePrefillChange('commercials', 'ceiling_internal', v === '' ? '' : Number(v))} placeholder="INR p.a." />
-                </Field>
-                <Field label="Range Vendors Will See" hint="Min–Max INR p.a.">
-                  <RangeInput
-                    minVal={prefill.range_vendors_see_min}
-                    maxVal={prefill.range_vendors_see_max}
-                    onMinChange={(v) => handlePrefillChange('commercials', 'range_vendors_see_min', v)}
-                    onMaxChange={(v) => handlePrefillChange('commercials', 'range_vendors_see_max', v)}
-                    placeholder="INR p.a."
-                  />
-                </Field>
-              </div>
-              <div className="editor-row-3" style={{ marginTop: 18 }}>
-                <Field label="Rate Card Cap" hint="Agreed rate-card cap for variance checks (INR p.a.)">
-                  <TextInput type="number" min="0" value={prefill.rate_card_cap} onChange={(v) => handlePrefillChange('commercials', 'rate_card_cap', v === '' ? '' : Number(v))} placeholder="INR p.a." />
-                </Field>
-                <Field label="Total Engagement Value" hint="Auto-calculated from headcount × rate × duration — editable override">
-                  <TextInput value={prefill.total_engagement_value} onChange={(v) => handlePrefillChange('commercials', 'total_engagement_value', v)} placeholder="e.g. ₹36,00,000" />
-                </Field>
-                <Field label="Cost Centre" hint="e.g. ENG-4102">
-                  <TextInput value={prefill.cost_centre} onChange={(v) => handlePrefillChange('commercials', 'cost_centre', v)} placeholder="ENG-4102" />
-                </Field>
-              </div>
-              <div className="editor-row-3" style={{ marginTop: 18 }}>
-                <Field label="Budget Approved">
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <SelectInput value={prefill.budget_approved ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('commercials', 'budget_approved', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" style={{ width: '80px' }} />
-                    <TextInput value={prefill.budget_reference} onChange={(v) => handlePrefillChange('commercials', 'budget_reference', v)} placeholder="PO / reference…" disabled={!prefill.budget_approved} />
-                  </div>
-                </Field>
-                <Field label="HR Approved Variance">
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-                    <input type="checkbox" checked={prefill.variance_approved} onChange={(e) => handlePrefillChange('commercials', 'variance_approved', e.target.checked)} />
-                    <span>HR approved the rate-card variance</span>
-                  </label>
-                </Field>
-              </div>
-            </Section>
-
-            <Section title="Work Setup" expanded={expandedSections.workSetup} onToggle={ToggleSection('workSetup')}>
-              <div className="editor-row-3">
-                <Field label="Work Mode">
-                  <SelectInput value={prefill.work_mode} onChange={(v) => handlePrefillChange('workSetup', 'work_mode', v)} options={WORK_MODES} placeholder="Select…" />
-                </Field>
-                <Field label="Location(s)">
-                  <ChipInput
-                    value={prefill.work_locations}
-                    onChange={(v) => handlePrefillChange('workSetup', 'work_locations', v)}
-                    onRemove={(i) => handleChipRemove('work_locations', i)}
-                    placeholder="+ add city / region"
-                  />
-                </Field>
-                <Field label="Equipment Provisioning">
-                  <SelectInput value={prefill.equipment_provisioning} onChange={(v) => handlePrefillChange('workSetup', 'equipment_provisioning', v)} options={EQUIPMENT_OPTIONS} placeholder="Select…" />
-                </Field>
-              </div>
-              <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Working Hours / Shift" hint="e.g. IST business hours (9:30 – 18:30)">
-                  <TextInput value={prefill.working_hours} onChange={(v) => handlePrefillChange('workSetup', 'working_hours', v)} placeholder="IST business hours (9:30 – 18:30)" />
-                </Field>
-              </div>
-              <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Location Remote Policy">
-                  <TextInput value={prefill.location_remote_policy} onChange={(v) => handlePrefillChange('workSetup', 'location_remote_policy', v)} placeholder="e.g. Remote-first, onsite quarterly" />
-                </Field>
-              </div>
-              <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Onsite Requirement">
-                  <TextInput value={prefill.onsite_requirement} onChange={(v) => handlePrefillChange('workSetup', 'onsite_requirement', v)} placeholder="e.g. 2 days/week in Bangalore office" />
-                </Field>
-              </div>
-            </Section>
-
-            <Section title="Compliance" expanded={expandedSections.compliance} onToggle={ToggleSection('compliance')}>
-              <div className="editor-row-3">
-                <Field label="Background Check Required">
-                  <SelectInput value={prefill.background_check_required ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'background_check_required', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
-                </Field>
-                <Field label="Contract Type">
-                  <SelectInput value={prefill.nda_contract_type} onChange={(v) => handlePrefillChange('compliance', 'nda_contract_type', v)} options={CONTRACT_OPTIONS} placeholder="Select…" />
-                </Field>
-                <Field label="Client Site Access">
-                  <SelectInput value={prefill.client_site_access ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'client_site_access', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
-                </Field>
-              </div>
-              <div className="editor-row-3" style={{ marginTop: 18 }}>
-                <Field label="Data / Security Clearance Required">
-                  <SelectInput value={prefill.security_clearance_required ? 'Yes' : 'No'} onChange={(v) => handlePrefillChange('compliance', 'security_clearance_required', v === 'Yes')} options={BOOL_OPTIONS} placeholder="No" />
-                </Field>
-              </div>
-              <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Background Check Details" hint="e.g. Standard police + education verification">
-                  <TextInput value={prefill.background_check} onChange={(v) => handlePrefillChange('compliance', 'background_check', v)} placeholder="Standard police + education verification" />
-                </Field>
-              </div>
-              <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Work Authorization" hint="Visa / authorization constraints">
-                  <TextInput value={prefill.work_authorization} onChange={(v) => handlePrefillChange('compliance', 'work_authorization', v)} placeholder="Indian citizen / work visa required" />
-                </Field>
-              </div>
-              <div className="editor-row" style={{ marginTop: 18 }}>
-                <Field label="Security Clearance Notes" hint="Applies when clearance is required">
-                  <TextInput value={prefill.security_clearance_notes} onChange={(v) => handlePrefillChange('compliance', 'security_clearance_notes', v)} placeholder="Govt client — background + screening" />
-                </Field>
-              </div>
-            </Section>
-
-            <Section title="Process" expanded={expandedSections.process} onToggle={ToggleSection('process')}>
-              <div className="editor-row-3">
-                <Field label="Hiring Manager" hint="e.g. Arjun Mehta">
-                  <TextInput value={prefill.hiring_manager} onChange={(v) => handlePrefillChange('process', 'hiring_manager', v)} placeholder="Arjun Mehta" />
-                </Field>
-                <Field label="Submission Deadline" required>
-                  <TextInput type="date" value={prefill.submission_deadline} onChange={(v) => handlePrefillChange('process', 'submission_deadline', v)} />
-                </Field>
-                <Field label="Priority">
-                  <SelectInput value={prefill.priority} onChange={(v) => handlePrefillChange('process', 'priority', v)} options={PRIORITY_OPTIONS} placeholder="Normal" />
-                </Field>
-              </div>
-            </Section>
-          </section>
-
-          {/* E. Submit */}
-          <div className="intake-footer">
-            <p className="intake-footer-note">
-              Nothing auto-publishes — the draft lands in a review editor where you check every field first.
-            </p>
-            <button type="submit" className="glow-btn" disabled={submitting || !canSubmit}>
-              {submitting ? 'Creating...' : 'Create & Start Agent'}
-            </button>
-          </div>
-        </form>
+      {error && (
+        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+          <AlertCircle size={15} className="shrink-0 text-red-500" />
+          <span>{error}</span>
+        </div>
       )}
+
+      {/* Main Grid: Form (8 cols) + AI Guide & Assistant Copilot (4 cols) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        {/* Left Column: Form Sections (8 cols) */}
+        <div className="lg:col-span-8 space-y-4">
+          {/* Template Import Card */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <BookOpen size={14} className="text-gray-900" />
+                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                  Import from Template (Optional)
+                </h3>
+              </div>
+              <span className="text-[11px] text-gray-400">Pre-fill standard company fields</span>
+            </div>
+
+            <select
+              value={selectedTemplateId}
+              onChange={(e) => handleTemplateSelect(e.target.value)}
+              className="w-full bg-gray-50 hover:bg-gray-100/70 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 focus:outline-none focus:border-black transition-colors"
+            >
+              <option value="">— Choose an approved role template —</option>
+              {templates.map((tpl) => {
+                const label = tpl.name || tpl.title || tpl.role_title || (tpl.structured_role && (tpl.structured_role.title || tpl.structured_role.role_title)) || `Template #${tpl.id.slice(0, 8)}`;
+                const dept = tpl.department || (tpl.structured_role && (tpl.structured_role.department || tpl.structured_role.job_family));
+                return (
+                  <option key={tpl.id} value={tpl.id}>
+                    {label} {dept ? `(${dept})` : ''}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Core Requisition Builder Card */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
+            {/* Tab Bar */}
+            <div className="flex items-center gap-1.5 p-1 bg-gray-100/80 rounded-xl overflow-x-auto">
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
+                      isActive
+                        ? 'bg-black text-white shadow-xs'
+                        : 'text-gray-600 hover:text-black hover:bg-white/60'
+                    }`}
+                  >
+                    <Icon size={13} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* TAB 1: ROLE */}
+            {activeTab === 'role' && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Job Title <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={roleTitle}
+                      onChange={(e) => setRoleTitle(e.target.value)}
+                      placeholder="e.g. Senior Backend Engineer"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Job Family / Department
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.job_family}
+                      onChange={(e) => handlePrefillChange('role', 'job_family', e.target.value)}
+                      placeholder="e.g. Platform Engineering"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Seniority Level
+                    </label>
+                    <select
+                      value={prefill.seniority}
+                      onChange={(e) => handlePrefillChange('role', 'seniority', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {SENIORITY_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Experience Band
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.experience_band}
+                      onChange={(e) => handlePrefillChange('role', 'experience_band', e.target.value)}
+                      placeholder="e.g. 3-6 yrs"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Headcount Openings
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={prefill.headcount}
+                      onChange={(e) => handlePrefillChange('role', 'headcount', parseInt(e.target.value, 10) || 1)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                </div>
+
+                {/* Must-have Skills Tag Input */}
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                    Must-Have Skills <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={skillInput}
+                      onChange={(e) => setSkillInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addMustHaveSkill())}
+                      placeholder="Type skill & press Enter (e.g. Python, FastApi, PostgreSQL)"
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={addMustHaveSkill}
+                      className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-800 transition-colors cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {prefill.must_have_skills.map((skill, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 border border-gray-200 text-gray-900 text-xs font-bold"
+                      >
+                        {skill}
+                        <button
+                          type="button"
+                          onClick={() => removeMustHaveSkill(idx)}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                    {prefill.must_have_skills.length === 0 && (
+                      <span className="text-[11px] text-gray-400 italic">No skills added yet.</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Nice-to-have skills */}
+                <div className="space-y-1.5 pt-1">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                    Nice-to-Have Skills (Optional)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={niceSkillInput}
+                      onChange={(e) => setNiceSkillInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addNiceSkill())}
+                      placeholder="e.g. Docker, Redis, Kubernetes"
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={addNiceSkill}
+                      className="px-3.5 py-2 rounded-xl bg-gray-200 text-gray-800 text-xs font-bold hover:bg-gray-300 transition-colors cursor-pointer"
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {prefill.nice_to_have_skills.map((skill, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-gray-700 text-xs font-medium"
+                      >
+                        {skill}
+                        <button
+                          type="button"
+                          onClick={() => removeNiceSkill(idx)}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Job Description Raw Text (Optional) */}
+                <div className="space-y-1 pt-1">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                    Raw Job Brief / Past JD (Optional)
+                  </label>
+                  <textarea
+                    rows="3"
+                    value={rawJd}
+                    onChange={(e) => setRawJd(e.target.value)}
+                    placeholder="Paste rough notes, responsibilities, or an existing JD here. AI will extract and structure it automatically."
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: ENGAGEMENT */}
+            {activeTab === 'engagement' && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Engagement Type
+                    </label>
+                    <select
+                      value={prefill.engagement_type}
+                      onChange={(e) => handlePrefillChange('engagement', 'engagement_type', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {ENGAGEMENT_TYPES.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Contract Duration
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.duration}
+                      onChange={(e) => handlePrefillChange('engagement', 'duration', e.target.value)}
+                      placeholder="e.g. 6 months / 1 year"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Start Date
+                    </label>
+                    <input
+                      type="date"
+                      value={prefill.start_date}
+                      onChange={(e) => handlePrefillChange('engagement', 'start_date', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Estimated End Date
+                    </label>
+                    <input
+                      type="date"
+                      value={prefill.ends_on}
+                      onChange={(e) => handlePrefillChange('engagement', 'ends_on', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Extension Likely?
+                    </label>
+                    <select
+                      value={prefill.extension_likely}
+                      onChange={(e) => handlePrefillChange('engagement', 'extension_likely', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {BOOL_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: COMMERCIALS */}
+            {activeTab === 'commercials' && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Rate Basis
+                    </label>
+                    <select
+                      value={prefill.rate_basis}
+                      onChange={(e) => handlePrefillChange('commercials', 'rate_basis', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      <option value="Monthly rate">Monthly rate (INR)</option>
+                      <option value="Daily rate">Daily rate (INR)</option>
+                      <option value="Hourly rate">Hourly rate (INR)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Internal Ceiling Cap (₹)
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.ceiling_internal}
+                      onChange={(e) => handlePrefillChange('commercials', 'ceiling_internal', e.target.value)}
+                      placeholder="e.g. 150000 / 18L"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Vendor Visible Floor (₹)
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.vendor_floor}
+                      onChange={(e) => handlePrefillChange('commercials', 'vendor_floor', e.target.value)}
+                      placeholder="e.g. 120000"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Vendor Visible Cap (₹)
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.vendor_cap}
+                      onChange={(e) => handlePrefillChange('commercials', 'vendor_cap', e.target.value)}
+                      placeholder="e.g. 150000"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: WORK SETUP */}
+            {activeTab === 'work_setup' && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Work Mode
+                    </label>
+                    <select
+                      value={prefill.work_mode}
+                      onChange={(e) => handlePrefillChange('work_setup', 'work_mode', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {WORK_MODES.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Primary Location
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.primary_location}
+                      onChange={(e) => handlePrefillChange('work_setup', 'primary_location', e.target.value)}
+                      placeholder="e.g. Bangalore, India"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Timezone & Shift Hours
+                    </label>
+                    <input
+                      type="text"
+                      value={prefill.shift_hours}
+                      onChange={(e) => handlePrefillChange('work_setup', 'shift_hours', e.target.value)}
+                      placeholder="e.g. 9:30 AM – 6:30 PM IST"
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Equipment Provision
+                    </label>
+                    <select
+                      value={prefill.equipment_provided}
+                      onChange={(e) => handlePrefillChange('work_setup', 'equipment_provided', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {EQUIPMENT_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: COMPLIANCE */}
+            {activeTab === 'compliance' && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      BGV Verification Required?
+                    </label>
+                    <select
+                      value={prefill.bgv_required}
+                      onChange={(e) => handlePrefillChange('compliance', 'bgv_required', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {BOOL_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      NDA Execution Required?
+                    </label>
+                    <select
+                      value={prefill.nda_required}
+                      onChange={(e) => handlePrefillChange('compliance', 'nda_required', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {BOOL_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Contract Agreement Type
+                    </label>
+                    <select
+                      value={prefill.contract_template}
+                      onChange={(e) => handlePrefillChange('compliance', 'contract_template', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {CONTRACT_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 6: PROCESS */}
+            {activeTab === 'process' && (
+              <div className="space-y-4 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Submission Deadline <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={prefill.submission_deadline}
+                      onChange={(e) => handlePrefillChange('process', 'submission_deadline', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                      Priority Level
+                    </label>
+                    <select
+                      value={prefill.priority}
+                      onChange={(e) => handlePrefillChange('process', 'priority', e.target.value)}
+                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    >
+                      {PRIORITY_OPTIONS.map((o) => (
+                        <option key={o} value={o}>{o}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                    Interview Rounds Structure
+                  </label>
+                  <input
+                    type="text"
+                    value={prefill.interview_rounds}
+                    onChange={(e) => handlePrefillChange('process', 'interview_rounds', e.target.value)}
+                    placeholder="e.g. 2 rounds (Technical Screen + Hiring Manager Loop)"
+                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right Column: Interactive Copilot & Live Assistant Side Tab (4 cols) */}
+        <div className="lg:col-span-4 space-y-3.5">
+          {/* Main Assistant Card */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3.5 sticky top-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-lg bg-black text-white flex items-center justify-center shrink-0">
+                  <Sparkles size={13} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Requisition Copilot
+                  </h3>
+                  <p className="text-[10px] text-gray-400">Live draft readiness guide</p>
+                </div>
+              </div>
+              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-900 text-[10px] font-extrabold">
+                {checklist.score}% Ready
+              </span>
+            </div>
+
+            {/* Readiness Progress Bar */}
+            <div className="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
+              <div
+                className="bg-black h-full rounded-full transition-all duration-300"
+                style={{ width: `${checklist.score}%` }}
+              />
+            </div>
+
+            {/* Step-by-Step Flow Instructions */}
+            <div className="space-y-2 text-xs">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                What to do next
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-start gap-2 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
+                  <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    1
+                  </span>
+                  <div>
+                    <div className="font-bold text-gray-900 text-[11.5px]">Provide Role & Core Skills</div>
+                    <div className="text-[10.5px] text-gray-500">
+                      Fill in Job Title and at least one must-have skill in the Role tab.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
+                  <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    2
+                  </span>
+                  <div>
+                    <div className="font-bold text-gray-900 text-[11.5px]">Set Budget & Submission Deadline</div>
+                    <div className="text-[10.5px] text-gray-500">
+                      Configure duration and target submission cutoff date.
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-2 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
+                  <span className="w-4 h-4 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                    3
+                  </span>
+                  <div>
+                    <div className="font-bold text-gray-900 text-[11.5px]">Launch AI Intake</div>
+                    <div className="text-[10.5px] text-gray-500">
+                      Click below to generate targeted screening questions and candidate matching criteria.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Live Missing Fields Interactive Checklist */}
+            <div className="space-y-2 pt-1 border-t border-gray-100">
+              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                Field Checklist & Jump
+              </div>
+
+              <div className="space-y-1.5">
+                {checklist.items.map((item) => (
+                  <div
+                    key={item.id}
+                    onClick={() => setActiveTab(item.tab)}
+                    className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-50 border border-transparent hover:border-gray-200 transition-all cursor-pointer text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                          item.filled
+                            ? 'bg-black text-white'
+                            : item.required
+                            ? 'bg-gray-200 text-gray-600'
+                            : 'bg-gray-100 text-gray-400'
+                        }`}
+                      >
+                        {item.filled ? '✓' : '•'}
+                      </span>
+                      <span className={item.filled ? 'font-bold text-gray-900' : 'text-gray-600'}>
+                        {item.label}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-gray-400 max-w-[120px] truncate text-right">
+                      {item.detail}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Action CTA inside Side Tab */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting || !canSubmit}
+                className="w-full py-2.5 px-3.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles size={13} />
+                <span>{submitting ? 'Creating...' : 'Create & Start AI Intake →'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

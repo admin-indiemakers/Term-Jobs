@@ -131,6 +131,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [acceptedCandidates, setAcceptedCandidates] = useState([]);
   const [portalUsers, setPortalUsers] = useState([]);
   const [dismissedNotifIds, setDismissedNotifIds] = useState(new Set());
+  const [updatingStatusIds, setUpdatingStatusIds] = useState(new Set());
   const [loadingInterviews, setLoadingInterviews] = useState(false);
   const [confirmingId, setConfirmingId] = useState(null);
   const [interviewFilter, setInterviewFilter] = useState('ALL');
@@ -515,9 +516,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
   const filteredReqCandidates = useMemo(() => {
     return (bankCandidates || []).filter((candidate) => {
-      const name = `${candidate.candidate_name || ''} ${candidate.candidate_email || ''} ${candidate.candidate_title || ''}`.toLowerCase();
-      const skills = (candidate.skills || []).map(s => s.toLowerCase());
-      const searchLower = reqCandidateSearch.toLowerCase();
+      if (!candidate) return false;
+      const name = `${candidate.candidate_name || candidate.name || ''} ${candidate.candidate_email || candidate.email || ''} ${candidate.candidate_title || candidate.title || ''}`.toLowerCase();
+      const skills = (candidate.skills || []).map(s => (typeof s === 'string' ? s.toLowerCase() : String(s || '').toLowerCase()));
+      const searchLower = (reqCandidateSearch || '').toLowerCase().trim();
+      if (!searchLower) return true;
       return name.includes(searchLower) || skills.some(s => s.includes(searchLower));
     });
   }, [bankCandidates, reqCandidateSearch]);
@@ -642,43 +645,42 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     setLoading(true);
     const activeToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token');
     try {
-      // 1. Fetch core essentials first for instant UI render
-      const [rawRequisitions, candidateData] = await Promise.all([
+      const [rawRequisitions, candidateData, limitData, bankData, interviewData, screenedSummaryData, acceptedData, portalUsersData] = await Promise.all([
         request('/requisitions', { token: activeToken }).catch(() => []),
         request('/candidates/shortlisted', { token: activeToken })
           .catch(() => request('/api/candidates/shortlisted', { token: activeToken }))
           .catch(() => []),
-      ]);
-
-      const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
-      setRequisitions(list);
-      let listShortlisted = Array.isArray(candidateData) ? candidateData : candidateData?.shortlisted_candidates || [];
-      setShortlisted(listShortlisted);
-      setLoading(false);
-
-      if (list.length) {
-        const defaultReq = list.find((item) => item.status === 'Published') || list[0];
-        selectRequisition(defaultReq.id, list);
-      }
-
-      // 2. Defer non-critical background data fetches to prevent blocking workspace render
-      Promise.all([
         request('/api/settings/candidate-limit', { token: activeToken }).catch(() => ({ limit: null })),
         request('/candidates/bank', { token: activeToken }).catch(() => []),
         request('/api/interviews/vendor', { token: activeToken }).catch(() => []),
         request('/candidates/bank/screened-summary', { token: activeToken }).catch(() => ({ screened_requisitions: {} })),
         request('/candidates?status=Accepted', { token: activeToken }).catch(() => []),
         request('/api/auth/portal-users', { token: activeToken }).catch(() => []),
-      ]).then(([limitData, bankData, interviewData, screenedSummaryData, acceptedData, portalUsersData]) => {
-        setCandidateLimit(limitData?.limit ?? null);
-        setBankCandidates(bankData || []);
-        setInterviews(Array.isArray(interviewData) ? interviewData : []);
-        const acceptedList = Array.isArray(acceptedData) ? acceptedData : (acceptedData?.candidates || []);
-        setAcceptedCandidates(acceptedList);
-        setPortalUsers(Array.isArray(portalUsersData) ? portalUsersData : []);
-        setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
-      });
+      ]);
 
+      const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
+      setRequisitions(list);
+      let listShortlisted = Array.isArray(candidateData) ? candidateData : candidateData?.shortlisted_candidates || [];
+      if (!listShortlisted.length && activeToken) {
+        const fallbackSubs = await request('/candidates?status=Shortlisted', { token: activeToken }).catch(() => []);
+        if (Array.isArray(fallbackSubs) && fallbackSubs.length) {
+          listShortlisted = fallbackSubs;
+        }
+      }
+      setShortlisted(listShortlisted);
+      setCandidateLimit(limitData?.limit ?? null);
+      setBankCandidates(bankData || []);
+      setInterviews(Array.isArray(interviewData) ? interviewData : []);
+      const acceptedList = Array.isArray(acceptedData) ? acceptedData : (acceptedData?.candidates || []);
+      setAcceptedCandidates(acceptedList);
+      setPortalUsers(Array.isArray(portalUsersData) ? portalUsersData : []);
+      setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
+      setLoading(false);
+
+      if (list.length) {
+        const defaultReq = list.find((item) => item.status === 'Published') || list[0];
+        selectRequisition(defaultReq.id, list);
+      }
     } catch (err) {
       setError(err.message || 'Unable to load your recruiter workspace.');
       setLoading(false);
@@ -1027,10 +1029,10 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   }
 
   async function runBulkScreening() {
-    if (screening) return; // Prevent duplicate clicks or concurrent requests
-    if (!selectedCandidateIds.length) return setError('Please select at least one candidate.');
-    if (!selectedReqId) return setError('Please select a requisition.');
-
+    if (!selectedReqId) return setError('Please select a requisition requirement first.');
+    if (!selectedCandidateIds.length) return setError('Please select at least one candidate from the pool.');
+    setError('');
+    setScreening(true);
     const totalCount = selectedCandidateIds.length;
     setScreeningProgress({
       total: totalCount,
@@ -1038,39 +1040,25 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       pct: 5,
       stage: 'Extract',
     });
-    setScreening(true);
-    setError('');
 
-    let currentPct = 5;
-    let currentStage = 'Extract';
-    let currentProcessed = 0;
-
+    const stages = ['Extract', 'LLM Structure', 'GitHub Agent', 'Score', 'Rank'];
+    let currentStageIdx = 0;
     const progressInterval = setInterval(() => {
-      currentPct = Math.min(92, currentPct + Math.floor(Math.random() * 5) + 3);
-      currentProcessed = Math.min(totalCount - 1, Math.floor((currentPct / 100) * totalCount));
-
-      if (currentPct < 20) {
-        currentStage = 'Extract';
-      } else if (currentPct < 50) {
-        currentStage = 'LLM Structure';
-      } else if (currentPct < 75) {
-        currentStage = 'GitHub Agent';
-      } else if (currentPct < 90) {
-        currentStage = 'Score';
-      } else {
-        currentStage = 'Rank';
-      }
-
-      setScreeningProgress({
-        total: totalCount,
-        processed: currentProcessed,
-        pct: currentPct,
-        stage: currentStage,
+      setScreeningProgress((prev) => {
+        const nextProcessed = Math.min(totalCount, prev.processed + Math.ceil(totalCount / 5));
+        const nextPct = Math.min(95, prev.pct + 18);
+        currentStageIdx = (currentStageIdx + 1) % stages.length;
+        return {
+          ...prev,
+          processed: nextProcessed,
+          pct: nextPct,
+          stage: stages[currentStageIdx],
+        };
       });
-    }, 900);
+    }, 450);
 
     try {
-      const response = await request('/candidates/bank/match-bulk', {
+      const response = await request('/candidates/bank/match', {
         method: 'POST',
         token: authToken,
         body: {
@@ -1113,18 +1101,6 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     }
   }
 
-  function formatJd(req) {
-    if (req?.generated_jd_markdown) return req.generated_jd_markdown;
-    const data = role(req);
-    return [
-      `# ${data.title || req?.title || 'Untitled role'}`,
-      data.summary,
-      skillsFor(req).length ? `Must-have skills: ${skillsFor(req).join(', ')}` : '',
-      data.experience ? `Experience: ${data.experience}` : '',
-      data.location || data.work_locations?.join(', '),
-    ].filter(Boolean).join('\n\n');
-  }
-
   async function selectRequisition(id, source = requisitions) {
     const summary = source.find((item) => item.id === id);
     setSelectedReqId(id);
@@ -1132,39 +1108,46 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
     setAutoScreenEligibleCount(0);
     setFullReq(summary || null);
     setJdText(formatJd(summary));
-
-    // Fire all 3 requests in parallel instead of sequentially
     try {
-      const [details, subs, cacheRes] = await Promise.all([
-        request(`/requisitions/${id}`, { token: authToken }).catch(() => null),
+      const details = await request(`/requisitions/${id}`, { token: authToken });
+      setFullReq(details);
+      setJdText(formatJd(details));
+    } catch {
+      // The summarized published requisition remains fully usable for screening.
+    }
+    try {
+      const [subs, cacheRes] = await Promise.all([
         request(`/candidates?requisition_id=${id}`, { token: authToken }).catch(() => []),
         request(`/candidates/bank/screening-cache/${id}`, { token: authToken }).catch(() => ({ has_cache: false, screened_candidates: [] })),
       ]);
 
-      if (details) {
-        setFullReq(details);
-        setJdText(formatJd(details));
-      }
-
+      let listToSet = [];
       if (cacheRes?.has_cache && Array.isArray(cacheRes.screened_candidates) && cacheRes.screened_candidates.length) {
         const permanentMap = new Map((subs || []).map((s) => [s.candidate_name?.toLowerCase() || s.id, s]));
-        const merged = cacheRes.screened_candidates.map((cand) => {
+        listToSet = cacheRes.screened_candidates.map((cand) => {
           const perm = permanentMap.get(cand.candidate_name?.toLowerCase()) || permanentMap.get(cand.id);
           if (perm && perm.status) {
             return { ...cand, status: perm.status, id: perm.id || cand.id };
           }
           return cand;
         });
-        setScreenedSubmissions(merged);
       } else if (Array.isArray(subs) && subs.length) {
-        setScreenedSubmissions(subs);
-      } else if (!screening) {
-        setScreenedSubmissions([]);
+        listToSet = subs;
       }
+
+      // Deduplicate by candidate name/email so no dual rows appear
+      const seenSet = new Set();
+      const dedupedList = [];
+      (listToSet || []).forEach((c) => {
+        const k = (c.candidate_name || c.name || c.id || '').toLowerCase().trim();
+        if (!seenSet.has(k)) {
+          seenSet.add(k);
+          dedupedList.push(c);
+        }
+      });
+      setScreenedSubmissions(dedupedList);
     } catch {
-      if (!screening) {
-        setScreenedSubmissions([]);
-      }
+      setScreenedSubmissions([]);
     }
   }
 

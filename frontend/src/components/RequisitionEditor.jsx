@@ -456,23 +456,8 @@ case 'Work setup':
 
   return (
     <div>
-      {sourceLabel && (
-        <div className="source-banner">
-          <span className="source-banner-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M20 6 9 17l-5-5" />
-            </svg>
-          </span>
-          <p className="source-banner-text">
-            <strong>Company Background</strong> — Title, skills, experience and location prefilled below. Check them.
-          </p>
-          {editable && onReplace && (
-            <button type="button" className="source-banner-replace" onClick={onReplace}>Replace</button>
-          )}
-        </div>
-      )}
-
-      <div className="editor-tabs" role="tablist">
+      {/* Fixed Sticky Sub-Tabs Header (Never Scrolls) */}
+      <div className="editor-tabs" role="tablist" style={{ marginBottom: '16px', paddingBottom: '14px' }}>
         {TABS.map((t) => (
           <button
             key={t}
@@ -487,7 +472,13 @@ case 'Work setup':
         ))}
       </div>
 
-      {renderTab()}
+      {/* In-built Scrollable Body for Fields */}
+      <div
+        className="editor-tab-body overflow-y-auto pr-1.5 custom-scrollbar"
+        style={{ maxHeight: '380px' }}
+      >
+        {renderTab()}
+      </div>
     </div>
   );
 }
