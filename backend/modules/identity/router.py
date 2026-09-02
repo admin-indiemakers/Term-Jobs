@@ -1,3 +1,4 @@
+from pydantic import BaseModel
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from modules.identity.domain.models import Tenant, User, VendorEngagement
@@ -1081,3 +1082,112 @@ def permanently_delete_archive(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Archive not found")
     return {"ok": True, "message": "Permanently deleted"}
+
+
+class HiringManagerInviteIn(BaseModel):
+    name: str
+    email: str
+    department: str = ""
+    password: str
+    tenant_id: str | None = None
+    company_name: str | None = None
+
+
+@router.get("/join/company-info")
+def get_invite_company_info(
+    tenant_id: str | None = None,
+    company: str | None = None,
+    db: Session = Depends(get_db),
+):
+    all_tenants = db.query(Tenant).all()
+    target_tenant = None
+
+    if tenant_id:
+        target_tenant = next((t for t in all_tenants if t.id == tenant_id), None)
+    if not target_tenant and company:
+        comp_clean = company.strip().lower()
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == comp_clean), None)
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == 'bearitt'), None)
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if getattr(t, 'tenant_type', '') == 'client'), None)
+
+    return {
+        "tenant_id": target_tenant.id if target_tenant else "",
+        "company_name": target_tenant.name if target_tenant else "Bearitt",
+    }
+
+
+@router.post("/join/hiring-manager", status_code=status.HTTP_201_CREATED)
+@router.post("/hiring-manager/register", status_code=status.HTTP_201_CREATED)
+def register_hiring_manager(
+    body: HiringManagerInviteIn,
+    db: Session = Depends(get_db),
+):
+    """Public self-registration for Hiring Managers via secure company invite link.
+    Stores the account under the company's tenant so the Company Admin sees them
+    in their Hiring Manager governance list immediately.
+    """
+    if not body.email or not body.email.strip():
+        raise HTTPException(status_code=400, detail="Email address is required")
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=400, detail="Full name is required")
+    if not body.password or len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    email = body.email.strip().lower()
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists. Please log in.",
+        )
+
+    all_tenants = db.query(Tenant).all()
+    target_tenant = None
+    if body.tenant_id:
+        target_tenant = next((t for t in all_tenants if t.id == body.tenant_id), None)
+
+    if not target_tenant and body.company_name:
+        comp_clean = body.company_name.strip().lower()
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == comp_clean), None)
+
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == 'bearitt'), None)
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if getattr(t, 'tenant_type', '') == 'client'), None)
+
+    tenant_id = target_tenant.id if target_tenant else "local"
+
+    # Find the company admin or creator for reference
+    all_users = db.query(User).filter(User.tenant_id == tenant_id).all()
+    admin_user = next((u for u in all_users if u.role in ("Admin", "Super Admin")), None)
+    created_by_id = admin_user.id if admin_user else "self_invite"
+
+    user = User(
+        tenant_id=tenant_id,
+        email=email,
+        name=body.name.strip(),
+        password_hash=hash_password(body.password),
+        role="Hiring Manager",
+        department=body.department.strip() or "General",
+        created_by=created_by_id,
+        is_active=True,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "success": True,
+        "message": f"Access request submitted successfully for {user.name}. Your account is registered under {target_tenant.name if target_tenant else 'company'}.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "department": user.department,
+            "tenant_id": user.tenant_id,
+            "tenant_name": target_tenant.name if target_tenant else "Bearitt",
+        }
+    }

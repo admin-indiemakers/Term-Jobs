@@ -1766,21 +1766,37 @@
 }
 
 .app-shell.console-admin .nav-link {
-  color: #6b6b6b;
-  border-radius: 6px;
+  color: #52525b;
+  border-radius: 14px;
   font-weight: 500;
+  padding: 9px 13px;
+  margin: 3px 0;
+  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-shell.console-admin .nav-link:hover {
-  background: #f4f4f4;
-  color: #0a0a0a;
+  background: #f4f4f5;
+  color: #09090b;
 }
 
-.app-shell.console-admin .nav-link.active {
-  background: #f4f4f4;
-  color: #0a0a0a;
-  font-weight: 700;
-  box-shadow: inset 3px 0 0 #0a0a0a;
+.app-shell.console-admin .nav-link.active,
+.app-shell.console-superadmin .nav-link.active,
+.app-shell.console-director .nav-link.active,
+.app-shell.console-hiringmanager .nav-link.active,
+.app-shell.console-recruiter .nav-link.active {
+  background: #0a0a0a !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
+  border: none !important;
+}
+.app-shell.console-admin .nav-link.active *,
+.app-shell.console-superadmin .nav-link.active *,
+.app-shell.console-director .nav-link.active *,
+.app-shell.console-hiringmanager .nav-link.active *,
+.app-shell.console-recruiter .nav-link.active * {
+  color: #ffffff !important;
 }
 
 .app-shell.console-admin .sidebar-footer {
@@ -2311,10 +2327,11 @@
 }
 
 .app-shell.console-hiringmanager .nav-link.active {
-  background: transparent;
-  color: #0a0a0a;
-  font-weight: 700;
-  box-shadow: inset 3px 0 0 #0a0a0a;
+  background: #0a0a0a !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14) !important;
 }
 
 .app-shell.console-hiringmanager .sidebar-footer {
@@ -3844,10 +3861,11 @@
 }
 
 .app-shell.console-director .nav-link.active {
-  background: transparent;
-  color: #0a0a0a;
-  font-weight: 700;
-  box-shadow: inset 3px 0 0 #0a0a0a;
+  background: #0a0a0a !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14) !important;
 }
 
 .app-shell.console-director .sidebar-footer {
@@ -5440,34 +5458,6 @@ html, body, #root {
   max-height: 100vh !important;
 }
 
-/* ============ CANDIDATE DETAIL SLIDE-IN PANEL ============ */
-@keyframes slideIn {
-  from { transform: translateX(100%); opacity: 0.8; }
-  to { transform: translateX(0); opacity: 1; }
-}
-.animate-slide-in {
-  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.app-shell.console-admin .nav-link.active,
-.app-shell.console-superadmin .nav-link.active,
-.app-shell.console-director .nav-link.active,
-.app-shell.console-hiringmanager .nav-link.active,
-.app-shell.console-recruiter .nav-link.active {
-  background: #0a0a0a !important;
-  color: #ffffff !important;
-  font-weight: 700 !important;
-  border-radius: 14px !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
-  border: none !important;
-}
-.app-shell.console-admin .nav-link.active *,
-.app-shell.console-superadmin .nav-link.active *,
-.app-shell.console-director .nav-link.active *,
-.app-shell.console-hiringmanager .nav-link.active *,
-.app-shell.console-recruiter .nav-link.active * {
-  color: #ffffff !important;
-}
 
 .sidebar a,
 .sidebar button,

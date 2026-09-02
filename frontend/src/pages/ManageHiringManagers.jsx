@@ -4,6 +4,8 @@ import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   Users,
+  Link2,
+  Copy,
   UserPlus,
   ArrowLeft,
   Search,
@@ -48,6 +50,7 @@ export default function ManageHiringManagers() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [copied, setCopied] = useState(false);
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -81,6 +84,14 @@ export default function ManageHiringManagers() {
       return () => clearTimeout(timer);
     }
   }, [success]);
+
+  const handleCopyInviteLink = () => {
+    const inviteUrl = `${window.location.origin}/join/hiring-manager?company=${encodeURIComponent(user?.tenant_name || 'Bearitt')}`;
+    navigator.clipboard.writeText(inviteUrl);
+    setCopied(true);
+    setSuccess('Invite link copied to clipboard! Anyone with this link can request Hiring Manager access.');
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const handleInput = (e) => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -217,13 +228,17 @@ export default function ManageHiringManagers() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
-          <Link
-            to="/dashboard/admin"
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5"
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <button
+            type="button"
+            onClick={handleCopyInviteLink}
+            className="px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            title="Copy public invite link for new Hiring Managers"
           >
-            Back to Dashboard
-          </Link>
+            <Link2 size={14} className="text-gray-500" />
+            <span>{copied ? 'Link Copied!' : 'Copy Invite Link'}</span>
+          </button>
+
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}

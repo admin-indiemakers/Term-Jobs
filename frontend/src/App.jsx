@@ -2,6 +2,7 @@ import InterviewRequests from './pages/recruiter/InterviewRequests';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
+import JoinHiringManager from './pages/JoinHiringManager';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
 import CandidateLogin from './pages/CandidateLogin';
@@ -28,12 +29,6 @@ import CandidateSchedule from './pages/candidates/CandidateSchedule';
 import AcceptedCandidates from './pages/candidates/AcceptedCandidates';
 import CandidatePortal from './pages/candidates/CandidatePortal';
 import OnboardingManagement from './pages/candidates/OnboardingManagement';
-import CandidatePortalAccess from './pages/candidates/CandidatePortalAccess';
-import CandidateOnboarding from './pages/candidates/CandidateOnboarding';
-import ReportedIssues from './pages/candidates/ReportedIssues';
-import TeamOverview from './pages/workforce/TeamOverview';
-import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
-import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Archives from './pages/Archives';
 
 
@@ -80,6 +75,8 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
+        <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
         <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
@@ -105,12 +102,7 @@ export default function App() {
           <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
           <Route path="candidates/accepted" element={<AcceptedCandidates />} />
           <Route path="candidates/onboarding" element={<OnboardingManagement />} />
-          <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />
-          <Route path="candidates/issues" element={<ReportedIssues />} />
           <Route path="candidates" element={<ShortlistedCandidates />} />
-          <Route path="workforce/team" element={<TeamOverview />} />
-          <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
-          <Route path="workforce/expenses" element={<ExpenseApprovals />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
           <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
@@ -137,14 +129,6 @@ export default function App() {
           element={
             <RequireAuth>
               <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/onboarding"
-          element={
-            <RequireAuth>
-              <CandidateOnboarding />
             </RequireAuth>
           }
         />
