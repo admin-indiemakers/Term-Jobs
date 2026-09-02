@@ -24,6 +24,7 @@ from modules.identity.services.auth_service import (
 )
 from modules.requisition.domain.models import CompanyProfile
 from modules.shared.db import Session, get_session
+from modules.shared.cache import cache as _cache
 
 router = APIRouter(tags=["Authentication"])
 
@@ -277,6 +278,7 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    _cache.invalidate_prefix("users:")
 
     return UserResponse(
         id=user.id,
@@ -299,6 +301,12 @@ def list_users(
     db: Session = Depends(get_db),
 ):
     """Super Admin sees all accounts; Admin sees their tenant's users; HR sees the Hiring Managers they created."""
+    # Cache per-role results for 30s to avoid repeated full collection scans
+    _cache_key = f"users:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    _cached = _cache.get(_cache_key)
+    if _cached is not None:
+        return _cached
+
     if current_user.role == "Super Admin":
         users = db.query(User).all()
     elif current_user.role == "Admin":
@@ -315,13 +323,18 @@ def list_users(
             detail="You are not allowed to list users",
         )
     
-    tenant_ids = {u.tenant_id for u in users if u.tenant_id}
-    tenant_map = {}
-    if tenant_ids:
-        tenants = db.query(Tenant).filter(Tenant.id.in_(tenant_ids)).all()
-        tenant_map = {t.id: t for t in tenants}
+    all_tenants = db.query(Tenant).all()
+    tenant_map = {t.id: t for t in all_tenants}
 
-    return [
+    def _safe_iso(dt_val):
+        """Safely convert a datetime to ISO string, handling string values."""
+        if not dt_val:
+            return ""
+        if hasattr(dt_val, 'isoformat'):
+            return dt_val.isoformat()
+        return str(dt_val)
+
+    result = [
         UserListResponse(
             id=u.id,
             email=u.email,
@@ -333,11 +346,13 @@ def list_users(
             department=u.department or "",
             is_active=u.is_active,
             created_by=u.created_by,
-            created_at=u.created_at.isoformat() if u.created_at else "",
+            created_at=_safe_iso(u.created_at),
             candidate_limit=u.candidate_limit,
         )
         for u in users
     ]
+    _cache.set(_cache_key, result, ttl=30)
+    return result
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse)
@@ -401,6 +416,7 @@ def update_user(
 
     db.commit()
     db.refresh(target)
+    _cache.invalidate_prefix("users:")
 
     comp = _get_company_profile(target.tenant_id, db)
     return UserResponse(
@@ -466,6 +482,7 @@ def delete_user(
 
     db.delete(target)
     db.commit()
+    _cache.invalidate_prefix("users:")
     return None
 
 
@@ -504,6 +521,8 @@ def delete_tenant(
     mongo_db["users"].delete_many({"tenant_id": tenant_id})
     db.delete(tenant)
     db.commit()
+    _cache.invalidate_prefix("users:")
+    _cache.invalidate_prefix("tenants:")
     return None
 
 
@@ -514,6 +533,11 @@ def list_tenants(
     db: Session = Depends(get_db),
 ):
     """Super Admin lists all tenants; Admin lists their own company tenant."""
+    _cache_key = f"tenants:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    _cached = _cache.get(_cache_key)
+    if _cached is not None:
+        return _cached
+
     if current_user.role == "Super Admin":
         tenants = db.query(Tenant).all()
     elif current_user.role == "Admin":
@@ -523,10 +547,17 @@ def list_tenants(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list tenants",
         )
-    return [
-        TenantResponse(id=t.id, name=t.name, tenant_type=t.tenant_type, created_at=str(t.created_at or ""))
+    result = [
+        TenantResponse(
+            id=t.id,
+            name=t.name,
+            tenant_type=t.tenant_type,
+            created_at=str(t.created_at or ""),
+        )
         for t in sorted(tenants, key=lambda t: (t.tenant_type, t.name))
     ]
+    _cache.set(_cache_key, result, ttl=30)
+    return result
 
 
 @router.get("/tenants/check-name")
@@ -609,6 +640,8 @@ def create_tenant(
     db.add(tenant)
     db.commit()
     db.refresh(tenant)
+    _cache.invalidate_prefix("tenants:")
+    _cache.invalidate_prefix("users:")
 
     # Keep a company profile in sync so the requisition agents have rich
     # context (industry, size, location, tech stack) for automated requisitions.
@@ -794,13 +827,20 @@ def list_portal_users(
         if cid:
             portal_users[cid] = u
     
+    # Batch-fetch all requisitions in one query (eliminates N+1)
+    req_ids_needed = list({sub.get("requisition_id") for sub in accepted_subs if sub.get("requisition_id")})
+    req_cache = {}
+    if req_ids_needed:
+        for rd in mongo_db["requisitions"].find({"id": {"$in": req_ids_needed}}, {"id": 1, "title": 1}):
+            req_cache[rd.get("id")] = rd
+
     # Enrich accepted subs with portal user status + requisition title
     results = []
     for sub in accepted_subs:
         cid = sub.get("candidate_id", "")
         pu = portal_users.get(cid)
-        req_doc = mongo_db["requisitions"].find_one({"id": sub.get("requisition_id")}) if sub.get("requisition_id") else None
-        
+        req_doc = req_cache.get(sub.get("requisition_id"))
+
         results.append({
             "candidate_id": cid,
             "candidate_name": sub.get("candidate_name", ""),
@@ -873,6 +913,7 @@ def create_or_update_portal_user(
         existing_user.is_active = True
         db.commit()
         db.refresh(existing_user)
+        _cache.invalidate_prefix("users:")
         return {
             "ok": True,
             "id": existing_user.id,
@@ -936,6 +977,7 @@ def create_or_update_portal_user(
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    _cache.invalidate_prefix("users:")
 
     return {
         "ok": True,
@@ -975,6 +1017,7 @@ def update_portal_user(
         target.candidate_id = body["candidate_id"]
 
     db.commit()
+    _cache.invalidate_prefix("users:")
     return {"ok": True, "message": "Portal user updated"}
 
 
@@ -993,6 +1036,7 @@ def delete_portal_user(
         raise HTTPException(status_code=404, detail="User not found")
     db.delete(target)
     db.commit()
+    _cache.invalidate_prefix("users:")
     return {"ok": True, "message": "Portal user deleted"}
 
 

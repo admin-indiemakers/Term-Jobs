@@ -707,7 +707,13 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             # Admin, HR, Director, etc. see all requisitions in their tenant
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
         rows = query.all()
-        profiles = {p.id: p for p in session.query(models.CompanyProfile).all()}
+        # Only fetch company profiles referenced by the returned requisitions (not ALL profiles)
+        needed_cp_ids = {r.company_profile_id for r in rows if r.company_profile_id}
+        profiles = {}
+        if needed_cp_ids:
+            profiles = {p.id: p for p in session.query(models.CompanyProfile).filter(
+                models.CompanyProfile.id.in_(list(needed_cp_ids))
+            ).all()}
         is_vendor = current_user.role == "Recruiter"
         result = [
             {

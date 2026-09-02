@@ -40,7 +40,7 @@ def _get_client() -> "MongoClient":
             serverSelectionTimeoutMS=5000,
             connectTimeoutMS=10000,
             maxPoolSize=50,
-            minPoolSize=5,
+            minPoolSize=10,
             retryWrites=True,
             retryReads=True,
             tls=True,
@@ -223,6 +223,7 @@ class Session:
         self._tracked: list[Model] = []
         self._pending: list[Model] = []
         self._deleted: list[Model] = []
+        self._snapshots: dict[int, dict] = {}  # id(obj) -> serialized state at load time
 
     def __enter__(self) -> Self:
         return self
@@ -236,6 +237,7 @@ class Session:
     def _track(self, obj: Model) -> None:
         if obj not in self._tracked:
             self._tracked.append(obj)
+            self._snapshots[id(obj)] = obj.to_doc()
 
     def get(self, model: type[Model], doc_id: str):
         doc = self._coll(model).find_one({"id": doc_id})
@@ -257,17 +259,24 @@ class Session:
             self._coll(type(obj)).replace_one(
                 {"id": obj.id}, obj.to_doc(), upsert=True
             )
+            self._snapshots[id(obj)] = obj.to_doc()
         self._pending = []
 
     def commit(self) -> None:
         self.flush()
+        # Only write back tracked objects whose state actually changed
         for obj in self._tracked:
-            self._coll(type(obj)).replace_one(
-                {"id": obj.id}, obj.to_doc(), upsert=True
-            )
+            current = obj.to_doc()
+            snapshot = self._snapshots.get(id(obj))
+            if current != snapshot:
+                self._coll(type(obj)).replace_one(
+                    {"id": obj.id}, current, upsert=True
+                )
+                self._snapshots[id(obj)] = current
         for obj in self._deleted:
             self._coll(type(obj)).delete_one({"id": obj.id})
         self._tracked = []
+        self._snapshots = {}
         self._deleted = []
 
     def refresh(self, obj: Model) -> None:
@@ -276,6 +285,7 @@ class Session:
             for name, value in doc.items():
                 if name != "_id":
                     setattr(obj, name, value)
+            self._snapshots[id(obj)] = obj.to_doc()
 
     def delete(self, obj: Model) -> None:
         self._deleted.append(obj)
@@ -293,6 +303,7 @@ def init_db() -> None:
     db["company_profiles"].create_index("tenant_id")
     db["requisitions"].create_index("tenant_id")
     db["requisitions"].create_index("company_profile_id")
+    db["requisitions"].create_index("status")
     db["role_templates"].create_index("tenant_id")
     db["decision_records"].create_index("requisition_id")
     db["candidate_submissions"].create_index("requisition_id")
@@ -306,6 +317,7 @@ def init_db() -> None:
         db["candidate_submissions"].create_index([("requisition_id", 1), ("status", 1), ("match_score", -1)])
         db["candidate_submissions"].create_index([("tenant_id", 1), ("status", 1)])
         db["candidate_submissions"].create_index([("vendor_name", 1), ("status", 1)])
+        db["candidate_submissions"].create_index("status")
         db["candidate_submissions"].create_index("id", unique=True)
         db["candidates"].create_index([("tenant_id", 1), ("created_at", -1)])
         db["candidates"].create_index("id")

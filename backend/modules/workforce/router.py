@@ -152,20 +152,40 @@ def _build_team_batch(cand_ids: list[str], use_cache: bool = True) -> dict:
         doc.pop("_id", None)
         ob_map[doc.get("candidate_id")] = doc
 
-    # Enrich work orders from requisition/submission/onboarding
+    # Batch: pre-fetch all needed requisitions and company profiles (eliminates N+1)
+    req_ids_needed = set()
+    for cid, wo in wo_map.items():
+        if not wo.get("requisition_title") or not wo.get("location") or not wo.get("company_name"):
+            sub = sub_map.get(cid, {})
+            rid = wo.get("requisition_id") or sub.get("requisition_id") or ""
+            if rid:
+                req_ids_needed.add(rid)
+
+    req_cache = {}
+    cp_ids_needed = set()
+    if req_ids_needed:
+        for rd in db["requisitions"].find({"id": {"$in": list(req_ids_needed)}},
+                                           {"id": 1, "title": 1, "structured_role": 1, "company_profile_id": 1,
+                                            "work_mode": 1, "engagement_type": 1, "ends_on": 1}):
+            req_cache[rd.get("id")] = rd
+            if rd.get("company_profile_id"):
+                cp_ids_needed.add(rd["company_profile_id"])
+
+    cp_cache = {}
+    if cp_ids_needed:
+        for cd in db["company_profiles"].find({"id": {"$in": list(cp_ids_needed)}}, {"id": 1, "name": 1}):
+            cp_cache[cd.get("id")] = cd.get("name") or ""
+
+    # Enrich work orders from requisition/submission/onboarding (uses batch caches)
     for cid, wo in wo_map.items():
         if not wo.get("requisition_title") or not wo.get("location") or not wo.get("company_name"):
             sub = sub_map.get(cid, {})
             ob = ob_map.get(cid, {})
             req_id = wo.get("requisition_id") or sub.get("requisition_id") or ""
-            req_doc = db["requisitions"].find_one({"id": req_id}) if req_id else {}
+            req_doc = req_cache.get(req_id, {}) if req_id else {}
             sr = (req_doc or {}).get("structured_role") or {}
 
-            cp_name = ""
-            cp_id = (req_doc or {}).get("company_profile_id") or ""
-            if cp_id:
-                cp = db["company_profiles"].find_one({"id": cp_id}) or {}
-                cp_name = cp.get("name") or ""
+            cp_name = cp_cache.get((req_doc or {}).get("company_profile_id") or "") or ""
 
             def _fill_w(field, *sources):
                 if not wo.get(field):
