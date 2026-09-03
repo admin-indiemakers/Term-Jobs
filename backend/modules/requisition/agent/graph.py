@@ -158,7 +158,7 @@ def _compute_gaps(parsed: dict) -> list[str]:
     if not parsed.get("skills"):
         gaps.append("stack")
     if not parsed.get("seniority"):
-        gaps.append("seniority")
+        parsed["seniority"] = "Mid"
     if not parsed.get("years"):
         gaps.append("years")
     if not parsed.get("location"):
@@ -241,15 +241,31 @@ def _prefill_to_parsed(prefill: dict) -> dict:
     if skills_list:
         parsed["skills"] = [str(s).lower() for s in skills_list]
 
-    if prefill.get("seniority"):
-        parsed["seniority"] = prefill["seniority"]
+    title = prefill.get("title") or prefill.get("role_title") or prefill.get("role") or ""
+    raw_text = prefill.get("raw_text") or prefill.get("job_description") or ""
+
+    sen = prefill.get("seniority")
+    if not sen and title:
+        sen_obj = heuristics.parse_seniority(title)
+        if sen_obj:
+            sen = sen_obj.value
+    if not sen and raw_text:
+        sen_obj = heuristics.parse_seniority(raw_text)
+        if sen_obj:
+            sen = sen_obj.value
+
+    if sen:
+        parsed["seniority"] = sen
 
     if prefill.get("experience"):
         years = _min_experience_years(str(prefill["experience"]))
         if years is not None:
             parsed["years"] = years
-            if not prefill.get("seniority"):
+            if not parsed.get("seniority"):
                 parsed["seniority"] = _seniority_from_years(years)
+
+    if not parsed.get("seniority") and title:
+        parsed["seniority"] = "Mid"
 
     locations = prefill.get("work_locations") or []
     if locations:

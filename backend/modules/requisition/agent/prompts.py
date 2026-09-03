@@ -12,7 +12,7 @@ NEXT_QUESTION_TEMPLATES = {
     "seniority": "What seniority level? (Junior / Mid / Senior / Lead / Principal)",
     "years": "How many years of experience are required?",
     "location": "Where is the role based? (city or Remote)",
-    "rate": "What is the annual salary band in INR? (e.g. 25 LPA)",
+    "rate": "What is the vendor billing rate ceiling / contract rate band? (e.g. ₹5,000/day, ₹1.5L/month, or billing ceiling)",
     "contract": "What is the contract duration / engagement? (e.g. 6 months, 1 year, Permanent)",
 }
 
