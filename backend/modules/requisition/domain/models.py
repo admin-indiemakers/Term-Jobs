@@ -44,6 +44,7 @@ class Requisition(Model):
         "intake_answers": list,
         "pending_question": None,
         "structured_role": None,
+        "vendor_candidate_limit": 1,
         "generated_jd_markdown": None,
         "coverage_result": None,
         "refinement_log": list,
@@ -65,6 +66,7 @@ class Requisition(Model):
     intake_answers = Column("intake_answers")
     pending_question = Column("pending_question")
     structured_role = Column("structured_role")
+    vendor_candidate_limit = Column("vendor_candidate_limit")
     generated_jd_markdown = Column("generated_jd_markdown")
     coverage_result = Column("coverage_result")
     refinement_log = Column("refinement_log")

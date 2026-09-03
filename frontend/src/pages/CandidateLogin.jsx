@@ -7,7 +7,7 @@ import { ApiError } from '../api/client';
 export default function CandidateLogin() {
   const { user, loginWithCandidateId } = useAuth();
 
-  const [candidateId, setCandidateId] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [focused, setFocused] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -15,13 +15,21 @@ export default function CandidateLogin() {
 
   if (user) return <Navigate to="/" replace />;
 
+  const isValidEmail = (val) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.trim());
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
     setError('');
+
+    if (!isValidEmail(email)) {
+      setError('Please enter a valid official email address (e.g. candidate@company.com).');
+      return;
+    }
+
     setLoading(true);
     try {
-      await loginWithCandidateId(candidateId, password);
+      await loginWithCandidateId(email.trim(), password);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -81,7 +89,7 @@ export default function CandidateLogin() {
 
         <div className="px-6 py-5 border-t border-[#EDECE7]">
           <p className="text-[12px] text-[#A6A59F] leading-relaxed">
-            Sign in with your Candidate ID and password to access your portal.
+            Sign in with your official email address and password to access your portal.
           </p>
         </div>
       </aside>
@@ -140,20 +148,19 @@ export default function CandidateLogin() {
               <form onSubmit={handleSubmit}>
                 <label className="block mb-5">
                   <span className="flex items-center gap-2 text-[11px] tracking-[0.1em] uppercase text-[#6B6B67] mb-2 font-medium">
-                    Candidate ID
+                    Official Email Address
                   </span>
-                  <div className={`field rounded-xl px-4 py-3 ${focused === 'id' ? 'is-focused' : ''}`}>
+                  <div className={`field rounded-xl px-4 py-3 ${focused === 'email' ? 'is-focused' : ''}`}>
                     <input
-                      type="text"
-                      value={candidateId}
-                      onChange={(e) => setCandidateId(e.target.value)}
-                      onFocus={() => setFocused('id')}
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      onFocus={() => setFocused('email')}
                       onBlur={() => setFocused(null)}
-                      placeholder="e.g. c885133a"
+                      placeholder="e.g. candidate@company.com"
                       required
                       disabled={loading}
                       className="w-full bg-transparent outline-none text-[14.5px] text-[#0A0A0A] placeholder:text-[#B5B4AE]"
-                      style={{ fontFamily: "'JetBrains Mono', monospace" }}
                     />
                   </div>
                 </label>

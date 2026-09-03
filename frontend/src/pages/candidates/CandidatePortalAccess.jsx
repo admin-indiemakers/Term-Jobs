@@ -62,6 +62,12 @@ export default function CandidatePortalAccess() {
 
   const handleSaveAccess = async () => {
     if (!showCreateModal) return;
+    setError('');
+    const emailVal = (createForm.email || '').trim();
+    if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
+      setError('Please enter a valid official email address (e.g. candidate@company.com).');
+      return;
+    }
     setCreatingId(showCreateModal.candidate_id);
     setSuccessMsg('');
     try {
@@ -70,12 +76,12 @@ export default function CandidatePortalAccess() {
         token,
         body: {
           candidate_id: showCreateModal.candidate_id,
-          email: createForm.email,
+          email: emailVal,
           name: createForm.name,
           password: createForm.password,
         },
       });
-      setSuccessMsg(`Portal access created for ${createForm.name}. Candidate can now login with ${createForm.email}`);
+      setSuccessMsg(`Portal access created for ${createForm.name}. Candidate can now login with ${emailVal}`);
       setShowCreateModal(null);
       loadCandidates();
     } catch (err) {

@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy import func, or_
 
 from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
@@ -90,12 +91,33 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
     if lookup.upper() == "ADMIN":
         user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
     elif lookup:
-        # Try candidate_id first, then email
-        user = db.query(User).filter(User.candidate_id == lookup).first()
+        # Prioritize email lookup (case-insensitive), then candidate_id
+        email_clean = lookup.strip().lower()
+        user = db.query(User).filter(User.email == email_clean).first()
         if not user:
-            user = db.query(User).filter(User.email == lookup).first()
+            user = db.query(User).filter(User.candidate_id == lookup).first()
+        if not user:
+            from modules.shared.db import db as mongo_db
+            import re as _re
+            m_user = mongo_db["users"].find_one({
+                "$or": [
+                    {"email": {"$regex": f"^{_re.escape(email_clean)}$", "$options": "i"}},
+                    {"candidate_id": lookup}
+                ]
+            })
+            if m_user:
+                user = User(
+                    id=m_user.get("id") or str(m_user.get("_id")),
+                    email=m_user.get("email", ""),
+                    name=m_user.get("name", ""),
+                    password_hash=m_user.get("password_hash", ""),
+                    role=m_user.get("role", "Candidate"),
+                    tenant_id=m_user.get("tenant_id"),
+                    candidate_id=m_user.get("candidate_id", ""),
+                    is_active=m_user.get("is_active", True)
+                )
 
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user or not user.is_active or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -849,81 +871,74 @@ def list_portal_users(
                 filters.append(Requisition.created_by == current_user.id)
             req_ids = {r.id for r in req_session.query(Requisition).filter(*filters).all()}
         
-        # Get accepted submissions for these requisitions
-        sub_filter = {"status": {"$in": ["Accepted", "Hired"]}}
-        if current_user.role != "Super Admin":
-            if req_ids:
-                sub_filter["requisition_id"] = {"$in": list(req_ids)}
-            else:
-                sub_filter["requisition_id"] = {"$in": []}
-        
-        for sub in mongo_db["candidate_submissions"].find(sub_filter):
-            accepted_subs.append({
-                "candidate_id": sub.get("id"),
-                "candidate_name": sub.get("candidate_name", ""),
-                "candidate_email": sub.get("candidate_email", ""),
-                "requisition_id": sub.get("requisition_id", ""),
-                "vendor_name": sub.get("vendor_name", ""),
-            })
-    else:
-        # Recruiters see their own tenant's Candidate users
-        users = db.query(User).filter(
-            User.role == "Candidate",
-            User.tenant_id == current_user.tenant_id,
-        ).all()
-        return [
-            {
-                "id": u.id,
-                "email": u.email,
-                "name": u.name,
-                "candidate_id": getattr(u, 'candidate_id', '') or '',
-                "is_active": u.is_active,
-                "created_at": u.created_at.isoformat() if hasattr(u.created_at, 'isoformat') else str(u.created_at) if u.created_at else None,
-            }
-            for u in users
-        ]
+    # Get all candidate submissions for these requisitions (Shortlisted, Accepted, Hired, Screened, Submitted)
+    sub_filter = {}
+    if current_user.role != "Super Admin":
+        if req_ids:
+            sub_filter["requisition_id"] = {"$in": list(req_ids)}
+        else:
+            sub_filter["requisition_id"] = {"$in": []}
     
-    # Build map of existing portal users
+    accepted_subs = []
+    for sub in mongo_db["candidate_submissions"].find(sub_filter):
+        accepted_subs.append({
+            "candidate_id": sub.get("id"),
+            "candidate_name": sub.get("candidate_name", ""),
+            "candidate_email": sub.get("candidate_email", ""),
+            "requisition_id": sub.get("requisition_id", ""),
+            "vendor_name": sub.get("vendor_name", ""),
+        })
+    
+    # Build map of existing portal users from both SQL DB and MongoDB
     portal_users = {}
     for u in db.query(User).filter(User.role == "Candidate").all():
         cid = getattr(u, 'candidate_id', '') or ''
+        em = (getattr(u, 'email', '') or '').lower()
         if cid:
             portal_users[cid] = u
-    
-    # Batch-fetch all requisitions in one query (eliminates N+1)
+        if em:
+            portal_users[em] = u
+            
+    for m_u in mongo_db["users"].find({"role": "Candidate"}):
+        cid = m_u.get("candidate_id") or ""
+        em = (m_u.get("email") or "").lower()
+        if cid and cid not in portal_users:
+            portal_users[cid] = m_u
+        if em and em not in portal_users:
+            portal_users[em] = m_u
+
+    # Batch-fetch all requisitions in one query
     req_ids_needed = list({sub.get("requisition_id") for sub in accepted_subs if sub.get("requisition_id")})
     req_cache = {}
     if req_ids_needed:
         for rd in mongo_db["requisitions"].find({"id": {"$in": req_ids_needed}}, {"id": 1, "title": 1}):
             req_cache[rd.get("id")] = rd
 
-    # Batch-fetch work orders for all candidates
-    wo_list = list(mongo_db["work_orders"].find({"status": {"$ne": "CLOSED"}}))
-    wo_cache = {}
-
-    # Enrich accepted subs with portal user status + requisition title + work order
+    # Enrich candidate submissions with portal user status
     results = []
+    seen_keys = set()
     for sub in accepted_subs:
-        cid = (sub.get("candidate_id") or "").strip()
-        cemail = (sub.get("candidate_email") or "").lower().strip()
-        cname = (sub.get("candidate_name") or "").lower().strip()
-        cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+        cid = sub.get("candidate_id", "")
+        c_email = (sub.get("candidate_email") or "").lower()
+        dedup_key = f"{cid}:{c_email}"
+        if dedup_key in seen_keys:
+            continue
+        seen_keys.add(dedup_key)
 
-        wo_doc = None
-        for wo in wo_list:
-            wcid = str(wo.get("candidate_id", "")).strip()
-            wcemail = str(wo.get("candidate_email", "")).lower().strip()
-            wcname = str(wo.get("candidate_name", "")).lower().strip()
-            wcid_clean = wcid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+        pu = portal_users.get(cid) or (portal_users.get(c_email) if c_email else None)
+        is_active = False
+        pu_id = None
+        pu_email = None
+        if pu:
+            if isinstance(pu, dict):
+                is_active = bool(pu.get("is_active", True))
+                pu_id = str(pu.get("id") or pu.get("_id"))
+                pu_email = pu.get("email")
+            else:
+                is_active = bool(pu.is_active)
+                pu_id = pu.id
+                pu_email = pu.email
 
-            if (cid and wcid and cid == wcid) or \
-               (cid_clean and wcid_clean and cid_clean == wcid_clean) or \
-               (cemail and wcemail and cemail == wcemail) or \
-               (cname and wcname and cname == wcname):
-                wo_doc = wo
-                break
-
-        pu = portal_users.get(cid)
         req_doc = req_cache.get(sub.get("requisition_id"))
 
         results.append({
@@ -932,12 +947,9 @@ def list_portal_users(
             "candidate_email": sub.get("candidate_email", ""),
             "requisition_title": (req_doc or {}).get("title", ""),
             "vendor_name": sub.get("vendor_name", ""),
-            "has_portal_access": pu is not None and pu.is_active,
-            "portal_user_id": pu.id if pu else None,
-            "portal_user_email": pu.email if pu else None,
-            "work_order_status": wo_doc.get("status") if wo_doc else None,
-            "work_order_number": wo_doc.get("work_order_number") if wo_doc else None,
-            "has_work_order": wo_doc is not None,
+            "has_portal_access": is_active,
+            "portal_user_id": pu_id,
+            "portal_user_email": pu_email,
         })
     
     return results
@@ -967,8 +979,10 @@ def create_or_update_portal_user(
     password = body.get("password") or ""
     candidate_id = (body.get("candidate_id") or "").strip()
 
-    if not email or "@" not in email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
+    import re as _re
+    email_regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
+    if not email or not _re.match(email_regex, email):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid official email address (e.g. candidate@company.com) is required")
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate name is required")
     if not candidate_id:

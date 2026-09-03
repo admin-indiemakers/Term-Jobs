@@ -577,6 +577,83 @@ def clear_activation_gate(candidate_id: str, body: dict, authorization: str | No
     return {"status": "success", "message": f"Gate '{gate_id}' cleared", "activation_gates": gates}
 
 
+@router.post("/{candidate_id}/generate-work-order")
+def generate_or_activate_work_order(candidate_id: str, authorization: str | None = Header(None)):
+    """Generate or activate a Placement Work Order for an accepted candidate."""
+    user = _get_current_user(authorization)
+    if not user or user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR", "Recruiter"):
+        raise HTTPException(status_code=403, detail="Manager permission required")
+
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+
+    sub = db["candidate_submissions"].find_one({"$or": [{"id": candidate_id}, {"candidate_id": candidate_id}]}) or {}
+    cand_name = sub.get("candidate_name") or sub.get("name") or "Candidate"
+    cand_email = sub.get("candidate_email") or sub.get("email") or ""
+    req_title = sub.get("requisition_title") or "Software Engineer"
+    comp_name = sub.get("company_name") or user.get("tenant_name") or "Company"
+    vendor_name = sub.get("vendor_name") or "Direct"
+
+    existing_wo = db["work_orders"].find_one({"candidate_id": candidate_id})
+    if existing_wo:
+        db["work_orders"].update_one(
+            {"_id": existing_wo["_id"]},
+            {"$set": {
+                "status": "ACTIVE",
+                "activated_at": now_iso,
+                "updated_at": now_iso
+            }}
+        )
+        wo_num = existing_wo.get("work_order_number") or f"WO-2026-{uuid.uuid4().hex[:5].upper()}"
+    else:
+        wo_num = f"WO-2026-{uuid.uuid4().hex[:5].upper()}"
+        doc = {
+            "id": f"wo_{uuid.uuid4().hex[:10]}",
+            "work_order_number": wo_num,
+            "tenant_id": user.get("tenant_id", "tenant_c1"),
+            "candidate_id": candidate_id,
+            "candidate_name": cand_name,
+            "candidate_email": cand_email,
+            "requisition_id": sub.get("requisition_id", ""),
+            "requisition_title": req_title,
+            "company_name": comp_name,
+            "vendor_name": vendor_name,
+            "start_date": now.strftime("%d %b %Y"),
+            "start_date_iso": now.strftime("%Y-%m-%d"),
+            "end_date": (now + timedelta(days=180)).strftime("%d %b %Y"),
+            "end_date_iso": (now + timedelta(days=180)).strftime("%Y-%m-%d"),
+            "work_arrangement": "Remote",
+            "engagement_type": "Contract",
+            "weekly_hours": 40,
+            "reporting_manager": user.get("name") or "Hiring Manager",
+            "status": "ACTIVE",
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        db["work_orders"].insert_one(doc)
+
+    _coll().update_one(
+        {"candidate_id": candidate_id},
+        {"$set": {
+            "candidate_id": candidate_id,
+            "candidate_name": cand_name,
+            "candidate_email": cand_email,
+            "status": "completed",
+            "activation_status": "activated",
+            "activated_at": now_iso,
+            "updated_at": now_iso
+        }},
+        upsert=True
+    )
+
+    return {
+        "status": "success",
+        "work_order_number": wo_num,
+        "message": f"Work Order {wo_num} generated and activated successfully."
+    }
+
+
 @router.post("/generate")
 def generate_checklist(data: dict):
     """AI-generate an onboarding checklist using Groq."""

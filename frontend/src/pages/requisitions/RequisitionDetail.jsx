@@ -721,10 +721,18 @@ export default function RequisitionDetail() {
               )}
 
               {status === 'Published' && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 space-y-1 text-emerald-900">
-                  <div className="font-bold text-emerald-900">Live Sourcing</div>
-                  <p className="text-[11px] text-emerald-700">
-                    Engaged partner vendors are submitting matched candidate profiles. Review submissions under Candidates.
+                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                      <Building size={14} className="text-amber-700" />
+                      Engaged Vendor Consultancies (3)
+                    </div>
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
+                      Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                    3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
                   </p>
                 </div>
               )}
@@ -737,6 +745,16 @@ export default function RequisitionDetail() {
               </div>
 
               <div className="space-y-1.5">
+                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
+                  <span className="text-gray-500">Headcount Openings</span>
+                  <span className="font-bold text-gray-900">{structuredRole?.headcount || req?.headcount || 1} position(s)</span>
+                </div>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50/80 border border-amber-200/60 text-amber-900">
+                  <span className="text-amber-800 font-semibold">Vendor Candidate Limit</span>
+                  <span className="font-bold text-amber-950 px-2 py-0.5 rounded bg-amber-200/60 text-xs">
+                    {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} candidate / vendor
+                  </span>
+                </div>
                 <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
                   <span className="text-gray-500">Duration</span>
                   <span className="font-bold text-gray-900">{structuredRole?.duration || '6 months'}</span>

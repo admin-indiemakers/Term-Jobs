@@ -257,20 +257,21 @@ export default function OnboardingManagement() {
     }
   };
 
-  // Resolve Candidate Issue in Real Time
-  const handleResolveIssue = async (issueId) => {
-    setResolvingId(issueId);
+  // Generate Work Order for candidate
+  const handleGenerateWorkOrder = async (cand) => {
+    const candId = cand.candidate_id || cand.id;
+    setError('');
+    setSuccessInfo('');
     try {
-      await request(`/api/onboarding/issues/${issueId}/resolve`, {
+      const res = await request(`/api/onboarding/${candId}/generate-work-order`, {
         method: 'POST',
         token,
       });
-      setSuccessInfo('Issue marked as resolved.');
+      setSuccessInfo(res.message || `Work order generated and activated for ${cand.candidate_name || 'candidate'}.`);
       loadData();
     } catch (err) {
-      setError(err.message || 'Failed to resolve issue.');
-    } finally {
-      setResolvingId('');
+      console.error('Work order generation error:', err);
+      setError(err.message || 'Failed to generate work order.');
     }
   };
 
@@ -655,7 +656,7 @@ export default function OnboardingManagement() {
                       </td>
 
                       {/* 7. ACTION */}
-                      <td className="py-3.5 pr-4 pl-3 align-middle text-right">
+                      <td className="py-3.5 pr-4 pl-3 align-middle text-right flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => handleOpenSetup(cand)}
@@ -664,9 +665,22 @@ export default function OnboardingManagement() {
                             borderRadius: 10,
                             border: '1px solid #E2E2DC',
                           }}
-                          className="px-3.5 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer shadow-2xs"
+                          className="px-3 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer shadow-2xs"
                         >
                           {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateWorkOrder(cand)}
+                          style={{
+                            backgroundColor: isCompleted ? '#0A0A0A' : '#1A1A1A',
+                            color: '#FFFFFF',
+                            borderRadius: 10,
+                          }}
+                          className="px-3 py-1 text-[11.5px] font-bold hover:bg-[#262626] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                        >
+                          <span>Generate Work Order</span>
+                          <ArrowRight size={12} />
                         </button>
                       </td>
                     </tr>

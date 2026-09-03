@@ -35,10 +35,10 @@ export function AuthProvider({ children }) {
   );
 
   const loginWithCandidateId = useCallback(
-    async (candidateId, password) => {
+    async (emailOrId, password) => {
       const data = await request('/api/auth/login', { 
         method: 'POST', 
-        body: { username: candidateId, password } 
+        body: { username: emailOrId, email: emailOrId, password } 
       });
       applySession(data.access_token, data.user);
       return data.user;
@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
   }, [token, logout]);
 
   return (
-    <AuthContext.Provider value={{ user, token, initializing, login, loginWithCandidateId, logout }}>
+    <AuthContext.Provider value={{ user, token, initializing, login, loginWithCandidateId, loginCandidate: loginWithCandidateId, logout }}>
       {children}
     </AuthContext.Provider>
   );
