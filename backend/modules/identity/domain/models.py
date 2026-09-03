@@ -11,12 +11,20 @@ class Tenant(Model):
         "id": _uuid,
         "name": "",
         "tenant_type": "client",  # client or consultancy
+        "vendor_type": "standard",  # standard or guest
+        "created_by_tenant_id": "",
+        "is_deleted": False,
+        "deleted_at": None,
         "created_at": _utcnow,
     }
 
     id = Column("id")
     name = Column("name")
     tenant_type = Column("tenant_type")
+    vendor_type = Column("vendor_type")
+    created_by_tenant_id = Column("created_by_tenant_id")
+    is_deleted = Column("is_deleted")
+    deleted_at = Column("deleted_at")
     created_at = Column("created_at")
 
 
@@ -34,6 +42,8 @@ class User(Model):
         "phone": "",
         "created_by": "",  # id of the user who provisioned this account ("" for Admin)
         "is_active": True,
+        "is_deleted": False,
+        "deleted_at": None,
         "candidate_limit": None,  # per-account cap on vendor submissions; None = platform default
         "candidate_id": "",  # links Candidate accounts to their submission_id
         "created_at": _utcnow,
@@ -49,6 +59,8 @@ class User(Model):
     phone = Column("phone")
     created_by = Column("created_by")
     is_active = Column("is_active")
+    is_deleted = Column("is_deleted")
+    deleted_at = Column("deleted_at")
     candidate_limit = Column("candidate_limit")
     candidate_id = Column("candidate_id")
     created_at = Column("created_at")

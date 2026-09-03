@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from modules.identity.domain.models import Tenant, User, VendorEngagement
@@ -60,6 +60,9 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authenticated user not found",
         )
+    if getattr(user, 'is_deleted', False):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -97,6 +100,9 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
+
+    if getattr(user, 'is_deleted', False):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
         raise HTTPException(
@@ -276,7 +282,7 @@ def create_user(
         email=body.email,
         name=body.name,
         password_hash=hash_password(body.password),
-        role=body.role,
+        role="Super Admin",
         department=body.department,
         candidate_limit=body.candidate_limit,
         candidate_id=getattr(body, 'candidate_id', '') or '',
@@ -286,6 +292,7 @@ def create_user(
     db.commit()
     db.refresh(user)
     _cache.invalidate_prefix("users:")
+
 
     return UserResponse(
         id=user.id,
@@ -330,6 +337,7 @@ def list_users(
             detail="You are not allowed to list users",
         )
     
+    users = [u for u in users if not getattr(u, 'is_deleted', False)]
     all_tenants = db.query(Tenant).all()
     tenant_map = {t.id: t for t in all_tenants}
 
@@ -480,16 +488,34 @@ def delete_user(
             detail="You are not allowed to delete accounts",
         )
 
-    # Archive before deleting
+    # Archive before soft-deleting
     from modules.shared.db import db as mongo_db
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+
     user_doc = mongo_db["users"].find_one({"id": user_id})
     if user_doc:
         user_doc.pop("_id", None)
         _archive_item("user", user_doc, current_user.id, "Deleted by admin")
 
-    db.delete(target)
+    # Soft-delete: retain in database table but mark deleted & inactive
+    target.is_active = False
+    target.is_deleted = True
+    target.deleted_at = now_iso
+    mongo_db["users"].update_one(
+        {"id": user_id},
+        {"$set": {"is_deleted": True, "is_active": False, "deleted_at": now_iso}}
+    )
+    db.add(target)
     db.commit()
     _cache.invalidate_prefix("users:")
+    _log_admin_action(
+        current_user,
+        'ARCHIVE_USER',
+        getattr(target, 'role', '') or 'User',
+        getattr(target, 'name', '') or getattr(target, 'email', ''),
+        f"Archived {getattr(target, 'role', '') or 'User'} account '{getattr(target, 'name', '') or getattr(target, 'email', '')}' ({getattr(target, 'email', '')})"
+    )
     return None
 
 
@@ -524,12 +550,31 @@ def delete_tenant(
         u.pop("_id", None)
         _archive_item("user", u, current_user.id, f"User of deleted tenant: {tenant.name}")
 
-    # Cascade: remove all accounts in the company first.
-    mongo_db["users"].delete_many({"tenant_id": tenant_id})
-    db.delete(tenant)
+    # Soft-delete: retain tenant and cascaded accounts in database table
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    tenant.is_deleted = True
+    tenant.deleted_at = now_iso
+    mongo_db["tenants"].update_one(
+        {"id": tenant_id},
+        {"$set": {"is_deleted": True, "deleted_at": now_iso}}
+    )
+    mongo_db["users"].update_many(
+        {"tenant_id": tenant_id},
+        {"$set": {"is_deleted": True, "is_active": False, "deleted_at": now_iso}}
+    )
+    db.add(tenant)
     db.commit()
     _cache.invalidate_prefix("users:")
     _cache.invalidate_prefix("tenants:")
+    t_type = 'Vendor' if getattr(tenant, 'tenant_type', '') == 'consultancy' else 'Company'
+    _log_admin_action(
+        current_user,
+        f'ARCHIVE_{t_type.upper()}',
+        t_type,
+        getattr(tenant, 'name', ''),
+        f"Archived {t_type.lower()} '{getattr(tenant, 'name', '')}' and cascaded accounts to archives"
+    )
     return None
 
 
@@ -554,8 +599,15 @@ def list_tenants(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list tenants",
         )
+    tenants = [t for t in tenants if not getattr(t, 'is_deleted', False)]
     result = [
-        TenantResponse(id=t.id, name=t.name, tenant_type=t.tenant_type)
+        TenantResponse(
+            id=t.id,
+            name=t.name,
+            tenant_type=t.tenant_type,
+            vendor_type=getattr(t, 'vendor_type', 'standard') or 'standard',
+            is_guest=(getattr(t, 'vendor_type', '') == 'guest' or getattr(t, 'is_guest', False))
+        )
         for t in sorted(tenants, key=lambda t: (t.tenant_type, t.name))
     ]
     _cache.set(_cache_key, result, ttl=30)
@@ -568,8 +620,8 @@ def check_tenant_name(
     current_user: User = Depends(get_current_user),
 ):
     """Check if a tenant name is already taken (case-insensitive)."""
-    if current_user.role != "Super Admin":
-        raise HTTPException(status_code=403, detail="Only Super Admins")
+    if current_user.role not in ("Super Admin", "Admin"):
+        raise HTTPException(status_code=403, detail="Only Admins and Super Admins")
     from modules.shared.db import db as mongo_db
     existing = mongo_db["tenants"].find_one({"name": name.strip()})
     return {"taken": existing is not None, "existing_name": existing.get("name") if existing else None}
@@ -581,8 +633,8 @@ def ai_describe_company(
     current_user: User = Depends(get_current_user),
 ):
     """Use AI to research a company and return ALL profile fields."""
-    if current_user.role != "Super Admin":
-        raise HTTPException(status_code=403, detail="Only Super Admins")
+    if current_user.role not in ("Super Admin", "Admin"):
+        raise HTTPException(status_code=403, detail="Only Admins and Super Admins")
     company_name = body.get("name", "")
     if not company_name:
         raise HTTPException(status_code=400, detail="Company name is required")
@@ -659,6 +711,11 @@ def create_tenant(
     db.add(profile)
     db.commit()
 
+    action_type = 'CREATE_VENDOR' if body.tenant_type == 'consultancy' else 'CREATE_COMPANY'
+    target_type = 'Vendor' if body.tenant_type == 'consultancy' else 'Company'
+    details = f"Onboarded {target_type.lower()} '{tenant.name}'"
+    _log_admin_action(current_user, action_type, target_type, tenant.name, details)
+
     return TenantResponse(id=tenant.id, name=tenant.name, tenant_type=tenant.tenant_type)
 
 
@@ -698,12 +755,15 @@ def list_vendors(
         VendorResponse(
             id=v.id,
             name=v.name,
+            tenant_type="consultancy",
             industry=(prof.industry if (prof := profiles.get(v.id)) else ""),
             size=(prof.size if (prof := profiles.get(v.id)) else ""),
             location=(prof.location if (prof := profiles.get(v.id)) else ""),
             specializations=(prof.tech_stack or [] if (prof := profiles.get(v.id)) else []),
             engaged=(v.id in engaged_map),
             candidate_limit=(engaged_map[v.id].candidate_limit if v.id in engaged_map else None),
+            vendor_type=getattr(v, 'vendor_type', 'standard') or 'standard',
+            is_guest=(getattr(v, 'vendor_type', '') == 'guest' or getattr(v, 'is_guest', False)),
         )
         for v in sorted(vendors, key=lambda t: t.name)
     ]
@@ -1094,9 +1154,9 @@ def list_archives(
     current_user: User = Depends(get_current_user),
 ):
     """List all archived items. Super Admin only."""
-    if current_user.role != "Super Admin":
-        raise HTTPException(status_code=403, detail="Only Super Admins")
-    docs = list(_archives().find().sort("archived_at", -1).limit(200))
+    if current_user.role not in ("Super Admin", "Admin"):
+        raise HTTPException(status_code=403, detail="Only Admins and Super Admins")
+    docs = list(_archives().find({"$and": [{"is_deleted": {"$ne": True}}, {"purged_from_ui": {"$ne": True}}]}).sort("archived_at", -1).limit(200))
     for d in docs:
         d.pop("_id", None)
         if isinstance(d.get("original_data"), dict):
@@ -1113,8 +1173,8 @@ def restore_archive(
     db: Session = Depends(get_db),
 ):
     """Restore an archived item back to its original collection."""
-    if current_user.role != "Super Admin":
-        raise HTTPException(status_code=403, detail="Only Super Admins")
+    if current_user.role not in ("Super Admin", "Admin"):
+        raise HTTPException(status_code=403, detail="Only Admins and Super Admins")
     archive = _archives().find_one({"id": archive_id})
     if not archive:
         raise HTTPException(status_code=404, detail="Archive not found")
@@ -1142,6 +1202,13 @@ def restore_archive(
 
     # Remove from archives
     _archives().delete_one({"id": archive_id})
+    _log_admin_action(
+        current_user,
+        'RESTORE_RECORD',
+        item_type.capitalize(),
+        original.get('name') or original.get('email') or archive_id,
+        f"Restored archived {item_type} '{original.get('name') or original.get('email') or archive_id}' back to production"
+    )
     return {"ok": True, "message": f"{item_type} restored successfully"}
 
 
@@ -1150,12 +1217,24 @@ def permanently_delete_archive(
     archive_id: str,
     current_user: User = Depends(get_current_user),
 ):
-    """Permanently delete an archived item."""
-    if current_user.role != "Super Admin":
-        raise HTTPException(status_code=403, detail="Only Super Admins")
-    result = _archives().delete_one({"id": archive_id})
-    if result.deleted_count == 0:
+    """Hide/purge archived item from UI while safely preserving raw data in the database."""
+    if current_user.role not in ("Super Admin", "Admin"):
+        raise HTTPException(status_code=403, detail="Only Admins and Super Admins")
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    result = _archives().update_one(
+        {"id": archive_id},
+        {"$set": {"is_deleted": True, "purged_from_ui": True, "purged_at": now_iso}}
+    )
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Archive not found")
+    _log_admin_action(
+        current_user,
+        'DELETE_RECORD',
+        'Archive',
+        archive_id,
+        f"Purged archived record {archive_id} from management interface"
+    )
     return {"ok": True, "message": "Permanently deleted"}
 
 
@@ -1174,6 +1253,7 @@ def get_invite_company_info(
     company: str | None = None,
     db: Session = Depends(get_db),
 ):
+    users = [u for u in users if not getattr(u, 'is_deleted', False)]
     all_tenants = db.query(Tenant).all()
     target_tenant = None
 
@@ -1218,6 +1298,7 @@ def register_hiring_manager(
             detail="An account with this email address already exists. Please log in.",
         )
 
+    users = [u for u in users if not getattr(u, 'is_deleted', False)]
     all_tenants = db.query(Tenant).all()
     target_tenant = None
     if body.tenant_id:
@@ -1298,6 +1379,7 @@ def approve_user(
     db.refresh(target)
     _cache.invalidate_prefix("users:")
 
+
     return UserResponse(
         id=target.id,
         email=target.email,
@@ -1346,6 +1428,7 @@ def register_director(
             detail="An account with this email address already exists. Please log in.",
         )
 
+    users = [u for u in users if not getattr(u, 'is_deleted', False)]
     all_tenants = db.query(Tenant).all()
     target_tenant = None
     if body.tenant_id:
@@ -1469,6 +1552,7 @@ def create_superadmin(
     )
     _cache.invalidate_prefix("users:")
 
+
     return UserResponse(
         id=user.id,
         email=user.email,
@@ -1496,3 +1580,136 @@ def list_admin_logs(
     for d in docs:
         d.pop("_id", None)
     return docs
+
+
+class GuestVendorCreate(BaseModel):
+    vendor_name: str = Field(..., min_length=2, max_length=255)
+    industry: str = ""
+    location: str = ""
+    specializations: str = ""
+    notes: str = ""
+    name: str = Field(..., min_length=1, max_length=255)
+    email: str = Field(..., min_length=3, max_length=255)
+    password: str = Field(..., min_length=4, max_length=128)
+    candidate_limit: int = Field(3, ge=1, le=100)
+
+
+@router.post("/vendors/guest", response_model=VendorResponse, status_code=status.HTTP_201_CREATED)
+def create_guest_vendor(
+    body: GuestVendorCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Company Admin or Super Admin onboards a guest vendor in existing tables."""
+    if current_user.role not in ("Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only company Admins and Super Admins can onboard guest vendors",
+        )
+
+    v_name = body.vendor_name.strip()
+    from modules.shared.db import db as mongo_db
+    existing = mongo_db["tenants"].find_one({"name": v_name, "is_deleted": {"$ne": True}})
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A vendor or company with the name '{v_name}' already exists.",
+        )
+
+    recruiter_email = body.email.strip().lower()
+    existing_user = mongo_db["users"].find_one({"email": recruiter_email, "is_deleted": {"$ne": True}})
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Recruiter email is already registered",
+        )
+
+    # 1. Create Tenant marked as guest in existing 'tenants' table
+    tenant = Tenant(
+        name=v_name,
+        tenant_type="consultancy",
+        vendor_type="guest",
+        is_deleted=False,
+    )
+    db.add(tenant)
+    db.commit()
+    db.refresh(tenant)
+
+    mongo_db["tenants"].update_one(
+        {"id": tenant.id},
+        {"$set": {
+            "vendor_type": "guest",
+            "is_guest": True,
+            "created_by_tenant_id": current_user.tenant_id,
+            "created_by_admin_id": current_user.id,
+        }}
+    )
+
+    # 2. Create CompanyProfile in existing 'company_profiles' table
+    specs = [s.strip() for s in body.specializations.split(",") if s.strip()] if body.specializations else []
+    profile = CompanyProfile(
+        tenant_id=tenant.id,
+        name=tenant.name,
+        industry=body.industry,
+        size="1-50 employees",
+        location=body.location,
+        tech_stack=specs,
+        notes=body.notes,
+    )
+    db.add(profile)
+    db.commit()
+
+    # 3. Create Recruiter in existing 'users' table
+    recruiter = User(
+        email=recruiter_email,
+        name=body.name.strip(),
+        password_hash=hash_password(body.password),
+        role="Recruiter",
+        tenant_id=tenant.id,
+        candidate_limit=body.candidate_limit,
+        is_active=True,
+        is_deleted=False,
+        created_by=current_user.id,
+    )
+    db.add(recruiter)
+    db.commit()
+
+    # 4. Auto-engage guest vendor with current company
+    if current_user.tenant_id and current_user.role == "Admin":
+        existing_eng = db.query(VendorEngagement).filter(
+            VendorEngagement.tenant_id == current_user.tenant_id,
+            VendorEngagement.vendor_tenant_id == tenant.id,
+        ).first()
+        if not existing_eng:
+            db.add(VendorEngagement(
+                tenant_id=current_user.tenant_id,
+                vendor_tenant_id=tenant.id,
+                candidate_limit=body.candidate_limit,
+            ))
+            db.commit()
+
+    _cache.invalidate_prefix("tenants:")
+    _cache.invalidate_prefix("users:")
+
+    company_name = _tenant_name(current_user.tenant_id, db) if current_user.tenant_id else "Platform"
+    _log_admin_action(
+        current_user,
+        "CREATE_VENDOR",
+        "Guest Vendor",
+        tenant.name,
+        f"Company Admin '{current_user.name}' ({company_name}) onboarded guest vendor '{tenant.name}'"
+    )
+
+    return VendorResponse(
+        id=tenant.id,
+        name=tenant.name,
+        tenant_type="consultancy",
+        industry=body.industry,
+        size="1-50 employees",
+        location=body.location,
+        specializations=specs,
+        engaged=True,
+        candidate_limit=body.candidate_limit,
+        vendor_type="guest",
+        is_guest=True,
+    )

@@ -24,10 +24,15 @@ class TenantResponse(BaseModel):
     id: str
     name: str
     tenant_type: str
+    vendor_type: str = 'standard'
+    is_guest: bool = False
 
 class VendorResponse(BaseModel):
     id: str
     name: str
+    tenant_type: str = 'consultancy'
+    vendor_type: str = 'standard'
+    is_guest: bool = False
     industry: str = ""
     size: str = ""
     location: str = ""

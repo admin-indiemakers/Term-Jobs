@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -18,8 +18,21 @@ import {
   Briefcase,
   ShieldCheck,
   Sparkles,
-  HelpCircle
+  HelpCircle,
+  UserPlus
 } from 'lucide-react';
+
+const EMPTY_GUEST_FORM = {
+  vendor_name: '',
+  industry: '',
+  location: '',
+  specializations: '',
+  notes: '',
+  name: '',
+  email: '',
+  password: '',
+  candidate_limit: 3,
+};
 
 export default function ManagePartnerVendors() {
   const { user, token } = useAuth();
@@ -29,13 +42,23 @@ export default function ManagePartnerVendors() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'engaged' | 'available'
+  const [activeTab, setActiveTab] = useState('all'); // 'all' | 'engaged' | 'available' | 'guest'
   const [search, setSearch] = useState('');
 
   // Confirmation Modals State
   const [confirmModal, setConfirmModal] = useState(null); // { vendor, willEngage, candidateLimit }
   const [confirmAllModal, setConfirmAllModal] = useState(false); // boolean
   const [actionLoading, setActionLoading] = useState(false);
+
+  // Guest Vendor Creation Modal State
+  const [showGuestModal, setShowGuestModal] = useState(false);
+  const [guestForm, setGuestForm] = useState(EMPTY_GUEST_FORM);
+  const [guestSubmitting, setGuestSubmitting] = useState(false);
+  const [guestAiLoading, setGuestAiLoading] = useState(false);
+  const [guestShowPassword, setGuestShowPassword] = useState(false);
+  const [guestNameStatus, setGuestNameStatus] = useState(''); // '' | 'checking' | 'ok' | 'taken'
+  const [guestFieldErrors, setGuestFieldErrors] = useState({});
+  const nameCheckTimer = useRef(null);
 
   const load = () => {
     setLoading(true);
@@ -62,7 +85,118 @@ export default function ManagePartnerVendors() {
     }
   }, [success]);
 
-  // Open confirmation modal when clicking a vendor card or its Engage pill
+  // Real-time vendor name availability check
+  const handleVendorNameChange = (val) => {
+    setGuestForm((prev) => ({ ...prev, vendor_name: val }));
+    if (guestFieldErrors.vendor_name) {
+      setGuestFieldErrors((prev) => ({ ...prev, vendor_name: undefined }));
+    }
+    if (nameCheckTimer.current) clearTimeout(nameCheckTimer.current);
+
+    if (!val || val.trim().length < 2) {
+      setGuestNameStatus('');
+      return;
+    }
+
+    setGuestNameStatus('checking');
+    nameCheckTimer.current = setTimeout(async () => {
+      try {
+        const res = await request(
+          `/api/auth/tenants/check-name?name=${encodeURIComponent(val.trim())}`,
+          { token }
+        );
+        setGuestNameStatus(res.taken ? 'taken' : 'ok');
+      } catch {
+        setGuestNameStatus('');
+      }
+    }, 400);
+  };
+
+  // AI Auto-Fill with Groq LLM
+  const handleAiAutoFill = async () => {
+    const vName = guestForm.vendor_name.trim();
+    if (!vName) {
+      setGuestFieldErrors((prev) => ({ ...prev, vendor_name: 'Enter vendor name first' }));
+      return;
+    }
+    setGuestAiLoading(true);
+    try {
+      const res = await request('/api/auth/tenants/ai-describe', {
+        method: 'POST',
+        token,
+        body: { name: vName },
+      });
+      setGuestForm((prev) => ({
+        ...prev,
+        industry: res.industry || prev.industry,
+        location: res.location || prev.location,
+        specializations: res.tech_stack || prev.specializations,
+        notes: res.notes || prev.notes,
+      }));
+    } catch {
+      // silent fallback
+    } finally {
+      setGuestAiLoading(false);
+    }
+  };
+
+  const handleCreateGuestVendor = async (e) => {
+    e.preventDefault();
+    const errs = {};
+    if (!guestForm.vendor_name.trim() || guestForm.vendor_name.trim().length < 2) {
+      errs.vendor_name = 'Vendor name must be at least 2 characters';
+    }
+    if (guestNameStatus === 'taken') {
+      errs.vendor_name = 'This vendor name is already registered';
+    }
+    if (!guestForm.name.trim()) {
+      errs.name = 'Recruiter full name is required';
+    }
+    if (!guestForm.email.trim() || !guestForm.email.includes('@')) {
+      errs.email = 'Valid recruiter email is required';
+    }
+    if (!guestForm.password || guestForm.password.length < 4) {
+      errs.password = 'Password must be at least 4 characters';
+    }
+
+    if (Object.keys(errs).length > 0) {
+      setGuestFieldErrors(errs);
+      return;
+    }
+
+    setGuestSubmitting(true);
+    setError('');
+    try {
+      await request('/api/auth/vendors/guest', {
+        method: 'POST',
+        token,
+        body: {
+          vendor_name: guestForm.vendor_name.trim(),
+          industry: guestForm.industry.trim(),
+          location: guestForm.location.trim(),
+          specializations: guestForm.specializations.trim(),
+          notes: guestForm.notes.trim(),
+          name: guestForm.name.trim(),
+          email: guestForm.email.trim().toLowerCase(),
+          password: guestForm.password,
+          candidate_limit: parseInt(guestForm.candidate_limit, 10) || 3,
+        },
+      });
+
+      setSuccess(`"${guestForm.vendor_name.trim()}" onboarded successfully as a partner guest vendor.`);
+      setShowGuestModal(false);
+      setGuestForm(EMPTY_GUEST_FORM);
+      setGuestNameStatus('');
+      setGuestFieldErrors({});
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to create guest vendor');
+    } finally {
+      setGuestSubmitting(false);
+    }
+  };
+
+  // Open confirmation modal when clicking a vendor or its Engage button
   const handleVendorClick = (vendor) => {
     const willEngage = !vendor.engaged;
     setConfirmModal({
@@ -81,7 +215,6 @@ export default function ManagePartnerVendors() {
     setError('');
     setSuccess('');
 
-    // Construct updated vendors payload
     const updatedVendors = vendors.map((v) => {
       if (v.id === vendor.id) {
         return {
@@ -198,6 +331,7 @@ export default function ManagePartnerVendors() {
   }, [vendors]);
 
   const engagedCount = useMemo(() => vendors.filter((v) => v.engaged).length, [vendors]);
+  const guestCount = useMemo(() => vendors.filter((v) => v.is_guest || v.vendor_type === 'guest').length, [vendors]);
 
   const filteredVendors = useMemo(() => {
     let list = vendors;
@@ -205,6 +339,8 @@ export default function ManagePartnerVendors() {
       list = list.filter((v) => v.engaged);
     } else if (activeTab === 'available') {
       list = list.filter((v) => !v.engaged);
+    } else if (activeTab === 'guest') {
+      list = list.filter((v) => v.is_guest || v.vendor_type === 'guest');
     }
 
     if (search.trim()) {
@@ -223,13 +359,31 @@ export default function ManagePartnerVendors() {
 
   return (
     <div
-      className="p-6 sm:p-8 space-y-6 max-w-7xl mx-auto min-h-screen"
+      className="space-y-3.5 w-full h-[calc(100vh-5.5rem)] flex flex-col pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Top Banner Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+      <style>{`
+        .custom-vendor-scroller::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
+        }
+        .custom-vendor-scroller::-webkit-scrollbar-track {
+          background: #F4F4F2;
+          border-radius: 8px;
+        }
+        .custom-vendor-scroller::-webkit-scrollbar-thumb {
+          background: #D1D1CB;
+          border-radius: 8px;
+        }
+        .custom-vendor-scroller::-webkit-scrollbar-thumb:hover {
+          background: #9CA3AF;
+        }
+      `}</style>
+
+      {/* Top Banner Header Card */}
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1">
             <button
               type="button"
               onClick={() => navigate('/dashboard/admin')}
@@ -244,98 +398,110 @@ export default function ManagePartnerVendors() {
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
             Partner Vendors Management
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
+          <p className="text-xs text-gray-500 font-normal mt-0.5 max-w-2xl">
             Manage active consultancy vendor partnerships. Only engaged vendors can view your company's published requisitions and submit candidates.
           </p>
 
-          <div className="flex items-center gap-2 mt-4 flex-wrap">
-            <span className="px-3 py-1 rounded-full bg-black text-white text-xs font-bold shadow-2xs">
+          <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+            <span className="px-2.5 py-0.5 rounded-full bg-black text-white text-[11px] font-bold shadow-2xs">
               ● Admin
             </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-800 text-[11px] font-semibold shadow-2xs">
               {user?.tenant_name || 'Client'}
             </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-800 text-[11px] font-semibold shadow-2xs">
               {engagedCount} engaged
             </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+            <span className="px-2.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-800 text-[11px] font-semibold shadow-2xs">
+              {guestCount} guest vendors
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-white border border-gray-200 text-gray-800 text-[11px] font-semibold shadow-2xs">
               {vendors.length} total consultancies
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <Link
             to="/dashboard/admin"
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5"
           >
             Back to Dashboard
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setShowGuestModal(true)}
+            className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <UserPlus size={14} />
+            <span>+ Onboard Guest Vendor</span>
+          </button>
         </div>
       </div>
 
       {/* 3 Metric Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 shrink-0">
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
             ENGAGED PARTNERS
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+          <div className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
             {engagedCount}
           </div>
-          <div className="text-xs text-gray-500 font-medium">
+          <div className="text-[11px] text-gray-500 font-medium mt-0.5">
             Active candidate sourcing channels
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
             AVAILABLE CONSULTANCIES
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+          <div className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
             {vendors.length - engagedCount}
           </div>
-          <div className="text-xs text-gray-500 font-medium">
+          <div className="text-[11px] text-gray-500 font-medium mt-0.5">
             Unengaged vendor network
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-3.5 sm:p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
             SOURCING STATUS
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
+          <div className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight">
             {engagedCount > 0 ? 'Active' : 'Standby'}
           </div>
-          <div className="text-xs text-gray-500 font-medium">
+          <div className="text-[11px] text-gray-500 font-medium mt-0.5">
             Candidate submission access
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
-          <AlertCircle size={15} className="shrink-0 text-red-500" />
+        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 shrink-0">
+          <AlertCircle size={14} className="shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
-          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+        <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2 shadow-2xs shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
+          <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
           <span>{success}</span>
         </div>
       )}
 
-      {/* Main Vendor Management Hub */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-4">
+      {/* Main Vendor Management Hub: Viewport Height Aligned with Inbuilt Scroller */}
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* Controls Row: Filter Tabs, Search & Bulk Engage */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
-          {/* Tabs */}
-          <div className="flex items-center gap-1 bg-gray-100/90 p-1 rounded-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100 shrink-0">
+          {/* Tabs: All, Engaged, Unengaged, Guest */}
+          <div className="flex items-center gap-1 bg-gray-100/90 p-1 rounded-xl flex-wrap">
             <button
               type="button"
               onClick={() => setActiveTab('all')}
@@ -369,6 +535,18 @@ export default function ManagePartnerVendors() {
             >
               Unengaged ({vendors.length - engagedCount})
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('guest')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'guest'
+                  ? 'bg-white text-black shadow-2xs'
+                  : 'text-gray-600 hover:text-black'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+              <span>Guest ({guestCount})</span>
+            </button>
           </div>
 
           <div className="flex items-center gap-2.5">
@@ -377,7 +555,7 @@ export default function ManagePartnerVendors() {
               <button
                 type="button"
                 onClick={() => setConfirmAllModal(true)}
-                className={`px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl border transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer ${
                   allEngaged
                     ? 'bg-white border-gray-200 text-gray-700 hover:bg-gray-50'
                     : 'bg-black text-white border-black hover:bg-gray-900'
@@ -398,7 +576,7 @@ export default function ManagePartnerVendors() {
             )}
 
             {/* Search */}
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full sm:w-60">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
@@ -411,160 +589,420 @@ export default function ManagePartnerVendors() {
           </div>
         </div>
 
-        {/* Vendors Grid */}
-        {loading ? (
-          <div className="py-16 text-center text-xs text-gray-400 flex flex-col items-center justify-center gap-2">
-            <Loader2 size={20} className="animate-spin text-gray-400" />
-            <span>Loading partner vendor network...</span>
-          </div>
-        ) : filteredVendors.length === 0 ? (
-          <div className="py-16 text-center text-xs text-gray-400 space-y-1">
-            <div className="font-bold text-gray-600 text-sm">No vendors found</div>
-            <div>Try searching with a different term or toggling tabs.</div>
-          </div>
-        ) : (
-          <div
-            className="overflow-y-auto pr-1 pb-1"
-            style={{ maxHeight: '480px', minHeight: '260px' }}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-              {filteredVendors.map((v) => {
-                const isEngaged = !!v.engaged;
-                return (
-                  <div
-                    key={v.id}
-                    onClick={() => handleVendorClick(v)}
-                    className={`rounded-2xl p-4 sm:p-4.5 border transition-all cursor-pointer relative flex flex-col justify-between select-none ${
-                      isEngaged
-                        ? 'bg-white border-black shadow-sm ring-1 ring-black/5 hover:border-black'
-                        : 'bg-white border-gray-200/90 hover:border-gray-300 hover:shadow-xs'
-                    }`}
-                  >
-                    {/* Card Top */}
-                    <div>
-                      <div className="flex items-start justify-between gap-3 mb-2.5">
-                        <div className="flex items-center gap-2.5 min-w-0">
+        {/* Inbuilt Custom Scroller Container */}
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto pr-1 pt-1 custom-vendor-scroller">
+          {loading ? (
+            <div className="py-16 text-center text-xs text-gray-400 flex flex-col items-center justify-center gap-2">
+              <Loader2 size={20} className="animate-spin text-gray-400" />
+              <span>Loading partner vendor network...</span>
+            </div>
+          ) : filteredVendors.length === 0 ? (
+            <div className="py-16 text-center text-xs text-gray-400 space-y-1">
+              <div className="font-bold text-gray-600 text-sm">No vendors found</div>
+              <div>Try searching with a different term or toggling tabs.</div>
+            </div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse relative">
+              <thead className="sticky top-0 bg-white z-10 shadow-2xs">
+                <tr className="border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
+                  <th className="py-2.5 px-3">VENDOR CONSULTANCY</th>
+                  <th className="py-2.5 px-3">LOCATION & INDUSTRY</th>
+                  <th className="py-2.5 px-3">SPECIALIZATIONS</th>
+                  <th className="py-2.5 px-3">SUBMISSION LIMIT</th>
+                  <th className="py-2.5 px-3">PARTNERSHIP STATUS</th>
+                  <th className="py-2.5 px-3 text-right">ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {filteredVendors.map((v) => {
+                  const isEngaged = !!v.engaged;
+                  const isGuest = !!v.is_guest || v.vendor_type === 'guest';
+
+                  return (
+                    <tr
+                      key={v.id}
+                      className="hover:bg-gray-50/70 transition-colors group"
+                    >
+                      {/* Vendor Consultancy Name & Avatar */}
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
                             {(v.name || '?').slice(0, 1).toUpperCase()}
                           </div>
-                          <div className="min-w-0">
-                            <h3 className="text-sm font-bold text-gray-900 truncate">{v.name}</h3>
-                            <div className="text-[10px] text-gray-400 font-medium capitalize">
-                              {v.tenant_type || 'Consultancy'}
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-gray-900 text-sm">{v.name}</span>
+                            </div>
+                            <div className="text-[10px] font-medium capitalize mt-0.5">
+                              {isGuest ? (
+                                <span className="inline-block font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-1.5 py-0.5 rounded text-[9px]">
+                                  Guest Consultancy
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">
+                                  {v.tenant_type || 'Consultancy'}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
+                      </td>
 
-                        {/* Engagement Pill */}
-                        <span
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold shrink-0 transition-all ${
+                      {/* Location & Industry */}
+                      <td className="py-3 px-3">
+                        <div className="space-y-0.5">
+                          {v.location && (
+                            <div className="flex items-center gap-1.5 text-gray-700 font-medium text-xs">
+                              <MapPin size={12} className="text-gray-400 shrink-0" />
+                              <span>{v.location}</span>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1.5 text-gray-500 text-[11px]">
+                            {v.industry && (
+                              <span className="inline-flex items-center gap-1">
+                                <Building2 size={11} className="text-gray-400 shrink-0" />
+                                <span>{v.industry}</span>
+                              </span>
+                            )}
+                            {v.size && <span className="text-gray-400">• {v.size}</span>}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Specializations Tags */}
+                      <td className="py-3 px-3">
+                        {v.specializations && v.specializations.length > 0 ? (
+                          <div className="flex items-center gap-1 flex-wrap max-w-xs">
+                            {v.specializations.slice(0, 4).map((s) => (
+                              <span
+                                key={s}
+                                className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-medium"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                            {v.specializations.length > 4 && (
+                              <span className="text-[10px] text-gray-400 font-semibold">
+                                +{v.specializations.length - 4}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">General Sourcing</span>
+                        )}
+                      </td>
+
+                      {/* Candidate Limit */}
+                      <td className="py-3 px-3">
+                        {isEngaged ? (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={v.candidate_limit ?? ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setVendors((prev) =>
+                                  prev.map((item) =>
+                                    item.id === v.id
+                                      ? { ...item, candidate_limit: val === '' ? null : parseInt(val, 10) }
+                                      : item
+                                  )
+                                );
+                              }}
+                              onBlur={(e) => handleUpdateLimitDirectly(v.id, e.target.value)}
+                              placeholder="3"
+                              className="w-14 px-2 py-1 text-xs text-center font-bold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black focus:bg-white transition-all font-mono"
+                            />
+                            <span className="text-[11px] text-gray-500 font-medium">/ req</span>
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 text-xs">Default (3/req)</span>
+                        )}
+                      </td>
+
+                      {/* Partnership Status Pill */}
+                      <td className="py-3 px-3">
+                        <button
+                          type="button"
+                          onClick={() => handleVendorClick(v)}
+                          className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${
                             isEngaged
-                              ? 'bg-black text-white shadow-2xs'
+                              ? 'bg-black text-white shadow-2xs hover:bg-gray-800'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                         >
                           {isEngaged ? (
                             <>
-                              <Check size={11} className="stroke-[3]" />
+                              <Check size={12} className="stroke-[3]" />
                               <span>Engaged</span>
                             </>
                           ) : (
                             <>
-                              <Plus size={11} />
+                              <Plus size={12} />
                               <span>Engage</span>
                             </>
                           )}
-                        </span>
-                      </div>
+                        </button>
+                      </td>
 
-                      {/* Metadata Chips */}
-                      <div className="flex items-center gap-2 flex-wrap text-[11px] text-gray-500 mb-3">
-                        {v.location && (
-                          <span className="inline-flex items-center gap-1">
-                            <MapPin size={11} className="text-gray-400" />
-                            <span>{v.location}</span>
-                          </span>
-                        )}
-                        {v.industry && (
-                          <span className="inline-flex items-center gap-1">
-                            <Building2 size={11} className="text-gray-400" />
-                            <span>{v.industry}</span>
-                          </span>
-                        )}
-                        {v.size && (
-                          <span className="inline-flex items-center gap-1">
-                            <Users size={11} className="text-gray-400" />
-                            <span>{v.size}</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Specializations */}
-                      {v.specializations && v.specializations.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                          {v.specializations.slice(0, 4).map((s) => (
-                            <span
-                              key={s}
-                              className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[10px] font-medium"
-                            >
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Card Bottom: Candidate Limit config for Engaged Vendors */}
-                    {isEngaged && (
-                      <div
-                        onClick={(e) => e.stopPropagation()}
-                        className="mt-2 pt-3 border-t border-gray-100"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <label className="text-[11px] font-bold text-gray-700">
-                            Candidate Limit / Req
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            max="100"
-                            value={v.candidate_limit ?? ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setVendors((prev) =>
-                                prev.map((item) => (item.id === v.id ? { ...item, candidate_limit: val === '' ? null : parseInt(val, 10) } : item))
-                              );
-                            }}
-                            onBlur={(e) => handleUpdateLimitDirectly(v.id, e.target.value)}
-                            placeholder="3"
-                            className="w-20 px-2.5 py-1 text-xs text-right font-bold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black focus:bg-white transition-all font-mono"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Bottom Save Action Bar */}
-        <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-xs text-gray-500">
-            Vendor partnership engagements take effect immediately across all published requisitions. Candidate submission limits are configured directly on each requisition.
-          </p>
-          <button
-            type="button"
-            onClick={saveVendors}
-            disabled={saving}
-            className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
-          >
-            {saving && <Loader2 size={13} className="animate-spin text-white" />}
-            <span>Save Vendor Partnerships</span>
-          </button>
+                      {/* Action Links */}
+                      <td className="py-3 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => handleVendorClick(v)}
+                          className={`text-xs font-bold transition-colors cursor-pointer underline-offset-2 hover:underline ${
+                            isEngaged
+                              ? 'text-gray-500 hover:text-red-600'
+                              : 'text-gray-900 hover:text-black'
+                          }`}
+                        >
+                          {isEngaged ? 'Disengage' : 'Engage Partner'}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
+
+      {/* Modal Popup: Onboard Guest Vendor */}
+      {showGuestModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          onClick={() => !guestSubmitting && setShowGuestModal(false)}
+        >
+          <div
+            className="relative w-full max-w-[540px] bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-8 text-left max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center shadow-2xs shrink-0">
+                  <UserPlus size={20} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900 tracking-tight">Onboard Guest Vendor</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Register a partner consultancy directly for {user?.tenant_name || 'your company'}.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => !guestSubmitting && setShowGuestModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateGuestVendor} className="space-y-4">
+              {/* Vendor Name & AI Describe */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-gray-900">
+                    Vendor Consultancy Name <span className="text-red-500">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAiAutoFill}
+                    disabled={guestAiLoading || !guestForm.vendor_name.trim()}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {guestAiLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                    <span>Auto-fill with AI</span>
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    value={guestForm.vendor_name}
+                    onChange={(e) => handleVendorNameChange(e.target.value)}
+                    placeholder="e.g. Apex Staffing Partners"
+                    className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all ${
+                      guestFieldErrors.vendor_name ? 'border-red-400 bg-red-50/20' : 'border-gray-200'
+                    }`}
+                  />
+                  {guestNameStatus === 'checking' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 flex items-center gap-1">
+                      <Loader2 size={11} className="animate-spin" /> Checking
+                    </span>
+                  )}
+                  {guestNameStatus === 'ok' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-emerald-600 font-bold flex items-center gap-1">
+                      <Check size={12} /> Available
+                    </span>
+                  )}
+                  {guestNameStatus === 'taken' && (
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-red-500 font-bold">
+                      Name taken
+                    </span>
+                  )}
+                </div>
+                {guestFieldErrors.vendor_name && (
+                  <p className="text-[11px] text-red-500 mt-1">{guestFieldErrors.vendor_name}</p>
+                )}
+              </div>
+
+              {/* Industry & Location */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5">Industry</label>
+                  <input
+                    type="text"
+                    value={guestForm.industry}
+                    onChange={(e) => setGuestForm({ ...guestForm, industry: e.target.value })}
+                    placeholder="Staffing & Recruitment"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5">Location / HQ</label>
+                  <input
+                    type="text"
+                    value={guestForm.location}
+                    onChange={(e) => setGuestForm({ ...guestForm, location: e.target.value })}
+                    placeholder="Bangalore, India"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all"
+                  />
+                </div>
+              </div>
+
+              {/* Specializations */}
+              <div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5">Hiring Specializations</label>
+                <input
+                  type="text"
+                  value={guestForm.specializations}
+                  onChange={(e) => setGuestForm({ ...guestForm, specializations: e.target.value })}
+                  placeholder="React, Python, AWS, Fullstack"
+                  className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[11px] font-extrabold text-gray-400 uppercase tracking-wider mb-2.5">
+                  RECRUITER LOGIN CREDENTIALS
+                </div>
+              </div>
+
+              {/* Recruiter Full Name & Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5">
+                    Recruiter Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={guestForm.name}
+                    onChange={(e) => setGuestForm({ ...guestForm, name: e.target.value })}
+                    placeholder="e.g. Ramesh Kumar"
+                    className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all ${
+                      guestFieldErrors.name ? 'border-red-400 bg-red-50/20' : 'border-gray-200'
+                    }`}
+                  />
+                  {guestFieldErrors.name && (
+                    <p className="text-[11px] text-red-500 mt-1">{guestFieldErrors.name}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5">
+                    Recruiter Email <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={guestForm.email}
+                    onChange={(e) => setGuestForm({ ...guestForm, email: e.target.value })}
+                    placeholder="recruiter@apex.com"
+                    className={`w-full bg-white border rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all ${
+                      guestFieldErrors.email ? 'border-red-400 bg-red-50/20' : 'border-gray-200'
+                    }`}
+                  />
+                  {guestFieldErrors.email && (
+                    <p className="text-[11px] text-red-500 mt-1">{guestFieldErrors.email}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Recruiter Password & Limit */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5">
+                    Recruiter Password <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={guestShowPassword ? 'text' : 'password'}
+                      required
+                      value={guestForm.password}
+                      onChange={(e) => setGuestForm({ ...guestForm, password: e.target.value })}
+                      placeholder="Min 4 characters"
+                      className={`w-full bg-white border rounded-xl px-3.5 py-2.5 pr-14 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all ${
+                        guestFieldErrors.password ? 'border-red-400 bg-red-50/20' : 'border-gray-200'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setGuestShowPassword(!guestShowPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500 hover:text-black cursor-pointer select-none"
+                    >
+                      {guestShowPassword ? 'Hide' : 'Show'}
+                    </button>
+                  </div>
+                  {guestFieldErrors.password && (
+                    <p className="text-[11px] text-red-500 mt-1">{guestFieldErrors.password}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-900 mb-1.5">
+                    Candidate Limit / Req
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="100"
+                    value={guestForm.candidate_limit}
+                    onChange={(e) => setGuestForm({ ...guestForm, candidate_limit: e.target.value })}
+                    placeholder="3"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all font-mono"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
+                <button
+                  type="button"
+                  disabled={guestSubmitting}
+                  onClick={() => setShowGuestModal(false)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={guestSubmitting}
+                  className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {guestSubmitting && <Loader2 size={13} className="animate-spin text-white" />}
+                  <span>{guestSubmitting ? 'Onboarding...' : '+ Onboard Guest Vendor'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation Modal Popup for Single Vendor Engagement */}
       {confirmModal && (

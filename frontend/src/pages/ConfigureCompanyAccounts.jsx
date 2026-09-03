@@ -294,8 +294,17 @@ export default function ConfigureAccounts({ defaultTab }) {
 
                       {/* Company Name */}
                       <td className="py-3.5 px-3">
-                        <div className="font-semibold text-gray-900">{u.tenant_name || '—'}</div>
-                        <div className="text-[10px] text-gray-400 capitalize">{u.tenant_type || 'Client'}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-gray-900">{u.tenant_name || '—'}</span>
+                          {(tenantObj?.is_guest || tenantObj?.vendor_type === 'guest') && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold">
+                              Guest
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-gray-400 capitalize">
+                          {(tenantObj?.is_guest || tenantObj?.vendor_type === 'guest') ? 'Guest Consultancy' : (u.tenant_type || 'Consultancy')}
+                        </div>
                       </td>
 
                       {/* Candidate Limit */}
