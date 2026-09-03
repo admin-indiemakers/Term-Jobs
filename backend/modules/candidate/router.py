@@ -362,6 +362,27 @@ def update_submission_status(
         sub = session.get(CandidateSubmission, submission_id)
         if not sub:
             raise HTTPException(status_code=404, detail="Candidate submission not found")
+
+        if new_status in ("Shortlisted", "Accepted", "Under Review"):
+            from modules.requisition.domain.models import Requisition
+            req_obj = session.get(Requisition, sub.requisition_id)
+            if req_obj:
+                s_role = req_obj.structured_role or {}
+                limit = req_obj.vendor_candidate_limit or s_role.get("vendor_candidate_limit") or s_role.get("headcount") or 1
+                vendor_tenant = current_user.tenant_id or getattr(sub, "tenant_id", None)
+                if vendor_tenant:
+                    existing_subs = session.query(CandidateSubmission).filter(
+                        CandidateSubmission.requisition_id == sub.requisition_id,
+                        CandidateSubmission.tenant_id == vendor_tenant,
+                        CandidateSubmission.status.in_(["Shortlisted", "Accepted", "Under Review"]),
+                        CandidateSubmission.id != sub.id
+                    ).all()
+                    if len(existing_subs) >= limit:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Maximum candidate submission limit of {limit} reached for this requisition."
+                        )
+
         sub.status = new_status
         sub.updated_at = datetime.now(timezone.utc)
         session.add(sub)
@@ -394,7 +415,7 @@ def update_submission_status(
             notify_candidate_shortlisted(
                 requisition_id=sub.requisition_id,
                 candidate_name=sub.candidate_name,
-                vendor_name=current_user.tenant_name or sub.vendor_name or "Vendor A",
+                vendor_name=getattr(current_user, "tenant_name", None) or getattr(current_user, "name", None) or sub.vendor_name or "Vendor A",
                 match_score=sub.match_score,
             )
     except Exception:  # noqa: BLE001
@@ -1118,20 +1139,14 @@ def get_shortlist_quota(
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """Return the candidate shortlist quota and current count for this vendor/requisition."""
-    from modules.shared.settings import get_max_candidates_per_requisition
-    from modules.identity.domain.models import VendorEngagement
     from modules.requisition.domain.models import Requisition
 
-    limit = current_user.candidate_limit or get_max_candidates_per_requisition()
+    limit = 1
     with get_session() as session:
         req_obj = session.get(Requisition, requisition_id)
-        if req_obj and req_obj.tenant_id and current_user.tenant_id:
-            eng = session.query(VendorEngagement).filter(
-                VendorEngagement.tenant_id == req_obj.tenant_id,
-                VendorEngagement.vendor_tenant_id == current_user.tenant_id
-            ).first()
-            if eng and eng.candidate_limit is not None:
-                limit = eng.candidate_limit
+        if req_obj:
+            s_role = req_obj.structured_role or {}
+            limit = req_obj.vendor_candidate_limit or s_role.get("vendor_candidate_limit") or s_role.get("headcount") or 1
 
         all_subs = session.query(CandidateSubmission).filter(
             CandidateSubmission.requisition_id == requisition_id,
@@ -1170,21 +1185,14 @@ def shortlist_candidate(
     if not requisition_id or not candidate_name:
         raise HTTPException(status_code=400, detail="requisition_id and candidate_name are required")
 
-    from modules.shared.settings import get_max_candidates_per_requisition
-    from modules.identity.domain.models import VendorEngagement
     from modules.requisition.domain.models import Requisition
 
-    limit = current_user.candidate_limit or get_max_candidates_per_requisition()
-
+    limit = 1
     with get_session() as session:
         req_obj = session.get(Requisition, requisition_id)
-        if req_obj and req_obj.tenant_id and current_user.tenant_id:
-            eng = session.query(VendorEngagement).filter(
-                VendorEngagement.tenant_id == req_obj.tenant_id,
-                VendorEngagement.vendor_tenant_id == current_user.tenant_id
-            ).first()
-            if eng and eng.candidate_limit is not None:
-                limit = eng.candidate_limit
+        if req_obj:
+            s_role = req_obj.structured_role or {}
+            limit = req_obj.vendor_candidate_limit or s_role.get("vendor_candidate_limit") or s_role.get("headcount") or 1
 
         all_subs = session.query(CandidateSubmission).filter(
             CandidateSubmission.requisition_id == requisition_id
@@ -1279,7 +1287,7 @@ def shortlist_candidate(
                 requisition_id=requisition_id,
                 candidate_name=candidate_name,
                 candidate_email=candidate_email,
-                vendor_name=vendor_name or current_user.tenant_name or "Vendor A",
+                vendor_name=vendor_name or getattr(current_user, "tenant_name", None) or getattr(current_user, "name", None) or "Vendor A",
                 filename=filename,
                 fingerprint="",
                 match_score=match_score,
@@ -1325,7 +1333,7 @@ def shortlist_candidate(
                 "requisition_id": requisition_id,
                 "candidate_name": candidate_name,
                 "candidate_email": candidate_email or "",
-                "vendor_name": vendor_name or current_user.tenant_name or "bridgeon",
+                "vendor_name": vendor_name or getattr(current_user, "tenant_name", None) or getattr(current_user, "name", None) or "bridgeon",
                 "filename": filename or "",
                 "fingerprint": "",
                 "match_score": match_score or 0,
@@ -1361,7 +1369,7 @@ def shortlist_candidate(
         notify_candidate_shortlisted(
             requisition_id=requisition_id,
             candidate_name=candidate_name,
-            vendor_name=vendor_name or current_user.tenant_name or "Vendor A",
+            vendor_name=vendor_name or getattr(current_user, "tenant_name", None) or getattr(current_user, "name", None) or "Vendor A",
             match_score=match_score,
         )
         return {

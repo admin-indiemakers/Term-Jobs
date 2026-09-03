@@ -70,6 +70,7 @@ class StructuredRole(BaseModel):
     job_family: str = ""
     certifications: list[str] = Field(default_factory=list)
     headcount: int = Field(default=1, ge=1)
+    vendor_candidate_limit: int = Field(default=1, ge=1)
     experience: str = ""  # e.g. "5-8 years" (free text, distinct from seniority level)
 
     # Engagement tab

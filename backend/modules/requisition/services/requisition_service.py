@@ -128,6 +128,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
         job_family=prefill.get("job_family") or "",
         certifications=prefill.get("certifications") or [],
         headcount=_num(prefill.get("headcount")) or 1,
+        vendor_candidate_limit=_num(prefill.get("vendor_candidate_limit")) or _num(prefill.get("headcount")) or 1,
         experience=prefill.get("experience") or "",
         engagement_type=prefill.get("engagement_type") or "",
         duration=prefill.get("duration") or prefill.get("contract_duration") or "",
@@ -191,6 +192,7 @@ class RequisitionService:
         prefill = dict((intake_meta or {}).get("prefill") or {})
         saved_role = _structured_role_from_prefill(intent, prefill)
         with self.session_factory() as session:
+            v_limit = saved_role.get("vendor_candidate_limit") if isinstance(saved_role, dict) else getattr(saved_role, "vendor_candidate_limit", 1)
             req = models.Requisition(
                 tenant_id=tenant_id,
                 company_profile_id=company_profile_id,
@@ -200,6 +202,7 @@ class RequisitionService:
                 intent=intent.model_dump(),
                 intake_meta=intake_meta or {},
                 structured_role=saved_role,
+                vendor_candidate_limit=v_limit or 1,
             )
             session.add(req)
             session.commit()

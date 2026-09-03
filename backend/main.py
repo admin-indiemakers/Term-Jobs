@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from modules.candidate.router import router as candidate_router
-from modules.identity.domain.models import User
+from modules.identity.domain.models import User, VendorEngagement, Tenant
 from modules.identity.router import get_current_user
 
 from modules.calendar.router import router as calendar_router
@@ -222,6 +222,32 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             if prof:
                 company = _company_dict(prof)
         sr = req.structured_role or {}
+
+        # Get engaged vendor consultancies receiving this published requisition
+        published_vendors = []
+        if req.tenant_id:
+            engagements = (
+                session.query(VendorEngagement)
+                .filter(VendorEngagement.tenant_id == req.tenant_id)
+                .all()
+            )
+            vendor_tenant_ids = [e.vendor_tenant_id for e in engagements]
+            if vendor_tenant_ids:
+                vendors = (
+                    session.query(Tenant)
+                    .filter(Tenant.id.in_(vendor_tenant_ids))
+                    .all()
+                )
+                published_vendors = [
+                    {
+                        "id": v.id,
+                        "name": v.name,
+                        "tenant_type": getattr(v, "tenant_type", "vendor") or "vendor",
+                        "status": "Published & Active",
+                    }
+                    for v in vendors
+                ]
+
         return {
             "id": req.id,
             "ref": f"REQ-{req.id[:6].upper()}",
@@ -234,6 +260,8 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
             "structured_role": req.structured_role,
+            "vendor_candidate_limit": req.vendor_candidate_limit if req.vendor_candidate_limit is not None else (sr.get("vendor_candidate_limit") or sr.get("headcount") or 1),
+            "published_vendors": published_vendors,
             "hiring_manager_name": sr.get("hiring_manager") or "",
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,

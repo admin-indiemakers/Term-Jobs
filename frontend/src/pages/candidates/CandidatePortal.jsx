@@ -281,6 +281,13 @@ export default function CandidatePortal() {
     loadNotifications();
   }, [token, candidateId]);
 
+  // Redirect uncompleted candidates to onboarding screen
+  useEffect(() => {
+    if (data && data.candidate && data.candidate.onboarding_status !== 'completed') {
+      navigate('/candidate/onboarding', { replace: true });
+    }
+  }, [data, navigate]);
+
   useEffect(() => {
     if (activeTab === 'attendance') {
       loadAttendance(selectedMonth);
@@ -2734,13 +2741,34 @@ export default function CandidatePortal() {
 
                       <div>
                         <label className="block text-[10.5px] font-bold uppercase tracking-wider text-[#8A8A85] mb-2">
-                          RECEIPT
+                          RECEIPT (PDF or Image only)
                         </label>
                         <input
                           type="file"
+                          accept=".pdf,image/png,image/jpeg,image/jpg,image/webp,application/pdf,image/*"
                           onChange={(e) => {
                             const f = e.target.files?.[0];
-                            if (f) setExpenseForm({ ...expenseForm, receipt_name: f.name });
+                            if (!f) return;
+
+                            const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+                            const ext = f.name.slice(((f.name.lastIndexOf('.') - 1) >>> 0) + 2).toLowerCase();
+                            const allowedExts = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
+
+                            if (!allowedTypes.includes(f.type) && !allowedExts.includes(ext)) {
+                              alert('Only PDF and Image files (PNG, JPG, WEBP) are accepted for receipt attachments.');
+                              e.target.value = '';
+                              return;
+                            }
+
+                            const reader = new FileReader();
+                            reader.onload = (evt) => {
+                              setExpenseForm({
+                                ...expenseForm,
+                                receipt_name: f.name,
+                                receipt_url: evt.target.result,
+                              });
+                            };
+                            reader.readAsDataURL(f);
                           }}
                           style={{
                             backgroundColor: '#FFFFFF',
@@ -2749,6 +2777,11 @@ export default function CandidatePortal() {
                           }}
                           className="w-full px-3 py-2 text-[12px] text-[#737373] file:mr-3 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-[#F2F2EE] file:text-[#0A0A0A] hover:file:bg-[#E5E5E0] cursor-pointer"
                         />
+                        {expenseForm.receipt_name && (
+                          <div className="mt-1 text-[11px] text-[#16a34a] font-medium flex items-center gap-1">
+                            ✓ Attached: {expenseForm.receipt_name}
+                          </div>
+                        )}
                       </div>
                     </div>
 

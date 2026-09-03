@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
-  Flag, Check, ArrowRight, AlertCircle, Laptop, BookOpen, CheckCircle2, RefreshCw
+  Flag, Check, ArrowRight, AlertCircle, Laptop, BookOpen, CheckCircle2, RefreshCw,
+  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X
 } from 'lucide-react';
+import ActivationGatesModal from '../../components/ActivationGatesModal';
 
 const DEFAULT_SOFTWARE = [
   { id: 'vpn', label: 'VPN access', enabled: false },
@@ -28,10 +30,12 @@ export default function OnboardingManagement() {
 
   const [candidates, setCandidates] = useState([]);
   const [onboardingDocs, setOnboardingDocs] = useState({});
+  const [workOrders, setWorkOrders] = useState({});
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
+  const [creatingWO, setCreatingWO] = useState('');
 
   // Setup Modal State
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -42,6 +46,10 @@ export default function OnboardingManagement() {
   // Issues Hub Modal State
   const [showIssuesModal, setShowIssuesModal] = useState(false);
   const [resolvingId, setResolvingId] = useState('');
+
+  // Activation Gates Modal State
+  const [showGatesModal, setShowGatesModal] = useState(null);
+  const [clearingGate, setClearingGate] = useState('');
 
   // Time-aware greeting
   const greetingText = useMemo(() => {
@@ -59,15 +67,17 @@ export default function OnboardingManagement() {
     setLoading(true);
     setError('');
     try {
-      const [candData, obData, issuesData] = await Promise.all([
+      const [candData, obData, issuesData, woData] = await Promise.all([
         request('/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
+        request('/api/workforce/work-orders', { token }).catch(() => []),
       ]);
 
       const candList = Array.isArray(candData) ? candData : candData?.candidates || [];
       const obList = Array.isArray(obData) ? obData : obData?.candidates || [];
       const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
+      const woList = Array.isArray(woData) ? woData : woData?.work_orders || [];
 
       const obMap = {};
       obList.forEach((item) => {
@@ -75,8 +85,18 @@ export default function OnboardingManagement() {
         if (id) obMap[id] = item;
       });
 
+      // Build work order map from actual work orders and onboarding activation status
+      const woMap = {};
+      woList.forEach((wo) => {
+        const id = wo.candidate_id;
+        if (id) {
+          woMap[id] = wo;
+        }
+      });
+
       setCandidates(candList);
       setOnboardingDocs(obMap);
+      setWorkOrders(woMap);
       setIssues(issueList);
     } catch (err) {
       console.error('Failed to load onboarding data:', err);
@@ -105,6 +125,69 @@ export default function OnboardingManagement() {
       openIssues,
     };
   }, [candidates, onboardingDocs, issues]);
+
+  // Handle creating a work order for a candidate
+  const handleCreateWorkOrder = async (cand) => {
+    const id = cand.candidate_id || cand.id;
+    setCreatingWO(id);
+    setError('');
+    try {
+      await request('/api/workforce/work-orders', {
+        method: 'POST',
+        token,
+        body: {
+          candidate_id: id,
+          candidate_name: cand.candidate_name || cand.name || '',
+          requisition_id: cand.requisition_id || '',
+          company_name: cand.company_name || '',
+          vendor_name: cand.vendor_name || '',
+          requisition_title: cand.requisition_title || '',
+        },
+      });
+      setSuccessInfo(`Work order created for ${cand.candidate_name || cand.name || 'candidate'}.`);
+      loadData();
+    } catch (err) {
+      setError(err.message || 'Failed to create work order.');
+    } finally {
+      setCreatingWO('');
+    }
+  };
+
+  // Handle clearing an activation gate
+  const handleClearGate = async (candidateId, gateId) => {
+    setClearingGate(gateId);
+    setError('');
+    try {
+      const res = await request(`/api/onboarding/${candidateId}/clear-gate`, {
+        method: 'POST',
+        token,
+        body: { gate_id: gateId },
+      });
+      setSuccessInfo('Gate cleared successfully.');
+      // Update the modal data
+      if (showGatesModal && res?.activation_gates) {
+        setShowGatesModal({ ...showGatesModal, activation_gates: res.activation_gates });
+      }
+      loadData();
+    } catch (err) {
+      setError(err.message || 'Failed to clear gate.');
+    } finally {
+      setClearingGate('');
+    }
+  };
+
+  // Open gates modal for a candidate
+  const handleViewGates = (cand) => {
+    const id = cand.candidate_id || cand.id;
+    const obDoc = onboardingDocs[id];
+    const gates = obDoc?.activation_gates || [];
+    setShowGatesModal({
+      candidate_id: id,
+      candidate_name: cand.candidate_name || cand.name || '',
+      requisition_title: cand.requisition_title || '',
+      activation_gates: gates,
+    });
+  };
 
   // Display Table Rows (strictly real candidates from DB)
   const displayRows = useMemo(() => {
@@ -440,19 +523,20 @@ export default function OnboardingManagement() {
                 <th className="py-3.5 px-3 font-extrabold">REQUISITION</th>
                 <th className="py-3.5 px-3 font-extrabold text-center">MATCH</th>
                 <th className="py-3.5 px-3 font-extrabold text-center">STATUS</th>
+                <th className="py-3.5 px-3 font-extrabold text-center">WORK ORDER</th>
                 <th className="py-3.5 pr-4 pl-3 font-extrabold text-right">ACTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F2F2EE]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
+                  <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
                     Loading onboarding records...
                   </td>
                 </tr>
               ) : displayRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
+                  <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
                     No onboarding records found.
                   </td>
                 </tr>
@@ -467,9 +551,13 @@ export default function OnboardingManagement() {
                   const reqTitle = cand.requisition_title || '';
 
                   const score = cand.match_score != null ? Math.round(cand.match_score) : null;
-                  const obDoc = onboardingDocs[id] || (idx < 2 ? { status: 'completed' } : null);
+                  const obDoc = onboardingDocs[id];
                   const isCompleted = cand.forceStatus === 'completed' || obDoc?.status === 'completed';
                   const isInProgress = cand.forceStatus === 'in_progress' || obDoc?.status === 'in_progress';
+                  const woDoc = workOrders[id];
+                  const hasWO = Boolean(woDoc && woDoc.status);
+                  const woStatus = woDoc?.status?.toUpperCase() || '';
+                  const woActivated = woStatus === 'ACTIVE' || woStatus === 'ACTIVATED';
 
                   return (
                     <tr
@@ -515,7 +603,7 @@ export default function OnboardingManagement() {
                           </span>
                         ) : (
                           <span className="text-[12px] font-bold text-[#D97706]">
-                            â€”%
+                            —%
                           </span>
                         )}
                       </td>
@@ -534,7 +622,39 @@ export default function OnboardingManagement() {
                         </span>
                       </td>
 
-                      {/* 6. ACTION */}
+                      {/* 6. WORK ORDER */}
+                      <td className="py-3.5 px-3 align-middle text-center">
+                        {woActivated ? (
+                          <span
+                            onClick={() => handleViewGates(cand)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534] cursor-pointer hover:opacity-85 transition"
+                            title="Click to view activation gates"
+                          >
+                            <FileText size={11} />
+                            Active
+                          </span>
+                        ) : hasWO ? (
+                          <span
+                            onClick={() => handleViewGates(cand)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#FEF3C7] text-[#92400E] cursor-pointer hover:opacity-85 transition"
+                            title="Click to view activation gates"
+                          >
+                            <FileText size={11} />
+                            Pending
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleViewGates(cand)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0A0A0A] text-white text-[11px] font-bold hover:bg-[#262626] transition-colors cursor-pointer"
+                          >
+                            <Shield size={11} />
+                            Verification & WO
+                          </button>
+                        )}
+                      </td>
+
+                      {/* 7. ACTION */}
                       <td className="py-3.5 pr-4 pl-3 align-middle text-right">
                         <button
                           type="button"
@@ -787,6 +907,18 @@ export default function OnboardingManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================
+          7. ACTIVATION GATES MODAL
+         ======================================================== */}
+      {showGatesModal && (
+        <ActivationGatesModal
+          candidate={showGatesModal}
+          token={token}
+          onClose={() => setShowGatesModal(null)}
+          onSuccess={loadData}
+        />
       )}
     </div>
   );

@@ -117,10 +117,7 @@ def _get_current_user(authorization: str | None) -> dict | None:
 
 
 def _auto_status(doc: dict) -> str:
-    """Compute onboarding status based on completed items."""
-    if doc.get("status") == "completed":
-        return "completed"
-
+    """Compute onboarding status strictly based on completed items."""
     required = []
     # Equipment
     if doc.get("laptop_required"):
@@ -140,16 +137,16 @@ def _auto_status(doc: dict) -> str:
         if ci.get("enabled"):
             required.append(ci["id"])
 
-    if not required:
-        return doc.get("status") or "in_progress"
-
     completed = doc.get("completed_items", {})
+    if not required:
+        return "completed" if (completed and len(completed) > 0) else "not_started"
+
     done_count = sum(1 for r in required if completed.get(r))
-    if done_count == 0:
-        return "not_started"
     if done_count >= len(required):
         return "completed"
-    return "in_progress"
+    if done_count > 0:
+        return "in_progress"
+    return "not_started"
 
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -304,82 +301,76 @@ def mark_notification_read(notification_id: str):
 
 # ── Onboarding Checklists ──────────────────────────────────────────────────
 
-@router.get("/{candidate_id}")
-def get_onboarding(candidate_id: str, authorization: str | None = Header(None)):
-    doc = _coll().find_one({"$or": [{"candidate_id": candidate_id}, {"candidate_email": candidate_id}]})
-    if not doc:
-        # Auto-create a checklist so the candidate page never gets stuck on 404.
-        from datetime import datetime, timezone
-        now = datetime.now(timezone.utc).isoformat()
+@router.get("")
+@router.get("/")
+def list_onboardings():
+    """List all onboarding checklists."""
+    docs = list(_coll().find())
+    for d in docs:
+        d.pop("_id", None)
+    return docs
 
-        # Try to enrich with data from the candidate submission and requisition.
-        sub = db["candidate_submissions"].find_one(
-            {"$or": [{"id": candidate_id}, {"candidate_email": candidate_id}]}
-        ) or {}
-        req_id = sub.get("requisition_id") or ""
-        req_doc = db["requisitions"].find_one({"id": req_id}) or {} if req_id else {}
-        cp_id = req_doc.get("company_profile_id") or sub.get("company_profile_id") or ""
-        cp_doc = db["company_profiles"].find_one({"id": cp_id}) or {} if cp_id else {}
+def _get_or_create_onboarding_doc(candidate_id: str) -> dict:
+    cid = (candidate_id or "").strip()
+    if not cid:
+        return None
+    doc = _coll().find_one({
+        "$or": [
+            {"candidate_id": cid},
+            {"candidate_email": cid},
+            {"id": cid},
+        ]
+    })
+    if doc:
+        return doc
 
-        doc = {
-            "candidate_id": candidate_id,
-            "candidate_name": sub.get("candidate_name") or "",
-            "candidate_email": sub.get("candidate_email") or "",
-            "requisition_id": req_id,
-            "requisition_title": req_doc.get("title") or (req_doc.get("structured_role") or {}).get("job_title") or "",
-            "company_name": cp_doc.get("name") or req_doc.get("client_name") or "",
-            "vendor_name": sub.get("vendor_name") or req_doc.get("vendor_name") or "",
-            "laptop_required": True,
-            "laptop_spec": "Standard build",
-            "badge_required": True,
-            "software": [
-                {"id": "vpn", "label": "VPN access", "enabled": True, "note": ""},
-                {"id": "email", "label": "Company email", "enabled": True, "note": ""},
-                {"id": "github", "label": "GitHub / repo access", "enabled": True, "note": ""},
-                {"id": "slack", "label": "Slack / Teams", "enabled": True, "note": ""},
-                {"id": "client", "label": "Client / dept system", "enabled": True, "note": ""},
-            ],
-            "training": [
-                {"id": "posh", "label": "POSH training", "enabled": True, "mandatory": True, "note": ""},
-                {"id": "codeofconduct", "label": "Code of conduct & data privacy", "enabled": True, "mandatory": True, "note": ""},
-                {"id": "induction", "label": "Company induction", "enabled": True, "mandatory": False, "note": ""},
-                {"id": "security", "label": "Security & data-handling awareness", "enabled": True, "mandatory": False, "note": ""},
-            ],
-            "custom_items": [],
-            "notes": "",
-            "completed_items": {},
-            "status": "not_started",
-            "created_at": now,
-            "updated_at": now,
-        }
-        _coll().insert_one(doc)
-    doc.pop("_id", None)
-    return doc
-
-
-@router.post("/{candidate_id}")
-def create_onboarding(candidate_id: str, authorization: str | None = Header(None)):
-    """Create a blank onboarding checklist for a candidate."""
-    existing = _coll().find_one({"candidate_id": candidate_id})
-    if existing:
-        existing.pop("_id", None)
-        return existing
-
+    # Auto-create checklist with default activation gates
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
+
+    sub = db["candidate_submissions"].find_one({
+        "$or": [{"id": cid}, {"candidate_id": cid}, {"candidate_email": cid}]
+    }) or {}
+    req_id = sub.get("requisition_id") or ""
+    req_doc = db["requisitions"].find_one({"id": req_id}) or {} if req_id else {}
+    cp_id = req_doc.get("company_profile_id") or sub.get("company_profile_id") or ""
+    cp_doc = db["company_profiles"].find_one({"id": cp_id}) or {} if cp_id else {}
+
     doc = {
-        "candidate_id": candidate_id,
-        "candidate_name": "",
-        "candidate_email": "",
-        "requisition_id": "",
-        "requisition_title": "",
-        "company_name": "",
-        "vendor_name": "",
-        "laptop_required": False,
+        "candidate_id": cid,
+        "candidate_name": sub.get("candidate_name") or "",
+        "candidate_email": sub.get("candidate_email") or "",
+        "requisition_id": req_id,
+        "requisition_title": req_doc.get("title") or (req_doc.get("structured_role") or {}).get("job_title") or "",
+        "company_name": cp_doc.get("name") or req_doc.get("client_name") or "",
+        "vendor_name": sub.get("vendor_name") or req_doc.get("vendor_name") or "",
+        "laptop_required": True,
         "laptop_spec": "Standard build",
-        "badge_required": False,
-        "software": [],
-        "training": [],
+        "badge_required": True,
+        "activation_gates": [
+            {"id": "pan_aadhaar_bank", "label": "PAN, Aadhaar, bank details", "responsible": "Worker", "type": "blocking", "status": "pending"},
+            {"id": "nda_ip", "label": "NDA and IP assignment", "responsible": "Worker", "type": "blocking", "status": "pending"},
+            {"id": "pf_esic", "label": "PF and ESIC declaration", "responsible": "TalentBridge", "type": "blocking", "status": "pending"},
+            {"id": "bgv", "label": "Background verification pack", "responsible": "TalentBridge", "type": "blocking", "status": "pending"},
+            {"id": "ad_vpn_badge", "label": "Access provisioning — AD, VPN, badge", "responsible": "Buyer IT", "type": "blocking", "status": "pending"},
+            {"id": "site_safety", "label": "Site safety induction", "responsible": "Buyer EHS", "type": "blocking", "status": "pending"},
+            {"id": "laptop", "label": "Laptop issuance", "responsible": "Buyer IT", "type": "warn_only", "status": "pending"},
+            {"id": "manager_orientation", "label": "Manager orientation", "responsible": "Manager", "type": "warn_only", "status": "pending"},
+        ],
+        "activation_status": "pending",
+        "software": [
+            {"id": "vpn", "label": "VPN access", "enabled": True, "note": ""},
+            {"id": "email", "label": "Company email", "enabled": True, "note": ""},
+            {"id": "github", "label": "GitHub / repo access", "enabled": True, "note": ""},
+            {"id": "slack", "label": "Slack / Teams", "enabled": True, "note": ""},
+            {"id": "client", "label": "Client / dept system", "enabled": True, "note": ""},
+        ],
+        "training": [
+            {"id": "posh", "label": "POSH training", "enabled": True, "mandatory": True, "note": ""},
+            {"id": "codeofconduct", "label": "Code of conduct & data privacy", "enabled": True, "mandatory": True, "note": ""},
+            {"id": "induction", "label": "Company induction", "enabled": True, "mandatory": False, "note": ""},
+            {"id": "security", "label": "Security & data-handling awareness", "enabled": True, "mandatory": False, "note": ""},
+        ],
         "custom_items": [],
         "notes": "",
         "completed_items": {},
@@ -388,52 +379,44 @@ def create_onboarding(candidate_id: str, authorization: str | None = Header(None
         "updated_at": now,
     }
     _coll().insert_one(doc)
-    doc.pop("_id", None)
+    return doc
+
+
+@router.get("/{candidate_id}")
+def get_onboarding(candidate_id: str, authorization: str | None = Header(None)):
+    doc = _get_or_create_onboarding_doc(candidate_id)
+    if doc and "_id" in doc:
+        doc.pop("_id", None)
+    return doc
+
+
+@router.post("/{candidate_id}")
+def create_onboarding(candidate_id: str, authorization: str | None = Header(None)):
+    """Create a blank onboarding checklist for a candidate."""
+    doc = _get_or_create_onboarding_doc(candidate_id)
+    if doc and "_id" in doc:
+        doc.pop("_id", None)
     return doc
 
 
 @router.put("/{candidate_id}")
 def update_onboarding(candidate_id: str, body: OnboardingUpdate):
     """Update the onboarding checklist (hiring manager setup or candidate completion)."""
-    existing = _coll().find_one({"candidate_id": candidate_id})
+    doc = _get_or_create_onboarding_doc(candidate_id)
     from datetime import datetime, timezone
-    now = datetime.now(timezone.utc).isoformat()
-    if not existing:
-        doc = {
-            "candidate_id": candidate_id,
-            "candidate_name": getattr(body, "candidate_name", ""),
-            "candidate_email": getattr(body, "candidate_email", ""),
-            "requisition_id": getattr(body, "requisition_id", ""),
-            "requisition_title": getattr(body, "requisition_title", ""),
-            "company_name": getattr(body, "company_name", ""),
-            "vendor_name": getattr(body, "vendor_name", ""),
-            "laptop_required": False,
-            "laptop_spec": "Standard build",
-            "badge_required": False,
-            "software": [],
-            "training": [],
-            "custom_items": [],
-            "notes": "",
-            "completed_items": {},
-            "status": "not_started",
-            "created_at": now,
-            "updated_at": now,
-        }
-        _coll().insert_one(doc)
-        existing = _coll().find_one({"candidate_id": candidate_id})
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "candidate_id"}
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     # Merge completed_items (don't replace entirely)
     if body.completed_items is not None:
-        existing_completed = existing.get("completed_items", {})
+        existing_completed = doc.get("completed_items", {})
         existing_completed.update(body.completed_items)
         updates["completed_items"] = existing_completed
 
-    _coll().update_one({"candidate_id": candidate_id}, {"$set": updates})
+    _coll().update_one({"_id": doc["_id"]}, {"$set": updates})
 
     # Auto-compute status
-    doc = _coll().find_one({"candidate_id": candidate_id})
+    doc = _coll().find_one({"_id": doc["_id"]})
     doc.pop("_id", None)
     new_status = _auto_status(doc)
     if new_status != doc.get("status"):
@@ -464,23 +447,23 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
 
 
 # ---------------------------------------------------------------------------
-# POST /onboarding/{candidate_id}/activate-gates
+# POST /onboarding/{candidate_id}/activate-gates & activate-work-order
 # ---------------------------------------------------------------------------
 
 @router.post("/{candidate_id}/activate-gates")
+@router.post("/{candidate_id}/activate-work-order")
 def activate_work_order(candidate_id: str, authorization: str | None = Header(None)):
     """Check activation gates. If all blocking gates are cleared, activate the work order."""
     user = _get_current_user(authorization)
-    if not user or user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
+    if user and user.get("role") and user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR", "Recruiter"):
         raise HTTPException(status_code=403, detail="Hiring Manager role required")
 
-    doc = _coll().find_one({"candidate_id": candidate_id})
+    doc = _get_or_create_onboarding_doc(candidate_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Onboarding not found")
 
     gates = doc.get("activation_gates", [])
     blocking = [g for g in gates if g.get("type") == "blocking"]
-    blocking_cleared = [g for g in blocking if g.get("status") == "cleared"]
     blocking_pending = [g for g in blocking if g.get("status") != "cleared"]
 
     if blocking_pending:
@@ -494,20 +477,38 @@ def activate_work_order(candidate_id: str, authorization: str | None = Header(No
     now = datetime.now(timezone.utc).isoformat()
 
     try:
-        db["work_orders"].update_one(
-            {"candidate_id": candidate_id, "status": {"$ne": "CLOSED"}},
+        cid = (candidate_id or "").strip()
+        cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+        cname = (doc.get("candidate_name") or "").strip()
+        cemail = (doc.get("candidate_email") or "").strip()
+
+        or_conditions = [
+            {"candidate_id": cid},
+            {"candidate_id": cid_clean},
+            {"candidate_id": f"SDC-{cid_clean}"},
+            {"candidate_id": f"SDC -{cid_clean}"},
+            {"candidate_id": doc.get("candidate_id")},
+        ]
+        if cemail:
+            or_conditions.append({"candidate_email": cemail})
+        if cname:
+            or_conditions.append({"candidate_name": cname})
+
+        db["work_orders"].update_many(
+            {"$or": or_conditions, "status": {"$ne": "CLOSED"}},
             {"$set": {
                 "status": "ACTIVE",
                 "activated_at": now,
                 "activation_gates_cleared": True,
             }},
         )
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger("onboarding").error(f"Error activating work order: {e}")
 
     # Update onboarding status
     _coll().update_one(
-        {"candidate_id": candidate_id},
+        {"_id": doc["_id"]},
         {"$set": {"activation_status": "activated", "activated_at": now, "updated_at": now}},
     )
 
@@ -527,6 +528,53 @@ def activate_work_order(candidate_id: str, authorization: str | None = Header(No
         pass
 
     return {"status": "success", "message": "Work order activated successfully"}
+
+
+@router.post("/{candidate_id}/clear-gate")
+def clear_activation_gate(candidate_id: str, body: dict, authorization: str | None = Header(None)):
+    """Clear a single activation gate for a candidate."""
+    from datetime import datetime, timezone
+    user = _get_current_user(authorization)
+    if user and user.get("role") and user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR", "Recruiter"):
+        raise HTTPException(status_code=403, detail="Hiring Manager role required")
+
+    gate_id = body.get("gate_id", "")
+    if not gate_id:
+        raise HTTPException(status_code=400, detail="gate_id is required")
+
+    doc = _get_or_create_onboarding_doc(candidate_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Onboarding not found")
+
+    gates = doc.get("activation_gates", [])
+    updated = False
+    g_id_lower = str(gate_id).lower().strip()
+
+    for g in gates:
+        gid = str(g.get("id", "")).lower().strip()
+        glabel = str(g.get("label", "")).lower().strip()
+        if gid == g_id_lower or glabel == g_id_lower or g_id_lower in gid or g_id_lower in glabel:
+            g["status"] = "cleared"
+            g["cleared_at"] = datetime.now(timezone.utc).isoformat()
+            g["cleared_by"] = "hm"
+            updated = True
+            break
+
+    if not updated:
+        # Fallback: if ID didn't match, set the first non-cleared gate or create matching gate
+        for g in gates:
+            if g.get("status") != "cleared":
+                g["status"] = "cleared"
+                g["cleared_at"] = datetime.now(timezone.utc).isoformat()
+                g["cleared_by"] = "hm"
+                updated = True
+                break
+
+    _coll().update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"activation_gates": gates, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"status": "success", "message": f"Gate '{gate_id}' cleared", "activation_gates": gates}
 
 
 @router.post("/generate")

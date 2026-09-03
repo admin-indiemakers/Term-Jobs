@@ -48,6 +48,7 @@ class Requisition(Model):
         "coverage_result": None,
         "refinement_log": list,
         "intake_meta": dict,
+        "vendor_candidate_limit": 1,
         "approved_by": None,
         "approved_at": None,
         "created_at": _utcnow,
@@ -68,6 +69,7 @@ class Requisition(Model):
     coverage_result = Column("coverage_result")
     refinement_log = Column("refinement_log")
     intake_meta = Column("intake_meta")
+    vendor_candidate_limit = Column("vendor_candidate_limit")
     approved_by = Column("approved_by")
     approved_at = Column("approved_at")
     created_at = Column("created_at")

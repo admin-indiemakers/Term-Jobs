@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
   RefreshCw, CheckCircle, XCircle, AlertTriangle, Receipt, DollarSign,
-  Clock, Filter, ChevronDown, ChevronUp, FileText,
+  Clock, Filter, ChevronDown, ChevronUp, FileText, Eye, Download, ExternalLink, X,
 } from 'lucide-react';
 
 export default function ExpenseApprovals() {
@@ -19,6 +19,7 @@ export default function ExpenseApprovals() {
   const [actionLoading, setActionLoading] = useState(null);
   const [rejectModal, setRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [previewReceipt, setPreviewReceipt] = useState(null);
 
   const loadExpenses = async () => {
     setLoading(true);
@@ -292,11 +293,16 @@ export default function ExpenseApprovals() {
 
                       {exp.receipt_name && (
                         <div className="mb-4">
-                          <div className="text-[0.68rem] tracking-[0.12em] text-[#8a8a85] font-semibold uppercase mb-1">Receipt</div>
-                          <div className="flex items-center gap-2 text-[0.85rem] text-[#2563eb]">
-                            <FileText size={14} />
-                            {exp.receipt_name}
-                          </div>
+                          <div className="text-[0.68rem] tracking-[0.12em] text-[#8a8a85] font-semibold uppercase mb-1">Receipt Attachment</div>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewReceipt(exp)}
+                            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#eff6ff] border border-[#bfdbfe] text-[0.82rem] font-semibold text-[#1d4ed8] hover:bg-[#dbeafe] transition cursor-pointer shadow-2xs"
+                          >
+                            <Eye size={15} />
+                            <span>{exp.receipt_name}</span>
+                            <span className="text-[10px] uppercase px-1.5 py-0.2 bg-[#1d4ed8] text-white rounded font-bold">View</span>
+                          </button>
                         </div>
                       )}
 
@@ -381,6 +387,80 @@ export default function ExpenseApprovals() {
           </div>
         </div>
       )}
+
+      {/* Receipt Preview Modal */}
+      {previewReceipt && (() => {
+        let receiptUrl = previewReceipt.receipt_url || '';
+        if (!receiptUrl && previewReceipt.receipt_name) {
+          const match = expenses.find(e => e.receipt_name === previewReceipt.receipt_name && e.receipt_url?.startsWith('data:'));
+          if (match) receiptUrl = match.receipt_url;
+        }
+        const isImage = receiptUrl.startsWith('data:image/') || previewReceipt.receipt_name?.match(/\.(png|jpg|jpeg|webp)$/i);
+
+        return (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4" onClick={() => setPreviewReceipt(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-[#eaeae6] flex items-center justify-between bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#eff6ff] text-[#2563eb] flex items-center justify-center font-bold">
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="text-[1.02rem] font-bold text-[#1a1a1a] flex items-center gap-2">
+                      <span>{previewReceipt.receipt_name || 'Receipt Document'}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-[#dbeafe] text-[#1e40af]">
+                        {isImage ? 'Image Receipt' : 'PDF Receipt'}
+                      </span>
+                    </h3>
+                    <p className="text-[0.78rem] text-[#70706b]">
+                      Candidate: <strong className="text-[#1a1a1a]">{previewReceipt.candidate_name}</strong> • Category: <strong className="text-[#1a1a1a]">{previewReceipt.category}</strong> • Amount: <strong className="text-[#1a1a1a]">₹{previewReceipt.amount?.toLocaleString()}</strong>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {receiptUrl && (
+                    <a
+                      href={receiptUrl}
+                      download={previewReceipt.receipt_name || 'receipt.pdf'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1a1a1a] text-white text-[0.78rem] font-semibold hover:bg-[#262626] transition shadow-2xs"
+                    >
+                      <ExternalLink size={14} />
+                      {isImage ? 'Open / Download Image' : 'Open / Download PDF'}
+                    </a>
+                  )}
+                  <button onClick={() => setPreviewReceipt(null)} className="w-9 h-9 rounded-full bg-[#f7f7f5] hover:bg-[#eaeae6] flex items-center justify-center text-[#70706b] transition">
+                    <X size={18} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-4 bg-[#f8f9fa] overflow-y-auto flex-1 flex flex-col items-center justify-center min-h-[500px]">
+                {receiptUrl ? (
+                  isImage ? (
+                    <img src={receiptUrl} alt="Receipt Attachment" className="max-w-full max-h-[75vh] object-contain rounded-xl shadow-lg border border-[#e5e7eb]" />
+                  ) : (
+                    <iframe
+                      src={receiptUrl}
+                      className="w-full h-[75vh] rounded-xl border border-[#e5e7eb] shadow-md bg-white"
+                      title="Receipt PDF Preview"
+                    />
+                  )
+                ) : (
+                  <div className="text-center p-8 bg-white border border-[#eaeae6] rounded-2xl shadow-xs max-w-md w-full">
+                    <FileText size={36} className="text-[#2563eb] mx-auto mb-3" />
+                    <h4 className="text-[1rem] font-bold text-[#1a1a1a] mb-1">{previewReceipt.receipt_name}</h4>
+                    <p className="text-[0.82rem] text-[#70706b] mb-4">
+                      Expense Claim: <strong className="text-[#1a1a1a]">₹{previewReceipt.amount} ({previewReceipt.category})</strong> logged on {previewReceipt.date_label || previewReceipt.date}.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

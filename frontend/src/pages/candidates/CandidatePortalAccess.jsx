@@ -1,17 +1,22 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
-import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key } from 'lucide-react';
+import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key, FileText, ExternalLink, ClipboardCheck, Lock } from 'lucide-react';
+import ActivationGatesModal from '../../components/ActivationGatesModal';
 
 export default function CandidatePortalAccess() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
 
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [creatingId, setCreatingId] = useState(null);
+  const [creatingWOId, setCreatingWOId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(null);
+  const [selectedGatesCandidate, setSelectedGatesCandidate] = useState(null);
   const [createForm, setCreateForm] = useState({ email: '', name: '', password: '1234' });
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -78,6 +83,31 @@ export default function CandidatePortalAccess() {
       setError(err.message || 'Failed to create portal access');
     } finally {
       setCreatingId(null);
+    }
+  };
+
+  const handleCreateWorkOrder = async (cand) => {
+    setCreatingWOId(cand.candidate_id);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const res = await request('/api/workforce/work-orders', {
+        method: 'POST',
+        token,
+        body: {
+          candidate_id: cand.candidate_id,
+          candidate_name: cand.candidate_name,
+          requisition_title: cand.requisition_title,
+          vendor_name: cand.vendor_name,
+        },
+      });
+      setSuccessMsg(res.message || `Work order created for ${cand.candidate_name}`);
+      await loadCandidates();
+    } catch (err) {
+      console.error('Failed to create work order:', err);
+      setError(err.message || 'Failed to create work order');
+    } finally {
+      setCreatingWOId(null);
     }
   };
 
@@ -187,6 +217,7 @@ export default function CandidatePortalAccess() {
                   <th className="px-5 py-3 font-semibold">Candidate ID</th>
                   <th className="px-5 py-3 font-semibold">Requisition & Role</th>
                   <th className="px-5 py-3 font-semibold">Portal Status</th>
+                  <th className="px-5 py-3 font-semibold">Work Order</th>
                   <th className="px-5 py-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
@@ -199,13 +230,14 @@ export default function CandidatePortalAccess() {
                         <td className="px-5 py-3"><div className="h-4 w-32 bg-gray-200 rounded" /></td>
                         <td className="px-5 py-3"><div className="h-4 w-40 bg-gray-200 rounded" /></td>
                         <td className="px-5 py-3"><div className="h-5 w-20 bg-gray-200 rounded-full" /></td>
+                        <td className="px-5 py-3"><div className="h-5 w-24 bg-gray-200 rounded-full" /></td>
                         <td className="px-5 py-3"><div className="h-8 w-28 bg-gray-200 rounded-lg ml-auto" /></td>
                       </tr>
                     ))}
                   </>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center">
+                    <td colSpan={6} className="px-5 py-12 text-center">
                       <AlertCircle size={28} className="mx-auto mb-2 text-[#d1d5cc]" />
                       <div className="text-[0.92rem] text-[#8a8a85] font-medium">
                         {candidates.length === 0 ? 'No accepted candidates found' : 'No candidates match your search'}
@@ -234,18 +266,74 @@ export default function CandidatePortalAccess() {
                         <div className="text-[0.72rem] text-[#8a8a85]">{cand.vendor_name || '—'}</div>
                       </td>
                       <td className="px-5 py-3.5">{statusBadge(cand.has_portal_access)}</td>
+                      <td className="px-5 py-3.5">
+                        {cand.has_work_order ? (
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide cursor-pointer hover:opacity-85 transition"
+                              style={{
+                                backgroundColor: cand.work_order_status === 'ACTIVE' ? '#dcfce7' : '#fef3c7',
+                                color: cand.work_order_status === 'ACTIVE' ? '#166534' : '#92400e',
+                              }}
+                              onClick={() => setSelectedGatesCandidate(cand)}
+                              title="Click to view activation gates & verification checklist"
+                            >
+                              <FileText size={11} />
+                              {cand.work_order_status || 'Created'}
+                            </span>
+                            {cand.work_order_number && (
+                              <span className="text-[11px] font-mono text-[#8a8a85] font-semibold">{cand.work_order_number}</span>
+                            )}
+                          </div>
+                        ) : cand.has_portal_access ? (
+                          <button
+                            onClick={() => setSelectedGatesCandidate(cand)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-medium hover:bg-[#262626] transition shadow-2xs"
+                          >
+                            <ClipboardCheck size={13} />
+                            Verification & Work Order
+                          </button>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f3f4f6] text-[#9ca3af] text-[0.78rem] font-medium border border-[#e5e7eb] cursor-not-allowed"
+                            title="Create candidate portal login account first to unlock Work Order generation"
+                          >
+                            <Lock size={12} />
+                            Portal Access Required
+                          </span>
+                        )}
+                      </td>
                       <td className="px-5 py-3.5 text-right">
                         {!cand.has_portal_access ? (
                           <button
                             onClick={() => handleCreateAccess(cand)}
                             disabled={creatingId === cand.candidate_id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-medium hover:bg-[#262626] transition disabled:opacity-50"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-medium hover:bg-[#262626] transition disabled:opacity-50 shadow-2xs"
                           >
                             <UserPlus size={13} />
                             {creatingId === cand.candidate_id ? 'Creating...' : 'Create Access'}
                           </button>
                         ) : (
-                          <span className="text-[0.78rem] text-[#8a8a85]">Active ✓</span>
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-[12px] text-[#8a8a85]">Active ✓</span>
+                            {!cand.has_work_order ? (
+                              <button
+                                onClick={() => setSelectedGatesCandidate(cand)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[11px] font-medium hover:bg-[#262626] transition"
+                              >
+                                <FileText size={11} />
+                                + Assign Work Order
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => setSelectedGatesCandidate(cand)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f7f7f5] border border-[#eaeae6] text-[11px] font-medium text-[#1a1a1a] hover:bg-[#efefec] transition"
+                              >
+                                <ExternalLink size={11} />
+                                Gates & Onboarding
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
                     </tr>
@@ -316,6 +404,16 @@ export default function CandidatePortalAccess() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Activation Gates Verification Checklist Modal */}
+      {selectedGatesCandidate && (
+        <ActivationGatesModal
+          candidate={selectedGatesCandidate}
+          token={token}
+          onClose={() => setSelectedGatesCandidate(null)}
+          onSuccess={loadCandidates}
+        />
       )}
     </div>
   );

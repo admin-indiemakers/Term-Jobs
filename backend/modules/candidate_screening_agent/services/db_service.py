@@ -191,6 +191,26 @@ def fetch_candidates_from_db(requisition_id: str | None = None, status: str | No
                 "hiring_manager_notes": doc.get("hiring_manager_notes"),
                 "created_at": doc.get("created_at").isoformat() if hasattr(doc.get("created_at"), 'isoformat') else doc.get("created_at"),
             })
+
+        # Enforce requisition vendor_candidate_limit per vendor consultancy for shortlisted candidates
+        if status in ("Shortlisted", "Accepted", "Under Review", "Hired") and results:
+            vendor_counts = {}
+            filtered = []
+            for item in results:
+                r_id = item.get("requisition_id")
+                req_d = db["requisitions"].find_one({"id": r_id}) if r_id else None
+                v_limit = 1
+                if req_d:
+                    s_r = req_d.get("structured_role") or {}
+                    v_limit = req_d.get("vendor_candidate_limit") or s_r.get("vendor_candidate_limit") or s_r.get("headcount") or 1
+                
+                v_key = (r_id, item.get("vendor_name") or item.get("tenant_id") or "default")
+                cnt = vendor_counts.get(v_key, 0)
+                if cnt < v_limit:
+                    filtered.append(item)
+                    vendor_counts[v_key] = cnt + 1
+            results = filtered
+
         return results
     except Exception as e:
         print(f"Error fetching candidate submissions from MongoDB: {e}")

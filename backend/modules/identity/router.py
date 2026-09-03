@@ -837,10 +837,32 @@ def list_portal_users(
         for rd in mongo_db["requisitions"].find({"id": {"$in": req_ids_needed}}, {"id": 1, "title": 1}):
             req_cache[rd.get("id")] = rd
 
-    # Enrich accepted subs with portal user status + requisition title
+    # Batch-fetch work orders for all candidates
+    wo_list = list(mongo_db["work_orders"].find({"status": {"$ne": "CLOSED"}}))
+    wo_cache = {}
+
+    # Enrich accepted subs with portal user status + requisition title + work order
     results = []
     for sub in accepted_subs:
-        cid = sub.get("candidate_id", "")
+        cid = (sub.get("candidate_id") or "").strip()
+        cemail = (sub.get("candidate_email") or "").lower().strip()
+        cname = (sub.get("candidate_name") or "").lower().strip()
+        cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+
+        wo_doc = None
+        for wo in wo_list:
+            wcid = str(wo.get("candidate_id", "")).strip()
+            wcemail = str(wo.get("candidate_email", "")).lower().strip()
+            wcname = str(wo.get("candidate_name", "")).lower().strip()
+            wcid_clean = wcid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+
+            if (cid and wcid and cid == wcid) or \
+               (cid_clean and wcid_clean and cid_clean == wcid_clean) or \
+               (cemail and wcemail and cemail == wcemail) or \
+               (cname and wcname and cname == wcname):
+                wo_doc = wo
+                break
+
         pu = portal_users.get(cid)
         req_doc = req_cache.get(sub.get("requisition_id"))
 
@@ -853,6 +875,9 @@ def list_portal_users(
             "has_portal_access": pu is not None and pu.is_active,
             "portal_user_id": pu.id if pu else None,
             "portal_user_email": pu.email if pu else None,
+            "work_order_status": wo_doc.get("status") if wo_doc else None,
+            "work_order_number": wo_doc.get("work_order_number") if wo_doc else None,
+            "has_work_order": wo_doc is not None,
         })
     
     return results

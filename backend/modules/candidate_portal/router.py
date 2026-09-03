@@ -287,7 +287,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-    else:
+    elif current_ts:
         current_ts.pop("_id", None)
 
     daily_status = []
@@ -343,8 +343,8 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             },
             "timesheet": {
                 "label": "TIMESHEET",
-                "value": "1" if current_ts.get("status") == "DRAFT" else "0",
-                "subtext": "action required" if current_ts.get("status") == "DRAFT" else "all submitted",
+                "value": "1" if (current_ts and current_ts.get("status") == "DRAFT") else "0",
+                "subtext": "action required" if (current_ts and current_ts.get("status") == "DRAFT") else "all submitted",
             },
             "expenses": {
                 "label": "EXPENSES",
@@ -702,6 +702,7 @@ class ExpenseCreateRequest(BaseModel):
     category: str
     amount: float
     receipt_name: Optional[str] = None
+    receipt_url: Optional[str] = None
     description: Optional[str] = None
     status: Optional[str] = "Submitted"
 
@@ -744,6 +745,14 @@ def create_candidate_expense(
     if payload.amount <= 0:
         raise HTTPException(status_code=400, detail="Expense amount must be greater than 0")
 
+    if payload.receipt_name:
+        ext = payload.receipt_name.rsplit(".", 1)[-1].lower() if "." in payload.receipt_name else ""
+        if ext not in ["pdf", "png", "jpg", "jpeg", "webp"]:
+            raise HTTPException(
+                status_code=400,
+                detail="Only PDF and Image files (PNG, JPG, WEBP) are accepted as receipt attachments."
+            )
+
     cand_id = current_user.candidate_id or ""
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
     if not raw_wo:
@@ -773,6 +782,23 @@ def create_candidate_expense(
     except Exception:
         date_label = payload.date
 
+    receipt_url = payload.receipt_url or ""
+    if not receipt_url and payload.receipt_name:
+        import os, base64
+        for folder in ["/Users/mac/Downloads", "/Users/mac/Desktop"]:
+            target = os.path.join(folder, payload.receipt_name)
+            if os.path.exists(target):
+                try:
+                    with open(target, "rb") as f:
+                        content_bytes = f.read()
+                    b64 = base64.b64encode(content_bytes).decode("ascii")
+                    ext = payload.receipt_name.rsplit(".", 1)[-1].lower() if "." in payload.receipt_name else ""
+                    mime = "application/pdf" if ext == "pdf" else f"image/{ext}"
+                    receipt_url = f"data:{mime};base64,{b64}"
+                    break
+                except Exception:
+                    pass
+
     doc = {
         "id": payload.id or f"exp_{uuid.uuid4().hex[:10]}",
         "candidate_id": cand_id,
@@ -783,6 +809,7 @@ def create_candidate_expense(
         "category": payload.category or "Travel",
         "amount": float(payload.amount),
         "receipt_name": payload.receipt_name or "",
+        "receipt_url": receipt_url,
         "description": payload.description or "",
         "status": payload.status or "Pending",
         "created_at": datetime.now(timezone.utc).isoformat()

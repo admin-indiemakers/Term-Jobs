@@ -164,7 +164,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [selectedCompanyTab, setSelectedCompanyTab] = useState('All');
   const [limitReachedModal, setLimitReachedModal] = useState(null);
   const [limitToast, setLimitToast] = useState(null);
-  const [shortlistQuota, setShortlistQuota] = useState({ limit: 3, used: 0, is_limit_reached: false });
+  const [shortlistQuota, setShortlistQuota] = useState({ limit: 1, used: 0, is_limit_reached: false });
   const [shortlistingCandidateIds, setShortlistingCandidateIds] = useState(new Set());
   const [autoScreenFilterMode, setAutoScreenFilterMode] = useState('all'); // 'all' | 'exclude_accepted'
   const [rowFilterModes, setRowFilterModes] = useState({});
@@ -823,7 +823,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           const st = (s.status || '').toLowerCase();
           return st === 'shortlisted' || st === 'accepted' || st === 'hired' || st === 'under review';
         }).length;
-        const currentCap = shortlistQuota?.limit || 3;
+        const currentCap = shortlistQuota?.limit || 1;
 
         if (activeSubCount >= currentCap) {
           const limitMsg = `Maximum candidate shortlist limit of ${currentCap} reached for this requisition. You cannot shortlist more candidates.`;
@@ -920,7 +920,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           title: 'Maximum Shortlist Limit Reached',
           message: msg,
           candidateName: sub.candidate_name,
-          limit: shortlistQuota?.limit || 3,
+          limit: shortlistQuota?.limit || 1,
         });
       }
       setError(msg);

@@ -91,45 +91,46 @@ export default function NewRequisition() {
   const [niceSkillInput, setNiceSkillInput] = useState('');
   const [certInput, setCertInput] = useState('');
 
-  // 6-Section Requisition Prefill State
+  // 6-Section Requisition Prefill State (Clean empty state)
   const [prefill, setPrefill] = useState({
     // 1. Role
     job_family: '',
-    seniority: 'Senior',
-    experience_band: '3-6 yrs',
+    seniority: '',
+    experience_band: '',
     headcount: 1,
+    vendor_candidate_limit: 1,
     must_have_skills: [],
     nice_to_have_skills: [],
     certifications: [],
     // 2. Engagement
-    engagement_type: 'Contract',
-    duration: '6 months',
-    start_date: toISODate(new Date()),
-    ends_on: addDuration('6 months', new Date()) || '',
-    extension_likely: 'Yes',
+    engagement_type: '',
+    duration: '',
+    start_date: '',
+    ends_on: '',
+    extension_likely: '',
     // 3. Commercials
-    rate_basis: 'Monthly rate',
+    rate_basis: '',
     ceiling_internal: '',
     vendor_floor: '',
     vendor_cap: '',
     budget_cap_currency: 'INR',
     // 4. Work Setup
-    work_mode: 'Remote',
-    primary_location: 'Bangalore, India',
-    timezone: 'IST (UTC+5:30)',
-    shift_hours: '9:30 AM – 6:30 PM IST',
-    equipment_provided: 'Company-provided',
+    work_mode: '',
+    primary_location: '',
+    timezone: '',
+    shift_hours: '',
+    equipment_provided: '',
     // 5. Compliance
-    bgv_required: 'Yes',
-    drug_test_required: 'No',
-    nda_required: 'Yes',
-    ip_assignment_required: 'Yes',
-    contract_template: 'Consultancy agreement',
+    bgv_required: '',
+    drug_test_required: '',
+    nda_required: '',
+    ip_assignment_required: '',
+    contract_template: '',
     // 6. Process
-    target_start_date: toISODate(new Date()),
-    submission_deadline: addDuration('7 days', new Date()) || '',
-    interview_rounds: '2 rounds (Technical + Managerial)',
-    priority: 'Normal',
+    target_start_date: '',
+    submission_deadline: '',
+    interview_rounds: '',
+    priority: '',
   });
 
   // Load Templates & Company Profiles
@@ -185,46 +186,92 @@ export default function NewRequisition() {
 
   const handleTemplateSelect = (templateId) => {
     setSelectedTemplateId(templateId);
-    if (!templateId) return;
+    if (!templateId) {
+      setRoleTitle('');
+      setDepartment('');
+      setRawJd('');
+      setPrefill({
+        job_family: '',
+        seniority: '',
+        experience_band: '',
+        headcount: 1,
+        vendor_candidate_limit: 1,
+        must_have_skills: [],
+        nice_to_have_skills: [],
+        certifications: [],
+        engagement_type: '',
+        duration: '',
+        start_date: '',
+        ends_on: '',
+        extension_likely: '',
+        rate_basis: '',
+        ceiling_internal: '',
+        vendor_floor: '',
+        vendor_cap: '',
+        budget_cap_currency: 'INR',
+        work_mode: '',
+        primary_location: '',
+        timezone: '',
+        shift_hours: '',
+        equipment_provided: '',
+        bgv_required: '',
+        drug_test_required: '',
+        nda_required: '',
+        ip_assignment_required: '',
+        contract_template: '',
+        target_start_date: '',
+        submission_deadline: '',
+        interview_rounds: '',
+        priority: '',
+      });
+      return;
+    }
 
     const tpl = templates.find((t) => String(t.id) === String(templateId));
     if (!tpl) return;
 
     const sr = tpl.structured_role || tpl.parsed_template || {};
     const title = sr.title || sr.role_title || tpl.name || tpl.title || '';
-    const dept = sr.department || sr.job_family || tpl.department || 'Engineering';
+    const dept = sr.department || sr.job_family || tpl.department || '';
 
     setRoleTitle(title);
     setDepartment(dept);
     if (tpl.description || tpl.raw_jd) setRawJd(tpl.description || tpl.raw_jd || '');
 
-    setPrefill((prev) => ({
-      ...prev,
-      job_family: sr.job_family || sr.department || dept,
-      seniority: sr.seniority || sr.seniority_level || prev.seniority,
-      experience_band: sr.experience_band || sr.years_experience || prev.experience_band,
-      headcount: sr.headcount || sr.openings || prev.headcount,
-      must_have_skills: Array.isArray(sr.must_have_skills) && sr.must_have_skills.length ? sr.must_have_skills : prev.must_have_skills,
-      nice_to_have_skills: Array.isArray(sr.nice_to_have_skills) && sr.nice_to_have_skills.length ? sr.nice_to_have_skills : prev.nice_to_have_skills,
-      certifications: Array.isArray(sr.certifications) && sr.certifications.length ? sr.certifications : prev.certifications,
-      engagement_type: sr.engagement_type || prev.engagement_type,
-      duration: sr.duration || prev.duration,
-      start_date: sr.start_date || prev.start_date,
-      extension_likely: sr.extension_likely || prev.extension_likely,
-      ceiling_internal: sr.ceiling_internal || sr.rate_card_cap || prev.ceiling_internal,
-      vendor_floor: sr.vendor_floor || sr.rate_card_floor || prev.vendor_floor,
-      vendor_cap: sr.vendor_cap || sr.rate_card_cap || prev.vendor_cap,
-      work_mode: sr.work_mode || prev.work_mode,
-      primary_location: sr.primary_location || sr.location || prev.primary_location,
-      timezone: sr.timezone || prev.timezone,
-      shift_hours: sr.shift_hours || prev.shift_hours,
-      equipment_provided: sr.equipment_provided || prev.equipment_provided,
-      bgv_required: sr.bgv_required || prev.bgv_required,
-      nda_required: sr.nda_required || prev.nda_required,
-      contract_template: sr.contract_template || prev.contract_template,
-      interview_rounds: sr.interview_rounds || prev.interview_rounds,
-      priority: sr.priority || prev.priority,
-    }));
+    setPrefill({
+      job_family: sr.job_family || sr.department || dept || '',
+      seniority: sr.seniority || sr.seniority_level || '',
+      experience_band: sr.experience_band || sr.years_experience || sr.experience || '',
+      headcount: sr.headcount || sr.openings || 1,
+      vendor_candidate_limit: sr.vendor_candidate_limit || sr.headcount || 1,
+      must_have_skills: Array.isArray(sr.must_have_skills) ? sr.must_have_skills : [],
+      nice_to_have_skills: Array.isArray(sr.nice_to_have_skills) ? sr.nice_to_have_skills : [],
+      certifications: Array.isArray(sr.certifications) ? sr.certifications : [],
+      engagement_type: sr.engagement_type || '',
+      duration: sr.duration || sr.contract_duration || '',
+      start_date: sr.start_date || '',
+      ends_on: sr.ends_on || '',
+      extension_likely: sr.extension_likely || '',
+      rate_basis: sr.rate_basis || '',
+      ceiling_internal: sr.ceiling_internal || sr.rate_card_cap || '',
+      vendor_floor: sr.vendor_floor || sr.rate_card_floor || '',
+      vendor_cap: sr.vendor_cap || sr.rate_card_cap || '',
+      budget_cap_currency: sr.budget_cap_currency || 'INR',
+      work_mode: sr.work_mode || '',
+      primary_location: sr.primary_location || sr.location || '',
+      timezone: sr.timezone || '',
+      shift_hours: sr.shift_hours || '',
+      equipment_provided: sr.equipment_provided || '',
+      bgv_required: sr.bgv_required || '',
+      drug_test_required: sr.drug_test_required || '',
+      nda_required: sr.nda_required || '',
+      ip_assignment_required: sr.ip_assignment_required || '',
+      contract_template: sr.contract_template || '',
+      target_start_date: sr.target_start_date || '',
+      submission_deadline: sr.submission_deadline || '',
+      interview_rounds: sr.interview_rounds || '',
+      priority: sr.priority || '',
+    });
   };
 
   // Skill Add / Remove Handlers
@@ -580,6 +627,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('role', 'seniority', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select Seniority Level...</option>
                       {SENIORITY_OPTIONS.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -609,6 +657,22 @@ export default function NewRequisition() {
                       value={prefill.headcount}
                       onChange={(e) => handlePrefillChange('role', 'headcount', parseInt(e.target.value, 10) || 1)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center justify-between">
+                      <span>Vendor Candidate Limit <span className="text-red-600 font-bold">*</span></span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200">IMPORTANT</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      value={prefill.vendor_candidate_limit ?? 1}
+                      onChange={(e) => handlePrefillChange('role', 'vendor_candidate_limit', parseInt(e.target.value, 10) || 1)}
+                      className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all font-mono"
+                      placeholder="1"
                     />
                   </div>
                 </div>
@@ -729,6 +793,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('engagement', 'engagement_type', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select Engagement Type...</option>
                       {ENGAGEMENT_TYPES.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -751,38 +816,45 @@ export default function NewRequisition() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                      Start Date
+                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center justify-between">
+                      <span>Start Date <span className="text-red-600 font-bold">*</span></span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200">MANDATORY</span>
                     </label>
                     <input
                       type="date"
                       value={prefill.start_date}
                       onChange={(e) => handlePrefillChange('engagement', 'start_date', e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                      className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
+                      required
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                      Estimated End Date
+                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center justify-between">
+                      <span>Estimated End Date <span className="text-red-600 font-bold">*</span></span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200">MANDATORY</span>
                     </label>
                     <input
                       type="date"
                       value={prefill.ends_on}
                       onChange={(e) => handlePrefillChange('engagement', 'ends_on', e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                      className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
+                      required
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                      Extension Likely?
+                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center justify-between">
+                      <span>Extension Likely? <span className="text-red-600 font-bold">*</span></span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200">MANDATORY</span>
                     </label>
                     <select
                       value={prefill.extension_likely}
                       onChange={(e) => handlePrefillChange('engagement', 'extension_likely', e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                      className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
+                      required
                     >
+                      <option value="">Select...</option>
                       {BOOL_OPTIONS.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -868,6 +940,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('work_setup', 'work_mode', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select Work Mode...</option>
                       {WORK_MODES.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -911,6 +984,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('work_setup', 'equipment_provided', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select Provision...</option>
                       {EQUIPMENT_OPTIONS.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -933,6 +1007,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('compliance', 'bgv_required', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select...</option>
                       {BOOL_OPTIONS.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -948,6 +1023,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('compliance', 'nda_required', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select...</option>
                       {BOOL_OPTIONS.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -963,6 +1039,7 @@ export default function NewRequisition() {
                       onChange={(e) => handlePrefillChange('compliance', 'contract_template', e.target.value)}
                       className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
                     >
+                      <option value="">Select Agreement Type...</option>
                       {CONTRACT_OPTIONS.map((o) => (
                         <option key={o} value={o}>{o}</option>
                       ))}
@@ -977,14 +1054,16 @@ export default function NewRequisition() {
               <div className="space-y-4 pt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                      Submission Deadline <span className="text-red-500">*</span>
+                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center justify-between">
+                      <span>Submission Deadline <span className="text-red-600 font-bold">*</span></span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200">MANDATORY</span>
                     </label>
                     <input
                       type="date"
                       value={prefill.submission_deadline}
                       onChange={(e) => handlePrefillChange('process', 'submission_deadline', e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                      className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
+                      required
                     />
                   </div>
 

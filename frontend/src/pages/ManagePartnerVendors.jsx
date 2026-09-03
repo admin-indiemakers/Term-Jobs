@@ -543,11 +543,29 @@ export default function ManagePartnerVendors() {
                       </div>
                     )}
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
             </div>
           </div>
         )}
+
+        {/* Bottom Save Action Bar */}
+        <div className="pt-4 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-xs text-gray-500">
+            Vendor partnership engagements take effect immediately across all published requisitions. Candidate submission limits are configured directly on each requisition.
+          </p>
+          <button
+            type="button"
+            onClick={saveVendors}
+            disabled={saving}
+            className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+          >
+            {saving && <Loader2 size={13} className="animate-spin text-white" />}
+            <span>Save Vendor Partnerships</span>
+          </button>
+        </div>
+>>>>>>> 5c06619 (feat: implement expense receipt preview modal, add candidate submission limits, and introduce background sync scripts)
       </div>
 
       {/* Confirmation Modal Popup for Single Vendor Engagement */}

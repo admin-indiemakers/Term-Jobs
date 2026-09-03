@@ -570,7 +570,7 @@ export default function AdminDashboard() {
                 <thead className="sticky top-0 bg-white z-10 shadow-2xs">
                   <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
                     <th className="py-2.5 px-3">{teamTab === 'vendors' ? 'VENDOR / CONSULTANCY' : 'NAME'}</th>
-                    <th className="py-2.5 px-3">{teamTab === 'vendors' ? 'SUBMISSION LIMIT' : 'EMAIL'}</th>
+                    <th className="py-2.5 px-3">EMAIL</th>
                     <th className="py-2.5 px-3 text-right">STATUS</th>
                   </tr>
                 </thead>
@@ -596,15 +596,9 @@ export default function AdminDashboard() {
                           </div>
                         </td>
 
-                        {/* Email or Candidate Limit */}
+                        {/* Email */}
                         <td className="py-2.5 px-3 text-gray-600 font-medium">
-                          {isVendor ? (
-                            <span className="font-bold text-gray-900">
-                              {item.candidate_limit != null ? `${item.candidate_limit} / req` : '3 / req (default)'}
-                            </span>
-                          ) : (
-                            item.email
-                          )}
+                          {item.email || '—'}
                         </td>
 
                         {/* Status */}

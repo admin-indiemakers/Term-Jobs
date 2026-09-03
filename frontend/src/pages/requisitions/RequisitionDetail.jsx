@@ -23,6 +23,7 @@ import {
   ArrowRight,
   FileText,
   ChevronRight,
+  Building,
   ShieldCheck,
   DollarSign,
   Edit3
@@ -523,6 +524,55 @@ export default function RequisitionDetail() {
               )}
             </div>
           )}
+
+          {/* Published Vendor Distribution Status Card */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs mb-4">
+            <div className="flex items-center justify-between gap-2 mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-[#eff6ff] text-[#2563eb] flex items-center justify-center font-bold">
+                  <Building size={16} />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                    Engaged Vendor Consultancies ({req.published_vendors?.length || 0})
+                  </h3>
+                  <p className="text-[11px] text-gray-500">
+                    {req.published_vendors?.length || 0} partner consultancies receiving this live requisition • Max {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || 1} candidate per consultancy
+                  </p>
+                </div>
+              </div>
+              <span className="px-3 py-1 rounded-full text-[11.5px] font-black uppercase tracking-wide bg-red-100 text-red-700 border-2 border-red-300 flex items-center gap-1.5 shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                <span>IMPORTANT LIMIT: {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || 1} CAND / VENDOR</span>
+              </span>
+            </div>
+
+            {req.published_vendors && req.published_vendors.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                {req.published_vendors.map((v) => (
+                  <div key={v.id} className="p-3 rounded-xl bg-gray-50/80 border border-gray-200/80 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-lg bg-black text-white font-extrabold text-xs flex items-center justify-center shrink-0">
+                        {v.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="font-bold text-xs text-gray-900">{v.name}</div>
+                        <div className="text-[10px] text-gray-400 font-medium capitalize">{v.tenant_type || 'Vendor Consultancy'}</div>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Live
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500">
+                No active partner vendor consultancies linked to this buyer account yet.
+              </div>
+            )}
+          </div>
 
           {/* Structured Role & JD Preview Tabs */}
           <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">

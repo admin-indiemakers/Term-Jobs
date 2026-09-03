@@ -170,7 +170,11 @@ def _compute_gaps(parsed: dict) -> list[str]:
     return [g for g in prompts.GAP_ORDER if g in gaps]
 
 
-def _parse_answer(value: str, question_id: str) -> dict:
+def _parse_answer(value: Any, question_id: str) -> dict:
+    if isinstance(value, dict):
+        value = str(value.get("answer") or value.get("text") or value)
+    elif not isinstance(value, str):
+        value = str(value)
     extracted = heuristics.extract_from_text(value)
     parsed = {}
     if question_id == "stack":
