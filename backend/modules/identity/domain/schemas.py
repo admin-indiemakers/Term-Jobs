@@ -44,6 +44,7 @@ class VendorEngagementsIn(BaseModel):
     engagements: list[VendorEngagementItem] = Field(default_factory=list)
 
 class UserCreate(BaseModel):
+    phone: str = ''
     email: str = Field(..., min_length=3, max_length=255)
     name: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=4, max_length=128)
@@ -54,6 +55,7 @@ class UserCreate(BaseModel):
     candidate_id: str = ""
 
 class UserUpdate(BaseModel):
+    phone: str | None = None
     email: str | None = Field(None, min_length=3, max_length=255)
     name: str | None = Field(None, min_length=1, max_length=255)
     password: str | None = Field(None, min_length=4, max_length=128)
@@ -74,6 +76,7 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    phone: str = ''
     email: str
     name: str
     role: str
@@ -93,6 +96,7 @@ class UserResponse(BaseModel):
 
 class UserListResponse(BaseModel):
     id: str
+    phone: str = ''
     email: str
     name: str
     role: str

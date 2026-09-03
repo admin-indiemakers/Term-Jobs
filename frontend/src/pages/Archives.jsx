@@ -12,14 +12,16 @@ import {
   User,
   AlertCircle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Calendar,
+  Clock
 } from 'lucide-react';
 
 function formatDate(iso) {
   if (!iso) return '—';
   try {
     const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso.slice(0, 10);
+    if (isNaN(d.getTime())) return String(iso).slice(0, 10);
     return d.toLocaleDateString('en-US', {
       day: 'numeric',
       month: 'short',
@@ -28,7 +30,7 @@ function formatDate(iso) {
       minute: '2-digit',
     });
   } catch {
-    return iso;
+    return String(iso);
   }
 }
 
@@ -89,71 +91,64 @@ export default function Archives() {
     setSuccess('');
     try {
       await request(`/api/auth/archives/${item.id}`, { method: 'DELETE', token });
-      setSuccess(`"${item.displayName}" has been permanently deleted.`);
+      setSuccess(`"${item.displayName}" permanently deleted.`);
       setConfirmPermanentDelete(null);
       load();
     } catch (err) {
-      setError(err.message || 'Failed to permanently delete');
+      setError(err.message || 'Failed to delete archived item');
     } finally {
       setActing(null);
     }
   };
 
-  const tenantCount = useMemo(() => archives.filter((a) => a.item_type === 'tenant').length, [archives]);
-  const userCount = useMemo(() => archives.filter((a) => a.item_type === 'user').length, [archives]);
-
   const filteredArchives = useMemo(() => {
     return archives.filter((a) => {
       if (filter === 'tenant' && a.item_type !== 'tenant') return false;
       if (filter === 'user' && a.item_type !== 'user') return false;
-
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      const data = a.original_data || {};
-      const isTenant = a.item_type === 'tenant';
-      const displayName = (isTenant ? data.name : (data.name || data.email) || '').toLowerCase();
-      const email = (data.email || '').toLowerCase();
-      const id = (data.id || a.id || '').toLowerCase();
-      return displayName.includes(q) || email.includes(q) || id.includes(q);
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const data = a.original_data || {};
+        const matchName = (data.name || '').toLowerCase().includes(q);
+        const matchEmail = (data.email || '').toLowerCase().includes(q);
+        const matchId = (a.id || '').toLowerCase().includes(q);
+        const matchReason = (a.reason || '').toLowerCase().includes(q);
+        return matchName || matchEmail || matchId || matchReason;
+      }
+      return true;
     });
   }, [archives, filter, searchQuery]);
 
-  if (user?.role !== 'Super Admin') {
-    return (
-      <div className="w-full p-8 text-center text-xs text-red-600 font-semibold">
-        Only Super Admins can view archives.
-      </div>
-    );
-  }
+  const tenantCount = useMemo(() => archives.filter((a) => a.item_type === 'tenant').length, [archives]);
+  const userCount = useMemo(() => archives.filter((a) => a.item_type === 'user').length, [archives]);
 
   return (
     <div
-      className="w-full min-w-0 pb-16 space-y-5 text-left"
+      className="p-6 sm:p-8 space-y-6 max-w-7xl mx-auto min-h-screen"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Header Banner Card */}
+      {/* Top Banner Card */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <button
               type="button"
               onClick={() => navigate('/dashboard/superadmin')}
-              className="text-xs font-semibold text-gray-500 hover:text-black flex items-center gap-1 transition-colors"
+              className="text-xs font-semibold text-gray-500 hover:text-black flex items-center gap-1 transition-colors cursor-pointer"
             >
               <ArrowLeft size={13} />
-              Dashboard
+              Super Admin Workspace
             </button>
             <span className="text-gray-300">•</span>
             <span className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase">
-              PLATFORM ARCHIVES & RECOVERY
+              DATA RETENTION
             </span>
           </div>
 
           <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight">
-            Archives
+            Archived Records
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
-            Deleted companies and user accounts are stored here before permanent removal. You can restore or permanently delete them.
+            Audit and restore deleted companies and user accounts. Records stored here can be restored back to production with a single click.
           </p>
 
           <div className="flex items-center gap-2 mt-4 flex-wrap">
@@ -163,10 +158,16 @@ export default function Archives() {
             <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
               {archives.length} archived records
             </span>
+            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+              {tenantCount} companies
+            </span>
+            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+              {userCount} user accounts
+            </span>
           </div>
         </div>
 
-        <div className="shrink-0">
+        <div className="flex items-center gap-3 shrink-0">
           <Link
             to="/dashboard/superadmin"
             className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5"
@@ -229,16 +230,16 @@ export default function Archives() {
         </div>
       )}
 
-      {/* Main Archives Table Card */}
+      {/* Archives Data Table Card */}
       <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-        {/* Filter Pills + Search Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Filter Controls Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-gray-100">
           {/* Tabs */}
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setFilter('all')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${filter === 'all'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${filter === 'all'
                 ? 'bg-black text-white shadow-2xs'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
@@ -248,7 +249,7 @@ export default function Archives() {
             <button
               type="button"
               onClick={() => setFilter('tenant')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${filter === 'tenant'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${filter === 'tenant'
                 ? 'bg-black text-white shadow-2xs'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
@@ -258,7 +259,7 @@ export default function Archives() {
             <button
               type="button"
               onClick={() => setFilter('user')}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${filter === 'user'
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${filter === 'user'
                 ? 'bg-black text-white shadow-2xs'
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
@@ -291,8 +292,8 @@ export default function Archives() {
           <div
             className="overflow-x-auto overflow-y-auto pr-1"
             style={{
-              maxHeight: '350px',
-              minHeight: '240px',
+              maxHeight: '480px',
+              minHeight: '260px',
             }}
           >
             <table className="w-full text-left text-xs border-collapse relative">
@@ -303,7 +304,8 @@ export default function Archives() {
                   <th className="py-3 px-3">DETAILS</th>
                   <th className="py-3 px-3">ARCHIVED BY</th>
                   <th className="py-3 px-3">REASON</th>
-                  <th className="py-3 px-3">DATE</th>
+                  <th className="py-3 px-3">JOINED DATE</th>
+                  <th className="py-3 px-3">ENDED DATE</th>
                   <th className="py-3 px-3 text-right">ACTIONS</th>
                 </tr>
               </thead>
@@ -317,6 +319,9 @@ export default function Archives() {
                     : `${data.email || '—'} • ${data.role || 'User'} • ID: ${(data.id || a.id || '').slice(0, 8)}`;
                   const isActing = acting === a.id;
                   const itemPayload = { id: a.id, displayName };
+
+                  const joinedDate = data.created_at || data.joined_at || data.joined_date || a.created_at;
+                  const endedDate = a.archived_at || data.deleted_at || data.ended_date || data.ended_at;
 
                   return (
                     <tr key={a.id} className="hover:bg-gray-50/60 transition-colors">
@@ -347,17 +352,22 @@ export default function Archives() {
 
                       {/* Archived By */}
                       <td className="py-3.5 px-3">
-                        <span className="text-gray-600 font-medium">Super Admin</span>
+                        <span className="text-gray-600 font-medium">{a.archived_by || 'Super Admin'}</span>
                       </td>
 
                       {/* Reason */}
                       <td className="py-3.5 px-3">
-                        <span className="text-gray-500">{a.reason || 'Deleted by Super Admin'}</span>
+                        <span className="text-gray-500">{a.reason || 'Deleted by admin'}</span>
                       </td>
 
-                      {/* Date */}
+                      {/* Joined Date */}
                       <td className="py-3.5 px-3">
-                        <span className="text-gray-500 font-medium">{formatDate(a.archived_at)}</span>
+                        <span className="text-gray-600 font-medium">{formatDate(joinedDate)}</span>
+                      </td>
+
+                      {/* Ended Date */}
+                      <td className="py-3.5 px-3">
+                        <span className="text-gray-600 font-medium">{formatDate(endedDate)}</span>
                       </td>
 
                       {/* Actions (Restore & Permanent Delete) */}
@@ -392,72 +402,92 @@ export default function Archives() {
         )}
       </div>
 
-      {/* Restore Confirmation Modal */}
+      {/* Confirmation Modal Popup: Restore */}
       {confirmRestore && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
           onClick={() => setConfirmRestore(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 max-w-sm w-full text-left"
+            className="relative w-full max-w-[420px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-base font-bold text-gray-900">Restore archive?</h3>
-            <p className="text-xs text-gray-500 mt-1 mb-5">
-              This will restore <strong>{confirmRestore.displayName}</strong> and bring it back to active status on the platform.
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-200">
+                <RotateCcw size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 tracking-tight">Restore Record</h3>
+                <p className="text-xs text-gray-500">Restore back to production</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 mb-6 leading-relaxed">
+              Are you sure you want to restore <strong className="text-gray-900">{confirmRestore.displayName}</strong>?
+              This record will immediately become active again.
             </p>
-            <div className="flex items-center justify-end gap-2">
+
+            <div className="flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => setConfirmRestore(null)}
-                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => handleRestore(confirmRestore)}
-                disabled={acting === confirmRestore.id}
-                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                {acting === confirmRestore.id && <Loader2 size={13} className="animate-spin text-white" />}
-                <span>Restore Item</span>
+                <RotateCcw size={13} />
+                <span>Confirm Restore</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Permanent Delete Confirmation Modal */}
+      {/* Confirmation Modal Popup: Permanent Delete */}
       {confirmPermanentDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
           onClick={() => setConfirmPermanentDelete(null)}
         >
           <div
-            className="bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 max-w-sm w-full text-left"
+            className="relative w-full max-w-[420px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-base font-bold text-gray-900">Permanently delete?</h3>
-            <p className="text-xs text-gray-500 mt-1 mb-5">
-              This will permanently destroy <strong>{confirmPermanentDelete.displayName}</strong> from the database. This action <strong>CANNOT</strong> be undone.
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-200">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900 tracking-tight">Permanently Delete</h3>
+                <p className="text-xs text-gray-500">Irreversible action</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-600 mb-6 leading-relaxed">
+              Are you sure you want to permanently delete <strong className="text-gray-900">{confirmPermanentDelete.displayName}</strong>?
+              This action cannot be undone and will erase all associated archived data.
             </p>
-            <div className="flex items-center justify-end gap-2">
+
+            <div className="flex items-center justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => setConfirmPermanentDelete(null)}
-                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                className="px-4 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => handlePermanentDelete(confirmPermanentDelete)}
-                disabled={acting === confirmPermanentDelete.id}
-                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
               >
-                {acting === confirmPermanentDelete.id && <Loader2 size={13} className="animate-spin text-white" />}
-                <span>Delete Forever</span>
+                <Trash2 size={13} />
+                <span>Permanently Delete</span>
               </button>
             </div>
           </div>

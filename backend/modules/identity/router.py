@@ -1074,6 +1074,10 @@ def list_archives(
     docs = list(_archives().find().sort("archived_at", -1).limit(200))
     for d in docs:
         d.pop("_id", None)
+        if isinstance(d.get("original_data"), dict):
+            for k, v in list(d["original_data"].items()):
+                if hasattr(v, "isoformat"):
+                    d["original_data"][k] = v.isoformat()
     return docs
 
 
@@ -1361,3 +1365,109 @@ def register_director(
             "is_active": False,
         }
     }
+
+
+def _admin_logs():
+    from modules.shared.db import db as _db
+    return _db["admin_audit_logs"]
+
+
+def _log_admin_action(admin, action: str, target_type: str, target_name: str, details: str = ""):
+    """Records an administrative audit log entry in MongoDB."""
+    import uuid
+    from datetime import datetime, timezone
+    doc = {
+        "id": f"log_{uuid.uuid4().hex[:12]}",
+        "admin_id": getattr(admin, "id", "") or "system",
+        "admin_name": getattr(admin, "name", "") or "Super Admin",
+        "admin_email": getattr(admin, "email", "") or "admin@platform.com",
+        "action": action,
+        "target_type": target_type,
+        "target_name": target_name,
+        "details": details,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "ip_address": "Platform Console",
+    }
+    _admin_logs().insert_one(doc)
+    return doc
+
+
+class SuperAdminCreate(BaseModel):
+    name: str
+    email: str
+    phone: str = ""
+    password: str
+
+
+@router.post("/superadmins", response_model=UserResponse)
+def create_superadmin(
+    body: SuperAdminCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Super Admin provisions another Super Administrator account."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins can create Super Admin accounts")
+    
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(status_code=400, detail="Valid email address is required")
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=400, detail="Full name is required")
+    if not body.password or len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Account with this email already exists")
+
+    user = User(
+        email=email,
+        name=body.name.strip(),
+        password_hash=hash_password(body.password),
+        role="Super Admin",
+        phone=body.phone.strip(),
+        tenant_id=current_user.tenant_id or "system",
+        is_active=True,
+        created_by=current_user.id,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    _log_admin_action(
+        current_user,
+        "CREATE_ADMIN",
+        "Super Admin",
+        user.name,
+        f"Provisioned Super Admin account for {user.email} (Phone: {user.phone or 'N/A'})"
+    )
+    _cache.invalidate_prefix("users:")
+
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        role=user.role,
+        tenant_id=user.tenant_id,
+        tenant_name="Platform Administration",
+        tenant_type="system",
+        department="Platform Admin",
+        created_by=user.created_by,
+        is_active=user.is_active,
+        phone=user.phone or "",
+    )
+
+
+@router.get("/admin-logs")
+def list_admin_logs(
+    current_user: User = Depends(get_current_user),
+):
+    """List administrative audit trail logs. Super Admin only."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins can view audit logs")
+    
+    docs = list(_admin_logs().find().sort("timestamp", -1).limit(200))
+    for d in docs:
+        d.pop("_id", None)
+    return docs

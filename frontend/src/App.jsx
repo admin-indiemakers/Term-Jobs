@@ -37,6 +37,7 @@ import TeamOverview from './pages/workforce/TeamOverview';
 import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Archives from './pages/Archives';
+import AdminAccounts from './pages/AdminAccounts';
 
 
 function FullScreenLoader() {
@@ -135,6 +136,8 @@ export default function App() {
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
           <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
+          <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
+          <Route path="superadmin/admins" element={<AdminAccounts />} />
           <Route path="superadmin/archives" element={<Archives />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>

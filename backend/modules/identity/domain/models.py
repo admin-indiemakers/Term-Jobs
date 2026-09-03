@@ -31,6 +31,7 @@ class User(Model):
         "password_hash": "",
         "role": "",  # Admin, HR, Hiring Manager, Recruiter
         "department": "",  # optional department, e.g. Engineering, Sales
+        "phone": "",
         "created_by": "",  # id of the user who provisioned this account ("" for Admin)
         "is_active": True,
         "candidate_limit": None,  # per-account cap on vendor submissions; None = platform default
@@ -45,6 +46,7 @@ class User(Model):
     password_hash = Column("password_hash")
     role = Column("role")
     department = Column("department")
+    phone = Column("phone")
     created_by = Column("created_by")
     is_active = Column("is_active")
     candidate_limit = Column("candidate_limit")

@@ -219,6 +219,7 @@ export default function DashboardLayout() {
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
               { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
               { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
+              { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, icon: Icons.PortalAccess },
               { to: '/dashboard/superadmin/archives', label: 'Archives', end: true, icon: Icons.Shortlisted },
             ]
             : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
@@ -450,6 +451,20 @@ export default function DashboardLayout() {
                 <div className="flex items-center gap-2.5">
                   <Icons.CandidatesBank size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">Vendor Accounts</span>
+                </div>
+              </NavLink>
+
+              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
+                ADMINISTRATION
+              </div>
+              <NavLink
+                to="/dashboard/superadmin/admin-accounts"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.PortalAccess size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">Admin Accounts</span>
                 </div>
               </NavLink>
 
