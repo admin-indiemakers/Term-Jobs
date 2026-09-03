@@ -543,9 +543,8 @@ export default function ManagePartnerVendors() {
                       </div>
                     )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
             </div>
           </div>
         )}
@@ -565,7 +564,6 @@ export default function ManagePartnerVendors() {
             <span>Save Vendor Partnerships</span>
           </button>
         </div>
->>>>>>> 5c06619 (feat: implement expense receipt preview modal, add candidate submission limits, and introduce background sync scripts)
       </div>
 
       {/* Confirmation Modal Popup for Single Vendor Engagement */}
