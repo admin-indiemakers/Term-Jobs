@@ -1,3 +1,4 @@
+import LandingPage from './pages/LandingPage';
 import InterviewRequests from './pages/recruiter/InterviewRequests';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -90,7 +91,7 @@ export default function App() {
         <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
-        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/" element={<LandingPage />} />
         <Route
           path="/dashboard"
           element={
