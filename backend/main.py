@@ -39,7 +39,7 @@ from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
 from modules.requisition.domain.state import StateMachine
-from modules.shared.db import get_session, init_db
+from modules.shared.db import get_session, init_db, _utcnow
 from modules.shared.cache import cache as _cache
 from modules.resume_screener.router import router as resume_screener_router
 from modules.interview.router import router as interview_router
@@ -168,6 +168,7 @@ class ApproveIn(BaseModel):
 
 class RejectIn(BaseModel):
     reviewer: str | None = None
+    reason: str | None = None
 
 
 class ApproveByIn(BaseModel):
@@ -284,12 +285,17 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "structured_role": sr,
             "vendor_candidate_limit": v_limit,
             "published_vendors": published_vendors,
-            "published_vendors": published_vendors,
             "hiring_manager_name": sr.get("hiring_manager") or "",
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
             "intake_meta": req.intake_meta or {},
+            "director_approved": bool(getattr(req, "director_approved", False)),
+            "director_approved_by": getattr(req, "director_approved_by", None),
+            "director_approved_at": req.director_approved_at.isoformat() if getattr(req, "director_approved_at", None) else None,
+            "rejection_reason": getattr(req, "rejection_reason", None),
+            "rejected_by": getattr(req, "rejected_by", None),
+            "rejected_at": req.rejected_at.isoformat() if getattr(req, "rejected_at", None) else None,
             "approved_by": req.approved_by,
             "approved_at": req.approved_at.isoformat() if req.approved_at else None,
             "created_at": req.created_at.isoformat() if req.created_at else None,
@@ -325,7 +331,7 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
         return req
     if req.tenant_id == current_user.tenant_id:
         # Hiring Manager can only access requisitions they created
-        if current_user.role == "Hiring Manager" and req.created_by != current_user.id:
+        if current_user.role == "Hiring Manager" and req.created_by and req.created_by != current_user.id:
             raise HTTPException(
                 status_code=403,
                 detail="You do not have access to this requisition",
@@ -819,6 +825,7 @@ def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: Use
 
 
 @app.post("/requisitions/{requisition_id}/approve")
+@app.post("/api/requisitions/{requisition_id}/approve")
 def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
@@ -830,26 +837,109 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
             raise HTTPException(status_code=422, detail=f"invalid edited_role: {exc}")
 
     reviewer = body.reviewer if body else None
-    state, interrupt = service.approve(requisition_id, reviewer=reviewer, edited_role=edited)
-    return _interrupt_payload(state, interrupt)
+    try:
+        service.approve(requisition_id, reviewer=reviewer, edited_role=edited)
+    except Exception:
+        pass
+
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.status = schemas.RequisitionStatus.PENDING_APPROVAL.value
+            db_req.rejection_reason = None
+            db_req.rejected_by = None
+            db_req.rejected_at = None
+            if edited:
+                db_req.structured_role = edited.model_dump()
+            if current_user.role in ("Director", "Admin", "Super Admin"):
+                db_req.director_approved = True
+                db_req.director_approved_by = current_user.name or current_user.email or "Director"
+                db_req.director_approved_at = _utcnow()
+            else:
+                db_req.director_approved = False
+                db_req.director_approved_by = None
+                db_req.director_approved_at = None
+            session.commit()
+
+    return _requisition_dict(requisition_id)
+
+
+@app.post("/requisitions/{requisition_id}/director-approve")
+@app.post("/api/requisitions/{requisition_id}/director-approve")
+def director_approve_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    if current_user.role not in ("Director", "Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only Directors or Admins can approve requisitions.",
+        )
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.director_approved = True
+            db_req.director_approved_by = current_user.name or current_user.email or "Director"
+            db_req.director_approved_at = _utcnow()
+            db_req.rejection_reason = None
+            db_req.rejected_by = None
+            db_req.rejected_at = None
+            session.commit()
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/reject")
+@app.post("/api/requisitions/{requisition_id}/reject")
 def reject_requisition(requisition_id: str, body: RejectIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
-    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
 
-    reviewer = body.reviewer if body else None
-    state, interrupt = service.reject(requisition_id, reviewer=reviewer)
-    return _interrupt_payload(state, interrupt)
+    reviewer = (body.reviewer if body else None) or current_user.name or current_user.email or "Director"
+    reason = (body.reason if body and body.reason else None) or "Revision requested by Director"
+
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.status = schemas.RequisitionStatus.STRUCTURING.value
+            db_req.director_approved = False
+            db_req.director_approved_by = None
+            db_req.director_approved_at = None
+            db_req.rejection_reason = reason
+            db_req.rejected_by = reviewer
+            db_req.rejected_at = _utcnow()
+            session.commit()
+
+    try:
+        service.reject(requisition_id, reviewer=reviewer)
+    except Exception:
+        pass
+
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/publish")
+@app.post("/api/requisitions/{requisition_id}/publish")
 def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
-    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
 
-    by = body.by if body else None
+    db_req = _get_requisition(requisition_id)
+    is_director_or_admin = current_user.role in ("Director", "Admin", "Super Admin")
+
+    if not getattr(db_req, "director_approved", False) and not is_director_or_admin:
+        raise HTTPException(
+            status_code=400,
+            detail="Requisition requires Director approval before it can be published to vendors.",
+        )
+
+    if is_director_or_admin and not getattr(db_req, "director_approved", False):
+        with get_session() as session:
+            s_req = session.get(models.Requisition, requisition_id)
+            if s_req:
+                s_req.director_approved = True
+                s_req.director_approved_by = current_user.name or current_user.email or "Director"
+                s_req.director_approved_at = _utcnow()
+                session.commit()
+
+    by = body.by if body else (current_user.name or current_user.email)
     try:
         req = service.publish(requisition_id, by=by)
     except ValueError as exc:

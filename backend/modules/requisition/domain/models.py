@@ -49,6 +49,12 @@ class Requisition(Model):
         "refinement_log": list,
         "intake_meta": dict,
         "vendor_candidate_limit": 1,
+        "director_approved": False,
+        "director_approved_by": None,
+        "director_approved_at": None,
+        "rejection_reason": None,
+        "rejected_by": None,
+        "rejected_at": None,
         "approved_by": None,
         "approved_at": None,
         "created_at": _utcnow,
@@ -70,6 +76,12 @@ class Requisition(Model):
     refinement_log = Column("refinement_log")
     intake_meta = Column("intake_meta")
     vendor_candidate_limit = Column("vendor_candidate_limit")
+    director_approved = Column("director_approved")
+    director_approved_by = Column("director_approved_by")
+    director_approved_at = Column("director_approved_at")
+    rejection_reason = Column("rejection_reason")
+    rejected_by = Column("rejected_by")
+    rejected_at = Column("rejected_at")
     approved_by = Column("approved_by")
     approved_at = Column("approved_at")
     created_at = Column("created_at")

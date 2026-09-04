@@ -117,6 +117,13 @@ const Icons = {
       <path d="M13 16H8"/>
     </svg>
   ),
+  FileCheck: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <path d="m9 15 2 2 4-4"/>
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -130,6 +137,9 @@ export default function DashboardLayout() {
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
+
+  // Dynamic live count badges for Director / Admin
+  const [directorCounts, setDirectorCounts] = useState({ pendingApprovals: 0, requisitions: 0 });
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
@@ -155,6 +165,16 @@ export default function DashboardLayout() {
           pendingExpenses: pendingExp,
         });
       }).catch(() => {});
+    }
+
+    if ((user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin') && token) {
+      request('/requisitions', { token })
+        .then((reqs) => {
+          const list = Array.isArray(reqs) ? reqs : [];
+          const pending = list.filter((r) => (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved).length;
+          setDirectorCounts({ pendingApprovals: pending, requisitions: list.length });
+        })
+        .catch(() => {});
     }
   }, [user?.role, token]);
 
@@ -212,7 +232,11 @@ export default function DashboardLayout() {
           { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
         ]
         : userRole === 'Director'
-          ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
+          ? [
+              { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/director/approvals', label: 'Requisition Approvals', end: false, icon: Icons.FileCheck, badge: directorCounts.pendingApprovals },
+              { to: '/dashboard/director/requisitions', label: 'All Requisitions', end: false, icon: Icons.Requisitions },
+            ]
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },

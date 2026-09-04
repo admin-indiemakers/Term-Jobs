@@ -81,6 +81,8 @@ export default function RequisitionDetail() {
   const [shortlistLoading, setShortlistLoading] = useState(false);
   const [activeReviewTab, setActiveReviewTab] = useState('structured'); // 'structured' | 'jd'
   const [showRefineBox, setShowRefineBox] = useState(false);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -128,6 +130,9 @@ export default function RequisitionDetail() {
   const rawStatus = req?.status || 'Draft';
   const status = NORMALIZED[rawStatus] || rawStatus;
   const structuredRole = draftRole || req?.structured_role;
+
+  const isDirectorOrAdmin = user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin';
+  const isDirectorApproved = Boolean(req?.director_approved);
 
   const currentStepIndex = Math.max(
     0,
@@ -212,10 +217,64 @@ export default function RequisitionDetail() {
         body: payload,
         token,
       });
-      setInfo('Requisition criteria approved and moved to review.');
+      setInfo(req?.rejection_reason ? 'Requisition resubmitted for Director approval.' : 'Requisition submitted for Director approval.');
       load();
     } catch (err) {
       setError(err.message || 'Failed to approve requisition');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const handleDirectorApprove = async () => {
+    setBusy('director-approve');
+    setError('');
+    setInfo('');
+    try {
+      const data = await request(`/requisitions/${id}/director-approve`, {
+        method: 'POST',
+        token,
+      });
+      setReq((prev) => ({ ...prev, ...data }));
+      setInfo('Requisition approved by Director! Ready to publish.');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to approve requisition');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const handleOpenRejectModal = () => {
+    setShowRejectModal(true);
+    setRejectReason('');
+    setError('');
+  };
+
+  const handleConfirmReject = async (e) => {
+    if (e) e.preventDefault();
+    if (!rejectReason.trim()) {
+      setError('Please provide a reason for rejecting this requisition.');
+      return;
+    }
+    setBusy('reject');
+    setError('');
+    setInfo('');
+    try {
+      await request(`/requisitions/${id}/reject`, {
+        method: 'POST',
+        body: {
+          reviewer: user?.name || user?.email,
+          reason: rejectReason.trim(),
+        },
+        token,
+      });
+      setShowRejectModal(false);
+      setRejectReason('');
+      setInfo('Requisition rejected and returned for Hiring Manager revision with feedback.');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to reject requisition');
     } finally {
       setBusy('');
     }
@@ -376,15 +435,48 @@ export default function RequisitionDetail() {
           )}
 
           {status === 'PendingApproval' && (
-            <button
-              type="button"
-              onClick={handlePublish}
-              disabled={Boolean(busy)}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Sparkles size={13} />
-              <span>{busy === 'publish' ? 'Publishing...' : 'Publish to Vendors →'}</span>
-            </button>
+            isDirectorApproved ? (
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={Boolean(busy)}
+                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles size={13} />
+                <span>{busy === 'publish' ? 'Publishing...' : 'Publish to Vendors →'}</span>
+              </button>
+            ) : isDirectorOrAdmin ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenRejectModal}
+                  disabled={Boolean(busy)}
+                  className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <XCircle size={13} />
+                  <span>Reject ✕</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDirectorApprove}
+                  disabled={Boolean(busy)}
+                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Check size={13} />
+                  <span>{busy === 'director-approve' ? 'Approving...' : 'Approve Requisition (Director) ✓'}</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-400 text-xs font-bold border border-gray-200 cursor-not-allowed flex items-center gap-1.5"
+                title="Awaiting Director approval before publishing"
+              >
+                <Clock size={13} />
+                <span>Awaiting Director Approval</span>
+              </button>
+            )
           )}
 
           {status === 'Published' && (
@@ -399,6 +491,105 @@ export default function RequisitionDetail() {
           )}
         </div>
       </div>
+
+      {/* Director Rejection Alert Banner for Hiring Manager */}
+      {req?.rejection_reason && (
+        <div className="p-5 bg-gradient-to-r from-red-50 via-amber-50 to-red-50 border-2 border-red-200 rounded-2xl flex flex-col sm:flex-row items-start justify-between gap-4 text-red-950 shadow-xs">
+          <div className="flex items-start gap-3.5">
+            <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 text-red-600 flex items-center justify-center shrink-0 mt-0.5 font-bold">
+              <AlertCircle size={22} />
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black uppercase tracking-wider text-red-700 bg-red-100 border border-red-300 px-2.5 py-0.5 rounded-md">
+                  ❌ Director Requested Revision
+                </span>
+                {req.rejected_by && (
+                  <span className="text-[11px] font-semibold text-gray-600">
+                    Reviewed by <strong className="text-gray-900">{req.rejected_by}</strong> {req.rejected_at ? `on ${formatDate(req.rejected_at)}` : ''}
+                  </span>
+                )}
+              </div>
+              <div className="text-sm font-extrabold text-gray-900 pt-1">
+                Reason: "{req.rejection_reason}"
+              </div>
+              <p className="text-xs text-gray-700 font-medium leading-relaxed">
+                Please edit the structured role criteria or job parameters below to address the Director's feedback, then click <strong className="text-black font-extrabold">"Proceed to Approval →"</strong> to resubmit for Director approval.
+              </p>
+            </div>
+          </div>
+          {status !== 'PendingApproval' && (
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={Boolean(busy)}
+              className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 self-start sm:self-center"
+            >
+              <Check size={14} />
+              <span>{busy === 'approve' ? 'Resubmitting...' : 'Resubmit for Approval →'}</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Workflow Status Banner for Pending Approval */}
+      {status === 'PendingApproval' && (
+        isDirectorApproved ? (
+          <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl flex items-center gap-3 text-emerald-900 shadow-2xs">
+            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
+            <div>
+              <div className="text-xs font-bold text-emerald-950">
+                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''}
+              </div>
+              <p className="text-[11px] text-emerald-800 mt-0.5">
+                This requisition has been formally approved by the Director and is ready to be published to partner vendors.
+              </p>
+            </div>
+          </div>
+        ) : isDirectorOrAdmin ? (
+          <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <ShieldCheck size={20} className="shrink-0 text-amber-700" />
+              <div>
+                <div className="text-xs font-bold text-amber-950">Director Approval Required</div>
+                <p className="text-[11px] text-amber-800 mt-0.5">
+                  Submitted by Hiring Manager. As Director/Admin, approve publication or reject back for revision with reason.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleOpenRejectModal}
+                disabled={Boolean(busy)}
+                className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
+              >
+                <XCircle size={14} />
+                <span>Reject ✕</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDirectorApprove}
+                disabled={Boolean(busy)}
+                className="px-4 py-2 rounded-xl bg-amber-900 hover:bg-black text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check size={14} />
+                <span>{busy === 'director-approve' ? 'Approving...' : 'Approve Requisition (Director) ✓'}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 bg-blue-50 border border-blue-200/90 rounded-2xl flex items-center gap-3 text-blue-900 shadow-2xs">
+            <Clock size={20} className="shrink-0 text-blue-600" />
+            <div>
+              <div className="text-xs font-bold text-blue-950">⏳ Pending Director Approval</div>
+              <p className="text-[11px] text-blue-800 mt-0.5">
+                Submitted to the company Director for approval. Once approved, you will be able to publish this requisition to partner vendors.
+              </p>
+            </div>
+          </div>
+        )
+      )}
 
       {info && (
         <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
@@ -706,18 +897,37 @@ export default function RequisitionDetail() {
 
               {status === 'PendingApproval' && (
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Publish to Partners</div>
+                  <div className="font-bold text-gray-900">
+                    {isDirectorApproved ? 'Publish to Partners' : 'Director Approval Required'}
+                  </div>
                   <p className="text-[11px] text-gray-500">
-                    Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.
+                    {isDirectorApproved
+                      ? 'Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.'
+                      : 'Director approval is required before this requisition can be published to partner vendors.'}
                   </p>
-                  <button
-                    type="button"
-                    onClick={handlePublish}
-                    disabled={Boolean(busy)}
-                    className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                  >
-                    Publish to Vendors →
-                  </button>
+                  {isDirectorApproved ? (
+                    <button
+                      type="button"
+                      onClick={handlePublish}
+                      disabled={Boolean(busy)}
+                      className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
+                    >
+                      Publish to Vendors →
+                    </button>
+                  ) : isDirectorOrAdmin ? (
+                    <button
+                      type="button"
+                      onClick={handleDirectorApprove}
+                      disabled={Boolean(busy)}
+                      className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
+                    >
+                      Approve Requisition (Director) ✓
+                    </button>
+                  ) : (
+                    <div className="mt-2 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                      ⏳ Awaiting Director approval before publication.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -757,6 +967,69 @@ export default function RequisitionDetail() {
           </div>
         </div>
       </div>
+
+      {/* Director Rejection Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-gray-100 text-left animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-red-600 font-extrabold text-sm">
+                <AlertCircle size={18} />
+                <span>Reject Requisition & Request Changes</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRejectModal(false)}
+                className="text-gray-400 hover:text-black font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div>
+              <h3 className="font-extrabold text-base text-gray-900">
+                {req.title || structuredRole?.title || 'Untitled Requisition'}
+              </h3>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                REQ #{req.id.slice(0, 8)} • Provide specific feedback on what the Hiring Manager needs to revise.
+              </p>
+            </div>
+
+            <form onSubmit={handleConfirmReject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
+                  Rejection Reason / Required Modifications <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows="4"
+                  required
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="e.g. Rate ceiling of ₹1200 is above budget. Please reduce internal ceiling to ₹900/hr or adjust required seniority level."
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-red-500 focus:bg-white transition-all font-medium"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowRejectModal(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!rejectReason.trim() || busy === 'reject'}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <span>{busy === 'reject' ? 'Rejecting...' : 'Confirm Rejection & Send Reason ✕'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

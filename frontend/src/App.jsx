@@ -130,7 +130,9 @@ export default function App() {
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="admin/vendors" element={<ManagePartnerVendors />} />
-          <Route path="director" element={<DirectorDashboard />} />
+          <Route path="director" element={<DirectorDashboard view="overview" />} />
+          <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
+          <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />

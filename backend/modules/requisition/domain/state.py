@@ -21,6 +21,7 @@ _TRANSITIONS: dict[RequisitionStatus, set[RequisitionStatus]] = {
     },
     RequisitionStatus.PENDING_APPROVAL: {
         RequisitionStatus.PUBLISHED,
+        RequisitionStatus.STRUCTURING,
         RequisitionStatus.DRAFT,
     },
     RequisitionStatus.PUBLISHED: {RequisitionStatus.CLOSED},

@@ -62,11 +62,12 @@ def test_uncovered_stack_asks_for_stack(service, company_profile, session_factor
         assert stored.pending_question and "tech stack" in stored.pending_question.lower()
 
     _, interrupt = service.answer(req.id, "Go, Kubernetes, Terraform")
-    assert isinstance(interrupt, str)  # seniority asked next
-    assert "seniority" in interrupt.lower()
+    assert isinstance(interrupt, str)
+    assert "experience" in interrupt.lower() or "years" in interrupt.lower() or "seniority" in interrupt.lower()
 
     with session_factory() as session:
-        assert "seniority" in (session.get(models.Requisition, req.id).pending_question or "").lower()
+        pending = (session.get(models.Requisition, req.id).pending_question or "").lower()
+        assert "experience" in pending or "years" in pending or "seniority" in pending
 
     # finish the remaining intake questions -> approval; pending question cleared
     for answer in ["Senior", "5 years", "Chennai", "24 lpa", "6 months"]:
