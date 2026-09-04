@@ -679,39 +679,62 @@ export default function CandidatePortal() {
     }
   };
 
+  // Determine if work order is active
+  const isWorkOrderActive = Boolean(
+    data?.has_assignment &&
+    data?.work_order &&
+    (data.work_order.status === 'ACTIVE' || data.work_order.status === 'ACTIVATED')
+  );
+
   // Dynamic candidate & work order fallback
   const cand = data?.candidate || {
-    name: user.name || 'Sreehari P S',
-    first_name: (user.name || 'Sreehari').split(' ')[0],
-    id: candidateId || 'BEAR-c7a70f8a',
-    company: 'Bearitt',
-    vendor: 'Bridgeon',
-    requisition_title: 'DevOps Engineer',
-    status: 'ACTIVE',
-    active_badge: 'Active candidate',
+    name: user.name || 'Candidate',
+    first_name: (user.name || 'Candidate').split(' ')[0],
+    id: candidateId || '',
+    company: 'Company',
+    vendor: 'Vendor',
+    requisition_title: 'Contractor Role',
+    status: isWorkOrderActive ? 'ACTIVE' : 'PENDING_ACTIVATION',
+    active_badge: isWorkOrderActive ? 'Active candidate' : 'Pending Activation',
   };
 
   const wo = data?.work_order || {
-    work_order_number: 'WO-2026-00124',
-    requisition_title: cand.requisition_title || 'DevOps Engineer',
-    company_name: cand.company || 'Bearitt',
-    vendor_name: cand.vendor || 'Bridgeon',
-    start_date: '25 Aug 2026',
-    end_date: '25 Feb 2027',
+    work_order_number: 'Pending Activation',
+    requisition_title: cand.requisition_title || 'Contractor Role',
+    company_name: cand.company || 'Company',
+    vendor_name: cand.vendor || 'Vendor',
+    start_date: isWorkOrderActive ? '25 Aug 2026' : 'Awaiting Activation',
+    end_date: isWorkOrderActive ? '25 Feb 2027' : '—',
     weekly_hours: 40,
     location: 'Bangalore',
     work_arrangement: 'Hybrid',
-    reporting_manager: 'Arun Deshpande',
-    overtime_policy: 'Allowed',
+    reporting_manager: 'Hiring Manager',
+    overtime_policy: 'Standard Cap',
     engagement_type: 'Contractor',
-    status: 'ACTIVE',
+    status: isWorkOrderActive ? 'ACTIVE' : 'PENDING',
   };
 
-  const kpis = data?.kpi_stats || {
-    assignment: { label: 'ASSIGNMENT', value: 'ACTIVE', subtext: wo.work_order_number || 'WO-2026-00124' },
-    this_week: { label: 'THIS WEEK', value: `${calculatedMetrics.totalHours}h`, subtext: 'of 40 expected' },
-    timesheet: { label: 'TIMESHEET', value: '1', subtext: 'action required' },
-    expenses: { label: 'EXPENSES', value: `₹${expenseTotalThisMonth.toLocaleString()}`, subtext: 'this month' },
+  const kpis = {
+    assignment: {
+      label: 'ASSIGNMENT',
+      value: isWorkOrderActive ? (wo.status || 'ACTIVE') : 'PENDING ACTIVATION',
+      subtext: wo.work_order_number || 'Awaiting activation',
+    },
+    this_week: {
+      label: 'THIS WEEK',
+      value: isWorkOrderActive ? `${calculatedMetrics.totalHours}h` : '0h',
+      subtext: isWorkOrderActive ? 'of 40 expected' : 'Locked until activation',
+    },
+    timesheet: {
+      label: 'TIMESHEET',
+      value: isWorkOrderActive ? (data?.kpi_stats?.timesheet?.value || '1') : '0',
+      subtext: isWorkOrderActive ? 'action required' : 'Locked until activation',
+    },
+    expenses: {
+      label: 'EXPENSES',
+      value: isWorkOrderActive ? `₹${expenseTotalThisMonth.toLocaleString()}` : '₹0',
+      subtext: isWorkOrderActive ? 'this month' : 'Locked until activation',
+    },
   };
 
   const timeCap = data?.time_capture || {
@@ -739,9 +762,38 @@ export default function CandidatePortal() {
     ai_desc: 'Use your work pattern and previous entries to prepare your timesheet. You only confirm the final hours.',
   };
 
-  const radius = 32;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (timeCap.progress_pct / 100) * circumference;
+  const renderLockedFeatureCard = (featureTitle, featureDesc) => (
+    <div
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: 22,
+        border: '1px solid #E2E2DC',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+      }}
+      className="p-10 md:p-14 text-center space-y-4 max-w-xl mx-auto my-8 animate-in fade-in duration-200"
+    >
+      <div className="w-16 h-16 rounded-2xl bg-[#FEF3C7] text-[#D97706] flex items-center justify-center mx-auto shadow-xs border border-[#FDE68A]">
+        <Lock size={28} />
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-[1.3rem] font-extrabold text-[#0A0A0A] tracking-tight">
+          {featureTitle} Feature Locked
+        </h3>
+        <p className="text-[13px] text-[#737373] font-medium leading-relaxed max-w-md mx-auto">
+          {featureDesc ||
+            'Your Work Order is awaiting activation by your Hiring Manager. Once all verification gates are cleared and the Work Order is activated, this section will unlock automatically.'}
+        </p>
+      </div>
+      <div className="pt-2">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className="px-5 py-2.5 bg-[#0A0A0A] text-white text-[12px] font-bold rounded-xl hover:bg-[#262626] transition shadow-xs cursor-pointer"
+        >
+          Return to Dashboard Overview
+        </button>
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -1279,25 +1331,105 @@ export default function CandidatePortal() {
 
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="max-w-2xl">
-                  <div className="text-[10.5px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1.5">
-                    Term Jobs · Active Assignment
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10.5px] font-bold tracking-[0.14em] uppercase text-[#8A8A85]">
+                      Term Jobs · Candidate Portal
+                    </span>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold ${
+                        isWorkOrderActive ? 'bg-[#ECFDF5] text-[#059669]' : 'bg-[#FEF3C7] text-[#D97706]'
+                      }`}
+                    >
+                      {isWorkOrderActive ? 'Active Work Order' : 'Work Order Pending Activation'}
+                    </span>
                   </div>
                   <h1 className="text-[1.75rem] md:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
                     {greeting}, {cand.first_name || cand.name}.
                   </h1>
                   <p className="text-[13px] md:text-[13.5px] text-[#5A5A57] mt-2 font-normal leading-relaxed max-w-xl">
-                    Your onboarding is complete. Your assignment start date is {wo.start_date || '25 Aug 2026'}, and your workspace is ready.
+                    {isWorkOrderActive
+                      ? `Your onboarding is complete. Your assignment start date is ${wo.start_date || '25 Aug 2026'}, and your workspace is ready.`
+                      : 'Your candidate account is set up. Timesheets, attendance, and expense submissions will unlock automatically once your Hiring Manager activates your Work Order.'}
                   </p>
                 </div>
 
                 <div className="text-left md:text-right shrink-0">
-                  <div className="text-[1.45rem] md:text-[1.6rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                    {wo.start_date || '25 Aug 2026'}
+                  <div className="text-[1.4rem] md:text-[1.55rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                    {isWorkOrderActive ? (wo.start_date || '25 Aug 2026') : (wo.work_order_number || 'Pending')}
                   </div>
-                  <div className="text-[12px] text-[#737373] font-medium mt-0.5">Assignment starts</div>
+                  <div className="text-[12px] text-[#737373] font-medium mt-0.5">
+                    {isWorkOrderActive ? 'Assignment starts' : 'Work Order Status'}
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* PENDING ACTIVATION STEPPER CARD */}
+            {!isWorkOrderActive && (
+              <div
+                style={{
+                  backgroundColor: '#FEF3C7',
+                  borderRadius: 22,
+                  border: '1px solid #FDE68A',
+                  boxShadow: '0 2px 10px rgba(217, 119, 6, 0.05)',
+                }}
+                className="p-6 md:p-7 space-y-4 animate-in fade-in duration-200"
+              >
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-2xl bg-[#D97706] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Lock size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-[1.1rem] font-extrabold text-[#92400E] tracking-tight">
+                          Work Order Awaiting Activation
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D97706] text-white uppercase tracking-wider">
+                          Awaiting Manager Clearance
+                        </span>
+                      </div>
+                      <p className="text-[12.5px] text-[#B45309] mt-1 font-medium leading-relaxed max-w-2xl">
+                        Your onboarding verification checklist is being finalized. Dashboard tracking features will activate as soon as your Hiring Manager verifies clearance and activates Work Order {wo?.work_order_number || ''}.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Stepper */}
+                <div className="pt-3 border-t border-[#FDE68A]/60 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#10B981] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">1. Candidate Account</div>
+                      <div className="text-[11px] text-[#059669] font-semibold">Setup Complete</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#F59E0B] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      2
+                    </div>
+                    <div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">2. Verification Gates</div>
+                      <div className="text-[11px] text-[#D97706] font-semibold">Under Review</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#E5E7EB] text-[#9CA3AF] flex items-center justify-center text-[12px] font-bold shrink-0">
+                      3
+                    </div>
+                    <div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">3. Work Order Activation</div>
+                      <div className="text-[11px] text-[#6B7280] font-semibold">Pending Manager Sign-off</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 2. FOUR KPI STAT CARDS (WITH LEFT-TO-RIGHT EXPANDING UNDERLINE HOVER EFFECT) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
@@ -1691,6 +1823,12 @@ export default function CandidatePortal() {
             VIEW 2: TIMESHEET (MONOCHROME TIME FLOW ARCHITECTURE)
            ======================================================== */}
         {activeTab === 'timesheet' && (
+          !isWorkOrderActive ? (
+            renderLockedFeatureCard(
+              'Timesheet',
+              `Timesheet logging and hour submissions are locked until your Hiring Manager clears verification gates and activates Work Order ${wo?.work_order_number || ''}.`
+            )
+          ) : (
           <div className="space-y-4 pb-6">
             {/* Page Header */}
             <div className="flex items-center justify-between pt-1">
@@ -2253,7 +2391,7 @@ export default function CandidatePortal() {
               </div>
             )}
           </div>
-        )}
+        ))}
 
         {/* ========================================================
             VIEW 3: MY ASSIGNMENT (TIMELINE & BENTO BLOCKS)
@@ -2406,6 +2544,12 @@ export default function CandidatePortal() {
             VIEW 4: ATTENDANCE (MONOCHROME BENTO & CALENDAR DATA)
            ======================================================== */}
         {activeTab === 'attendance' && (
+          !isWorkOrderActive ? (
+            renderLockedFeatureCard(
+              'Attendance',
+              'Attendance tracking and monthly payable day records are locked until your Work Order is activated.'
+            )
+          ) : (
           <div className="space-y-4 pb-6">
             {/* Page Header */}
             <div className="flex items-center justify-between pt-1">
@@ -2597,12 +2741,18 @@ export default function CandidatePortal() {
               </div>
             </div>
           </div>
-        )}
+        ))}
 
         {/* ========================================================
             VIEW 5: EXPENSES (MONOCHROME BENTO FORM & SUMMARY)
            ======================================================== */}
         {activeTab === 'expenses' && (
+          !isWorkOrderActive ? (
+            renderLockedFeatureCard(
+              'Expenses',
+              'Expense submissions are locked until your Work Order is activated by your Hiring Manager.'
+            )
+          ) : (
           <div className="space-y-4 pb-6">
             {/* Page Header with + New Expense button */}
             <div className="flex items-center justify-between pt-1">
@@ -2915,7 +3065,7 @@ export default function CandidatePortal() {
               </div>
             </div>
           </div>
-        )}
+        ))}
       </main>
 
       {/* ========================================================

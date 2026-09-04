@@ -200,6 +200,15 @@ INTERNAL_ROLE_KEYS = {
 }
 
 
+def _num(val: Any) -> int | None:
+    if val in (None, ""):
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def _strip_internal_role(role: Any) -> Any:
     """Remove internal-only commercial fields before a vendor sees a role.
 
@@ -221,7 +230,19 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
             if prof:
                 company = _company_dict(prof)
-        sr = req.structured_role or {}
+        sr = dict(req.structured_role or {})
+        v_limit = (
+            _num((req.intake_meta or {}).get("prefill", {}).get("vendor_candidate_limit"))
+            or _num((req.intake_meta or {}).get("prefill", {}).get("candidate_limit"))
+            or _num(sr.get("vendor_candidate_limit"))
+            or _num(req.vendor_candidate_limit)
+            or _num(sr.get("headcount"))
+            or 1
+        )
+        if sr:
+            sr["vendor_candidate_limit"] = v_limit
+        if for_vendor:
+            sr = _strip_internal_role(sr)
 
         # Get engaged vendor consultancies receiving this published requisition
         published_vendors = []
@@ -259,8 +280,9 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
-            "structured_role": req.structured_role,
-            "vendor_candidate_limit": req.vendor_candidate_limit if req.vendor_candidate_limit is not None else (sr.get("vendor_candidate_limit") or sr.get("headcount") or 1),
+            "structured_role": sr,
+            "vendor_candidate_limit": v_limit,
+            "published_vendors": published_vendors,
             "published_vendors": published_vendors,
             "hiring_manager_name": sr.get("hiring_manager") or "",
             "generated_jd_markdown": req.generated_jd_markdown,

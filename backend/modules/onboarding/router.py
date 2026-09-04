@@ -322,6 +322,19 @@ def _get_or_create_onboarding_doc(candidate_id: str) -> dict:
         ]
     })
     if doc:
+        if not doc.get("activation_gates"):
+            default_gates = [
+                {"id": "pan_aadhaar_bank", "label": "PAN, Aadhaar, bank details", "responsible": "Worker", "type": "blocking", "status": "pending"},
+                {"id": "nda_ip", "label": "NDA and IP assignment", "responsible": "Worker", "type": "blocking", "status": "pending"},
+                {"id": "pf_esic", "label": "PF and ESIC declaration", "responsible": "TalentBridge", "type": "blocking", "status": "pending"},
+                {"id": "bgv", "label": "Background verification pack", "responsible": "TalentBridge", "type": "blocking", "status": "pending"},
+                {"id": "ad_vpn_badge", "label": "Access provisioning — AD, VPN, badge", "responsible": "Buyer IT", "type": "blocking", "status": "pending"},
+                {"id": "site_safety", "label": "Site safety induction", "responsible": "Buyer EHS", "type": "blocking", "status": "pending"},
+                {"id": "laptop", "label": "Laptop issuance", "responsible": "Buyer IT", "type": "warn_only", "status": "pending"},
+                {"id": "manager_orientation", "label": "Manager orientation", "responsible": "Manager", "type": "warn_only", "status": "pending"},
+            ]
+            doc["activation_gates"] = default_gates
+            _coll().update_one({"_id": doc["_id"]}, {"$set": {"activation_gates": default_gates}})
         return doc
 
     # Auto-create checklist with default activation gates
@@ -526,8 +539,27 @@ def activate_work_order(candidate_id: str, authorization: str | None = Header(No
         })
     except Exception:
         pass
+    # Retrieve active work order document for returning details
+    wo_number = None
+    wo_doc = None
+    try:
+        wo_doc = db["work_orders"].find_one({"$or": or_conditions, "status": "ACTIVE"})
+        if wo_doc:
+            wo_number = wo_doc.get("work_order_number")
+            wo_doc.pop("_id", None)
+    except Exception:
+        pass
 
-    return {"status": "success", "message": "Work order activated successfully"}
+    if not wo_number:
+        wo_number = doc.get("work_order_number") or f"WO-{datetime.now(timezone.utc).year}-{uuid.uuid4().hex[:4].upper()}"
+        _coll().update_one({"_id": doc["_id"]}, {"$set": {"work_order_number": wo_number}})
+
+    return {
+        "status": "success",
+        "message": f"Work order {wo_number} activated successfully",
+        "work_order_number": wo_number,
+        "work_order": wo_doc
+    }
 
 
 @router.post("/{candidate_id}/clear-gate")

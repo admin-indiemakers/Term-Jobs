@@ -87,7 +87,8 @@ export default function RequisitionDetail() {
     request(`/requisitions/${id}`, { token })
       .then((data) => {
         setReq(data);
-        const role = data.structured_role ? { ...data.structured_role } : null;
+        const vLimit = data.vendor_candidate_limit || data.structured_role?.vendor_candidate_limit || (data.intake_meta?.prefill?.vendor_candidate_limit) || (data.intake_meta?.prefill?.candidate_limit) || 1;
+        const role = data.structured_role ? { ...data.structured_role, vendor_candidate_limit: vLimit } : { vendor_candidate_limit: vLimit };
         if (role && !role.hiring_manager && user?.name) role.hiring_manager = user.name;
         setDraftRole(role);
         setEditing(false);
@@ -537,13 +538,13 @@ export default function RequisitionDetail() {
                     Engaged Vendor Consultancies ({req.published_vendors?.length || 0})
                   </h3>
                   <p className="text-[11px] text-gray-500">
-                    {req.published_vendors?.length || 0} partner consultancies receiving this live requisition • Max {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || 1} candidate per consultancy
+                    {req.published_vendors?.length || 0} partner consultancies receiving this live requisition • Max {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || (req.intake_meta?.prefill?.vendor_candidate_limit) || 1} candidate per consultancy
                   </p>
                 </div>
               </div>
               <span className="px-3 py-1 rounded-full text-[11.5px] font-black uppercase tracking-wide bg-red-100 text-red-700 border-2 border-red-300 flex items-center gap-1.5 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                <span>IMPORTANT LIMIT: {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || 1} CAND / VENDOR</span>
+                <span>IMPORTANT LIMIT: {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || (req.intake_meta?.prefill?.vendor_candidate_limit) || 1} CAND / VENDOR</span>
               </span>
             </div>
 

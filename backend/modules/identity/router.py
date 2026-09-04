@@ -282,7 +282,7 @@ def create_user(
         email=body.email,
         name=body.name,
         password_hash=hash_password(body.password),
-        role="Super Admin",
+        role=body.role,
         department=body.department,
         candidate_limit=body.candidate_limit,
         candidate_id=getattr(body, 'candidate_id', '') or '',
@@ -488,25 +488,16 @@ def delete_user(
             detail="You are not allowed to delete accounts",
         )
 
-    # Archive before soft-deleting
+    # Archive before deleting
     from modules.shared.db import db as mongo_db
-    from datetime import datetime, timezone
-    now_iso = datetime.now(timezone.utc).isoformat()
 
     user_doc = mongo_db["users"].find_one({"id": user_id})
     if user_doc:
         user_doc.pop("_id", None)
         _archive_item("user", user_doc, current_user.id, "Deleted by admin")
 
-    # Soft-delete: retain in database table but mark deleted & inactive
-    target.is_active = False
-    target.is_deleted = True
-    target.deleted_at = now_iso
-    mongo_db["users"].update_one(
-        {"id": user_id},
-        {"$set": {"is_deleted": True, "is_active": False, "deleted_at": now_iso}}
-    )
-    db.add(target)
+    mongo_db["users"].delete_one({"id": user_id})
+    db.delete(target)
     db.commit()
     _cache.invalidate_prefix("users:")
     _log_admin_action(
@@ -550,20 +541,10 @@ def delete_tenant(
         u.pop("_id", None)
         _archive_item("user", u, current_user.id, f"User of deleted tenant: {tenant.name}")
 
-    # Soft-delete: retain tenant and cascaded accounts in database table
-    from datetime import datetime, timezone
-    now_iso = datetime.now(timezone.utc).isoformat()
-    tenant.is_deleted = True
-    tenant.deleted_at = now_iso
-    mongo_db["tenants"].update_one(
-        {"id": tenant_id},
-        {"$set": {"is_deleted": True, "deleted_at": now_iso}}
-    )
-    mongo_db["users"].update_many(
-        {"tenant_id": tenant_id},
-        {"$set": {"is_deleted": True, "is_active": False, "deleted_at": now_iso}}
-    )
-    db.add(tenant)
+    mongo_db["tenants"].delete_one({"id": tenant_id})
+    mongo_db["users"].delete_many({"tenant_id": tenant_id})
+    db.query(User).filter(User.tenant_id == tenant_id).delete(synchronize_session=False)
+    db.delete(tenant)
     db.commit()
     _cache.invalidate_prefix("users:")
     _cache.invalidate_prefix("tenants:")
@@ -883,12 +864,54 @@ def list_portal_users(
             for u in users
         ]
     
-    # Build map of existing portal users
-    portal_users = {}
+    # Build map of existing portal users with flexible candidate ID and email indexing
+    portal_users_by_cid = {}
+    portal_users_by_email = {}
+    
     for u in db.query(User).filter(User.role == "Candidate").all():
-        cid = getattr(u, 'candidate_id', '') or ''
-        if cid:
-            portal_users[cid] = u
+        raw_cid = (getattr(u, 'candidate_id', '') or '').strip()
+        clean_cid = raw_cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+        uemail = (getattr(u, 'email', '') or '').strip().lower()
+
+        if raw_cid:
+            portal_users_by_cid[raw_cid] = u
+        if clean_cid:
+            portal_users_by_cid[clean_cid] = u
+            portal_users_by_cid[f"SDC-{clean_cid}"] = u
+            portal_users_by_cid[f"SDC -{clean_cid}"] = u
+            portal_users_by_cid[f"BEAR-{clean_cid}"] = u
+
+        if uemail:
+            portal_users_by_email[uemail] = u
+    
+    # Also index candidate users stored in Mongo users collection
+    try:
+        for mu in mongo_db["users"].find({"role": "Candidate"}):
+            raw_cid = (mu.get("candidate_id") or "").strip()
+            clean_cid = raw_cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+            uemail = (mu.get("email") or "").strip().lower()
+
+            # Wrap dict as lightweight object with email, name, id, is_active attributes if not in SQL map
+            class MongoUserWrapper:
+                def __init__(self, doc):
+                    self.id = str(doc.get("_id") or doc.get("id"))
+                    self.email = doc.get("email", "")
+                    self.name = doc.get("name", "")
+                    self.candidate_id = doc.get("candidate_id", "")
+                    self.is_active = doc.get("is_active", True)
+
+            wrapper = MongoUserWrapper(mu)
+            if raw_cid and raw_cid not in portal_users_by_cid:
+                portal_users_by_cid[raw_cid] = wrapper
+            if clean_cid and clean_cid not in portal_users_by_cid:
+                portal_users_by_cid[clean_cid] = wrapper
+                portal_users_by_cid[f"SDC-{clean_cid}"] = wrapper
+                portal_users_by_cid[f"SDC -{clean_cid}"] = wrapper
+                portal_users_by_cid[f"BEAR-{clean_cid}"] = wrapper
+            if uemail and uemail not in portal_users_by_email:
+                portal_users_by_email[uemail] = wrapper
+    except Exception as mongo_err:
+        print(f"Error indexing Mongo candidate users: {mongo_err}")
     
     # Batch-fetch all requisitions in one query (eliminates N+1)
     req_ids_needed = list({sub.get("requisition_id") for sub in accepted_subs if sub.get("requisition_id")})
@@ -905,14 +928,14 @@ def list_portal_users(
     results = []
     for sub in accepted_subs:
         cid = (sub.get("candidate_id") or "").strip()
-        cemail = (sub.get("candidate_email") or "").lower().strip()
+        cemail = (sub.get("candidate_email") or sub.get("email") or "").lower().strip()
         cname = (sub.get("candidate_name") or "").lower().strip()
         cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
 
         wo_doc = None
         for wo in wo_list:
             wcid = str(wo.get("candidate_id", "")).strip()
-            wcemail = str(wo.get("candidate_email", "")).lower().strip()
+            wcemail = str(wo.get("candidate_email", "") or wo.get("email", "")).lower().strip()
             wcname = str(wo.get("candidate_name", "")).lower().strip()
             wcid_clean = wcid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
 
@@ -923,18 +946,27 @@ def list_portal_users(
                 wo_doc = wo
                 break
 
-        pu = portal_users.get(cid)
+        pu = (
+            portal_users_by_cid.get(cid)
+            or portal_users_by_cid.get(cid_clean)
+            or portal_users_by_cid.get(f"SDC-{cid_clean}")
+            or portal_users_by_cid.get(f"SDC -{cid_clean}")
+            or portal_users_by_email.get(cemail)
+        )
         req_doc = req_cache.get(sub.get("requisition_id"))
+
+        eff_email = (pu.email if pu and getattr(pu, 'email', None) else (sub.get("candidate_email") or sub.get("email") or "")).strip()
+        eff_name = (pu.name if pu and getattr(pu, 'name', None) else (sub.get("candidate_name") or "")).strip()
 
         results.append({
             "candidate_id": cid,
-            "candidate_name": sub.get("candidate_name", ""),
-            "candidate_email": sub.get("candidate_email", ""),
+            "candidate_name": eff_name,
+            "candidate_email": eff_email,
             "requisition_title": (req_doc or {}).get("title", ""),
             "vendor_name": sub.get("vendor_name", ""),
-            "has_portal_access": pu is not None and pu.is_active,
+            "has_portal_access": pu is not None and getattr(pu, 'is_active', True),
             "portal_user_id": pu.id if pu else None,
-            "portal_user_email": pu.email if pu else None,
+            "portal_user_email": eff_email,
             "work_order_status": wo_doc.get("status") if wo_doc else None,
             "work_order_number": wo_doc.get("work_order_number") if wo_doc else None,
             "has_work_order": wo_doc is not None,
@@ -943,19 +975,41 @@ def list_portal_users(
     return results
 
 
+def _sync_candidate_credentials_to_mongo(candidate_id: str, email: str, name: str):
+    if not candidate_id:
+        return
+    cid = candidate_id.strip()
+    clean_cid = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+    id_variants = list(set([cid, clean_cid, f"SDC-{clean_cid}", f"SDC -{clean_cid}", f"BEAR-{clean_cid}"]))
+    
+    try:
+        from modules.shared.db import db as mongo_db
+        # Sync candidate_submissions
+        mongo_db["candidate_submissions"].update_many(
+            {"$or": [{"id": {"$in": id_variants}}, {"candidate_id": {"$in": id_variants}}]},
+            {"$set": {"candidate_email": email, "email": email, "candidate_name": name}}
+        )
+        # Sync onboarding_checklists
+        mongo_db["onboarding_checklists"].update_many(
+            {"$or": [{"candidate_id": {"$in": id_variants}}, {"candidate_email": email}]},
+            {"$set": {"candidate_email": email, "candidate_name": name}}
+        )
+        # Sync mongo_db["users"] collection
+        mongo_db["users"].update_many(
+            {"$or": [{"candidate_id": {"$in": id_variants}}, {"email": email}]},
+            {"$set": {"candidate_email": email, "email": email, "name": name, "candidate_id": cid}}
+        )
+    except Exception as sync_err:
+        print(f"MongoDB sync error on portal user update: {sync_err}")
+
+
 @router.post("/portal-users")
 def create_or_update_portal_user(
     body: dict,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Create or update a Candidate portal account for a specific candidate submission.
-    
-    Enforces candidate/tenant uniqueness:
-    - If a Candidate user already exists for this candidate_id (or email within this tenant),
-      it updates the existing credentials and ensures is_active=True.
-    - Otherwise, provisions a new Candidate user linked to this candidate_id.
-    """
+    """Create or update a Candidate portal account for a specific candidate submission."""
     if current_user.role not in ("Recruiter", "Admin", "Super Admin", "Hiring Manager"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -966,6 +1020,7 @@ def create_or_update_portal_user(
     name = (body.get("name") or "").strip()
     password = body.get("password") or ""
     candidate_id = (body.get("candidate_id") or "").strip()
+    cid_clean = candidate_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
 
     if not email or "@" not in email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
@@ -976,12 +1031,12 @@ def create_or_update_portal_user(
 
     tenant_id = current_user.tenant_id
 
-    # 1. Search for existing Candidate user by candidate_id OR email (across all tenants)
+    # 1. Search for existing Candidate user by candidate_id variations OR email
     existing_user = None
     if candidate_id:
         existing_user = db.query(User).filter(
             User.role == "Candidate",
-            User.candidate_id == candidate_id,
+            User.candidate_id.in_([candidate_id, cid_clean, f"SDC-{cid_clean}", f"SDC -{cid_clean}", f"BEAR-{cid_clean}"])
         ).first()
 
     if not existing_user and email:
@@ -1002,6 +1057,10 @@ def create_or_update_portal_user(
         db.commit()
         db.refresh(existing_user)
         _cache.invalidate_prefix("users:")
+
+        # Synchronize to Mongo collections
+        _sync_candidate_credentials_to_mongo(candidate_id, email, name)
+
         return {
             "ok": True,
             "id": existing_user.id,
@@ -1041,6 +1100,7 @@ def create_or_update_portal_user(
                 "is_active": True,
             }}
         )
+        _sync_candidate_credentials_to_mongo(candidate_id, email, name)
         return {
             "ok": True,
             "id": mongo_existing.get("id"),
@@ -1067,6 +1127,9 @@ def create_or_update_portal_user(
     db.refresh(new_user)
     _cache.invalidate_prefix("users:")
 
+    # Sync candidate email & name to candidate_submissions and onboarding_checklists in MongoDB
+    _sync_candidate_credentials_to_mongo(candidate_id, email, name)
+
     return {
         "ok": True,
         "id": new_user.id,
@@ -1088,25 +1151,55 @@ def update_portal_user(
     """Update a Candidate user's name, email, password, or active status."""
     target = db.query(User).filter(
         User.id == user_id,
-        User.tenant_id == current_user.tenant_id,
     ).first()
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if "name" in body:
-        target.name = body["name"]
-    if "email" in body:
-        target.email = body["email"]
-    if "password" in body and body["password"]:
-        target.password_hash = hash_password(body["password"])
+    email = (body.get("email") or "").strip().lower()
+    name = (body.get("name") or "").strip()
+    password = body.get("password") or ""
+
+    if name:
+        target.name = name
+    if email:
+        target.email = email
+    if password:
+        target.password_hash = hash_password(password)
     if "is_active" in body:
         target.is_active = body["is_active"]
-    if "candidate_id" in body:
+    if "candidate_id" in body and body["candidate_id"]:
         target.candidate_id = body["candidate_id"]
 
     db.commit()
+    db.refresh(target)
     _cache.invalidate_prefix("users:")
-    return {"ok": True, "message": "Portal user updated"}
+
+    # Sync to MongoDB collections as well
+    cid = target.candidate_id or body.get("candidate_id")
+    if cid:
+        _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
+
+    return {
+        "ok": True,
+        "message": "Portal credentials updated successfully",
+        "user": {
+            "id": target.id,
+            "email": target.email,
+            "name": target.name,
+            "candidate_id": target.candidate_id,
+        }
+    }
+
+    return {
+        "ok": True,
+        "message": "Portal credentials updated successfully",
+        "user": {
+            "id": target.id,
+            "email": target.email,
+            "name": target.name,
+            "candidate_id": target.candidate_id,
+        }
+    }
 
 
 @router.delete("/portal-users/{user_id}")

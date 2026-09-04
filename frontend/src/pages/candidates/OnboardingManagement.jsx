@@ -557,7 +557,11 @@ export default function OnboardingManagement() {
                   const woDoc = workOrders[id];
                   const hasWO = Boolean(woDoc && woDoc.status);
                   const woStatus = woDoc?.status?.toUpperCase() || '';
-                  const woActivated = woStatus === 'ACTIVE' || woStatus === 'ACTIVATED';
+                  const woActivated = woStatus === 'ACTIVE' || woStatus === 'ACTIVATED' || obDoc?.activation_status === 'activated';
+                  const woNumber =
+                    woDoc?.work_order_number ||
+                    obDoc?.work_order_number ||
+                    (hasWO || woActivated ? `WO-2026-${id.replace('SDC-', '').replace('SDC -', '').slice(0, 4).toUpperCase()}` : null);
 
                   return (
                     <tr
@@ -625,23 +629,45 @@ export default function OnboardingManagement() {
                       {/* 6. WORK ORDER */}
                       <td className="py-3.5 px-3 align-middle text-center">
                         {woActivated ? (
-                          <span
-                            onClick={() => handleViewGates(cand)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534] cursor-pointer hover:opacity-85 transition"
-                            title="Click to view activation gates"
-                          >
-                            <FileText size={11} />
-                            Active
-                          </span>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <span
+                              onClick={() => handleViewGates(cand)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534] cursor-pointer hover:opacity-85 transition"
+                              title="Click to view activation gates"
+                            >
+                              <FileText size={11} />
+                              Active
+                            </span>
+                            {woNumber && (
+                              <span
+                                onClick={() => handleViewGates(cand)}
+                                className="text-[11px] font-mono text-[#4b5563] font-semibold bg-[#f3f4f6] px-2 py-0.5 rounded-md border border-[#e5e7eb] cursor-pointer hover:bg-[#e5e7eb] transition"
+                                title="Work Order ID — Click to view details"
+                              >
+                                {woNumber}
+                              </span>
+                            )}
+                          </div>
                         ) : hasWO ? (
-                          <span
-                            onClick={() => handleViewGates(cand)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#FEF3C7] text-[#92400E] cursor-pointer hover:opacity-85 transition"
-                            title="Click to view activation gates"
-                          >
-                            <FileText size={11} />
-                            Pending
-                          </span>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <span
+                              onClick={() => handleViewGates(cand)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#FEF3C7] text-[#92400E] cursor-pointer hover:opacity-85 transition"
+                              title="Click to view activation gates"
+                            >
+                              <FileText size={11} />
+                              Pending
+                            </span>
+                            {woNumber && (
+                              <span
+                                onClick={() => handleViewGates(cand)}
+                                className="text-[11px] font-mono text-[#78350f] font-semibold bg-[#fef3c7] px-2 py-0.5 rounded-md border border-[#fde68a] cursor-pointer hover:opacity-85 transition"
+                                title="Work Order ID — Click to view details"
+                              >
+                                {woNumber}
+                              </span>
+                            )}
+                          </div>
                         ) : (
                           <button
                             type="button"

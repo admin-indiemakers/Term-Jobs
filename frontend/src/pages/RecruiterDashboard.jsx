@@ -6365,17 +6365,21 @@ function PortalAccessView({ authToken }) {
   // Strict Candidate matching to actual Database Portal User credentials
   const candidateRows = candidates.map((c) => {
     const cid = (c.submission_id || c.id || '').trim();
+    const cleanCid = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").trim();
     const candEmail = (c.candidate_email || '').trim().toLowerCase();
 
-    // 1. Strict primary match by candidate_id / submission_id
-    let user = portalUsers.find(
-      (u) => u.candidate_id && u.candidate_id.trim() === cid
-    );
+    // 1. Flexible primary match by candidate_id / submission_id
+    let user = portalUsers.find((u) => {
+      if (!u.candidate_id) return false;
+      const uCid = u.candidate_id.trim();
+      const uCleanCid = uCid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").trim();
+      return uCid === cid || (uCleanCid && uCleanCid === cleanCid);
+    });
 
-    // 2. Secondary fallback by email ONLY if candidate_email is valid non-empty and candidate_id matches
+    // 2. Secondary fallback by email
     if (!user && candEmail && candEmail.length > 3) {
       user = portalUsers.find(
-        (u) => (u.email || '').trim().toLowerCase() === candEmail && (!u.candidate_id || u.candidate_id.trim() === cid)
+        (u) => (u.email || '').trim().toLowerCase() === candEmail
       );
     }
 
@@ -6749,7 +6753,7 @@ function PortalAccessView({ authToken }) {
                               {candName}
                             </div>
                             <div className="text-[11.5px] text-[#8A8A85] truncate">
-                              {c.candidate_email || 'No email provided'}
+                              {c.portalUser?.email || c.candidate_email || 'No email provided'}
                             </div>
                           </div>
                         </div>

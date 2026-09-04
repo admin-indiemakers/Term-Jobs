@@ -16,14 +16,16 @@ export default function CandidatePortalAccess() {
   const [creatingId, setCreatingId] = useState(null);
   const [creatingWOId, setCreatingWOId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(null);
   const [selectedGatesCandidate, setSelectedGatesCandidate] = useState(null);
   const [createForm, setCreateForm] = useState({ email: '', name: '', password: '1234' });
+  const [editForm, setEditForm] = useState({ email: '', name: '', password: '' });
+  const [updatingId, setUpdatingId] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
 
   const loadCandidates = async () => {
     setLoading(true);
     setError('');
-    setSuccessMsg('');
     try {
       const data = await request('/api/auth/portal-users', { token });
       setCandidates(Array.isArray(data) ? data : []);
@@ -43,6 +45,7 @@ export default function CandidatePortalAccess() {
     return candidates.filter(c =>
       c.candidate_name?.toLowerCase().includes(q) ||
       c.candidate_email?.toLowerCase().includes(q) ||
+      c.portal_user_email?.toLowerCase().includes(q) ||
       c.candidate_id?.toLowerCase().includes(q) ||
       c.requisition_title?.toLowerCase().includes(q)
     );
@@ -53,11 +56,61 @@ export default function CandidatePortalAccess() {
 
   const handleCreateAccess = (cand) => {
     setCreateForm({
-      email: cand.candidate_email || '',
+      email: cand.portal_user_email || cand.candidate_email || '',
       name: cand.candidate_name || '',
       password: '1234',
     });
     setShowCreateModal(cand);
+  };
+
+  const handleEditAccess = (cand) => {
+    setEditForm({
+      email: cand.portal_user_email || cand.candidate_email || '',
+      name: cand.candidate_name || '',
+      password: '',
+    });
+    setShowEditModal(cand);
+  };
+
+  const handleSaveEditAccess = async () => {
+    if (!showEditModal) return;
+    const targetId = showEditModal.portal_user_id;
+    setUpdatingId(showEditModal.candidate_id);
+    setSuccessMsg('');
+    setError('');
+    try {
+      if (targetId) {
+        await request(`/api/auth/portal-users/${targetId}`, {
+          method: 'PUT',
+          token,
+          body: {
+            email: editForm.email,
+            name: editForm.name,
+            password: editForm.password || undefined,
+            candidate_id: showEditModal.candidate_id,
+          },
+        });
+      } else {
+        await request('/api/auth/portal-users', {
+          method: 'POST',
+          token,
+          body: {
+            candidate_id: showEditModal.candidate_id,
+            email: editForm.email,
+            name: editForm.name,
+            password: editForm.password || '1234',
+          },
+        });
+      }
+      setSuccessMsg(`Portal credentials updated for ${editForm.name}. Candidate can now login with ${editForm.email}`);
+      setShowEditModal(null);
+      await loadCandidates();
+    } catch (err) {
+      console.error('Failed to update portal access:', err);
+      setError(err.message || 'Failed to update portal credentials');
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const handleSaveAccess = async () => {
@@ -254,7 +307,7 @@ export default function CandidatePortalAccess() {
                           </div>
                           <div>
                             <div className="text-[0.88rem] font-semibold text-[#1a1a1a]">{cand.candidate_name}</div>
-                            <div className="text-[0.75rem] text-[#8a8a85]">{cand.candidate_email}</div>
+                            <div className="text-[0.75rem] text-[#8a8a85]">{cand.portal_user_email || cand.candidate_email}</div>
                           </div>
                         </div>
                       </td>
@@ -281,9 +334,9 @@ export default function CandidatePortalAccess() {
                               <FileText size={11} />
                               {cand.work_order_status || 'Created'}
                             </span>
-                            {cand.work_order_number && (
-                              <span className="text-[11px] font-mono text-[#8a8a85] font-semibold">{cand.work_order_number}</span>
-                            )}
+                            <span className="text-[11px] font-mono text-[#4b5563] font-semibold bg-[#f3f4f6] px-2 py-0.5 rounded-md border border-[#e5e7eb]">
+                              {cand.work_order_number || `WO-2026-${(cand.candidate_id || '').replace('SDC-', '').replace('SDC -', '').slice(0, 4).toUpperCase()}`}
+                            </span>
                           </div>
                         ) : cand.has_portal_access ? (
                           <button
@@ -314,12 +367,19 @@ export default function CandidatePortalAccess() {
                             {creatingId === cand.candidate_id ? 'Creating...' : 'Create Access'}
                           </button>
                         ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="text-[12px] text-[#8a8a85]">Active ✓</span>
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
+                            <button
+                              onClick={() => handleEditAccess(cand)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f4f4f0] hover:bg-[#eaeae6] border border-[#d1d1cc] text-[11px] font-bold text-[#1a1a1a] transition cursor-pointer shadow-2xs"
+                              title="Edit Portal Email & Password"
+                            >
+                              <Key size={11} />
+                              Edit Credentials
+                            </button>
                             {!cand.has_work_order ? (
                               <button
                                 onClick={() => setSelectedGatesCandidate(cand)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[11px] font-medium hover:bg-[#262626] transition"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[11px] font-bold hover:bg-[#262626] transition cursor-pointer"
                               >
                                 <FileText size={11} />
                                 + Assign Work Order
@@ -327,7 +387,7 @@ export default function CandidatePortalAccess() {
                             ) : (
                               <button
                                 onClick={() => setSelectedGatesCandidate(cand)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f7f7f5] border border-[#eaeae6] text-[11px] font-medium text-[#1a1a1a] hover:bg-[#efefec] transition"
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f7f7f5] border border-[#eaeae6] text-[11px] font-bold text-[#1a1a1a] hover:bg-[#efefec] transition cursor-pointer"
                               >
                                 <ExternalLink size={11} />
                                 Gates & Onboarding
@@ -400,6 +460,75 @@ export default function CandidatePortalAccess() {
                 className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50"
               >
                 {creatingId === showCreateModal.candidate_id ? 'Creating...' : 'Create Access'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Access Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowEditModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between border-b border-[#eaeae6] pb-3">
+              <div>
+                <h2 className="text-[1.1rem] font-bold text-[#1a1a1a]">Edit Portal Access</h2>
+                <p className="text-[0.82rem] text-[#8a8a85] mt-0.5">
+                  Update credentials for <strong>{showEditModal.candidate_name}</strong>
+                </p>
+              </div>
+              <button onClick={() => setShowEditModal(null)} className="text-[#8a8a85] hover:text-[#1a1a1a] text-lg font-bold">
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Login Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                  placeholder="candidate@example.com"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Candidate Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">
+                  New Password <span className="normal-case font-normal text-[#a0a09a]">(leave blank to keep current)</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.password}
+                  onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
+                  placeholder="Enter new password to update"
+                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2 border-t border-[#eaeae6]">
+              <button
+                onClick={() => setShowEditModal(null)}
+                className="flex-1 px-4 py-2.5 text-[0.82rem] font-medium text-[#8a8a85] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg hover:bg-[#efefec] transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEditAccess}
+                disabled={!editForm.email || !editForm.name || updatingId === showEditModal.candidate_id}
+                className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer shadow-2xs"
+              >
+                {updatingId === showEditModal.candidate_id ? 'Saving...' : 'Update Credentials'}
               </button>
             </div>
           </div>

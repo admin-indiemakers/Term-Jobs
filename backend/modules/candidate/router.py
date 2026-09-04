@@ -365,22 +365,31 @@ def update_submission_status(
 
         if new_status in ("Shortlisted", "Accepted", "Under Review"):
             from modules.requisition.domain.models import Requisition
+            from modules.shared.db import db as mongo_db
             req_obj = session.get(Requisition, sub.requisition_id)
             if req_obj:
                 s_role = req_obj.structured_role or {}
-                limit = req_obj.vendor_candidate_limit or s_role.get("vendor_candidate_limit") or s_role.get("headcount") or 1
-                vendor_tenant = current_user.tenant_id or getattr(sub, "tenant_id", None)
-                if vendor_tenant:
-                    existing_subs = session.query(CandidateSubmission).filter(
-                        CandidateSubmission.requisition_id == sub.requisition_id,
-                        CandidateSubmission.tenant_id == vendor_tenant,
-                        CandidateSubmission.status.in_(["Shortlisted", "Accepted", "Under Review"]),
-                        CandidateSubmission.id != sub.id
-                    ).all()
-                    if len(existing_subs) >= limit:
+                prefill = dict((req_obj.intake_meta or {}).get("prefill") or {})
+                limit = (
+                    req_obj.vendor_candidate_limit
+                    or s_role.get("vendor_candidate_limit")
+                    or prefill.get("vendor_candidate_limit")
+                    or prefill.get("candidate_limit")
+                    or s_role.get("headcount")
+                    or 1
+                )
+                v_name = getattr(sub, "vendor_name", None) or ""
+                if v_name:
+                    existing_count = mongo_db["candidate_submissions"].count_documents({
+                        "requisition_id": sub.requisition_id,
+                        "vendor_name": v_name,
+                        "status": {"$in": ["Shortlisted", "Accepted", "Under Review"]},
+                        "id": {"$ne": sub.id}
+                    })
+                    if existing_count >= limit:
                         raise HTTPException(
                             status_code=400,
-                            detail=f"Maximum candidate submission limit of {limit} reached for this requisition."
+                            detail=f"Maximum candidate submission limit of {limit} reached for vendor '{v_name}' on this requisition."
                         )
 
         sub.status = new_status
