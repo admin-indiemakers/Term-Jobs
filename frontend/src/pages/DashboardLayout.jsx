@@ -256,18 +256,7 @@ export default function DashboardLayout() {
         <div className="sidebar-brand pb-4 border-b border-[#EAEAE6] mb-5">
           {userRole === 'Recruiter' ? (
             <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-              >
-                TJ
-              </div>
+              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
               <div className="leading-tight">
                 <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
@@ -275,45 +264,23 @@ export default function DashboardLayout() {
             </div>
           ) : userRole === 'Hiring Manager' ? (
             <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
-              >
-                {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
-              </div>
+              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
               <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
+                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'SDC Limited'}</div>
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
               </div>
             </div>
           ) : ['Admin', 'HR', 'Director'].includes(userRole) ? (
-            <>
-              <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
-              <div className="brand-text">
-                <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
-                <span className="brand-sub">{userRole} Console</span>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
+              <div className="leading-tight">
+                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Term Jobs'}</div>
+                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">{userRole} Console</div>
               </div>
-            </>
+            </div>
           ) : userRole === 'Super Admin' ? (
             <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-              >
-                SA
-              </div>
+              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
               <div className="leading-tight">
                 <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Super Admin</div>

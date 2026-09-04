@@ -61,10 +61,8 @@ export default function SuperAdminLogin() {
 
       <main className="relative z-[2] flex w-full max-w-[460px] flex-col items-center gap-7 animate-sa-rise">
         <header className="flex items-center gap-2.5 text-slate-200">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-300/40 bg-gradient-to-br from-violet-500/25 to-violet-500/5 text-violet-300 shadow-[0_0_24px_-6px_rgba(139,92,246,0.6)]">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[22px] w-[22px]">
-              <path d="M12 3l7 4v5c0 4.5-3 8.2-7 9-4-.8-7-4.5-7-9V7z" />
-            </svg>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-300/40 bg-white p-1.5 shadow-[0_0_24px_-6px_rgba(139,92,246,0.6)]">
+            <img src="/logo.png" alt="TermJobs Logo" className="h-7 w-7 object-contain" />
           </div>
           <span className="text-[1.05rem] font-extrabold tracking-[0.18em] text-slate-50">TERMJOBS</span>
           <span className="rounded-md border border-violet-300/40 bg-violet-500/10 px-[7px] py-[3px] text-[0.6rem] font-bold tracking-[0.16em] text-violet-300">CONSOLE</span>

@@ -5,9 +5,11 @@ import { ApiError } from '../api/client';
 
 function Mark() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-      <path d="M12 3l7 4v5c0 4.5-3 8.2-7 9-4-.8-7-4.5-7-9V7z" />
-    </svg>
+    <img
+      src="/logo.png"
+      alt="TermJobs Logo"
+      className="h-8 w-8 object-contain rounded-md"
+    />
   );
 }
 
