@@ -38,6 +38,7 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
+from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db
 from modules.shared.cache import cache as _cache
 from modules.resume_screener.router import router as resume_screener_router
