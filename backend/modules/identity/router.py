@@ -1030,8 +1030,9 @@ def create_or_update_portal_user(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate ID is required")
 
     tenant_id = current_user.tenant_id
+    from modules.shared.db import db as mongo_db
 
-    # 1. Search for existing Candidate user by candidate_id variations OR email
+    # 1. Search for existing Candidate user specifically for THIS candidate_id
     existing_user = None
     if candidate_id:
         existing_user = db.query(User).filter(
@@ -1039,11 +1040,40 @@ def create_or_update_portal_user(
             User.candidate_id.in_([candidate_id, cid_clean, f"SDC-{cid_clean}", f"SDC -{cid_clean}", f"BEAR-{cid_clean}"])
         ).first()
 
-    if not existing_user and email:
-        existing_user = db.query(User).filter(
-            User.role == "Candidate",
-            User.email == email,
-        ).first()
+    # 2. Check if email is already taken by ANOTHER account (candidate or non-candidate)
+    email_owner = db.query(User).filter(User.email == email).first()
+    if email_owner:
+        is_same_account = existing_user is not None and email_owner.id == existing_user.id
+        if not is_same_account:
+            if email_owner.role == "Candidate":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The email '{email}' is already in use by another candidate portal account.",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The email '{email}' is already registered for staff account ({email_owner.role}).",
+                )
+
+    # Double-check Mongo users collection for duplicate email
+    mongo_email_owner = mongo_db["users"].find_one({"email": email})
+    if mongo_email_owner:
+        m_id = str(mongo_email_owner.get("_id") or mongo_email_owner.get("id"))
+        m_cid = (mongo_email_owner.get("candidate_id") or "").strip()
+        m_clean_cid = m_cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+
+        is_same_account = False
+        if existing_user and (existing_user.id == m_id or existing_user.candidate_id in [m_cid, m_clean_cid]):
+            is_same_account = True
+        elif candidate_id and (candidate_id == m_cid or cid_clean == m_clean_cid):
+            is_same_account = True
+
+        if not is_same_account:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"The email '{email}' is already in use by another candidate portal account.",
+            )
 
     if existing_user:
         # Update existing candidate user credentials & ensure active
@@ -1071,47 +1101,13 @@ def create_or_update_portal_user(
             "message": "Portal credentials updated and activated successfully",
         }
 
-    # 2. Check if email is already taken by a non-candidate account
-    email_taken = db.query(User).filter(User.email == email, User.role != "Candidate").first()
-    if email_taken:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Email '{email}' is already registered for staff role '{email_taken.role}'",
-        )
-
     if not password or len(password) < 4:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Password must be at least 4 characters long",
         )
 
-    # 3. Double-check via MongoDB directly (the ORM query might miss cross-tenant users)
-    from modules.shared.db import db as mongo_db
-    mongo_existing = mongo_db["users"].find_one({"email": email})
-    if mongo_existing:
-        # User exists in MongoDB but ORM didn't find it — update directly
-        mongo_db["users"].update_one(
-            {"_id": mongo_existing["_id"]},
-            {"$set": {
-                "name": name,
-                "candidate_id": candidate_id,
-                "tenant_id": tenant_id,
-                "password_hash": hash_password(password),
-                "is_active": True,
-            }}
-        )
-        _sync_candidate_credentials_to_mongo(candidate_id, email, name)
-        return {
-            "ok": True,
-            "id": mongo_existing.get("id"),
-            "email": email,
-            "name": name,
-            "candidate_id": candidate_id,
-            "is_active": True,
-            "message": "Portal access created successfully",
-        }
-
-    # 4. Truly new user — create
+    # 3. Truly new user — create
     new_user = User(
         tenant_id=tenant_id,
         email=email,
@@ -1158,6 +1154,29 @@ def update_portal_user(
     email = (body.get("email") or "").strip().lower()
     name = (body.get("name") or "").strip()
     password = body.get("password") or ""
+    from modules.shared.db import db as mongo_db
+
+    if email and email != target.email:
+        # Check if email is used by another user account
+        email_owner = db.query(User).filter(User.email == email, User.id != user_id).first()
+        if email_owner:
+            if email_owner.role == "Candidate":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The email '{email}' is already in use by another candidate portal account.",
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The email '{email}' is already registered for staff account ({email_owner.role}).",
+                )
+
+        mongo_email_owner = mongo_db["users"].find_one({"email": email, "id": {"$ne": user_id}})
+        if mongo_email_owner:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"The email '{email}' is already in use by another candidate portal account.",
+            )
 
     if name:
         target.name = name

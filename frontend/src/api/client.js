@@ -60,7 +60,18 @@ export async function request(path, { method = 'GET', body, token, timeout = 180
   }
 
   if (!response.ok) {
-    const detail = data && typeof data.detail === 'string' ? data.detail : `Request failed (${response.status})`;
+    let detail = `Request failed (${response.status})`;
+    if (data) {
+      if (typeof data.detail === 'string') {
+        detail = data.detail;
+      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+        detail = data.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join(', ');
+      } else if (typeof data.message === 'string') {
+        detail = data.message;
+      } else if (typeof data.error === 'string') {
+        detail = data.error;
+      }
+    }
     throw new ApiError(detail, response.status);
   }
 

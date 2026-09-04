@@ -22,6 +22,7 @@ export default function CandidatePortalAccess() {
   const [editForm, setEditForm] = useState({ email: '', name: '', password: '' });
   const [updatingId, setUpdatingId] = useState(null);
   const [successMsg, setSuccessMsg] = useState('');
+  const [modalError, setModalError] = useState('');
 
   const loadCandidates = async () => {
     setLoading(true);
@@ -51,6 +52,38 @@ export default function CandidatePortalAccess() {
     );
   }, [candidates, search]);
 
+  const createEmailError = useMemo(() => {
+    if (!showCreateModal || !createForm.email) return '';
+    const typed = createForm.email.trim().toLowerCase();
+    if (!typed || !typed.includes('@')) return '';
+    
+    const match = candidates.find(c =>
+      c.candidate_id !== showCreateModal.candidate_id &&
+      ((c.portal_user_email && c.portal_user_email.toLowerCase() === typed) ||
+       (c.candidate_email && c.candidate_email.toLowerCase() === typed))
+    );
+    if (match) {
+      return `Email '${typed}' is already used by ${match.candidate_name || 'another candidate'}`;
+    }
+    return '';
+  }, [showCreateModal, createForm.email, candidates]);
+
+  const editEmailError = useMemo(() => {
+    if (!showEditModal || !editForm.email) return '';
+    const typed = editForm.email.trim().toLowerCase();
+    if (!typed || !typed.includes('@')) return '';
+    
+    const match = candidates.find(c =>
+      c.candidate_id !== showEditModal.candidate_id &&
+      ((c.portal_user_email && c.portal_user_email.toLowerCase() === typed) ||
+       (c.candidate_email && c.candidate_email.toLowerCase() === typed))
+    );
+    if (match) {
+      return `Email '${typed}' is already used by ${match.candidate_name || 'another candidate'}`;
+    }
+    return '';
+  }, [showEditModal, editForm.email, candidates]);
+
   const withAccess = candidates.filter(c => c.has_portal_access).length;
   const withoutAccess = candidates.filter(c => !c.has_portal_access).length;
 
@@ -60,6 +93,7 @@ export default function CandidatePortalAccess() {
       name: cand.candidate_name || '',
       password: '1234',
     });
+    setModalError('');
     setShowCreateModal(cand);
   };
 
@@ -69,6 +103,7 @@ export default function CandidatePortalAccess() {
       name: cand.candidate_name || '',
       password: '',
     });
+    setModalError('');
     setShowEditModal(cand);
   };
 
@@ -78,6 +113,7 @@ export default function CandidatePortalAccess() {
     setUpdatingId(showEditModal.candidate_id);
     setSuccessMsg('');
     setError('');
+    setModalError('');
     try {
       if (targetId) {
         await request(`/api/auth/portal-users/${targetId}`, {
@@ -107,7 +143,9 @@ export default function CandidatePortalAccess() {
       await loadCandidates();
     } catch (err) {
       console.error('Failed to update portal access:', err);
-      setError(err.message || 'Failed to update portal credentials');
+      const msg = err.message || 'Failed to update portal credentials';
+      setModalError(msg);
+      setError(msg);
     } finally {
       setUpdatingId(null);
     }
@@ -117,6 +155,7 @@ export default function CandidatePortalAccess() {
     if (!showCreateModal) return;
     setCreatingId(showCreateModal.candidate_id);
     setSuccessMsg('');
+    setModalError('');
     try {
       await request('/api/auth/portal-users', {
         method: 'POST',
@@ -133,7 +172,9 @@ export default function CandidatePortalAccess() {
       loadCandidates();
     } catch (err) {
       console.error('Failed to create portal access:', err);
-      setError(err.message || 'Failed to create portal access');
+      const msg = err.message || 'Failed to create portal access';
+      setModalError(msg);
+      setError(msg);
     } finally {
       setCreatingId(null);
     }
@@ -416,6 +457,13 @@ export default function CandidatePortalAccess() {
               </p>
             </div>
 
+            {modalError && (
+              <div className="p-3 bg-[#fee2e2] border border-[#fecaca] rounded-xl text-[0.82rem] text-[#991b1b] flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Email</label>
@@ -423,8 +471,16 @@ export default function CandidatePortalAccess() {
                   type="email"
                   value={createForm.email}
                   onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                  className={`w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border rounded-lg focus:outline-none transition ${
+                    createEmailError ? 'border-red-500 text-red-900 bg-red-50/30 focus:border-red-500' : 'border-[#eaeae6] focus:border-[#1a1a1a]'
+                  }`}
                 />
+                {createEmailError && (
+                  <p className="text-[0.75rem] font-semibold text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle size={13} className="shrink-0" />
+                    <span>{createEmailError}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Name</label>
@@ -456,7 +512,7 @@ export default function CandidatePortalAccess() {
               </button>
               <button
                 onClick={handleSaveAccess}
-                disabled={!createForm.email || !createForm.name || !createForm.password || creatingId === showCreateModal.candidate_id}
+                disabled={!createForm.email || !!createEmailError || !createForm.name || !createForm.password || creatingId === showCreateModal.candidate_id}
                 className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50"
               >
                 {creatingId === showCreateModal.candidate_id ? 'Creating...' : 'Create Access'}
@@ -482,6 +538,13 @@ export default function CandidatePortalAccess() {
               </button>
             </div>
 
+            {modalError && (
+              <div className="p-3 bg-[#fee2e2] border border-[#fecaca] rounded-xl text-[0.82rem] text-[#991b1b] flex items-center gap-2">
+                <AlertCircle size={15} className="shrink-0" />
+                <span>{modalError}</span>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Login Email</label>
@@ -489,9 +552,17 @@ export default function CandidatePortalAccess() {
                   type="email"
                   value={editForm.email}
                   onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
-                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                  className={`w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border rounded-lg focus:outline-none transition ${
+                    editEmailError ? 'border-red-500 text-red-900 bg-red-50/30 focus:border-red-500' : 'border-[#eaeae6] focus:border-[#1a1a1a]'
+                  }`}
                   placeholder="candidate@example.com"
                 />
+                {editEmailError && (
+                  <p className="text-[0.75rem] font-semibold text-red-600 mt-1 flex items-center gap-1">
+                    <AlertCircle size={13} className="shrink-0" />
+                    <span>{editEmailError}</span>
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Candidate Name</label>
@@ -525,7 +596,7 @@ export default function CandidatePortalAccess() {
               </button>
               <button
                 onClick={handleSaveEditAccess}
-                disabled={!editForm.email || !editForm.name || updatingId === showEditModal.candidate_id}
+                disabled={!editForm.email || !!editEmailError || !editForm.name || updatingId === showEditModal.candidate_id}
                 className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer shadow-2xs"
               >
                 {updatingId === showEditModal.candidate_id ? 'Saving...' : 'Update Credentials'}
