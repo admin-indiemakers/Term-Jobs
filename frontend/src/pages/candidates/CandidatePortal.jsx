@@ -247,7 +247,7 @@ export default function CandidatePortal() {
   }, [showNotifications]);
 
   if (!user) return <Navigate to="/candidate/login" replace />;
-  if (user.role !== 'Candidate') return <Navigate to="/" replace />;
+  if (user.role !== 'Candidate') return <Navigate to="/dashboard" replace />;
 
   const candidateId = user.candidate_id || '';
 
