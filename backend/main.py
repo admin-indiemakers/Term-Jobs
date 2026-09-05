@@ -82,16 +82,20 @@ async def vercel_routing_middleware(request: Request, call_next):
         request.scope["path"] = target
 
     origin = request.headers.get("origin")
+    req_headers = request.headers.get("access-control-request-headers", "*")
+
+    print(f"🌐 [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | RequestedHeaders: {req_headers}")
 
     # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
     if request.method == "OPTIONS":
         from fastapi.responses import Response
+        print(f"✨ [CORS PREFLIGHT OK] Returning 200 for OPTIONS preflight from Origin: {origin}")
         return Response(
             status_code=200,
             headers={
                 "Access-Control-Allow-Origin": origin or "*",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
+                "Access-Control-Allow-Headers": req_headers,
                 "Access-Control-Allow-Credentials": "true",
             },
         )
