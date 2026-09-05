@@ -35,7 +35,7 @@ def test_workorder_agent_autofill():
     # Rate should be calculated between floor and cap
     assert 130000.0 <= result["billing_rate"] <= 190000.0
     assert result["ai_generated"] is True
-    assert "AI Agent analyzed candidate" in result["ai_reasoning"]
+    assert "AI MSA Agent analyzed candidate" in result["ai_reasoning"]
 
 
 def test_workorder_schema_validation():

@@ -83,35 +83,54 @@ def _tenant_type(tenant_id: str, db: Session) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 def login_user(body: UserLogin, db: Session = Depends(get_db)):
-    # Determine the lookup identifier: prefer username (candidate ID or ADMIN), fall back to email
     lookup = body.username or body.email or ""
+    print(f"🔑 [AUTH LOG] Login attempt for lookup='{lookup}' (username='{body.username}', email='{body.email}')")
 
-    user = None
-    if lookup.upper() == "ADMIN":
-        user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
-    elif lookup:
-        # Try candidate_id first, then email
-        user = db.query(User).filter(User.candidate_id == lookup).first()
-        if not user:
-            user = db.query(User).filter(User.email == lookup).first()
+    try:
+        user = None
+        if lookup.upper() == "ADMIN":
+            user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
+        elif lookup:
+            user = db.query(User).filter(User.candidate_id == lookup).first()
+            if not user:
+                user = db.query(User).filter(User.email == lookup).first()
+    except Exception as db_err:
+        import sys, traceback
+        print(f"🔥 [AUTH DB ERROR] Failed querying user during login: {db_err}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database connectivity error: {str(db_err)}",
+        )
 
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user:
+        print(f"❌ [AUTH FAILED] User not found for lookup='{lookup}'")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    if not verify_password(body.password, user.password_hash):
+        print(f"❌ [AUTH FAILED] Incorrect password for user='{user.email}' (role='{user.role}')")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
 
     if getattr(user, 'is_deleted', False):
+        print(f"❌ [AUTH FAILED] User '{user.email}' is marked deleted")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
+        print(f"⚠️ [AUTH BLOCKED] User '{user.email}' account is inactive/pending approval")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account is pending approval by the company administrator. Please wait for approval before logging in.",
         )
 
-    comp = _get_company_profile(user.tenant_id, db)
+    print(f"✅ [AUTH SUCCESS] User '{user.email}' logged in successfully (role='{user.role}', tenant='{user.tenant_id}')")
 
+    comp = _get_company_profile(user.tenant_id, db)
     token_data = {"sub": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id}
     token = create_access_token(token_data)
 
@@ -1584,6 +1603,74 @@ def register_director(
             "tenant_name": target_tenant.name if target_tenant else "Bearitt",
             "is_active": False,
         }
+    }
+
+
+@router.post("/join/procurement", status_code=status.HTTP_201_CREATED)
+@router.post("/procurement/register", status_code=status.HTTP_201_CREATED)
+def register_procurement(
+    body: DirectorInviteIn,
+    db: Session = Depends(get_db),
+):
+    """Public self-registration for Procurement Team members via secure company invite link."""
+    if not body.email or not body.email.strip():
+        raise HTTPException(status_code=400, detail="Email address is required")
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=400, detail="Full name is required")
+    if not body.password or len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    email = body.email.strip().lower()
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists. Please log in.",
+        )
+
+    all_tenants = db.query(Tenant).all()
+    target_tenant = None
+    if body.tenant_id:
+        target_tenant = next((t for t in all_tenants if t.id == body.tenant_id), None)
+
+    if not target_tenant and body.company_name:
+        comp_clean = body.company_name.strip().lower()
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == comp_clean), None)
+
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == 'bearitt'), None)
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if getattr(t, 'tenant_type', '') == 'client'), None)
+
+    tenant_id = target_tenant.id if target_tenant else "local"
+
+    user = User(
+        tenant_id=tenant_id,
+        email=email,
+        name=body.name.strip(),
+        password_hash=hash_password(body.password),
+        role="Procurement Team",
+        department=body.department.strip() or "Procurement & Commercials",
+        created_by="self_invite",
+        is_active=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "success": True,
+        "message": f"Access request submitted successfully for {user.name}. Your account is pending company administrator approval.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "department": user.department,
+            "tenant_id": user.tenant_id,
+            "tenant_name": target_tenant.name if target_tenant else "Bearitt",
+            "is_active": False,
+        },
     }
 
 

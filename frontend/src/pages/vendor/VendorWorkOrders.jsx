@@ -69,8 +69,8 @@ export default function VendorWorkOrders() {
       setCandidates(vendorCands);
       setWorkOrders(woList);
     } catch (err) {
-      console.error('Failed to load vendor work order data:', err);
-      setError(err.message || 'Unable to load candidates or work orders.');
+      console.error('Failed to load vendor MSA data:', err);
+      setError(err.message || 'Unable to load candidates or Master Services Agreements.');
     } finally {
       setLoading(false);
     }
@@ -155,12 +155,12 @@ export default function VendorWorkOrders() {
           scope_of_work: res.scope_of_work || '',
           special_terms: res.special_terms || '',
           ai_generated: true,
-          ai_reasoning: res.ai_reasoning || 'AI Agent successfully calculated commercial terms from Requisition & Candidate Profile.',
+          ai_reasoning: res.ai_reasoning || 'AI MSA Agent successfully calculated commercial terms from Requisition & Candidate Profile.',
         });
-        setSuccess('AI Agent filled commercial terms based on Requisition Vendor Rate Floor & Cap!');
+        setSuccess('AI MSA Agent prefilled terms bounded by Vendor Rate Floor & Cap!');
       }
     } catch (err) {
-      console.error('AI Work Order Agent failed:', err);
+      console.error('AI MSA Agent failed:', err);
       setError('AI Agent failed to prefill. Please enter terms manually.');
     } finally {
       setAiGenerating(false);
@@ -227,12 +227,12 @@ export default function VendorWorkOrders() {
         });
       }
 
-      setSuccess(shouldSubmit ? 'Work Order submitted to Hiring Manager for review!' : 'Work Order draft saved!');
+      setSuccess(shouldSubmit ? 'Master Services Agreement (MSA) submitted to Company Director for approval!' : 'MSA draft saved!');
       setSelectedCandidate(null);
       loadData();
     } catch (err) {
-      console.error('Failed to save Work Order:', err);
-      setError(err.message || 'Unable to save Work Order.');
+      console.error('Failed to save Master Services Agreement:', err);
+      setError(err.message || 'Unable to save Master Services Agreement.');
     } finally {
       setSubmitting(false);
       setUploadingFile(false);
@@ -247,9 +247,9 @@ export default function VendorWorkOrders() {
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-600 mb-1">
             <Building2 className="w-4 h-4" /> Vendor Workspace
           </div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Work Orders & Commercial Contracts</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Master Services Agreements (MSA)</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Generate and submit commercial Work Orders for selected candidates using the AI Agent.
+            Generate, customize, and submit Master Services Agreements (MSA) to the Company Director for executive approval.
           </p>
         </div>
       </div>
@@ -271,8 +271,8 @@ export default function VendorWorkOrders() {
       <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <div>
-            <h3 className="font-bold text-slate-900 text-base">Selected Candidates & Work Order Lifecycle</h3>
-            <p className="text-xs text-slate-500">Candidates accepted by Hiring Managers ready for contract execution.</p>
+            <h3 className="font-bold text-slate-900 text-base">Selected Candidates & MSA Lifecycle</h3>
+            <p className="text-xs text-slate-500">Candidates accepted by Hiring Managers ready for Director MSA approval.</p>
           </div>
           <span className="px-3 py-1 bg-indigo-50 text-indigo-700 font-bold text-xs rounded-full border border-indigo-100">
             {candidates.length} Selected Candidates
@@ -293,7 +293,7 @@ export default function VendorWorkOrders() {
                   <th className="py-3.5 px-6">Candidate</th>
                   <th className="py-3.5 px-6">Role & Requisition</th>
                   <th className="py-3.5 px-6">Vendor Name</th>
-                  <th className="py-3.5 px-6">Work Order Status</th>
+                  <th className="py-3.5 px-6">MSA Status</th>
                   <th className="py-3.5 px-6 text-right">Action</th>
                 </tr>
               </thead>
@@ -304,26 +304,26 @@ export default function VendorWorkOrders() {
                   
                   let badge = (
                     <span className="px-2.5 py-1 bg-amber-50 text-amber-700 font-bold text-xs rounded-full border border-amber-200 inline-flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" /> Pending Work Order
+                      <Clock className="w-3.5 h-3.5" /> Pending MSA Creation
                     </span>
                   );
 
                   if (wo?.status === 'Submitted') {
                     badge = (
                       <span className="px-2.5 py-1 bg-blue-50 text-blue-700 font-bold text-xs rounded-full border border-blue-200 inline-flex items-center gap-1">
-                        <Send className="w-3.5 h-3.5" /> Under Client Review
+                        <Send className="w-3.5 h-3.5" /> Pending Director Approval
                       </span>
                     );
                   } else if (wo?.status === 'Approved') {
                     badge = (
                       <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-full border border-emerald-200 inline-flex items-center gap-1">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> Approved & Executed
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Approved by Director ({wo.approved_by || 'Director'})
                       </span>
                     );
                   } else if (wo?.status === 'Revision Requested') {
                     badge = (
                       <span className="px-2.5 py-1 bg-rose-50 text-rose-700 font-bold text-xs rounded-full border border-rose-200 inline-flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" /> Revision Requested
+                        <AlertCircle className="w-3.5 h-3.5" /> Revision Requested by Director
                       </span>
                     );
                   }
@@ -348,7 +348,7 @@ export default function VendorWorkOrders() {
                           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-all inline-flex items-center gap-1.5 cursor-pointer border-none"
                         >
                           <Sparkles className="w-3.5 h-3.5" />
-                          {wo ? 'View / Edit Work Order' : '✨ Generate Work Order'}
+                          {wo?.status === 'Revision Requested' ? 'Update & Resubmit MSA' : wo ? 'View / Edit MSA' : '✨ Generate MSA'}
                         </button>
                       </td>
                     </tr>
@@ -360,7 +360,7 @@ export default function VendorWorkOrders() {
         )}
       </div>
 
-      {/* Work Order Generator Modal */}
+      {/* Master Services Agreement (MSA) Builder Modal */}
       {selectedCandidate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-3xl w-full p-8 shadow-2xl border border-slate-200 relative my-8 animate-in fade-in zoom-in duration-200">
@@ -376,7 +376,7 @@ export default function VendorWorkOrders() {
                 <FileText className="w-6 h-6" />
               </div>
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Work Order Commercial Builder</h2>
+                <h2 className="text-xl font-extrabold text-slate-900">Master Services Agreement (MSA) Builder</h2>
                 <p className="text-xs text-slate-500">
                   Candidate: <strong className="text-slate-800">{selectedCandidate.candidate_name || selectedCandidate.name}</strong> ({selectedCandidate.requisition_title})
                 </p>
@@ -387,10 +387,10 @@ export default function VendorWorkOrders() {
             <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-indigo-900 to-slate-900 text-white flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-md">
               <div className="space-y-1">
                 <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
-                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" /> AI Work Order Agent
+                  <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" /> AI MSA Agent
                 </div>
                 <div className="text-sm font-medium text-slate-200">
-                  Calculates billing rate based on Requisition Vendor Rate Floor & Cap.
+                  Calculates billing rate bounded by Requisition Vendor Rate Floor & Cap.
                 </div>
               </div>
               <button
@@ -411,11 +411,18 @@ export default function VendorWorkOrders() {
               </div>
             )}
 
-            {/* Revision Notes Alert if any */}
+            {/* Revision Notes Alert from Director if any */}
             {activeWorkOrder?.status === 'Revision Requested' && activeWorkOrder.revision_notes && (
-              <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 leading-relaxed">
-                <strong className="font-bold text-rose-950 block mb-1">⚠️ Client Revision Feedback:</strong>
-                {activeWorkOrder.revision_notes}
+              <div className="mb-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 leading-relaxed shadow-2xs">
+                <strong className="font-bold text-rose-950 block mb-1 text-sm flex items-center gap-1.5">
+                  <AlertCircle size={16} className="text-rose-600" /> Director Revision Request & Rejection Reason:
+                </strong>
+                <p className="mt-1 font-medium bg-white/70 p-2.5 rounded-lg border border-rose-100 text-rose-950">
+                  "{activeWorkOrder.revision_notes}"
+                </p>
+                <div className="mt-2 text-[11px] font-semibold text-rose-700">
+                  Please adjust the rates, contract timeline, or scope of services below and click <strong>"Resubmit MSA to Director for Approval →"</strong>.
+                </div>
               </div>
             )}
 
@@ -522,25 +529,37 @@ export default function VendorWorkOrders() {
               </div>
             </div>
 
-            {/* Scope of Work */}
+            {/* Scope of Services & Deliverables (Manual Edit Enabled) */}
             <div className="mb-5">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Scope of Work & Deliverables</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Scope of Services & Deliverables
+                </label>
+                <span className="text-[11px] font-semibold text-indigo-600">✏️ Editable Manual Text</span>
+              </div>
               <textarea
-                rows="3"
+                rows="4"
                 value={formData.scope_of_work}
                 onChange={(e) => setFormData({ ...formData, scope_of_work: e.target.value })}
-                className="w-full p-3.5 rounded-xl border border-slate-200 font-sans text-sm text-slate-900 outline-none focus:border-indigo-600 transition-colors resize-none"
+                placeholder="Specify key deliverables, responsibilities, and technical scope..."
+                className="w-full p-3.5 rounded-xl border border-slate-200 font-sans text-sm text-slate-900 outline-none focus:border-indigo-600 transition-colors resize-y"
               ></textarea>
             </div>
 
-            {/* Special Terms */}
+            {/* Special Terms & Clauses (Manual Edit Enabled) */}
             <div className="mb-6">
-              <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">Special Terms & Clauses</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                  Special Master Services Terms & Clauses
+                </label>
+                <span className="text-[11px] font-semibold text-indigo-600">✏️ Editable Manual Text</span>
+              </div>
               <textarea
-                rows="3"
+                rows="4"
                 value={formData.special_terms}
                 onChange={(e) => setFormData({ ...formData, special_terms: e.target.value })}
-                className="w-full p-3.5 rounded-xl border border-slate-200 font-sans text-sm text-slate-900 outline-none focus:border-indigo-600 transition-colors resize-none"
+                placeholder="Enter confidentiality, NDA, IP ownership, and notice period clauses..."
+                className="w-full p-3.5 rounded-xl border border-slate-200 font-sans text-sm text-slate-900 outline-none focus:border-indigo-600 transition-colors resize-y"
               ></textarea>
             </div>
 
@@ -548,10 +567,10 @@ export default function VendorWorkOrders() {
             <div className="mb-6 p-4 rounded-xl bg-slate-50 border border-dashed border-slate-300 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
                 <div className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                  <Upload className="w-4 h-4 text-indigo-600" /> Optional E-Signature Document (PDF)
+                  <Upload className="w-4 h-4 text-indigo-600" /> Optional E-Signature Agreement Document (PDF)
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5">
-                  Upload optional signed PDF agreement file, or use default click-to-approve signature flow.
+                  Upload optional signed PDF agreement file, or use default digital approval signature flow.
                 </div>
               </div>
               <input
@@ -588,7 +607,7 @@ export default function VendorWorkOrders() {
                 className="w-full md:w-auto px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs shadow-md transition-all inline-flex items-center justify-center gap-1.5 cursor-pointer border-none disabled:opacity-50"
               >
                 <Send className="w-3.5 h-3.5" />
-                {submitting ? 'Submitting...' : 'Submit to Client for Review →'}
+                {submitting ? 'Submitting...' : activeWorkOrder?.status === 'Revision Requested' ? 'Resubmit MSA to Director for Approval →' : 'Submit MSA to Director for Approval →'}
               </button>
             </div>
           </div>

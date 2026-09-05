@@ -247,11 +247,11 @@ def submit_work_order(
     work_order_id: str,
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Vendor submits Work Order for Client review."""
+    """Vendor submits or resubmits Master Services Agreement (MSA) for Company Director approval."""
     with get_session() as session:
         wo = session.get(WorkOrder, work_order_id)
         if not wo:
-            raise HTTPException(status_code=404, detail="Work Order not found.")
+            raise HTTPException(status_code=404, detail="Master Services Agreement (MSA) not found.")
 
         wo.status = "Submitted"
         wo.submitted_at = datetime.now(timezone.utc)
@@ -267,16 +267,16 @@ def approve_work_order(
     body: WorkOrderApproveIn,
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Hiring Manager / Client HR approves Work Order (click-to-approve or optional esign upload)."""
+    """Company Director approves Master Services Agreement (MSA)."""
     with get_session() as session:
         wo = session.get(WorkOrder, work_order_id)
         if not wo:
-            raise HTTPException(status_code=404, detail="Work Order not found.")
+            raise HTTPException(status_code=404, detail="Master Services Agreement (MSA) not found.")
 
         wo.status = "Approved"
-        wo.approved_by = body.approved_by or current_user.name
+        wo.approved_by = body.approved_by or f"{current_user.name} ({current_user.role})"
         wo.approved_at = datetime.now(timezone.utc)
-        wo.approval_type = body.approval_type
+        wo.approval_type = body.approval_type or "click_to_approve"
         wo.updated_at = datetime.now(timezone.utc)
 
         # Update candidate submission status if candidate exists
@@ -296,14 +296,14 @@ def request_revision(
     body: WorkOrderRevisionIn,
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    """Hiring Manager requests changes with revision notes."""
+    """Company Director requests changes / rejects MSA with mandatory revision feedback notes."""
     with get_session() as session:
         wo = session.get(WorkOrder, work_order_id)
         if not wo:
-            raise HTTPException(status_code=404, detail="Work Order not found.")
+            raise HTTPException(status_code=404, detail="Master Services Agreement (MSA) not found.")
 
         wo.status = "Revision Requested"
-        wo.revision_notes = body.revision_notes
+        wo.revision_notes = body.revision_notes or "Director requested commercial rate or scope revision."
         wo.updated_at = datetime.now(timezone.utc)
         session.commit()
         session.refresh(wo)

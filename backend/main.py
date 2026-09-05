@@ -57,7 +57,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -81,7 +81,98 @@ async def vercel_routing_middleware(request: Request, call_next):
             target = target.split("?")[0]
         request.scope["path"] = target
 
-    return await call_next(request)
+    origin = request.headers.get("origin")
+    req_headers = request.headers.get("access-control-request-headers", "*")
+
+    print(f"🌐 [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | RequestedHeaders: {req_headers}")
+
+    # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response
+        print(f"✨ [CORS PREFLIGHT OK] Returning 200 for OPTIONS preflight from Origin: {origin}")
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin or "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": req_headers,
+                "Access-Control-Allow-Credentials": "true",
+            },
+        )
+
+    response = await call_next(request)
+
+    # Ensure CORS headers on all HTTP responses for any origin (including Vercel branch previews)
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+
+    return response
+
+# --- Global Exception Handlers with CORS Preservation & Debug Logging ---
+import traceback
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = f"🔥 [UNHANDLED BACKEND SERVER ERROR] {request.method} {request.url.path}: {exc}"
+    print(error_msg, file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    
+    origin = request.headers.get("origin") or "*"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error: {str(exc)}",
+            "type": type(exc).__name__,
+            "path": request.url.path,
+        },
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    print(f"⚠️ [HTTP EXCEPTION {exc.status_code}] {request.method} {request.url.path}: {exc.detail}", file=sys.stderr)
+    origin = request.headers.get("origin") or "*"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint providing MongoDB connectivity and server diagnostics."""
+    db_status = "unknown"
+    db_error = None
+    try:
+        from modules.shared.db import db as mongo_db
+        mongo_db.command("ping")
+        db_status = "connected"
+    except Exception as err:
+        db_status = "error"
+        db_error = str(err)
+        print(f"🚨 [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
+
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "database_error": db_error,
+        "environment": os.getenv("VERCEL_ENV", "local"),
+    }
 
 app.include_router(identity_router, prefix="/api/auth")
 app.include_router(candidate_router)

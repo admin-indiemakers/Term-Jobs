@@ -149,6 +149,7 @@ export default function AdminDashboard() {
 
   const hiringManagers = useMemo(() => users.filter((u) => u.role === 'Hiring Manager'), [users]);
   const directors = useMemo(() => users.filter((u) => u.role === 'Director'), [users]);
+  const procurementUsers = useMemo(() => users.filter((u) => u.role === 'Procurement' || u.role === 'Procurement Team'), [users]);
   const pendingApprovals = useMemo(
     () => requisitions.filter((r) => (r.status || '').toLowerCase() === 'pending_approval'),
     [requisitions]
@@ -168,8 +169,9 @@ export default function AdminDashboard() {
   const displayedTeamMembers = useMemo(() => {
     if (teamTab === 'managers') return hiringManagers;
     if (teamTab === 'directors') return directors;
+    if (teamTab === 'procurement') return procurementUsers;
     return engagedVendors;
-  }, [teamTab, hiringManagers, directors, engagedVendors]);
+  }, [teamTab, hiringManagers, directors, procurementUsers, engagedVendors]);
 
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
@@ -543,6 +545,17 @@ export default function AdminDashboard() {
               </button>
               <button
                 type="button"
+                onClick={() => setTeamTab('procurement')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamTab === 'procurement'
+                    ? 'bg-white text-black shadow-2xs'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Procurement ({procurementUsers.length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setTeamTab('vendors')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   teamTab === 'vendors'
@@ -658,11 +671,11 @@ export default function AdminDashboard() {
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Account Role *
                 </label>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Hiring Manager' }))}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       inviteForm.role === 'Hiring Manager'
                         ? 'bg-black text-white shadow-2xs'
                         : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
@@ -673,13 +686,24 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Director' }))}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                       inviteForm.role === 'Director'
                         ? 'bg-black text-white shadow-2xs'
                         : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
                     }`}
                   >
                     Director
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Procurement Team' }))}
+                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      inviteForm.role === 'Procurement Team' || inviteForm.role === 'Procurement'
+                        ? 'bg-black text-white shadow-2xs'
+                        : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    Procurement
                   </button>
                 </div>
               </div>
