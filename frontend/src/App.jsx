@@ -5,6 +5,7 @@ import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import JoinHiringManager from './pages/JoinHiringManager';
 import JoinDirector from './pages/JoinDirector';
+import JoinProcurement from './pages/JoinProcurement';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
 import CandidateLogin from './pages/CandidateLogin';
@@ -14,6 +15,7 @@ import HiringManagerDashboard from './pages/HiringManagerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import ManageDirectors from './pages/ManageDirectors';
 import ManageHiringManagers from './pages/ManageHiringManagers';
+import ManageProcurement from './pages/ManageProcurement';
 import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import DirectorDashboard from './pages/DirectorDashboard';
@@ -89,6 +91,8 @@ export default function App() {
         <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
         <Route path="/join/director" element={<JoinDirector />} />
         <Route path="/invite/director" element={<JoinDirector />} />
+        <Route path="/join/procurement" element={<JoinProcurement />} />
+        <Route path="/invite/procurement" element={<JoinProcurement />} />
         <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
@@ -130,6 +134,7 @@ export default function App() {
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/directors" element={<ManageDirectors />} />
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
+          <Route path="admin/procurement" element={<ManageProcurement />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="admin/vendors" element={<ManagePartnerVendors />} />
           <Route path="vendor/work-orders" element={<VendorWorkOrders />} />

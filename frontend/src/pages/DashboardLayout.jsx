@@ -499,6 +499,13 @@ export default function DashboardLayout() {
                 Directors
               </NavLink>
               <NavLink
+                to="/dashboard/admin/procurement"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Procurement
+              </NavLink>
+              <NavLink
                 to="/dashboard/admin/partner-vendors"
                 onClick={onLinkClick}
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}

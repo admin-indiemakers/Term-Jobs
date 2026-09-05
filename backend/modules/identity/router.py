@@ -1587,6 +1587,74 @@ def register_director(
     }
 
 
+@router.post("/join/procurement", status_code=status.HTTP_201_CREATED)
+@router.post("/procurement/register", status_code=status.HTTP_201_CREATED)
+def register_procurement(
+    body: DirectorInviteIn,
+    db: Session = Depends(get_db),
+):
+    """Public self-registration for Procurement Team members via secure company invite link."""
+    if not body.email or not body.email.strip():
+        raise HTTPException(status_code=400, detail="Email address is required")
+    if not body.name or not body.name.strip():
+        raise HTTPException(status_code=400, detail="Full name is required")
+    if not body.password or len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    email = body.email.strip().lower()
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email address already exists. Please log in.",
+        )
+
+    all_tenants = db.query(Tenant).all()
+    target_tenant = None
+    if body.tenant_id:
+        target_tenant = next((t for t in all_tenants if t.id == body.tenant_id), None)
+
+    if not target_tenant and body.company_name:
+        comp_clean = body.company_name.strip().lower()
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == comp_clean), None)
+
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if (t.name or '').strip().lower() == 'bearitt'), None)
+    if not target_tenant:
+        target_tenant = next((t for t in all_tenants if getattr(t, 'tenant_type', '') == 'client'), None)
+
+    tenant_id = target_tenant.id if target_tenant else "local"
+
+    user = User(
+        tenant_id=tenant_id,
+        email=email,
+        name=body.name.strip(),
+        password_hash=hash_password(body.password),
+        role="Procurement Team",
+        department=body.department.strip() or "Procurement & Commercials",
+        created_by="self_invite",
+        is_active=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "success": True,
+        "message": f"Access request submitted successfully for {user.name}. Your account is pending company administrator approval.",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "role": user.role,
+            "department": user.department,
+            "tenant_id": user.tenant_id,
+            "tenant_name": target_tenant.name if target_tenant else "Bearitt",
+            "is_active": False,
+        },
+    }
+
+
 def _admin_logs():
     from modules.shared.db import db as _db
     return _db["admin_audit_logs"]
