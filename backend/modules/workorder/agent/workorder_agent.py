@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 
 def generate_autofill_workorder(candidate_data: dict, requisition_data: dict) -> dict:
-    """AI Work Order Agent: Synthesizes candidate & requisition details to auto-generate a Work Order.
+    """AI Master Services Agreement (MSA) Agent: Synthesizes candidate & requisition details to auto-generate an MSA.
     
     Strictly incorporates vendor_visible_floor & vendor_visible_cap from the requisition.
     """
@@ -56,36 +56,37 @@ def generate_autofill_workorder(candidate_data: dict, requisition_data: dict) ->
     start_date_str = start_dt.strftime("%Y-%m-%d")
     end_date_str = end_dt.strftime("%Y-%m-%d")
 
-    # 4. Scope of Work (Summarized from JD or role title)
+    # 4. Scope of Services & Deliverables (Summarized from JD or role title)
     title = requisition_data.get("title") or candidate_data.get("requisition_title") or "Contract Professional"
     jd_summary = requisition_data.get("generated_jd_markdown") or ""
     
     bullets = [
-        f"Design, build, and deliver engineering solutions for the {title} engagement.",
-        "Collaborate with the client engineering team, participate in daily standups and sprint planning.",
-        "Ensure compliance with security guidelines, maintain automated test coverage, and documentation."
+        f"Design, build, and execute master technical services for the {title} project engagement.",
+        "Collaborate with the engineering team, participate in architecture reviews and sprint deliverables.",
+        "Ensure full compliance with client security standards, maintain code test coverage, and documentation."
     ]
     if jd_summary and len(jd_summary) > 50:
         cleaned_jd = jd_summary[:300].replace('#', '').strip()
-        bullets[0] = f"Key Responsibilities: {cleaned_jd}..."
+        bullets[0] = f"Key Services Scope: {cleaned_jd}..."
 
     scope_text = "\n• " + "\n• ".join(bullets)
 
-    # 5. Commercial Terms & Special Clauses
+    # 5. Master Services Agreement Commercial Terms & Clauses
     special_terms = (
-        "1. Billing Cycle: Monthly invoice generation based on approved timesheets.\n"
-        "2. Payment Terms: NET 30 from invoice receipt date.\n"
-        "3. Confidentiality: Non-Disclosure Agreement (NDA) & client IP assignment apply.\n"
-        "4. Notice Period: 14 calendar days written notice by either party for early termination.\n"
-        f"5. Vendor Visible Rate Range: ₹{floor:,.0f} - ₹{cap:,.0f} / month."
+        "1. Master Services Agreement (MSA) Governing Terms: Standard commercial terms apply.\n"
+        "2. Billing Cycle: Monthly invoice generation based on verified service delivery.\n"
+        "3. Payment Terms: NET 30 from invoice receipt date.\n"
+        "4. Confidentiality & IP: Strict Non-Disclosure (NDA) & client IP assignment apply upon execution.\n"
+        "5. Notice Period: 14 calendar days written notice by either party for early agreement termination.\n"
+        f"6. Vendor Visible Rate Range: ₹{floor:,.0f} - ₹{cap:,.0f} / month."
     )
 
     # 6. Reasoning Summary
     ai_reasoning = (
-        f"AI Agent analyzed candidate '{candidate_data.get('candidate_name', 'Candidate')}' (Match Score: {match_score:.1f}%) "
+        f"AI MSA Agent analyzed candidate '{candidate_data.get('candidate_name', 'Candidate')}' (Match Score: {match_score:.1f}%) "
         f"against requisition '{title}'. Recommended billing rate set to ₹{calculated_rate:,.0f}/month within the "
         f"Vendor Visible Floor (₹{floor:,.0f}) and Vendor Visible Cap (₹{cap:,.0f}). "
-        f"Contract timeline set for {duration_months} months starting {start_date_str}."
+        f"Master Services Agreement timeline set for {duration_months} months starting {start_date_str}."
     )
 
     return {

@@ -389,25 +389,25 @@ export default function AcceptedCandidates() {
                   const wo = woMap[id];
                   let woBadge = (
                     <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold">
-                      Pending Vendor WO
+                      Pending Vendor MSA
                     </span>
                   );
                   if (wo?.status === 'Submitted') {
                     woBadge = (
                       <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-bold border border-blue-200">
-                        WO Received
+                        Pending Director Approval
                       </span>
                     );
                   } else if (wo?.status === 'Approved') {
                     woBadge = (
                       <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[11px] font-bold border border-emerald-200">
-                        WO Approved ✓
+                        MSA Approved by Director ({wo.approved_by || 'Director'}) ✓
                       </span>
                     );
                   } else if (wo?.status === 'Revision Requested') {
                     woBadge = (
                       <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 rounded-full text-[11px] font-bold border border-rose-200">
-                        Revision Requested
+                        Revision Requested by Director
                       </span>
                     );
                   }
@@ -445,7 +445,7 @@ export default function AcceptedCandidates() {
                             onClick={() => handleOpenReviewWo(cand)}
                             className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11.5px] rounded-lg border border-indigo-200 transition-colors cursor-pointer"
                           >
-                            Review Work Order
+                            View MSA Approval Status
                           </button>
                         ) : (
                           <button
@@ -466,10 +466,10 @@ export default function AcceptedCandidates() {
         </div>
       </div>
 
-      {/* WORK ORDER REVIEW MODAL FOR HIRING MANAGER / CLIENT HR */}
+      {/* MASTER SERVICES AGREEMENT (MSA) APPROVAL STATUS REVIEW MODAL */}
       {reviewCandidate && (
         <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 my-8 animate-in fade-in duration-200 relative">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 my-8 animate-in fade-in duration-200 relative text-left">
             <button
               onClick={() => setReviewCandidate(null)}
               className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 bg-slate-100 p-2 rounded-full border-none cursor-pointer"
@@ -482,7 +482,7 @@ export default function AcceptedCandidates() {
                 <FileText size={24} />
               </div>
               <div>
-                <h2 className="text-xl font-extrabold text-slate-900">Work Order Commercial Review</h2>
+                <h2 className="text-xl font-extrabold text-slate-900">Master Services Agreement (MSA) Status</h2>
                 <p className="text-xs text-slate-500">
                   Candidate: <strong className="text-slate-800">{reviewCandidate.candidate_name || reviewCandidate.name}</strong> ({reviewCandidate.requisition_title})
                 </p>
@@ -491,6 +491,35 @@ export default function AcceptedCandidates() {
 
             {reviewingWo ? (
               <div className="space-y-5">
+                {/* Executive Approval Badge Summary Banner */}
+                <div className={`p-4 rounded-2xl border flex items-center justify-between gap-3 ${
+                  reviewingWo.status === 'Approved' ? 'bg-emerald-50 border-emerald-200 text-emerald-900' :
+                  reviewingWo.status === 'Revision Requested' ? 'bg-rose-50 border-rose-200 text-rose-900' :
+                  'bg-blue-50 border-blue-200 text-blue-900'
+                }`}>
+                  <div>
+                    <div className="text-[11px] font-bold uppercase tracking-wider">Director Governance Approval Status</div>
+                    <div className="text-base font-extrabold mt-0.5">
+                      {reviewingWo.status === 'Approved' ? `Approved by Director (${reviewingWo.approved_by || 'Executive'}) ✓` :
+                       reviewingWo.status === 'Revision Requested' ? 'Revision Requested by Director ⚠️' :
+                       'Pending Director Review & Approval ⏳'}
+                    </div>
+                  </div>
+                  {reviewingWo.approved_at && (
+                    <div className="text-right text-xs font-semibold shrink-0">
+                      Approved: {new Date(reviewingWo.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Director Revision Feedback if any */}
+                {reviewingWo.status === 'Revision Requested' && reviewingWo.revision_notes && (
+                  <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-900 leading-relaxed">
+                    <strong className="font-bold text-rose-950 block mb-1">⚠️ Director Revision Feedback:</strong>
+                    "{reviewingWo.revision_notes}"
+                  </div>
+                )}
+
                 {/* AI Reasoning Banner if available */}
                 {reviewingWo.ai_reasoning && (
                   <div className="p-3.5 rounded-xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-900 leading-relaxed">
@@ -521,9 +550,9 @@ export default function AcceptedCandidates() {
                   </div>
                 </div>
 
-                {/* Scope of Work */}
+                {/* Scope of Services */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-slate-500 mb-1">Scope of Work & Deliverables</h4>
+                  <h4 className="text-xs font-bold uppercase text-slate-500 mb-1">Scope of Services & Deliverables</h4>
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap">
                     {reviewingWo.scope_of_work || 'Standard deliverables as per role JD.'}
                   </div>
@@ -531,7 +560,7 @@ export default function AcceptedCandidates() {
 
                 {/* Special Terms */}
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-slate-500 mb-1">Special Terms & Clauses</h4>
+                  <h4 className="text-xs font-bold uppercase text-slate-500 mb-1">Special Master Services Terms & Clauses</h4>
                   <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap">
                     {reviewingWo.special_terms || 'Standard NET 30 payment terms.'}
                   </div>
@@ -540,78 +569,26 @@ export default function AcceptedCandidates() {
                 {/* Optional E-Sign File Attachment */}
                 {reviewingWo.esign_document_url && (
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between">
-                    <span className="font-semibold">📎 Vendor Attached Signed Document: {reviewingWo.esign_filename || 'WorkOrder_Signed.pdf'}</span>
+                    <span className="font-semibold">📎 Signed MSA Document: {reviewingWo.esign_filename || 'MSA_Signed.pdf'}</span>
                     <a href={reviewingWo.esign_document_url} target="_blank" rel="noreferrer" className="text-emerald-700 font-bold underline">
                       View Signed PDF
                     </a>
                   </div>
                 )}
 
-                {/* Optional Upload E-Sign PDF for Approver */}
-                <div className="p-3.5 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-xs space-y-1">
-                  <div className="font-bold text-slate-700">Optional: Attach Signed E-Sign PDF File</div>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => setEsignFile(e.target.files[0])}
-                    className="text-xs text-slate-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white cursor-pointer"
-                  />
+                {/* Close button */}
+                <div className="flex justify-end pt-3 border-t border-slate-100">
+                  <button
+                    onClick={() => setReviewCandidate(null)}
+                    className="px-5 py-2 bg-slate-900 hover:bg-black text-white font-bold text-xs rounded-xl cursor-pointer border-none"
+                  >
+                    Close Status View
+                  </button>
                 </div>
-
-                {/* Revision Textarea Input */}
-                {showRevisionInput && (
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2">
-                    <label className="block text-xs font-bold uppercase text-rose-800">
-                      Revision Feedback for Vendor
-                    </label>
-                    <textarea
-                      rows="3"
-                      placeholder="Specify requested commercial or term changes..."
-                      value={revisionNotes}
-                      onChange={(e) => setRevisionNotes(e.target.value)}
-                      className="w-full p-3 rounded-xl border border-rose-200 text-xs outline-none bg-white text-slate-900"
-                    ></textarea>
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => setShowRevisionInput(false)}
-                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 border-none bg-transparent cursor-pointer"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={handleRequestRevision}
-                        disabled={actionLoading || !revisionNotes.trim()}
-                        className="px-4 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl cursor-pointer border-none disabled:opacity-50"
-                      >
-                        Submit Revision Feedback →
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Action Buttons */}
-                {!showRevisionInput && (
-                  <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-3 border-t border-slate-100">
-                    <button
-                      onClick={() => setShowRevisionInput(true)}
-                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl border-none cursor-pointer"
-                    >
-                      Request Revision 💬
-                    </button>
-                    <button
-                      onClick={handleApproveWo}
-                      disabled={actionLoading}
-                      className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer border-none disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
-                    >
-                      <CheckCircle2 size={16} />
-                      {actionLoading ? 'Approving...' : 'Approve Work Order ✓'}
-                    </button>
-                  </div>
-                )}
               </div>
             ) : (
               <div className="py-8 text-center text-slate-500 text-sm">
-                No Work Order submitted by vendor yet for this candidate.
+                No Master Services Agreement submitted by vendor yet for this candidate.
               </div>
             )}
           </div>
