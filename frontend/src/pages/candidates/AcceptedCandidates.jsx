@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
-  Check, ArrowRight, AlertCircle, X, Shield, Laptop, BookOpen, CheckCircle2
+  Check, ArrowRight, AlertCircle, X, Shield, Laptop, BookOpen, CheckCircle2,
+  FileText, Sparkles, Send, Upload, DollarSign, Calendar, MessageSquare
 } from 'lucide-react';
 
 const DEFAULT_SOFTWARE = [
@@ -28,6 +29,7 @@ export default function AcceptedCandidates() {
 
   const [candidates, setCandidates] = useState([]);
   const [onboardingDocs, setOnboardingDocs] = useState({});
+  const [workOrders, setWorkOrders] = useState([]);
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -38,6 +40,14 @@ export default function AcceptedCandidates() {
   const [setupSoftware, setSetupSoftware] = useState(DEFAULT_SOFTWARE);
   const [setupTraining, setSetupTraining] = useState(DEFAULT_TRAINING);
   const [savingSetup, setSavingSetup] = useState(false);
+
+  // Work Order Review Modal State
+  const [reviewingWo, setReviewingWo] = useState(null);
+  const [reviewCandidate, setReviewCandidate] = useState(null);
+  const [revisionNotes, setRevisionNotes] = useState('');
+  const [showRevisionInput, setShowRevisionInput] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [esignFile, setEsignFile] = useState(null);
 
   // Time-aware greeting
   const greetingText = useMemo(() => {
@@ -50,20 +60,22 @@ export default function AcceptedCandidates() {
   const tenantName = user?.tenant_name || 'Bearitt';
   const userName = user?.name || 'HR';
 
-  // Load Real Accepted Candidates & Onboarding Data from Backend
+  // Load Real Accepted Candidates, Onboarding Data & Work Orders
   const loadData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [candData, obData, issuesData] = await Promise.all([
+      const [candData, obData, issuesData, woData] = await Promise.all([
         request('/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
+        request('/api/work-orders', { token }).catch(() => []),
       ]);
 
       const candList = Array.isArray(candData) ? candData : candData?.candidates || [];
       const obList = Array.isArray(obData) ? obData : obData?.candidates || [];
       const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
+      const woList = Array.isArray(woData) ? woData : woData?.work_orders || [];
 
       // Create mapping by candidate id
       const obMap = {};
@@ -74,6 +86,7 @@ export default function AcceptedCandidates() {
 
       setCandidates(candList);
       setOnboardingDocs(obMap);
+      setWorkOrders(woList);
       setIssues(issueList.filter((i) => i.status === 'open'));
     } catch (err) {
       console.error('Failed to load accepted candidates:', err);
@@ -87,11 +100,17 @@ export default function AcceptedCandidates() {
     loadData();
   }, [token]);
 
+  const woMap = useMemo(() => {
+    const map = {};
+    workOrders.forEach((wo) => {
+      if (wo.candidate_id) map[wo.candidate_id] = wo;
+    });
+    return map;
+  }, [workOrders]);
+
   // Derived Real KPI Metrics
   const metrics = useMemo(() => {
     const totalAccepted = candidates.length;
-    
-    // Count onboarding statuses
     const obValues = Object.values(onboardingDocs);
     const started = obValues.filter((o) => o.status === 'in_progress' || o.status === 'started').length;
     const completed = obValues.filter((o) => o.status === 'completed').length;
@@ -104,7 +123,7 @@ export default function AcceptedCandidates() {
     };
   }, [candidates, onboardingDocs, issues]);
 
-  // Display Table Rows (strictly real candidates from DB)
+  // Display Table Rows
   const displayRows = useMemo(() => {
     return candidates;
   }, [candidates]);
@@ -128,7 +147,7 @@ export default function AcceptedCandidates() {
     }
   };
 
-  // Save Onboarding Setup to Live Backend
+  // Save Onboarding Setup
   const handleSaveSetup = async () => {
     if (!editingCandidate) return;
     setSavingSetup(true);
@@ -148,286 +167,207 @@ export default function AcceptedCandidates() {
       };
 
       await request(`/api/onboarding/${id}`, {
-        method: 'PUT',
         token,
-        body: payload,
-      }).catch(async () => {
-        // Fallback POST if not exists
-        await request(`/api/onboarding/${id}`, {
-          method: 'POST',
-          token,
-          body: payload,
-        });
+        method: 'POST',
+        body: JSON.stringify(payload),
       });
 
-      setSuccessInfo(`Onboarding configured for ${editingCandidate.candidate_name || 'candidate'}.`);
+      setSuccessInfo(`Onboarding setup saved for ${payload.candidate_name}!`);
       setEditingCandidate(null);
       loadData();
     } catch (err) {
       console.error('Failed to save onboarding setup:', err);
-      setError(err.message || 'Failed to save onboarding checklist.');
+      setError(err.message || 'Failed to save setup.');
     } finally {
       setSavingSetup(false);
     }
   };
 
+  // Open Work Order Review Modal for Client HM/HR
+  const handleOpenReviewWo = (cand) => {
+    const id = cand.id || cand.candidate_id;
+    const wo = woMap[id];
+    setReviewCandidate(cand);
+    setReviewingWo(wo || null);
+    setShowRevisionInput(false);
+    setRevisionNotes('');
+    setEsignFile(null);
+  };
+
+  // Approve Work Order (Click-to-Approve or Optional E-sign PDF upload)
+  const handleApproveWo = async () => {
+    if (!reviewingWo) return;
+    setActionLoading(true);
+    setError('');
+
+    try {
+      // Optional E-sign upload if provided
+      if (esignFile) {
+        const fileForm = new FormData();
+        fileForm.append('file', esignFile);
+        await fetch(`/api/work-orders/${reviewingWo.id}/upload-esign`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: fileForm,
+        });
+      }
+
+      await request(`/api/work-orders/${reviewingWo.id}/approve`, {
+        token,
+        method: 'POST',
+        body: JSON.stringify({
+          approved_by: user?.name || 'Hiring Manager',
+          approval_type: esignFile ? 'esign_upload' : 'click_to_approve',
+        }),
+      });
+
+      setSuccessInfo(`Work Order approved for ${reviewingWo.candidate_name}!`);
+      setReviewingWo(null);
+      setReviewCandidate(null);
+      loadData();
+    } catch (err) {
+      console.error('Failed to approve Work Order:', err);
+      setError(err.message || 'Failed to approve Work Order.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // Request Revision for Work Order
+  const handleRequestRevision = async () => {
+    if (!reviewingWo || !revisionNotes.trim()) return;
+    setActionLoading(true);
+    setError('');
+
+    try {
+      await request(`/api/work-orders/${reviewingWo.id}/request-revision`, {
+        token,
+        method: 'POST',
+        body: JSON.stringify({
+          reviewer: user?.name || 'Hiring Manager',
+          revision_notes: revisionNotes.trim(),
+        }),
+      });
+
+      setSuccessInfo('Revision feedback sent back to vendor!');
+      setReviewingWo(null);
+      setReviewCandidate(null);
+      loadData();
+    } catch (err) {
+      console.error('Failed to request revision:', err);
+      setError(err.message || 'Failed to submit revision feedback.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
-    <div
-      className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0"
-    >
-      <style>{`
-        .custom-cand-scroll::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        .custom-cand-scroll::-webkit-scrollbar-track {
-          background: #FFFFFF;
-        }
-        .custom-cand-scroll::-webkit-scrollbar-thumb {
-          background: #E2E2DC;
-          border-radius: 4px;
-        }
-        .custom-cand-scroll::-webkit-scrollbar-thumb:hover {
-          background: #A3A39F;
-        }
-      `}</style>
-
-      {/* ========================================================
-          1. DARK HERO BANNER (MATCHES IMAGE 2 EXACTLY)
-         ======================================================== */}
-      <div
-        style={{
-          backgroundColor: '#0A0A0A',
-          borderRadius: 22,
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
-        }}
-        className="shrink-0 p-4 sm:p-6 text-white space-y-2 relative overflow-hidden rounded-[20px] sm:rounded-[22px]"
-      >
-        <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#A3A3A3]">
-          {greetingText}, {userName}
+    <div className="p-4 sm:p-6 md:p-8 max-w-[1400px] mx-auto space-y-6 font-sans">
+      {/* 1. HEADER SECTION */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+            {greetingText}, {userName.toUpperCase()} • {tenantName.toUpperCase()}
+          </div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-[#0A0A0A] tracking-tight">
+            Accepted Candidates & Work Orders
+          </h1>
         </div>
-        <h1 className="text-[1.8rem] sm:text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
-          Accepted Candidates
-        </h1>
-        <p className="text-[13px] text-[#A3A3A3] font-medium pt-0.5">
-          Accepted hires - setup and onboarding for each candidate.
-        </p>
-
-        <div className="flex items-center gap-2 pt-1">
-          <span
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.12)',
-            }}
-            className="px-3 py-1 text-[11px] font-bold text-white rounded-full flex items-center gap-1.5"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            <span>Hiring Manager</span>
-          </span>
-          <span
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.12)',
-            }}
-            className="px-3 py-1 text-[11px] font-bold text-white rounded-full"
-          >
-            {tenantName}
-          </span>
-        </div>
-      </div>
-
-      {/* ========================================================
-          2. TOP 4 BENTO METRIC CARDS (MATCHES IMAGE 2)
-         ======================================================== */}
-      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. ACCEPTED */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.accepted}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            ACCEPTED
-          </div>
-        </div>
-
-        {/* 2. ONBOARDING STARTED */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.started}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            ONBOARDING STARTED
-          </div>
-        </div>
-
-        {/* 3. ONBOARDING COMPLETE */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.completed}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            ONBOARDING COMPLETE
-          </div>
-        </div>
-
-        {/* 4. OPEN ISSUES */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.openIssues}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            OPEN ISSUES
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          3. NAVIGATION PILL TABS (MATCHES IMAGE 2)
-         ======================================================== */}
-      <div className="shrink-0 flex items-center gap-2 pt-0.5">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates')}
-          style={{
-            backgroundColor: '#FFFFFF',
-            color: '#0A0A0A',
-            borderRadius: 9999,
-            border: '1px solid #E2E2DC',
-          }}
-          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
-        >
-          Shortlisted
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates/accepted')}
-          style={{
-            backgroundColor: '#0A0A0A',
-            color: '#FFFFFF',
-            borderRadius: 9999,
-          }}
-          className="px-4 py-1.5 text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
-        >
-          Accepted
-        </button>
-
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/onboarding')}
-          style={{
-            backgroundColor: '#FFFFFF',
-            color: '#0A0A0A',
-            borderRadius: 9999,
-            border: '1px solid #E2E2DC',
-          }}
-          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
+          className="px-4 py-2 bg-[#0A0A0A] hover:bg-[#262626] text-white text-[12.5px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs self-start sm:self-auto border-none"
+        >
+          <span>Onboarding Hub</span>
+          <ArrowRight size={14} />
+        </button>
+      </div>
+
+      {/* 2. KPI METRICS CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
+          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.accepted}</div>
+          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">ACCEPTED</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
+          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.started}</div>
+          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">ONBOARDING STARTED</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
+          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.completed}</div>
+          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">ONBOARDING COMPLETE</div>
+        </div>
+        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
+          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.openIssues}</div>
+          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">OPEN ISSUES</div>
+        </div>
+      </div>
+
+      {/* 3. NAVIGATION PILL TABS */}
+      <div className="flex items-center gap-2 pt-0.5">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/candidates')}
+          className="px-4 py-1.5 bg-white text-[#0A0A0A] border border-[#E2E2DC] rounded-full text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
+        >
+          Shortlisted
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/candidates/accepted')}
+          className="px-4 py-1.5 bg-[#0A0A0A] text-white rounded-full text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs border-none"
+        >
+          Accepted
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/candidates/onboarding')}
+          className="px-4 py-1.5 bg-white text-[#0A0A0A] border border-[#E2E2DC] rounded-full text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
         >
           Onboarding
         </button>
       </div>
 
-      {/* ========================================================
-          4. MAIN CARD CONTAINER (ACCEPTED CANDIDATES DATA TABLE)
-         ======================================================== */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 22,
-          border: '1px solid #E2E2DC',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
-        }}
-        className="flex-1 min-h-[360px] md:min-h-0 flex flex-col p-4 sm:p-6 md:overflow-hidden"
-      >
-        {/* Header inside card */}
-        <div className="shrink-0 flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-[1.25rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
-              Accepted Candidates
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/candidates/onboarding')}
-            style={{
-              backgroundColor: '#0A0A0A',
-              color: '#FFFFFF',
-              borderRadius: 12,
-            }}
-            className="px-4 py-2 text-[12.5px] font-bold hover:bg-[#262626] transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
-          >
-            <span>Open Onboarding & Issues Hub</span>
-            <ArrowRight size={13} strokeWidth={2.5} />
-          </button>
+      {/* 4. MAIN DATA TABLE */}
+      <div className="bg-white rounded-2xl border border-[#E2E2DC] shadow-2xs p-4 sm:p-6 overflow-hidden">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-extrabold text-[#0A0A0A]">Accepted Candidates & Work Orders</h2>
         </div>
 
         {error && (
-          <div className="shrink-0 mb-3 p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl text-[12.5px] text-[#DC2626] font-medium flex items-center gap-2">
-            <AlertCircle size={15} />
-            <span>{error}</span>
+          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
+            <AlertCircle size={15} /> <span>{error}</span>
           </div>
         )}
         {successInfo && (
-          <div className="shrink-0 mb-3 p-3 bg-[#F0FDF4] border border-[#DCFCE7] rounded-xl text-[12.5px] text-[#16A34A] font-medium flex items-center gap-2">
-            <Check size={15} />
-            <span>{successInfo}</span>
+          <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-medium flex items-center gap-2">
+            <Check size={15} /> <span>{successInfo}</span>
           </div>
         )}
 
-        {/* Data Table (Scrollable inside card) */}
-        <div className="flex-1 overflow-x-auto overflow-y-auto custom-cand-scroll">
-          <table className="w-full text-left border-collapse min-w-[620px]">
-            <thead className="sticky top-0 bg-[#FFFFFF] z-10 shadow-2xs">
-              <tr className="border-b border-[#F2F2EE] text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85] bg-[#FFFFFF]">
-                <th className="py-3.5 pl-4 pr-3 font-extrabold">CANDIDATE</th>
-                <th className="py-3.5 px-3 font-extrabold">VENDOR</th>
-                <th className="py-3.5 px-3 font-extrabold">REQUISITION</th>
-                <th className="py-3.5 px-3 font-extrabold text-center">MATCH</th>
-                <th className="py-3.5 px-3 font-extrabold text-center">ONBOARDING</th>
-                <th className="py-3.5 pr-4 pl-3 font-extrabold text-right">ACTION</th>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead>
+              <tr className="border-b border-[#F2F2EE] text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                <th className="py-3.5 pl-4 pr-3">CANDIDATE</th>
+                <th className="py-3.5 px-3">VENDOR</th>
+                <th className="py-3.5 px-3">REQUISITION</th>
+                <th className="py-3.5 px-3 text-center">MATCH</th>
+                <th className="py-3.5 px-3 text-center">WORK ORDER</th>
+                <th className="py-3.5 px-3 text-center">ONBOARDING</th>
+                <th className="py-3.5 pr-4 pl-3 text-right">ACTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F2F2EE]">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
+                  <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-xs font-medium">
                     Loading accepted candidates...
                   </td>
                 </tr>
               ) : displayRows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
+                  <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-xs font-medium">
                     No accepted candidates found.
                   </td>
                 </tr>
@@ -436,93 +376,86 @@ export default function AcceptedCandidates() {
                   const id = cand.id || cand.candidate_id || `cand-${idx}`;
                   const rawId = cand.candidate_id || cand.id || `${idx}7fa08`;
                   const candCode = String(rawId).startsWith('BEAR-') ? String(rawId) : `BEAR-${String(rawId).slice(0, 6)}`;
-                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Sreehari P S';
-                  const vendorName = cand.vendor_name || 'bridgeon';
-                  const reqRef = cand.requisition_ref || 'REQ-F7F406';
-                  const reqTitle = cand.requisition_title || 'DevOps Engineer';
+                  const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
+                  const vendorName = cand.vendor_name || 'Vendor';
+                  const reqRef = cand.requisition_ref || 'REQ-ACTIVE';
+                  const reqTitle = cand.requisition_title || 'Contract Role';
 
                   const score = cand.match_score != null ? Math.round(cand.match_score) : null;
-                  const obDoc = onboardingDocs[id] || (idx === 5 ? { status: 'completed' } : null);
+                  const obDoc = onboardingDocs[id];
                   const isCompleted = obDoc?.status === 'completed';
                   const isInProgress = obDoc?.status === 'in_progress';
 
+                  const wo = woMap[id];
+                  let woBadge = (
+                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold">
+                      Pending Vendor WO
+                    </span>
+                  );
+                  if (wo?.status === 'Submitted') {
+                    woBadge = (
+                      <span className="px-2.5 py-0.5 bg-blue-50 text-blue-700 rounded-full text-[11px] font-bold border border-blue-200">
+                        WO Received
+                      </span>
+                    );
+                  } else if (wo?.status === 'Approved') {
+                    woBadge = (
+                      <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 rounded-full text-[11px] font-bold border border-emerald-200">
+                        WO Approved ✓
+                      </span>
+                    );
+                  } else if (wo?.status === 'Revision Requested') {
+                    woBadge = (
+                      <span className="px-2.5 py-0.5 bg-rose-50 text-rose-700 rounded-full text-[11px] font-bold border border-rose-200">
+                        Revision Requested
+                      </span>
+                    );
+                  }
+
                   return (
-                    <tr
-                      key={id}
-                      className="hover:bg-[#FAFAFA] transition-colors group"
-                    >
-                      {/* 1. CANDIDATE */}
+                    <tr key={id} className="hover:bg-[#FAFAFA] transition-colors">
                       <td className="py-3.5 pl-4 pr-3 align-middle">
-                        <div className="space-y-0.5">
-                          <div className="text-[13px] font-extrabold text-[#0A0A0A] tracking-tight">
-                            {candName}
-                          </div>
-                          <div className="text-[11px] text-[#8A8A85] font-medium">
-                            {candCode}
-                          </div>
-                        </div>
+                        <div className="text-[13px] font-extrabold text-[#0A0A0A]">{candName}</div>
+                        <div className="text-[11px] text-[#8A8A85] font-medium">{candCode}</div>
                       </td>
-
-                      {/* 2. VENDOR */}
+                      <td className="py-3.5 px-3 align-middle text-[12.5px] font-medium text-[#0A0A0A]">
+                        {vendorName}
+                      </td>
                       <td className="py-3.5 px-3 align-middle">
-                        <div className="text-[12.5px] font-medium text-[#0A0A0A]">
-                          {vendorName}
-                        </div>
+                        <div className="text-[12px] font-extrabold text-[#0A0A0A]">{reqRef}</div>
+                        <div className="text-[11px] text-[#8A8A85] font-medium">{reqTitle}</div>
                       </td>
-
-                      {/* 3. REQUISITION */}
-                      <td className="py-3.5 px-3 align-middle">
-                        <div className="space-y-0.5">
-                          <div className="text-[12px] font-extrabold text-[#0A0A0A]">
-                            {reqRef}
-                          </div>
-                          <div className="text-[11px] text-[#8A8A85] font-medium">
-                            {reqTitle}
-                          </div>
-                        </div>
+                      <td className="py-3.5 px-3 align-middle text-center font-bold text-[#D97706] text-xs">
+                        {score != null ? `${score}%` : '?%'}
                       </td>
-
-                      {/* 4. MATCH SCORE */}
-                      <td className="py-3.5 px-3 align-middle text-center">
-                        {score != null ? (
-                          <span className="text-[12.5px] font-extrabold text-[#D97706]">
-                            {score}%
-                          </span>
-                        ) : (
-                          <span className="text-[12px] font-bold text-[#D97706]">
-                            ?%
-                          </span>
-                        )}
-                      </td>
-
-                      {/* 5. ONBOARDING STATUS */}
+                      <td className="py-3.5 px-3 align-middle text-center">{woBadge}</td>
                       <td className="py-3.5 px-3 align-middle text-center">
                         <span
-                          style={{
-                            backgroundColor: isCompleted ? '#ECFDF5' : isInProgress ? '#FEF3C7' : '#F1F5F9',
-                            color: isCompleted ? '#059669' : isInProgress ? '#D97706' : '#64748B',
-                            borderRadius: 9999,
-                          }}
-                          className="inline-block px-3 py-0.5 text-[11px] font-bold"
+                          className={`inline-block px-3 py-0.5 text-[11px] font-bold rounded-full ${
+                            isCompleted ? 'bg-emerald-50 text-emerald-700' : isInProgress ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'
+                          }`}
                         >
                           {isCompleted ? 'Completed' : isInProgress ? 'In progress' : 'Not set up'}
                         </span>
                       </td>
-
-                      {/* 6. ACTION */}
-                      <td className="py-3.5 pr-4 pl-3 align-middle text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSetup(cand)}
-                          style={{
-                            backgroundColor: '#FFFFFF',
-                            borderRadius: 10,
-                            border: '1px solid #E2E2DC',
-                          }}
-                          className="px-3.5 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer shadow-2xs"
-                        >
-                          {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
-                        </button>
+                      <td className="py-3.5 pr-4 pl-3 align-middle text-right space-x-2">
+                        {wo ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReviewWo(cand)}
+                            className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11.5px] rounded-lg border border-indigo-200 transition-colors cursor-pointer"
+                          >
+                            Review Work Order
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSetup(cand)}
+                            className="px-3 py-1 bg-white hover:bg-[#F5F5F2] text-[#0A0A0A] font-bold text-[11.5px] rounded-lg border border-[#E2E2DC] transition-colors cursor-pointer"
+                          >
+                            {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -533,132 +466,246 @@ export default function AcceptedCandidates() {
         </div>
       </div>
 
-      {/* ========================================================
-          5. INTERACTIVE ONBOARDING SETUP MODAL (REAL BACKEND SYNC)
-         ======================================================== */}
+      {/* WORK ORDER REVIEW MODAL FOR HIRING MANAGER / CLIENT HR */}
+      {reviewCandidate && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 my-8 animate-in fade-in duration-200 relative">
+            <button
+              onClick={() => setReviewCandidate(null)}
+              className="absolute top-6 right-6 text-slate-400 hover:text-slate-700 bg-slate-100 p-2 rounded-full border-none cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                <FileText size={24} />
+              </div>
+              <div>
+                <h2 className="text-xl font-extrabold text-slate-900">Work Order Commercial Review</h2>
+                <p className="text-xs text-slate-500">
+                  Candidate: <strong className="text-slate-800">{reviewCandidate.candidate_name || reviewCandidate.name}</strong> ({reviewCandidate.requisition_title})
+                </p>
+              </div>
+            </div>
+
+            {reviewingWo ? (
+              <div className="space-y-5">
+                {/* AI Reasoning Banner if available */}
+                {reviewingWo.ai_reasoning && (
+                  <div className="p-3.5 rounded-xl bg-indigo-50 border border-indigo-100 text-xs text-indigo-900 leading-relaxed">
+                    <strong className="font-bold text-indigo-950 block mb-1">🤖 AI Derivation Reasoning:</strong>
+                    {reviewingWo.ai_reasoning}
+                  </div>
+                )}
+
+                {/* Key Commercial Metrics Card */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 rounded-2xl bg-slate-50 border border-slate-200">
+                  <div>
+                    <div className="text-[10.5px] font-bold uppercase text-slate-400">Agreed Billing Rate</div>
+                    <div className="text-base font-extrabold text-indigo-600">
+                      ₹{Number(reviewingWo.billing_rate || 0).toLocaleString()}/{reviewingWo.rate_type || 'month'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10.5px] font-bold uppercase text-slate-400">Vendor Rate Floor / Cap</div>
+                    <div className="text-xs font-semibold text-slate-700">
+                      ₹{Number(reviewingWo.vendor_visible_floor || 0).toLocaleString()} - ₹{Number(reviewingWo.vendor_visible_cap || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[10.5px] font-bold uppercase text-slate-400">Contract Timeline</div>
+                    <div className="text-xs font-semibold text-slate-700">
+                      {reviewingWo.start_date || 'TBD'} to {reviewingWo.end_date || 'TBD'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Scope of Work */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-500 mb-1">Scope of Work & Deliverables</h4>
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap">
+                    {reviewingWo.scope_of_work || 'Standard deliverables as per role JD.'}
+                  </div>
+                </div>
+
+                {/* Special Terms */}
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-500 mb-1">Special Terms & Clauses</h4>
+                  <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-800 whitespace-pre-wrap">
+                    {reviewingWo.special_terms || 'Standard NET 30 payment terms.'}
+                  </div>
+                </div>
+
+                {/* Optional E-Sign File Attachment */}
+                {reviewingWo.esign_document_url && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center justify-between">
+                    <span className="font-semibold">📎 Vendor Attached Signed Document: {reviewingWo.esign_filename || 'WorkOrder_Signed.pdf'}</span>
+                    <a href={reviewingWo.esign_document_url} target="_blank" rel="noreferrer" className="text-emerald-700 font-bold underline">
+                      View Signed PDF
+                    </a>
+                  </div>
+                )}
+
+                {/* Optional Upload E-Sign PDF for Approver */}
+                <div className="p-3.5 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-xs space-y-1">
+                  <div className="font-bold text-slate-700">Optional: Attach Signed E-Sign PDF File</div>
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    onChange={(e) => setEsignFile(e.target.files[0])}
+                    className="text-xs text-slate-600 file:mr-3 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-white cursor-pointer"
+                  />
+                </div>
+
+                {/* Revision Textarea Input */}
+                {showRevisionInput && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2">
+                    <label className="block text-xs font-bold uppercase text-rose-800">
+                      Revision Feedback for Vendor
+                    </label>
+                    <textarea
+                      rows="3"
+                      placeholder="Specify requested commercial or term changes..."
+                      value={revisionNotes}
+                      onChange={(e) => setRevisionNotes(e.target.value)}
+                      className="w-full p-3 rounded-xl border border-rose-200 text-xs outline-none bg-white text-slate-900"
+                    ></textarea>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setShowRevisionInput(false)}
+                        className="px-3 py-1.5 text-xs font-semibold text-slate-600 border-none bg-transparent cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleRequestRevision}
+                        disabled={actionLoading || !revisionNotes.trim()}
+                        className="px-4 py-1.5 bg-rose-600 text-white font-bold text-xs rounded-xl cursor-pointer border-none disabled:opacity-50"
+                      >
+                        Submit Revision Feedback →
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                {!showRevisionInput && (
+                  <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                    <button
+                      onClick={() => setShowRevisionInput(true)}
+                      className="w-full sm:w-auto px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-xl border-none cursor-pointer"
+                    >
+                      Request Revision 💬
+                    </button>
+                    <button
+                      onClick={handleApproveWo}
+                      disabled={actionLoading}
+                      className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md cursor-pointer border-none disabled:opacity-50 inline-flex items-center justify-center gap-1.5"
+                    >
+                      <CheckCircle2 size={16} />
+                      {actionLoading ? 'Approving...' : 'Approve Work Order ✓'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-8 text-center text-slate-500 text-sm">
+                No Work Order submitted by vendor yet for this candidate.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* INTERACTIVE ONBOARDING SETUP MODAL */}
       {editingCandidate && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 22,
-              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.15)',
-              maxWidth: 560,
-              width: '100%',
-            }}
-            className="p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200"
-          >
-            <div className="flex items-start justify-between border-b border-[#F2F2EE] pb-3.5">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 space-y-5 shadow-2xl border border-slate-200">
+            <div className="flex items-center justify-between border-b border-[#F2F2EE] pb-4">
               <div>
-                <h3 className="text-[1.2rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                  Configure Onboarding Setup
-                </h3>
-                <p className="text-[12px] text-[#737373] font-medium mt-0.5">
-                  {editingCandidate.candidate_name || editingCandidate.name} ? {editingCandidate.requisition_title || 'DevOps Engineer'}
+                <h3 className="text-base font-extrabold text-[#0A0A0A]">Setup Candidate Onboarding</h3>
+                <p className="text-[11.5px] text-[#8A8A85] font-medium">
+                  {editingCandidate.candidate_name || editingCandidate.name} ({editingCandidate.requisition_title || 'Role'})
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setEditingCandidate(null)}
-                className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold"
+                className="p-1 rounded-full text-[#8A8A85] hover:text-[#0A0A0A] hover:bg-[#F5F5F2] cursor-pointer border-none bg-transparent"
               >
-                ?
+                <X size={18} />
               </button>
             </div>
 
-            <div className="space-y-4 max-h-[60vh] overflow-y-auto custom-cand-scroll pr-1">
-              {/* IT & Software Access */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                  <Laptop size={13} />
-                  <span>IT & SYSTEM ACCESS</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {setupSoftware.map((item, idx) => (
-                    <label
-                      key={item.id}
-                      className="flex items-center gap-2 p-2.5 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={item.enabled}
-                        onChange={(e) => {
-                          const updated = [...setupSoftware];
-                          updated[idx] = { ...item, enabled: e.target.checked };
-                          setSetupSoftware(updated);
-                        }}
-                        className="rounded text-[#0A0A0A] focus:ring-0 w-4 h-4 cursor-pointer"
-                      />
-                      <span className="text-[12px] font-semibold text-[#0A0A0A]">
-                        {item.label}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+            {/* Software Access */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                <Laptop size={14} className="text-[#0A0A0A]" />
+                <span>Software & System Access</span>
               </div>
-
-              {/* Compliance & Training */}
-              <div className="space-y-2">
-                <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                  <BookOpen size={13} />
-                  <span>MANDATORY TRAINING & COMPLIANCE</span>
-                </div>
-                <div className="space-y-2">
-                  {setupTraining.map((item, idx) => (
-                    <label
-                      key={item.id}
-                      className="flex items-center justify-between p-2.5 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={item.enabled}
-                          onChange={(e) => {
-                            const updated = [...setupTraining];
-                            updated[idx] = { ...item, enabled: e.target.checked };
-                            setSetupTraining(updated);
-                          }}
-                          className="rounded text-[#0A0A0A] focus:ring-0 w-4 h-4 cursor-pointer"
-                        />
-                        <span className="text-[12px] font-semibold text-[#0A0A0A]">
-                          {item.label}
-                        </span>
-                      </div>
-                      {item.mandatory && (
-                        <span className="px-2 py-0.5 bg-[#FEF3C7] text-[#D97706] text-[10px] font-bold rounded">
-                          Mandatory
-                        </span>
-                      )}
-                    </label>
-                  ))}
-                </div>
+              <div className="space-y-1.5">
+                {setupSoftware.map((item, idx) => (
+                  <label key={item.id} className="flex items-center justify-between p-2.5 rounded-xl border border-[#E2E2DC] bg-[#FFFFFF] hover:bg-[#FAFAFA] cursor-pointer text-xs">
+                    <span className="font-semibold text-[#0A0A0A]">{item.label}</span>
+                    <input
+                      type="checkbox"
+                      checked={item.enabled}
+                      onChange={(e) => {
+                        const copy = [...setupSoftware];
+                        copy[idx].enabled = e.target.checked;
+                        setSetupSoftware(copy);
+                      }}
+                      className="w-4 h-4 accent-[#0A0A0A] cursor-pointer"
+                    />
+                  </label>
+                ))}
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-[#F2F2EE]">
+            {/* Training Modules */}
+            <div className="space-y-2">
+              <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                <BookOpen size={14} className="text-[#0A0A0A]" />
+                <span>Training & Compliance Modules</span>
+              </div>
+              <div className="space-y-1.5">
+                {setupTraining.map((item, idx) => (
+                  <label key={item.id} className="flex items-center justify-between p-2.5 rounded-xl border border-[#E2E2DC] bg-[#FFFFFF] hover:bg-[#FAFAFA] cursor-pointer text-xs">
+                    <span className="font-semibold text-[#0A0A0A]">
+                      {item.label} {item.mandatory && <span className="text-[#DC2626] font-bold">*</span>}
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={item.enabled}
+                      onChange={(e) => {
+                        const copy = [...setupTraining];
+                        copy[idx].enabled = e.target.checked;
+                        setSetupTraining(copy);
+                      }}
+                      className="w-4 h-4 accent-[#0A0A0A] cursor-pointer"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Save Buttons */}
+            <div className="flex items-center justify-end gap-3 border-t border-[#F2F2EE] pt-4">
               <button
                 type="button"
                 onClick={() => setEditingCandidate(null)}
-                style={{
-                  borderRadius: 12,
-                  border: '1px solid #E2E2DC',
-                  backgroundColor: '#FFFFFF',
-                }}
-                className="px-4 py-2 text-[12px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] cursor-pointer"
+                className="px-4 py-2 text-[12px] font-bold text-[#0A0A0A] bg-white border border-[#E2E2DC] rounded-xl hover:bg-[#F5F5F2] cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                disabled={savingSetup}
                 onClick={handleSaveSetup}
-                style={{
-                  borderRadius: 12,
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="px-5 py-2 text-[12px] font-bold hover:bg-[#262626] cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                disabled={savingSetup}
+                className="px-5 py-2 text-[12px] font-bold text-white bg-[#0A0A0A] hover:bg-[#262626] rounded-xl cursor-pointer border-none disabled:opacity-50"
               >
-                {savingSetup ? 'Saving...' : 'Save Onboarding Setup'}
+                {savingSetup ? 'Saving...' : 'Save & Publish Setup'}
               </button>
             </div>
           </div>
