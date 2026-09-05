@@ -152,6 +152,20 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         },
     )
 
+@app.get("/")
+@app.get("/api")
+@app.get("/api/")
+def root_status():
+    """Root endpoint returning API server health & status."""
+    return {
+        "status": "online",
+        "service": "TermJobs Requisition API Backend",
+        "version": "1.0.0",
+        "health_check": "/api/health",
+        "auth": "/api/auth/login",
+        "environment": os.getenv("VERCEL_ENV", "local"),
+    }
+
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
@@ -174,6 +188,7 @@ def health_check():
         "environment": os.getenv("VERCEL_ENV", "local"),
     }
 
+
 app.include_router(identity_router, prefix="/api/auth")
 app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")
@@ -191,21 +206,30 @@ app.include_router(workorder_router)
 
 # --- LLM provider selection -------------------------------------------------
 def _build_service():
-    from modules.requisition.agent.graph import make_checkpointer
-    from modules.requisition.llm.groq import GroqClient
-    from modules.requisition.llm.mock import MockLLM
-    from modules.requisition.services.requisition_service import RequisitionService
+    try:
+        from modules.requisition.agent.graph import make_checkpointer
+        from modules.requisition.llm.groq import GroqClient
+        from modules.requisition.llm.mock import MockLLM
+        from modules.requisition.services.requisition_service import RequisitionService
 
-    provider = os.getenv("LLM_PROVIDER", "groq").lower()
-    llm = GroqClient() if provider == "groq" else MockLLM()
-    return RequisitionService(
-        llm=llm,
-        session_factory=get_session,
-        checkpointer=make_checkpointer(),
-    )
+        provider = os.getenv("LLM_PROVIDER", "groq").lower()
+        llm = GroqClient() if provider == "groq" else MockLLM()
+        return RequisitionService(
+            llm=llm,
+            session_factory=get_session,
+            checkpointer=make_checkpointer(),
+        )
+    except Exception as err:
+        print(f"⚠️ [BUILD SERVICE STARTUP WARNING]: {err}", file=sys.stderr)
+        return None
 
 
-service = _build_service()
+try:
+    service = _build_service()
+except Exception as err:
+    service = None
+    print(f"⚠️ [SERVICE INIT FAILED]: {err}", file=sys.stderr)
+
 try:
     init_db()
 except Exception as exc:  # noqa: BLE001
