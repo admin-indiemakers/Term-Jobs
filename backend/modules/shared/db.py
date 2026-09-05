@@ -35,16 +35,34 @@ _client: "MongoClient | None" = None
 def _get_client() -> "MongoClient":
     global _client
     if _client is None:
-        _client = MongoClient(
-            settings.mongodb_url,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=10000,
-            maxPoolSize=50,
-            minPoolSize=10,
-            retryWrites=True,
-            retryReads=True,
-            tls=True,
-        )
+        import os
+        url = settings.mongodb_url
+        kwargs = {
+            "serverSelectionTimeoutMS": 5000,
+            "connectTimeoutMS": 10000,
+            "retryWrites": True,
+            "retryReads": True,
+        }
+        # In serverless environment like Vercel, use minPoolSize=0
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            kwargs["maxPoolSize"] = 10
+            kwargs["minPoolSize"] = 0
+        else:
+            kwargs["maxPoolSize"] = 50
+            kwargs["minPoolSize"] = 10
+
+        # Enable TLS only for cloud/SRV connections
+        if "mongodb+srv://" in url or "tls=true" in url.lower() or "ssl=true" in url.lower():
+            kwargs["tls"] = True
+            try:
+                import certifi
+                kwargs["tlsCAFile"] = certifi.where()
+            except ImportError:
+                pass
+
+        masked_url = url.split("@")[-1] if "@" in url else url
+        print(f"🔌 [MONGO CLIENT INIT] Connecting to MongoDB: {masked_url} (TLS={kwargs.get('tls', False)})")
+        _client = MongoClient(url, **kwargs)
     return _client
 
 

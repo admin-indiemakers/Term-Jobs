@@ -111,6 +111,69 @@ async def vercel_routing_middleware(request: Request, call_next):
 
     return response
 
+# --- Global Exception Handlers with CORS Preservation & Debug Logging ---
+import traceback
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = f"🔥 [UNHANDLED BACKEND SERVER ERROR] {request.method} {request.url.path}: {exc}"
+    print(error_msg, file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    
+    origin = request.headers.get("origin") or "*"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error: {str(exc)}",
+            "type": type(exc).__name__,
+            "path": request.url.path,
+        },
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    print(f"⚠️ [HTTP EXCEPTION {exc.status_code}] {request.method} {request.url.path}: {exc.detail}", file=sys.stderr)
+    origin = request.headers.get("origin") or "*"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint providing MongoDB connectivity and server diagnostics."""
+    db_status = "unknown"
+    db_error = None
+    try:
+        from modules.shared.db import db as mongo_db
+        mongo_db.command("ping")
+        db_status = "connected"
+    except Exception as err:
+        db_status = "error"
+        db_error = str(err)
+        print(f"🚨 [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
+
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "database_error": db_error,
+        "environment": os.getenv("VERCEL_ENV", "local"),
+    }
+
 app.include_router(identity_router, prefix="/api/auth")
 app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")

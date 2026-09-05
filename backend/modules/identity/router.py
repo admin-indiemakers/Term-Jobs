@@ -83,35 +83,54 @@ def _tenant_type(tenant_id: str, db: Session) -> str:
 
 @router.post("/login", response_model=TokenResponse)
 def login_user(body: UserLogin, db: Session = Depends(get_db)):
-    # Determine the lookup identifier: prefer username (candidate ID or ADMIN), fall back to email
     lookup = body.username or body.email or ""
+    print(f"🔑 [AUTH LOG] Login attempt for lookup='{lookup}' (username='{body.username}', email='{body.email}')")
 
-    user = None
-    if lookup.upper() == "ADMIN":
-        user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
-    elif lookup:
-        # Try candidate_id first, then email
-        user = db.query(User).filter(User.candidate_id == lookup).first()
-        if not user:
-            user = db.query(User).filter(User.email == lookup).first()
+    try:
+        user = None
+        if lookup.upper() == "ADMIN":
+            user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
+        elif lookup:
+            user = db.query(User).filter(User.candidate_id == lookup).first()
+            if not user:
+                user = db.query(User).filter(User.email == lookup).first()
+    except Exception as db_err:
+        import sys, traceback
+        print(f"🔥 [AUTH DB ERROR] Failed querying user during login: {db_err}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database connectivity error: {str(db_err)}",
+        )
 
-    if not user or not verify_password(body.password, user.password_hash):
+    if not user:
+        print(f"❌ [AUTH FAILED] User not found for lookup='{lookup}'")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    if not verify_password(body.password, user.password_hash):
+        print(f"❌ [AUTH FAILED] Incorrect password for user='{user.email}' (role='{user.role}')")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
 
     if getattr(user, 'is_deleted', False):
+        print(f"❌ [AUTH FAILED] User '{user.email}' is marked deleted")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
+        print(f"⚠️ [AUTH BLOCKED] User '{user.email}' account is inactive/pending approval")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Your account is pending approval by the company administrator. Please wait for approval before logging in.",
         )
 
-    comp = _get_company_profile(user.tenant_id, db)
+    print(f"✅ [AUTH SUCCESS] User '{user.email}' logged in successfully (role='{user.role}', tenant='{user.tenant_id}')")
 
+    comp = _get_company_profile(user.tenant_id, db)
     token_data = {"sub": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id}
     token = create_access_token(token_data)
 
