@@ -57,14 +57,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://term-jobs.vercel.app",
-        "https://term-jobs-j8ja-seven.vercel.app",
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-    ],
-    allow_origin_regex=r"https://.*\.vercel\.app",
+    allow_origin_regex=r"https://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,14 +81,15 @@ async def vercel_routing_middleware(request: Request, call_next):
             target = target.split("?")[0]
         request.scope["path"] = target
 
+    origin = request.headers.get("origin")
+
     # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
     if request.method == "OPTIONS":
-        origin = request.headers.get("origin") or "https://term-jobs.vercel.app"
         from fastapi.responses import Response
         return Response(
             status_code=200,
             headers={
-                "Access-Control-Allow-Origin": origin,
+                "Access-Control-Allow-Origin": origin or "*",
                 "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
                 "Access-Control-Allow-Headers": request.headers.get("access-control-request-headers", "*"),
                 "Access-Control-Allow-Credentials": "true",
@@ -103,15 +97,14 @@ async def vercel_routing_middleware(request: Request, call_next):
         )
 
     response = await call_next(request)
-    
-    # Ensure CORS headers on all HTTP responses
-    origin = request.headers.get("origin")
+
+    # Ensure CORS headers on all HTTP responses for any origin (including Vercel branch previews)
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
-        
+
     return response
 
 app.include_router(identity_router, prefix="/api/auth")
