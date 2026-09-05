@@ -66,20 +66,20 @@ app.add_middleware(
 @app.middleware("http")
 async def vercel_routing_middleware(request: Request, call_next):
     # Support Vercel serverless rewritten paths via query param or headers
-    target = request.query_params.get("__vercel_path")
-    if not target:
-        for header_key in ("x-matched-path", "x-forwarded-uri", "x-invoke-path"):
-            val = request.headers.get(header_key)
-            if val and val not in ("/api", "/api/", "/api/index", "/api/index.py"):
-                target = val
-                break
+    current_path = request.scope.get("path", "")
+    if current_path in ("/api/index.py", "/api/index", "/api/index.py/") or current_path.startswith("/api/index.py"):
+        forwarded = (
+            request.query_params.get("__vercel_path")
+            or request.headers.get("x-forwarded-uri")
+            or request.headers.get("x-matched-path")
+            or "/"
+        )
+        if "?" in forwarded:
+            forwarded = forwarded.split("?")[0]
+        if forwarded.startswith("//"):
+            forwarded = "/" + forwarded.lstrip("/")
+        request.scope["path"] = forwarded
 
-    if target:
-        if target.startswith("//"):
-            target = "/" + target.lstrip("/")
-        if "?" in target:
-            target = target.split("?")[0]
-        request.scope["path"] = target
 
     origin = request.headers.get("origin")
     req_headers = request.headers.get("access-control-request-headers", "*")
