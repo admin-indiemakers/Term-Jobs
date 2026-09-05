@@ -46,6 +46,7 @@ from modules.interview.router import router as interview_router
 from modules.onboarding.router import router as onboarding_router
 from modules.candidate_portal.router import router as candidate_portal_router
 from modules.workforce.router import router as workforce_router
+from modules.workorder.router import router as workorder_router
 
 
 app = FastAPI(
@@ -93,6 +94,7 @@ app.include_router(notifications_router)
 app.include_router(onboarding_router)
 app.include_router(candidate_portal_router)
 app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
+app.include_router(workorder_router)
 
 
 

@@ -39,6 +39,7 @@ import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Archives from './pages/Archives';
 import AdminAccounts from './pages/AdminAccounts';
+import VendorWorkOrders from './pages/vendor/VendorWorkOrders';
 
 
 function FullScreenLoader() {
@@ -131,6 +132,8 @@ export default function App() {
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="admin/vendors" element={<ManagePartnerVendors />} />
+          <Route path="vendor/work-orders" element={<VendorWorkOrders />} />
+          <Route path="work-orders" element={<VendorWorkOrders />} />
           <Route path="director" element={<DirectorDashboard view="overview" />} />
           <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
           <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
