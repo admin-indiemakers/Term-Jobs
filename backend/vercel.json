@@ -2,7 +2,8 @@
   "rewrites": [
     {
       "source": "/(.*)",
-      "destination": "/api/index.py?__vercel_path=/$1"
+      "destination": "/api/index.py"
     }
   ]
 }
+
