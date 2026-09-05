@@ -15,8 +15,17 @@ from modules.workorder.agent.workorder_agent import generate_autofill_workorder
 
 router = APIRouter(prefix="/api/work-orders", tags=["WorkOrders"])
 
-ESIGN_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "work_orders")
-os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
+if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+    ESIGN_UPLOAD_DIR = "/tmp/uploads/work_orders"
+else:
+    ESIGN_UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "uploads", "work_orders")
+
+try:
+    os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
+except Exception as _mkdir_err:
+    ESIGN_UPLOAD_DIR = "/tmp/uploads/work_orders"
+    os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
+
 
 
 def _work_order_dict(wo: WorkOrder) -> dict:
