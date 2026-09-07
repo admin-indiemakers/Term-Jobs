@@ -81,6 +81,15 @@ app.add_middleware(
 
 @app.middleware("http")
 async def vercel_routing_middleware(request: Request, call_next):
+    target = request.query_params.get("__vercel_path")
+    if target:
+        if target.startswith("//"):
+            target = "/" + target.lstrip("/")
+        if "?" in target:
+            target = target.split("?")[0]
+        request.scope["path"] = target
+        request.scope["root_path"] = ""
+
     origin = request.headers.get("origin")
     req_headers = request.headers.get("access-control-request-headers", "*")
 
