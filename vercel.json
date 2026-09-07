@@ -2,15 +2,19 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/backend/api/index.py"
+      "destination": "/backend/api/index.py?__vercel_path=/api/$1"
     },
     {
       "source": "/api",
-      "destination": "/backend/api/index.py"
+      "destination": "/backend/api/index.py?__vercel_path=/api"
     },
     {
       "source": "/health",
-      "destination": "/backend/api/index.py"
+      "destination": "/backend/api/index.py?__vercel_path=/health"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/backend/api/index.py?__vercel_path=/$1"
     }
   ]
 }
