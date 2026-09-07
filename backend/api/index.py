@@ -40,6 +40,8 @@ class VercelASGIApp:
                 cleaned_params = {k: v for k, v in params.items() if k != "__vercel_path"}
                 scope["query_string"] = urllib.parse.urlencode(cleaned_params, doseq=True).encode("utf-8")
 
+            print(f"?? [ASGI ROUTING] Method: {scope.get('method')} | Final Path: {scope.get('path')}")
+
         await self.asgi_app(scope, receive, send)
 
 app = VercelASGIApp(fastapi_app)

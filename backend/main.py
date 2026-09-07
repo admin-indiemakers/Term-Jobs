@@ -159,6 +159,7 @@ def health_check():
     }
 
 app.include_router(identity_router, prefix="/api/auth")
+app.include_router(identity_router, prefix="/auth")
 app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api", tags=["Calendar"])
