@@ -55,6 +55,22 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Route Not Found",
+            "requested_url": str(request.url),
+            "scope_path": request.scope.get("path"),
+            "scope_root_path": request.scope.get("root_path"),
+            "scope_raw_path": str(request.scope.get("raw_path")),
+            "query_params": dict(request.query_params),
+            "headers": dict(request.headers),
+        }
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=r"https://.*",
