@@ -1,37 +1,45 @@
 import sys
-import traceback
+import urllib.parse
 from pathlib import Path
 
 backend_root = Path(__file__).resolve().parent.parent
 if str(backend_root) not in sys.path:
     sys.path.insert(0, str(backend_root))
 
-try:
-    from main import app
-except Exception as e:
-    from fastapi import FastAPI, Request
-    from fastapi.responses import JSONResponse
-    
-    tb_str = traceback.format_exc()
-    print(f"🔥 [CRITICAL VERCEL BACKEND IMPORT ERROR]: {e}\n{tb_str}", file=sys.stderr)
-    
-    app = FastAPI(title="TermJobs Backend Diagnostic Fallback")
-    
-    @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"])
-    async def catch_all_error(request: Request, path: str = ""):
-        origin = request.headers.get("origin") or "*"
-        return JSONResponse(
-            status_code=500,
-            content={
-                "error": "Backend Application Failed to Start on Vercel",
-                "detail": str(e),
-                "type": type(e).__name__,
-                "traceback": tb_str.splitlines(),
-            },
-            headers={
-                "Access-Control-Allow-Origin": origin,
-                "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Allow-Methods": "*",
-                "Access-Control-Allow-Headers": "*",
-            },
-        )
+from main import app as fastapi_app
+
+class VercelASGIApp:
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            qs = scope.get("query_string", b"").decode("utf-8", errors="ignore")
+            params = urllib.parse.parse_qs(qs)
+
+            target_path = None
+            if "__vercel_path" in params and params["__vercel_path"]:
+                target_path = params["__vercel_path"][0]
+
+            if not target_path:
+                headers = dict(scope.get("headers", []))
+                for h_name in (b"x-matched-path", b"x-forwarded-uri", b"x-invoke-path"):
+                    h_val = headers.get(h_name, b"").decode("utf-8", errors="ignore")
+                    if h_val and h_val not in ("/api", "/api/", "/api/index", "/api/index.py"):
+                        target_path = h_val
+                        break
+
+            if target_path:
+                if target_path.startswith("//"):
+                    target_path = "/" + target_path.lstrip("/")
+                if "?" in target_path:
+                    target_path = target_path.split("?")[0]
+                scope["path"] = target_path
+
+            if "__vercel_path" in params:
+                cleaned_params = {k: v for k, v in params.items() if k != "__vercel_path"}
+                scope["query_string"] = urllib.parse.urlencode(cleaned_params, doseq=True).encode("utf-8")
+
+        await self.asgi_app(scope, receive, send)
+
+app = VercelASGIApp(fastapi_app)
