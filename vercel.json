@@ -1,98 +1,20 @@
 {
-  "services": {
-    "frontend": {
-      "root": "frontend",
-      "framework": "vite"
-    },
-    "backend": {
-      "root": "backend",
-      "entrypoint": "main:app"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
+      "destination": "/backend/api/index.py?__vercel_path=/api/$1"
     },
     {
       "source": "/api",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/requisitions/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/requisitions",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/company-profiles/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/company-profiles",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/candidates/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/candidates",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/templates/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
-    },
-    {
-      "source": "/templates",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
+      "destination": "/backend/api/index.py?__vercel_path=/api"
     },
     {
       "source": "/health",
-      "destination": {
-        "type": "service",
-        "service": "backend"
-      }
+      "destination": "/backend/api/index.py?__vercel_path=/health"
     },
     {
       "source": "/(.*)",
-      "destination": {
-        "type": "service",
-        "service": "frontend"
-      }
+      "destination": "/backend/api/index.py?__vercel_path=/$1"
     }
   ]
 }
