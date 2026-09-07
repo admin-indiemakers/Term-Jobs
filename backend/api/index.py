@@ -23,24 +23,29 @@ class VercelASGIApp:
 
             if not target_path:
                 headers = dict(scope.get("headers", []))
-                for h_name in (b"x-matched-path", b"x-forwarded-uri", b"x-invoke-path"):
+                for h_name in (b"x-matched-path", b"x-forwarded-uri", b"x-invoke-path", b"x-real-url"):
                     h_val = headers.get(h_name, b"").decode("utf-8", errors="ignore")
                     if h_val and h_val not in ("/api", "/api/", "/api/index", "/api/index.py"):
                         target_path = h_val
                         break
+
+            if not target_path:
+                current_p = scope.get("path", "")
+                if current_p and current_p not in ("/api", "/api/", "/api/index", "/api/index.py"):
+                    target_path = current_p
 
             if target_path:
                 if target_path.startswith("//"):
                     target_path = "/" + target_path.lstrip("/")
                 if "?" in target_path:
                     target_path = target_path.split("?")[0]
+                scope["root_path"] = ""
                 scope["path"] = target_path
+                scope["raw_path"] = target_path.encode("utf-8")
 
             if "__vercel_path" in params:
                 cleaned_params = {k: v for k, v in params.items() if k != "__vercel_path"}
                 scope["query_string"] = urllib.parse.urlencode(cleaned_params, doseq=True).encode("utf-8")
-
-            print(f"?? [ASGI ROUTING] Method: {scope.get('method')} | Final Path: {scope.get('path')}")
 
         await self.asgi_app(scope, receive, send)
 
