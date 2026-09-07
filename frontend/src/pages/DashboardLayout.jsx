@@ -124,6 +124,11 @@ const Icons = {
       <path d="m9 15 2 2 4-4"/>
     </svg>
   ),
+  MessageSquare: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -212,6 +217,7 @@ export default function DashboardLayout() {
     userRole === 'Hiring Manager'
       ? [
         { to: '/dashboard/hiring-manager', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+        { to: '/dashboard/hiring-manager/chat', label: 'AI Chat Assistant', end: true, section: 'WORKSPACE', icon: Icons.MessageSquare },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
@@ -240,6 +246,7 @@ export default function DashboardLayout() {
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.MessageSquare },
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
               { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
               { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
@@ -386,6 +393,18 @@ export default function DashboardLayout() {
                 <div className="flex items-center gap-2.5">
                   <Icons.Dashboard size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">Dashboard</span>
+                </div>
+              </NavLink>
+
+              <NavLink
+                to="/dashboard/superadmin/chat"
+                end
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.MessageSquare size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">AI Chat</span>
                 </div>
               </NavLink>
 
@@ -776,17 +795,19 @@ export default function DashboardLayout() {
         }
       `}</style>
 
-      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px) */}
-      <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
-        {renderSidebarContent()}
-      </aside>
+      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px or when in AI chat mode) */}
+      {!location.pathname.includes('/superadmin/chat') && (
+        <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
+          {renderSidebarContent()}
+        </aside>
+      )}
 
-      {/* Mobile Drawer (Visible when isMobileMenuOpen is true on < 1024px) */}
+      {/* Mobile / Fullscreen Drawer (Visible when isMobileMenuOpen is true) */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
+        <div className="fixed inset-0 z-[100] flex">
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
             onClick={() => setIsMobileMenuOpen(false)}
           />
 
@@ -800,7 +821,7 @@ export default function DashboardLayout() {
               padding: '24px 20px',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
               position: 'relative',
-              zIndex: 60,
+              zIndex: 110,
             }}
             className="flex flex-col justify-between overflow-y-auto animate-in slide-in-from-left duration-200"
           >
@@ -819,72 +840,74 @@ export default function DashboardLayout() {
       )}
 
       <div className="main-area min-w-0 flex-1 flex flex-col">
-        <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
-          {/* Breadcrumb & Mobile Menu Toggle Left */}
-          <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
-            {/* Hamburger Toggle (Mobile / Tablet only) */}
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
-              aria-label="Open menu"
-            >
-              <Menu size={21} strokeWidth={2.2} />
-            </button>
+        {!location.pathname.includes('/superadmin/chat') && (
+          <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
+            {/* Breadcrumb & Mobile Menu Toggle Left */}
+            <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
+              {/* Hamburger Toggle (Mobile / Tablet only) */}
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                aria-label="Open menu"
+              >
+                <Menu size={21} strokeWidth={2.2} />
+              </button>
 
-            <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
-              {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
-            </span>
-            <span className="text-[#8A8A85] font-normal">/</span>
-            <span className="text-[#0A0A0A] font-semibold truncate">
-              {location.pathname.includes('/requisitions') ? 'Requisitions'
-                : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
-                : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
-                : location.pathname.includes('/interviews') ? 'Interview Requests'
-                : location.pathname.includes('/accepted') ? 'Accepted Candidates'
-                : location.pathname.includes('/portal-access') ? 'Portal Access'
-                : 'Dashboard'}
-            </span>
-            <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
-            <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
-          </div>
+              <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
+                {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
+              </span>
+              <span className="text-[#8A8A85] font-normal">/</span>
+              <span className="text-[#0A0A0A] font-semibold truncate">
+                {location.pathname.includes('/requisitions') ? 'Requisitions'
+                  : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
+                  : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
+                  : location.pathname.includes('/interviews') ? 'Interview Requests'
+                  : location.pathname.includes('/accepted') ? 'Accepted Candidates'
+                  : location.pathname.includes('/portal-access') ? 'Portal Access'
+                  : 'Dashboard'}
+              </span>
+              <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
+              <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
+            </div>
 
-          {/* Actions Right */}
-          <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsAssistantOpen((prev) => !prev)}
-              title="AI Assistant"
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
-                border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
-                color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
-              }}
-              className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
-            >
-              <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
-            </button>
+            {/* Actions Right */}
+            <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAssistantOpen((prev) => !prev)}
+                title="AI Assistant"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
+                  border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
+                  color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
+                }}
+                className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
+              >
+                <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
+              </button>
 
-            <span
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E2DC',
-                borderRadius: 9999,
-              }}
-              className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-              <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
-              <span className="xs:hidden sm:hidden">SECURE</span>
-            </span>
-          </div>
-        </header>
+              <span
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E2DC',
+                  borderRadius: 9999,
+                }}
+                className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
+                <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
+                <span className="xs:hidden sm:hidden">SECURE</span>
+              </span>
+            </div>
+          </header>
+        )}
 
-        <main className="content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1">
-          <Outlet />
+        <main className={`content-area w-full max-w-none min-w-0 flex-1 ${location.pathname.includes('/superadmin/chat') ? '!p-0 !m-0 bg-[#fafafa]' : 'pt-1.5 px-3 sm:px-5 pb-4'}`}>
+          <Outlet context={{ onOpenNavMenu: () => setIsMobileMenuOpen(true) }} />
         </main>
       </div>
 

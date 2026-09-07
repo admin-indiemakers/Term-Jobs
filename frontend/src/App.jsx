@@ -12,12 +12,14 @@ import CandidateLogin from './pages/CandidateLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import HiringManagerDashboard from './pages/HiringManagerDashboard';
+import HiringManagerChat from './pages/HiringManagerChat';
 import AdminDashboard from './pages/AdminDashboard';
 import ManageDirectors from './pages/ManageDirectors';
 import ManageHiringManagers from './pages/ManageHiringManagers';
 import ManageProcurement from './pages/ManageProcurement';
 import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import SuperAdminChat from './pages/SuperAdminChat';
 import DirectorDashboard from './pages/DirectorDashboard';
 import OnboardCompany from './pages/OnboardCompany';
 import OnboardVendor from './pages/OnboardVendor';
@@ -107,6 +109,7 @@ export default function App() {
         >
           <Route index element={<DashboardIndex />} />
           <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+          <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
           <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
@@ -143,6 +146,7 @@ export default function App() {
           <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
           <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
+          <Route path="superadmin/chat" element={<SuperAdminChat />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />

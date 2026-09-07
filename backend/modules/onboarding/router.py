@@ -700,14 +700,30 @@ def list_onboarding(authorization: str | None = Header(None)):
     return docs
 
 
+@router.post("/assistant/chat")
 @router.post("/assistant")
 def ai_assistant_chat(data: dict):
-    """AI Assistant for Hiring Managers powered by Groq API.
-    Can summarize candidate onboarding issues and auto-resolve issues mentioned in the chat.
+    """AI Assistant for Hiring Managers and Super Admins powered by Groq API.
+    Can summarize candidate onboarding issues, handle platform tool calls, and control features.
     """
-    user_message = data.get("message", "").strip()
+    user_role = data.get("user_role", "")
+    user_message = (data.get("prompt") or data.get("message") or "").strip()
     if not user_message:
-        raise HTTPException(status_code=400, detail="Message is required")
+        raise HTTPException(status_code=400, detail="Message or prompt is required")
+
+    # Delegate Super Admin requests to Groq Super Admin Agent
+    if user_role == "Super Admin" or "super admin" in user_message.lower() or "tenant" in user_message.lower() or "company" in user_message.lower() or "audit" in user_message.lower():
+        try:
+            from modules.superadmin_agent.agent import SuperAdminAgent
+            agent = SuperAdminAgent()
+            res = agent.run(user_prompt=user_message, user_name=data.get("user_name", "Super Admin"))
+            return {
+                "reply": res["reply"],
+                "executed_actions": res.get("executed_actions", []),
+                "status": "success"
+            }
+        except Exception as e:
+            pass
 
     from datetime import datetime, timezone
     # Fetch current onboarding issues & candidate checklists

@@ -47,11 +47,14 @@ from modules.onboarding.router import router as onboarding_router
 from modules.candidate_portal.router import router as candidate_portal_router
 from modules.workforce.router import router as workforce_router
 from modules.workorder.router import router as workorder_router
+from modules.superadmin_agent.router import router as superadmin_agent_router
+from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
 
 
 app = FastAPI(
     title="TermJobs Requisition API",
     description="Intake and structure job requisitions using AI agents.",
+    
     version="1.0.0",
 )
 
@@ -196,6 +199,8 @@ app.include_router(onboarding_router)
 app.include_router(candidate_portal_router)
 app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
 app.include_router(workorder_router)
+app.include_router(superadmin_agent_router)
+app.include_router(hiring_manager_agent_router)
 
 
 

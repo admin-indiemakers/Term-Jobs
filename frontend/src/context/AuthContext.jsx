@@ -52,7 +52,11 @@ export function AuthProvider({ children }) {
       return;
     }
     let cancelled = false;
-    request('/api/auth/me', { token })
+    const maxTimer = setTimeout(() => {
+      if (!cancelled) setInitializing(false);
+    }, 3500);
+
+    request('/api/auth/me', { token, timeout: 5000 })
       .then((data) => {
         if (!cancelled) setUser(data);
       })
@@ -60,10 +64,13 @@ export function AuthProvider({ children }) {
         if (!cancelled) logout();
       })
       .finally(() => {
+        clearTimeout(maxTimer);
         if (!cancelled) setInitializing(false);
       });
+
     return () => {
       cancelled = true;
+      clearTimeout(maxTimer);
     };
   }, [token, logout]);
 
