@@ -256,6 +256,109 @@ TOOLS = [
                 "required": ["client_identifier", "vendor_identifier"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_hiring_requisitions",
+            "description": "List job requisitions across platform client companies (filter by status: 'all', 'open', 'draft', 'closed').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["all", "open", "draft", "closed"],
+                        "description": "Filter requisitions by status. Default is 'all'."
+                    }
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "draft_hiring_requisition",
+            "description": "Create an interactive draft form preview card for a new Job Requisition before final confirmation & publication.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Job Requisition Title e.g. Senior Full Stack Engineer"},
+                    "department": {"type": "string", "description": "Department e.g. Engineering / Product"},
+                    "location": {"type": "string", "description": "Location e.g. Bangalore / Remote"},
+                    "employment_type": {"type": "string", "description": "Employment type"},
+                    "experience_level": {"type": "string", "description": "Experience level"},
+                    "salary_range": {"type": "string", "description": "Target salary budget"},
+                    "skills": {"type": "string", "description": "Required skills"},
+                    "job_description": {"type": "string", "description": "Job description"}
+                },
+                "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_hiring_requisition",
+            "description": "Execute final creation & publication of a new Job Requisition after draft confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Job title"},
+                    "department": {"type": "string", "description": "Department"},
+                    "location": {"type": "string", "description": "Location"},
+                    "employment_type": {"type": "string", "description": "Employment type"},
+                    "experience_level": {"type": "string", "description": "Experience level"},
+                    "salary_range": {"type": "string", "description": "Salary range"},
+                    "skills": {"type": "string", "description": "Required skills"},
+                    "job_description": {"type": "string", "description": "Job description"}
+                },
+                "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_shortlisted_candidates",
+            "description": "List candidates shortlisted for company requisitions with match scores, skills, and current status.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "schedule_candidate_interview",
+            "description": "Create an interactive interview proposal card to schedule an interview meeting for a candidate.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "candidate_identifier": {"type": "string", "description": "Candidate full name or email address"},
+                    "req_title": {"type": "string", "description": "Requisition title"},
+                    "proposed_date": {"type": "string", "description": "Proposed interview date e.g. 2026-09-12"},
+                    "proposed_time": {"type": "string", "description": "Proposed interview time slot"},
+                    "interview_type": {"type": "string", "description": "Type of interview"},
+                    "meeting_notes": {"type": "string", "description": "Notes"}
+                },
+                "required": ["candidate_identifier"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_onboarding_issues",
+            "description": "List candidates currently in onboarding and review open reported onboarding issues.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -768,6 +871,36 @@ def tool_engage_vendor(client_identifier: str, vendor_identifier: str) -> dict:
     }
 
 
+def tool_list_hiring_requisitions(status: str = "all") -> list:
+    from modules.hiring_manager_agent.agent import list_hiring_requisitions
+    return list_hiring_requisitions("admin", "local", status)
+
+
+def tool_draft_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "") -> dict:
+    from modules.hiring_manager_agent.agent import draft_requisition_preview
+    return draft_requisition_preview(title, department, location, employment_type, experience_level, salary_range, skills, job_description)
+
+
+def tool_create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "") -> dict:
+    from modules.hiring_manager_agent.agent import create_hiring_requisition
+    return create_hiring_requisition(title, department, location, employment_type, experience_level, salary_range, skills, job_description, "admin", "local")
+
+
+def tool_list_shortlisted_candidates() -> list:
+    from modules.hiring_manager_agent.agent import list_shortlisted_candidates
+    return list_shortlisted_candidates("local")
+
+
+def tool_schedule_candidate_interview(candidate_identifier: str, req_title: str = "Senior Full Stack Developer", proposed_date: str = "", proposed_time: str = "", interview_type: str = "Technical Round", meeting_notes: str = "") -> dict:
+    from modules.hiring_manager_agent.agent import schedule_candidate_interview
+    return schedule_candidate_interview(candidate_identifier, req_title, proposed_date, proposed_time, interview_type, meeting_notes)
+
+
+def tool_list_onboarding_issues() -> list:
+    from modules.hiring_manager_agent.agent import list_onboarding_issues
+    return list_onboarding_issues("local")
+
+
 # Map tool name -> callable
 TOOL_MAP = {
     "get_platform_stats": tool_get_platform_stats,
@@ -783,6 +916,12 @@ TOOL_MAP = {
     "delete_tenant": tool_delete_tenant,
     "list_vendor_engagements": tool_list_vendor_engagements,
     "engage_vendor": tool_engage_vendor,
+    "list_hiring_requisitions": tool_list_hiring_requisitions,
+    "draft_hiring_requisition": tool_draft_hiring_requisition,
+    "create_hiring_requisition": tool_create_hiring_requisition,
+    "list_shortlisted_candidates": tool_list_shortlisted_candidates,
+    "schedule_candidate_interview": tool_schedule_candidate_interview,
+    "list_onboarding_issues": tool_list_onboarding_issues,
 }
 
 
@@ -823,9 +962,14 @@ class SuperAdminAgent:
                 "1. NEVER call `delete_tenant` directly on the initial request.\n"
                 "2. ALWAYS call `draft_tenant_deletion` first with the tenant name or ID.\n"
                 "3. This will display a profile preview card of the tenant with an explicit red 'Confirm & Delete Tenant' manual button.\n"
-                "4. Tell the administrator to review the tenant profile and manually click 'Confirm & Delete Tenant' in the chat card to complete deletion."
+                "4. Tell the administrator to review the tenant profile and manually click 'Confirm & Delete Tenant' in the chat card to complete deletion.\n"
+                "CRITICAL CONVERSATIONAL VOICE & CHAT FORMATTING RULE:\n"
+                "Adopt a natural, warm, and conversational voice tone suited for real-time voice interaction. Keep text responses short and spoken-friendly (1 to 3 natural sentences). "
+                "Acknowledge what action you took clearly (e.g. 'I've pulled up the buyer companies on your right workspace panel. Would you like me to check their admin accounts or run an audit?'). "
+                "Never output raw ASCII pipe tables, JSON blobs, or bulleted walls of text in your response, as the right Output Display panel automatically renders interactive visual widgets for full details."
             )
         }
+
 
         messages = [system_msg]
 
