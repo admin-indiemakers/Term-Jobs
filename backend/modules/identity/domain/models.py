@@ -46,6 +46,7 @@ class User(Model):
         "deleted_at": None,
         "candidate_limit": None,  # per-account cap on vendor submissions; None = platform default
         "candidate_id": "",  # links Candidate accounts to their submission_id
+        "workorder_id": "",  # links Candidate accounts to their workorder_id
         "created_at": _utcnow,
     }
 
@@ -63,6 +64,7 @@ class User(Model):
     deleted_at = Column("deleted_at")
     candidate_limit = Column("candidate_limit")
     candidate_id = Column("candidate_id")
+    workorder_id = Column("workorder_id")
     created_at = Column("created_at")
 
 

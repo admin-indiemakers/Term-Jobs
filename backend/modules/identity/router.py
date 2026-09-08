@@ -91,18 +91,23 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         if lookup.upper() == "ADMIN":
             user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
         elif lookup:
-            user = db.query(User).filter(User.workorder_id == lookup).first()
+            # 1. Primary lookup: email address
+            user = db.query(User).filter(User.email == lookup).first()
             if not user:
+                # Case-insensitive email fallback
+                user = db.query(User).filter(User.email.ilike(lookup)).first() if hasattr(User.email, "ilike") else None
+            # 2. Candidate / Work order ID fallback (only if not found by email)
+            if not user and hasattr(User, "candidate_id"):
                 user = db.query(User).filter(User.candidate_id == lookup).first()
-            if not user:
-                user = db.query(User).filter(User.email == lookup).first()
+            if not user and hasattr(User, "workorder_id"):
+                user = db.query(User).filter(User.workorder_id == lookup).first()
     except Exception as db_err:
         import sys, traceback
         print(f"🔥 [AUTH DB ERROR] Failed querying user during login: {db_err}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database connectivity error: {str(db_err)}",
+            detail="Database connectivity error. Please try again later.",
         )
 
     if not user:
@@ -1070,10 +1075,16 @@ def create_or_update_portal_user(
     existing_user = None
     if candidate_id:
         variants = [candidate_id, cid_clean, f"SDC-{cid_clean}", f"SDC -{cid_clean}", f"BEAR-{cid_clean}"]
-        existing_user = db.query(User).filter(
-            User.role == "Candidate",
-            (User.workorder_id.in_(variants)) | (User.candidate_id.in_(variants))
-        ).first()
+        if hasattr(User, "workorder_id"):
+            existing_user = db.query(User).filter(
+                User.role == "Candidate",
+                (User.workorder_id.in_(variants)) | (User.candidate_id.in_(variants))
+            ).first()
+        else:
+            existing_user = db.query(User).filter(
+                User.role == "Candidate",
+                User.candidate_id.in_(variants)
+            ).first()
 
     # 2. Check if email is already taken by ANOTHER account (candidate or non-candidate)
     email_owner = db.query(User).filter(User.email == email).first()

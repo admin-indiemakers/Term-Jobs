@@ -151,7 +151,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
       searchQuery === ''
         ? true
         : t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (t.id && t.id.toLowerCase().includes(searchQuery.toLowerCase()));
+        (t.id && t.id.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesTab && matchesSearch;
   });
 
@@ -187,27 +187,24 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => setFilterTab('all')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
-                filterTab === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-              }`}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${filterTab === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
             >
               All ({tenants.length})
             </button>
             <button
               type="button"
               onClick={() => setFilterTab('client')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
-                filterTab === 'client' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
-              }`}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${filterTab === 'client' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+                }`}
             >
               Buyers ({clientCount})
             </button>
             <button
               type="button"
               onClick={() => setFilterTab('consultancy')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${
-                filterTab === 'consultancy' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
-              }`}
+              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${filterTab === 'consultancy' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
+                }`}
             >
               Vendors ({consultancyCount})
             </button>
@@ -251,18 +248,16 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
           return (
             <div
               key={t.id}
-              className={`p-3.5 rounded-2xl bg-gradient-to-b from-white to-gray-50/40 border ${
-                isClient ? 'border-emerald-200 hover:border-emerald-500' : 'border-indigo-200 hover:border-indigo-500'
-              } transition-all duration-200 flex flex-col justify-between group relative overflow-hidden shadow-2xs hover:shadow-md`}
+              className={`p-3.5 rounded-2xl bg-gradient-to-b from-white to-gray-50/40 border ${isClient ? 'border-emerald-200 hover:border-emerald-500' : 'border-indigo-200 hover:border-indigo-500'
+                } transition-all duration-200 flex flex-col justify-between group relative overflow-hidden shadow-2xs hover:shadow-md`}
             >
               <div className={`absolute top-0 left-0 right-0 h-1 ${isClient ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
 
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1.5 mt-0.5">
                   <span
-                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
-                      isClient ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                    }`}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${isClient ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+                      }`}
                   >
                     {isClient ? 'Buyer Company' : 'Vendor Consultancy'}
                   </span>
@@ -570,7 +565,7 @@ function TenantDeletedSuccessWidget({ data = {}, onSendMessage }) {
 /* ── 7. MAIN AiChat COMPONENT ────────────────────────────────────────────────── */
 
 export default function AiChat() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
 
   const [messages, setMessages] = useState([
@@ -705,7 +700,7 @@ export default function AiChat() {
       vad.start();
     } else if (!continuousMode) {
       setVadStatus('idle');
-      try { vad.pause(); } catch(e) {}
+      try { vad.pause(); } catch (e) { }
     }
   }, [continuousMode, vad.loading, vad.errored]);
 
@@ -720,7 +715,7 @@ export default function AiChat() {
       setVadStatus('listening');
       try {
         vad.start();
-      } catch (e) {}
+      } catch (e) { }
     } else {
       setVadStatus('idle');
     }
@@ -889,7 +884,7 @@ export default function AiChat() {
 
       if (res?.audio_base64) {
         if (audioPlayerRef.current) {
-          try { audioPlayerRef.current.pause(); } catch (e) {}
+          try { audioPlayerRef.current.pause(); } catch (e) { }
         }
         const audio = new Audio(`data:audio/wav;base64,${res.audio_base64}`);
         audioPlayerRef.current = audio;
@@ -1054,22 +1049,21 @@ export default function AiChat() {
 
       {/* Main Container with Left Rail Dock & Dual Panels */}
       <div className="w-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch" data-purpose="main-dashboard-wrapper">
-        
+
         {/* ================================================================= */}
         {/* BEGIN: Left Navigation Rail Dock */}
         {/* ================================================================= */}
         <aside className="w-14 shrink-0 flex flex-col items-center justify-between py-1" data-purpose="sidebar-rail">
-          {/* Top Brand Logo */}
+          {/* Top Brand Logo - Term Jobs */}
           <div className="flex flex-col items-center">
-            <div
+            <button
+              type="button"
               onClick={() => navigate('/dashboard/superadmin')}
               className="w-11 h-11 rounded-full bg-[#111417] flex items-center justify-center cursor-pointer transition hover:scale-105 shadow-sm"
               title="Super Admin Dashboard"
             >
-              <svg className="w-5 h-5 text-[#D8F929]" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round"></path>
-              </svg>
-            </div>
+              TJ
+            </button>
           </div>
 
           {/* Dock Navigation Icons */}
@@ -1165,7 +1159,7 @@ export default function AiChat() {
         {/* BEGIN: Main Dual-Panel Content Layout */}
         {/* ================================================================= */}
         <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5" data-purpose="main-content-layout">
-          
+
           {/* ================================================================= */}
           {/* LEFT PANEL: PURELY CHAT CONVERSATION WORKSPACE */}
           {/* ================================================================= */}
@@ -1177,11 +1171,10 @@ export default function AiChat() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('review')}
-                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer shadow-2xs ${
-                      activeTab === 'review'
-                        ? 'bg-[#FCFEED] border border-[#D8F929] text-gray-900 font-semibold'
-                        : 'text-gray-500 hover:text-gray-800 bg-gray-50'
-                    }`}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer shadow-2xs ${activeTab === 'review'
+                      ? 'bg-[#FCFEED] border border-[#D8F929] text-gray-900 font-semibold'
+                      : 'text-gray-500 hover:text-gray-800 bg-gray-50'
+                      }`}
                   >
                     <span className="text-[#899c08] text-xs font-bold">✦</span>
                     <span className="text-gray-900 font-semibold text-[12px]">Q3 Talent & Operations Review</span>
@@ -1190,11 +1183,10 @@ export default function AiChat() {
                   <button
                     type="button"
                     onClick={handleNewChat}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${
-                      activeTab === 'new'
-                        ? 'bg-[#FCFEED] border border-[#D8F929] text-gray-900 font-semibold'
-                        : 'text-gray-400 hover:text-gray-700 font-normal hover:bg-gray-50'
-                    }`}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${activeTab === 'new'
+                      ? 'bg-[#FCFEED] border border-[#D8F929] text-gray-900 font-semibold'
+                      : 'text-gray-400 hover:text-gray-700 font-normal hover:bg-gray-50'
+                      }`}
                   >
                     <span className="text-sm leading-none">+</span>
                     <span>New Chat</span>
@@ -1213,21 +1205,20 @@ export default function AiChat() {
                         setVadStatus('listening');
                         try {
                           vad.start();
-                        } catch (e) {}
+                        } catch (e) { }
                         showToast('🟢 Hands-Free Continuous Voice Agent (Silero VAD) Activated');
                       } else {
                         setVadStatus('idle');
                         try {
                           vad.pause();
-                        } catch (e) {}
+                        } catch (e) { }
                         showToast('⚪ Continuous Voice Agent Paused');
                       }
                     }}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-                      continuousMode
+                    className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${continuousMode
                         ? 'bg-[#111417] text-[#D8F929] border border-[#D8F929] shadow-2xs'
                         : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                    }`}
+                      }`}
                     title="Hands-Free Continuous Voice Agent with Silero VAD & Sarvam AI"
                   >
                     <Radio size={13} className={continuousMode ? 'text-[#D8F929] animate-pulse' : 'text-gray-400'} />
@@ -1273,9 +1264,8 @@ export default function AiChat() {
                       setVoiceEnabled(!voiceEnabled);
                       showToast(voiceEnabled ? 'Sarvam Voice TTS Muted' : 'Sarvam Voice TTS Auto-Play Enabled');
                     }}
-                    className={`p-1.5 rounded-lg transition cursor-pointer ${
-                      voiceEnabled ? 'bg-[#111417] text-[#D8F929]' : 'text-gray-400 hover:text-gray-700'
-                    }`}
+                    className={`p-1.5 rounded-lg transition cursor-pointer ${voiceEnabled ? 'bg-[#111417] text-[#D8F929]' : 'text-gray-400 hover:text-gray-700'
+                      }`}
                     title={voiceEnabled ? 'Sarvam Spoken Voice Output Active' : 'Enable Sarvam Spoken Voice Output'}
                   >
                     {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
@@ -1284,9 +1274,8 @@ export default function AiChat() {
                   <button
                     type="button"
                     onClick={handleSyncHRMS}
-                    className={`w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-lg transition hover:bg-white cursor-pointer ${
-                      isSyncing ? 'animate-spin text-[#899c08]' : ''
-                    }`}
+                    className={`w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-lg transition hover:bg-white cursor-pointer ${isSyncing ? 'animate-spin text-[#899c08]' : ''
+                      }`}
                     title="Sync Live HRMS"
                   >
                     <RefreshCw size={14} />
@@ -1434,7 +1423,7 @@ export default function AiChat() {
                           setContinuousMode(nextVal);
                           continuousModeRef.current = nextVal;
                           setVadStatus('idle');
-                          try { vad.pause(); } catch(e) {}
+                          try { vad.pause(); } catch (e) { }
                           showToast('⚪ Conversational Voice Agent Paused');
                         }}
                         className="px-2.5 py-1 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10.5px] font-extrabold transition cursor-pointer"
@@ -1586,8 +1575,8 @@ export default function AiChat() {
                     isRecording
                       ? "🔴 Recording active... Speak now!"
                       : isTranscribing
-                      ? "⚡ Transcribing spoken audio with Sarvam AI STT..."
-                      : "Ask SuperAdmin AI about platform tenants, requisitions, or speak via microphone..."
+                        ? "⚡ Transcribing spoken audio with Sarvam AI STT..."
+                        : "Ask SuperAdmin AI about platform tenants, requisitions, or speak via microphone..."
                   }
                   className="w-full bg-transparent text-xs text-gray-900 placeholder-gray-400 focus:outline-none resize-none font-sans"
                 />
@@ -1654,11 +1643,10 @@ export default function AiChat() {
                   <button
                     type="button"
                     onClick={() => setRightPanelTab('overview')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${
-                      rightPanelTab === 'overview'
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${rightPanelTab === 'overview'
                         ? 'bg-white text-gray-950 shadow-xs'
                         : 'text-gray-500 hover:text-gray-950'
-                    }`}
+                      }`}
                   >
                     📊 Talent Pipeline
                   </button>
@@ -1666,11 +1654,10 @@ export default function AiChat() {
                   <button
                     type="button"
                     onClick={() => setRightPanelTab('display')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-                      rightPanelTab === 'display'
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${rightPanelTab === 'display'
                         ? 'bg-[#111417] text-[#D8F929] shadow-xs'
                         : 'text-gray-500 hover:text-gray-950'
-                    }`}
+                      }`}
                   >
                     <Zap size={13} className="text-[#D8F929]" />
                     <span>Output Display</span>
