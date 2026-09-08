@@ -23,13 +23,20 @@ def _get_current_week_bounds():
 
 
 def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_email: str, tenant_id: str):
-    """Return the active work order for this candidate, or None if none exists.
+    """Return the active work order for this candidate/workorder_id, or None if none exists.
     Does NOT auto-create fake work orders — shows 'No Active Assignment' instead.
     Deduplicates by keeping only the most recent work order per candidate.
     Enriches empty fields from requisition and candidate submission data.
     """
     wo_coll = db["work_orders"]
-    candidates = wo_coll.find({"candidate_id": candidate_id, "status": "ACTIVE"}).sort("created_at", -1)
+    candidates = wo_coll.find({
+        "$or": [
+            {"workorder_id": candidate_id},
+            {"candidate_id": candidate_id},
+            {"id": candidate_id}
+        ],
+        "status": "ACTIVE"
+    }).sort("created_at", -1)
     candidates_list = list(candidates)
     
     if not candidates_list:
@@ -46,7 +53,14 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
     
     # Enrich empty fields from multiple sources
     sub_coll = db["candidate_submissions"]
-    sub = sub_coll.find_one({"$or": [{"id": candidate_id}, {"candidate_email": candidate_email}]}) or {}
+    sub = sub_coll.find_one({
+        "$or": [
+            {"workorder_id": candidate_id},
+            {"candidate_id": candidate_id},
+            {"id": candidate_id},
+            {"candidate_email": candidate_email}
+        ]
+    }) or {}
     
     req_id = keep.get("requisition_id") or sub.get("requisition_id") or ""
     req_doc = {}
@@ -56,7 +70,12 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
     sr = req_doc.get("structured_role") or {}
     
     # Also pull from onboarding checklist (persists even when requisitions are deleted)
-    ob = db["onboarding_checklists"].find_one({"candidate_id": candidate_id}) or {}
+    ob = db["onboarding_checklists"].find_one({
+        "$or": [
+            {"workorder_id": candidate_id},
+            {"candidate_id": candidate_id}
+        ]
+    }) or {}
     
     # Company profile name
     comp_profile_name = ""
@@ -216,12 +235,18 @@ def get_candidate_profile(current_user: User = Depends(get_current_user)):
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
     
-    cand_id = current_user.candidate_id or ""
-    ob = db["onboarding_checklists"].find_one({"candidate_id": cand_id}) or {}
-    sub = db["candidate_submissions"].find_one({"$or": [{"id": cand_id}, {"candidate_email": current_user.email}]}) or {}
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
+    ob = db["onboarding_checklists"].find_one({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
+    }) or {}
+    sub = db["candidate_submissions"].find_one({
+        "$or": [{"workorder_id": cand_id}, {"id": cand_id}, {"candidate_id": cand_id}, {"candidate_email": current_user.email}]
+    }) or {}
 
     return {
-        "id": cand_id or sub.get("id") or "",
+        "id": cand_id or sub.get("workorder_id") or sub.get("id") or "",
+        "workorder_id": cand_id or sub.get("workorder_id") or sub.get("candidate_id") or "",
+        "candidate_id": cand_id or sub.get("candidate_id") or "",
         "name": current_user.name or ob.get("candidate_name") or sub.get("candidate_name") or "Candidate",
         "email": current_user.email,
         "company": ob.get("company_name") or "",
@@ -238,12 +263,16 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     cand_name = current_user.name or ""
     cand_email = current_user.email
 
-    ob = db["onboarding_checklists"].find_one({"$or": [{"candidate_id": cand_id}, {"candidate_email": cand_email}]}) or {}
-    sub = db["candidate_submissions"].find_one({"$or": [{"id": cand_id}, {"candidate_email": cand_email}]}) or {}
+    ob = db["onboarding_checklists"].find_one({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}, {"candidate_email": cand_email}]
+    }) or {}
+    sub = db["candidate_submissions"].find_one({
+        "$or": [{"workorder_id": cand_id}, {"id": cand_id}, {"candidate_id": cand_id}, {"candidate_email": cand_email}]
+    }) or {}
 
     raw_wo = _ensure_active_work_order(cand_id, cand_name, cand_email, current_user.tenant_id)
     safe_wo = _sanitize_work_order_for_candidate(raw_wo)
@@ -257,7 +286,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
     mon_str, sun_str = _get_current_week_bounds()
     ts_coll = db["timesheets"]
     current_ts = ts_coll.find_one({
-        "candidate_id": cand_id,
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
         "week_start_date": mon_str
     })
 
@@ -271,6 +300,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             "id": f"ts_{uuid.uuid4().hex[:12]}",
             "timesheet_number": f"TS-{_year}-W{_week_num:02d}-{uuid.uuid4().hex[:4].upper()}",
             "candidate_id": cand_id,
+            "workorder_id": cand_id,
             "work_order_id": safe_wo.get("id"),
             "work_order_number": safe_wo.get("work_order_number"),
             "tenant_id": current_user.tenant_id,
@@ -307,12 +337,17 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
     expected_h = safe_wo.get("weekly_hours", 40.0) if safe_wo else 40.0
     progress_pct = int(round((logged_hrs / expected_h) * 100)) if expected_h > 0 else 0
 
-    recent_ts = list(ts_coll.find({"candidate_id": cand_id, "status": "APPROVED"}).sort("created_at", -1).limit(5))
+    recent_ts = list(ts_coll.find({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
+        "status": "APPROVED"
+    }).sort("created_at", -1).limit(5))
     for t in recent_ts:
         t.pop("_id", None)
 
     exp_coll = db["candidate_expenses"]
-    user_expenses = list(exp_coll.find({"candidate_id": cand_id}))
+    user_expenses = list(exp_coll.find({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
+    }))
     exp_sum = sum(float(e.get("amount", 0)) for e in user_expenses if e.get("status") in ["Submitted", "Pending", "Approved"])
     exp_formatted = f"₹{exp_sum/1000:.1f}K" if exp_sum >= 1000 else f"₹{int(exp_sum)}"
 
@@ -320,6 +355,8 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         "has_assignment": has_assignment,
         "candidate": {
             "id": cand_id or "",
+            "workorder_id": cand_id or "",
+            "candidate_id": cand_id or "",
             "name": cand_name or ob.get("candidate_name") or "Candidate",
             "first_name": cand_name.split()[0] if cand_name else "Candidate",
             "email": cand_email,
@@ -388,7 +425,7 @@ def get_candidate_assignment(current_user: User = Depends(get_current_user)):
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
     safe_wo = _sanitize_work_order_for_candidate(raw_wo)
 
@@ -418,11 +455,14 @@ def get_current_timesheet(current_user: User = Depends(get_current_user)):
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     mon_str, sun_str = _get_current_week_bounds()
     ts_coll = db["timesheets"]
     
-    ts = ts_coll.find_one({"candidate_id": cand_id, "week_start_date": mon_str})
+    ts = ts_coll.find_one({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
+        "week_start_date": mon_str
+    })
     if ts:
         ts.pop("_id", None)
         return {"status": "success", "is_smart_draft": False, "timesheet": ts}
@@ -439,6 +479,7 @@ def get_current_timesheet(current_user: User = Depends(get_current_user)):
         "id": f"ts_{uuid.uuid4().hex[:12]}",
         "timesheet_number": f"TS-{mon_str[:4]}-W{_dt.fromisoformat(mon_str).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
+        "workorder_id": cand_id,
         "work_order_id": raw_wo.get("id"),
         "work_order_number": raw_wo.get("work_order_number", ""),
         "tenant_id": current_user.tenant_id,
@@ -463,13 +504,16 @@ def list_candidate_timesheets(current_user: User = Depends(get_current_user)):
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
     if raw_wo:
         _ensure_seed_history(cand_id, current_user.tenant_id, raw_wo)
 
     ts_coll = db["timesheets"]
-    timesheets = list(ts_coll.find({"candidate_id": cand_id, "status": {"$in": ["SUBMITTED", "APPROVED", "INVOICED"]}}).sort("created_at", -1))
+    timesheets = list(ts_coll.find({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
+        "status": {"$in": ["SUBMITTED", "APPROVED", "INVOICED"]}
+    }).sort("created_at", -1))
     for t in timesheets:
         t.pop("_id", None)
     return {"status": "success", "timesheets": timesheets}
@@ -492,7 +536,7 @@ def save_timesheet_draft(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     ts_coll = db["timesheets"]
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
 
@@ -512,7 +556,10 @@ def save_timesheet_draft(
 
     analysis = _analyze_timesheet_with_assistant(payload.daily_entries, expected_hours=40.0)
 
-    existing = ts_coll.find_one({"candidate_id": cand_id, "week_start_date": payload.week_start_date})
+    existing = ts_coll.find_one({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
+        "week_start_date": payload.week_start_date
+    })
     if existing and existing.get("status") in ["APPROVED", "INVOICED"]:
         raise HTTPException(status_code=400, detail="Approved timesheet cannot be modified.")
 
@@ -520,6 +567,7 @@ def save_timesheet_draft(
         "id": payload.id or (existing.get("id") if existing else f"ts_{uuid.uuid4().hex[:12]}"),
         "timesheet_number": existing.get("timesheet_number") if existing else f"TS-{datetime.now(timezone.utc).year}-W{datetime.now(timezone.utc).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
+        "workorder_id": cand_id,
         "worker_name": current_user.name,
         "work_order_id": raw_wo.get("id"),
         "work_order_number": raw_wo.get("work_order_number", ""),
@@ -555,7 +603,7 @@ def submit_timesheet(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     ts_coll = db["timesheets"]
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
 
@@ -575,7 +623,10 @@ def submit_timesheet(
 
     analysis = _analyze_timesheet_with_assistant(payload.daily_entries, expected_hours=40.0)
 
-    existing = ts_coll.find_one({"candidate_id": cand_id, "week_start_date": payload.week_start_date})
+    existing = ts_coll.find_one({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
+        "week_start_date": payload.week_start_date
+    })
     if existing and existing.get("status") in ["APPROVED", "INVOICED"]:
         raise HTTPException(status_code=400, detail="Approved timesheet cannot be modified.")
 
@@ -583,6 +634,7 @@ def submit_timesheet(
         "id": payload.id or (existing.get("id") if existing else f"ts_{uuid.uuid4().hex[:12]}"),
         "timesheet_number": existing.get("timesheet_number") if existing else f"TS-{datetime.now(timezone.utc).year}-W{datetime.now(timezone.utc).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
+        "workorder_id": cand_id,
         "worker_name": current_user.name,
         "work_order_id": raw_wo.get("id"),
         "work_order_number": raw_wo.get("work_order_number", ""),
@@ -632,16 +684,20 @@ def get_candidate_attendance(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     att_coll = db["attendance_sheets"]
 
-    att = att_coll.find_one({"candidate_id": cand_id, "month_year": month})
+    att = att_coll.find_one({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
+        "month_year": month
+    })
     if not att:
         if month == "2026-08":
             att = {
                 "id": f"att_{uuid.uuid4().hex[:12]}",
                 "attendance_number": f"ATT-2026-08-{uuid.uuid4().hex[:4].upper()}",
                 "candidate_id": cand_id,
+                "workorder_id": cand_id,
                 "worker_name": current_user.name,
                 "month_year": "2026-08",
                 "month_label": "August 2026",
@@ -664,6 +720,7 @@ def get_candidate_attendance(
                 "id": f"att_{uuid.uuid4().hex[:12]}",
                 "attendance_number": f"ATT-2026-07-{uuid.uuid4().hex[:4].upper()}",
                 "candidate_id": cand_id,
+                "workorder_id": cand_id,
                 "worker_name": current_user.name,
                 "month_year": "2026-07",
                 "month_label": "July 2026",
@@ -714,10 +771,12 @@ def list_candidate_expenses(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     exp_coll = db["candidate_expenses"]
 
-    expenses = list(exp_coll.find({"candidate_id": cand_id}).sort("created_at", -1))
+    expenses = list(exp_coll.find({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
+    }).sort("created_at", -1))
     for e in expenses:
         e.pop("_id", None)
 
@@ -753,7 +812,7 @@ def create_candidate_expense(
                 detail="Only PDF and Image files (PNG, JPG, WEBP) are accepted as receipt attachments."
             )
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     raw_wo = _ensure_active_work_order(cand_id, current_user.name, current_user.email, current_user.tenant_id)
     if not raw_wo:
         raise HTTPException(status_code=400, detail="No active assignment. Cannot log expenses without an assignment.")
@@ -802,6 +861,7 @@ def create_candidate_expense(
     doc = {
         "id": payload.id or f"exp_{uuid.uuid4().hex[:10]}",
         "candidate_id": cand_id,
+        "workorder_id": cand_id,
         "candidate_name": current_user.name,
         "work_order_number": raw_wo.get("work_order_number", ""),
         "date": payload.date,
@@ -828,10 +888,12 @@ def list_candidate_notifications(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     notif_coll = db["candidate_notifications"]
 
-    notifs = list(notif_coll.find({"candidate_id": cand_id}).sort("created_at", -1))
+    notifs = list(notif_coll.find({
+        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
+    }).sort("created_at", -1))
     for n in notifs:
         n.pop("_id", None)
 
@@ -855,9 +917,9 @@ def mark_notification_read(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     notif_coll = db["candidate_notifications"]
-    notif_coll.update_one({"id": notification_id, "candidate_id": cand_id}, {"$set": {"is_read": True}})
+    notif_coll.update_one({"id": notification_id, "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]}, {"$set": {"is_read": True}})
     return {"status": "success", "message": "Notification marked as read"}
 
 
@@ -868,7 +930,7 @@ def mark_all_notifications_read(
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.candidate_id or ""
+    cand_id = current_user.workorder_id or current_user.candidate_id or ""
     notif_coll = db["candidate_notifications"]
-    notif_coll.update_many({"candidate_id": cand_id}, {"$set": {"is_read": True}})
+    notif_coll.update_many({"$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]}, {"$set": {"is_read": True}})
     return {"status": "success", "message": "All notifications marked as read"}

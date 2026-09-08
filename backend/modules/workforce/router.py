@@ -81,7 +81,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     if tenant_req_ids is not None:
         wo_filter["requisition_id"] = {"$in": list(tenant_req_ids)} if tenant_req_ids else {"$in": []}
     for doc in wo_coll.find(wo_filter):
-        cid = doc.get("candidate_id")
+        cid = doc.get("workorder_id") or doc.get("candidate_id")
         email = (doc.get("candidate_email") or "").lower().strip()
         if not cid:
             continue
@@ -95,7 +95,7 @@ def _get_hm_team_candidate_ids(user: User, use_cache: bool = True) -> list[str]:
     # Fallback: if no candidates found via requisitions, show ALL active work orders for tenant
     if not id_set and user.role != "Super Admin":
         for doc in wo_coll.find({"status": "ACTIVE", "tenant_id": user.tenant_id}):
-            cid = doc.get("candidate_id")
+            cid = doc.get("workorder_id") or doc.get("candidate_id")
             if cid:
                 id_set.add(cid)
 
@@ -127,8 +127,8 @@ def _build_team_batch(cand_ids: list[str], use_cache: bool = True) -> dict:
 
     # Batch: all work orders for these candidates
     wo_map = {}
-    for doc in wo_coll.find({"candidate_id": {"$in": cand_ids}, "status": "ACTIVE"}):
-        cid = doc.get("candidate_id")
+    for doc in wo_coll.find({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}], "status": "ACTIVE"}):
+        cid = doc.get("workorder_id") or doc.get("candidate_id")
         doc.pop("_id", None)
         wo_map[cid] = doc
 
@@ -141,17 +141,18 @@ def _build_team_batch(cand_ids: list[str], use_cache: bool = True) -> dict:
     found_ids = set(sub_map.keys())
     missing = [cid for cid in cand_ids if cid not in found_ids]
     if missing:
-        for doc in sub_coll.find({"candidate_id": {"$in": missing}}):
+        for doc in sub_coll.find({"$or": [{"workorder_id": {"$in": missing}}, {"candidate_id": {"$in": missing}}]}):
             doc.pop("_id", None)
-            cid = doc.get("candidate_id")
+            cid = doc.get("workorder_id") or doc.get("candidate_id")
             if cid:
                 sub_map[cid] = doc
 
     # Batch: all onboarding checklists
     ob_map = {}
-    for doc in ob_coll.find({"candidate_id": {"$in": cand_ids}}):
+    for doc in ob_coll.find({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}]}):
         doc.pop("_id", None)
-        ob_map[doc.get("candidate_id")] = doc
+        cid = doc.get("workorder_id") or doc.get("candidate_id")
+        ob_map[cid] = doc
 
     # Batch: pre-fetch all needed requisitions and company profiles (eliminates N+1)
     req_ids_needed = set()
@@ -228,10 +229,10 @@ def _build_team_batch(cand_ids: list[str], use_cache: bool = True) -> dict:
     # Batch: latest timesheet per candidate (use aggregation pipeline)
     ts_map = {}
     pipeline = [
-        {"$match": {"candidate_id": {"$in": cand_ids}}},
+        {"$match": {"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}]}},
         {"$sort": {"created_at": -1}},
         {"$group": {
-            "_id": "$candidate_id",
+            "_id": {"$ifNull": ["$workorder_id", "$candidate_id"]},
             "ts": {"$first": "$$ROOT"},
         }},
     ]
@@ -243,9 +244,10 @@ def _build_team_batch(cand_ids: list[str], use_cache: bool = True) -> dict:
 
     # Batch: user records
     user_map = {}
-    for doc in users_coll.find({"candidate_id": {"$in": cand_ids}}):
+    for doc in users_coll.find({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}]}):
         doc.pop("_id", None)
-        user_map[doc.get("candidate_id")] = doc
+        cid = doc.get("workorder_id") or doc.get("candidate_id")
+        user_map[cid] = doc
 
     result = {
         "work_orders": wo_map,
@@ -316,6 +318,7 @@ def get_workforce_dashboard(current_user: User = Depends(get_current_user)):
 
         team.append({
             "candidate_id": cid,
+            "workorder_id": cid,
             "candidate_name": cand_name,
             "candidate_email": cand_email,
             "requisition_title": wo.get("requisition_title") or sub.get("requisition_title") or "",
@@ -423,6 +426,7 @@ def get_team_overview(current_user: User = Depends(get_current_user)):
 
         team.append({
             "candidate_id": cid,
+            "workorder_id": cid,
             "candidate_name": cand_name,
             "candidate_email": cand_email,
             "requisition_title": wo.get("requisition_title") or sub.get("requisition_title") or "",
@@ -478,12 +482,12 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
     user_coll = db["users"]
 
     # --- Work Order ---
-    wo = wo_coll.find_one({"candidate_id": candidate_id, "status": "ACTIVE"})
+    wo = wo_coll.find_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}], "status": "ACTIVE"})
     if wo:
         wo.pop("_id", None)
 
     # --- Candidate Submission ---
-    sub = sub_coll.find_one({"$or": [{"id": candidate_id}, {"candidate_email": wo.get("candidate_email") if wo else ""}]}) or {}
+    sub = sub_coll.find_one({"$or": [{"id": candidate_id}, {"workorder_id": candidate_id}, {"candidate_id": candidate_id}, {"candidate_email": wo.get("candidate_email") if wo else ""}]}) or {}
     sub.pop("_id", None)
 
     # --- Enrich empty work order fields from requisition/submission/onboarding ---
@@ -491,7 +495,7 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
         req_id = wo.get("requisition_id") or sub.get("requisition_id") or ""
         req_doc = db["requisitions"].find_one({"id": req_id}) if req_id else {}
         sr = (req_doc or {}).get("structured_role") or {}
-        ob_doc = ob_coll.find_one({"candidate_id": candidate_id}) or {}
+        ob_doc = ob_coll.find_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}) or {}
 
         comp_profile_name = ""
         cp_id = (req_doc or {}).get("company_profile_id") or ""
@@ -535,11 +539,11 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
             wo["end_date"] = sr.get("ends_on") or (req_doc or {}).get("end_date") or ""
 
     # --- User record ---
-    user_doc = user_coll.find_one({"candidate_id": candidate_id}) or {}
+    user_doc = user_coll.find_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}) or {}
     user_doc.pop("_id", None)
 
     # --- Onboarding ---
-    ob = ob_coll.find_one({"candidate_id": candidate_id}) or {}
+    ob = ob_coll.find_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}) or {}
     ob.pop("_id", None)
     ob_items = ob.get("software", []) + ob.get("training", []) + ob.get("custom_items", [])
     ob_enabled = [i for i in ob_items if i.get("enabled", True)]
@@ -547,7 +551,7 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
     ob_pct = round((len(ob_completed) / len(ob_enabled)) * 100) if ob_enabled else 0
 
     # --- ALL Timesheets (for graph + summary) ---
-    all_ts = list(ts_coll.find({"candidate_id": candidate_id}).sort("week_start_date", -1))
+    all_ts = list(ts_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}).sort("week_start_date", -1))
     for t in all_ts:
         t.pop("_id", None)
 
@@ -571,24 +575,24 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
     graph_data.reverse()  # chronological order
 
     # --- Attendance ---
-    attendance = list(att_coll.find({"candidate_id": candidate_id}).sort("created_at", -1).limit(6))
+    attendance = list(att_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}).sort("created_at", -1).limit(6))
     for a in attendance:
         a.pop("_id", None)
 
     # --- Expenses ---
-    expenses = list(exp_coll.find({"candidate_id": candidate_id}).sort("created_at", -1))
+    expenses = list(exp_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}).sort("created_at", -1))
     for e in expenses:
         e.pop("_id", None)
     exp_total = sum(float(e.get("amount", 0)) for e in expenses if e.get("status") in ["Submitted", "Pending", "Approved"])
 
     # --- Issues ---
-    issues = list(issue_coll.find({"candidate_id": candidate_id}).sort("created_at", -1))
+    issues = list(issue_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}).sort("created_at", -1))
     for i in issues:
         i.pop("_id", None)
     open_issues = sum(1 for i in issues if i.get("status") == "open")
 
     # --- Notifications ---
-    notifs = list(notif_coll.find({"candidate_id": candidate_id}).sort("created_at", -1).limit(10))
+    notifs = list(notif_coll.find({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}).sort("created_at", -1).limit(10))
     for n in notifs:
         n.pop("_id", None)
 
@@ -596,6 +600,8 @@ def get_candidate_detail(candidate_id: str, current_user: User = Depends(get_cur
         "status": "success",
         "candidate": {
             "id": candidate_id,
+            "candidate_id": candidate_id,
+            "workorder_id": candidate_id,
             "name": user_doc.get("name") or sub.get("candidate_name") or (wo.get("candidate_name") if wo else ""),
             "email": user_doc.get("email") or sub.get("candidate_email") or (wo.get("candidate_email") if wo else ""),
         },
@@ -653,14 +659,14 @@ def list_team_timesheets(
 
     ts_coll = db["timesheets"]
 
-    query: dict = {"candidate_id": {"$in": cand_ids}}
+    query: dict = {"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}]}
     if status:
         query["status"] = status.upper()
     if week:
         query["week_start_date"] = week
 
     timesheets = list(ts_coll.find(query).sort("created_at", -1))
-    pending_count = ts_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": "SUBMITTED"})
+    pending_count = ts_coll.count_documents({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}], "status": "SUBMITTED"})
 
     # Batch enrich with names
     sub_coll = db["candidate_submissions"]
@@ -670,13 +676,14 @@ def list_team_timesheets(
     for doc in sub_coll.find({"id": {"$in": cand_ids}}):
         sub_map[doc.get("id")] = doc
     wo_map = {}
-    for doc in wo_coll.find({"candidate_id": {"$in": cand_ids}, "status": "ACTIVE"}):
-        wo_map[doc.get("candidate_id")] = doc
+    for doc in wo_coll.find({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}], "status": "ACTIVE"}):
+        cid = doc.get("workorder_id") or doc.get("candidate_id")
+        wo_map[cid] = doc
 
     result = []
     for ts in timesheets:
         ts.pop("_id", None)
-        cid = ts.get("candidate_id", "")
+        cid = ts.get("workorder_id") or ts.get("candidate_id", "")
         sub = sub_map.get(cid, {})
         wo = wo_map.get(cid, {})
 
@@ -684,6 +691,7 @@ def list_team_timesheets(
             **ts,
             "candidate_name": ts.get("worker_name") or sub.get("candidate_name") or "",
             "candidate_id": cid,
+            "workorder_id": cid,
             "vendor_name": ts.get("vendor_name") or wo.get("vendor_name") or sub.get("vendor_name") or "",
             "requisition_title": wo.get("requisition_title") or sub.get("requisition_title") or "",
             "work_order_number": ts.get("work_order_number") or wo.get("work_order_number", ""),
@@ -720,7 +728,8 @@ def approve_timesheet(
         raise HTTPException(status_code=404, detail="Timesheet not found")
 
     cand_ids = _get_hm_team_candidate_ids(current_user)
-    if ts.get("candidate_id") not in cand_ids:
+    cand_id = ts.get("workorder_id") or ts.get("candidate_id")
+    if cand_id not in cand_ids:
         raise HTTPException(status_code=403, detail="This timesheet does not belong to your team")
 
     if ts.get("status") != "SUBMITTED":
@@ -740,11 +749,12 @@ def approve_timesheet(
     }
     ts_coll.update_one({"id": timesheet_id}, {"$set": update_fields})
 
-    cand_id = ts.get("candidate_id", "")
+    cand_id = ts.get("workorder_id") or ts.get("candidate_id", "")
     if cand_id:
         db["candidate_notifications"].insert_one({
             "id": f"notif_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
             "candidate_id": cand_id,
+            "workorder_id": cand_id,
             "type": "timesheet_approved",
             "title": "Timesheet Approved",
             "message": f"Your timesheet for week {ts.get('week_start_date', '')} – {ts.get('week_end_date', '')} has been approved by {current_user.name}.",
@@ -778,7 +788,8 @@ def reject_timesheet(
         raise HTTPException(status_code=404, detail="Timesheet not found")
 
     cand_ids = _get_hm_team_candidate_ids(current_user)
-    if ts.get("candidate_id") not in cand_ids:
+    cand_id = ts.get("workorder_id") or ts.get("candidate_id")
+    if cand_id not in cand_ids:
         raise HTTPException(status_code=403, detail="This timesheet does not belong to your team")
 
     if ts.get("status") != "SUBMITTED":
@@ -795,11 +806,12 @@ def reject_timesheet(
     }
     ts_coll.update_one({"id": timesheet_id}, {"$set": update_fields})
 
-    cand_id = ts.get("candidate_id", "")
+    cand_id = ts.get("workorder_id") or ts.get("candidate_id", "")
     if cand_id:
         db["candidate_notifications"].insert_one({
             "id": f"notif_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}",
             "candidate_id": cand_id,
+            "workorder_id": cand_id,
             "type": "timesheet_rejected",
             "title": "Timesheet Rejected",
             "message": f"Your timesheet for week {ts.get('week_start_date', '')} – {ts.get('week_end_date', '')} was rejected. {payload.reason}".strip(),
@@ -859,7 +871,7 @@ def list_team_expenses(
         return {"status": "success", "expenses": [], "pending_count": 0, "total_amount": 0}
 
     exp_coll = db["candidate_expenses"]
-    query = {"candidate_id": {"$in": cand_ids}}
+    query = {"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}]}
     if status:
         query["status"] = status
 
@@ -899,7 +911,7 @@ def approve_expense(
     if not exp:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    cand_id = exp.get("candidate_id") or ""
+    cand_id = exp.get("workorder_id") or exp.get("candidate_id") or ""
     cand_id_clean = cand_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
     cand_ids_clean = {c.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip() for c in cand_ids}
 
@@ -922,7 +934,8 @@ def approve_expense(
     notif_coll = db["candidate_notifications"]
     notif_coll.insert_one({
         "id": f"notif_{_uuid.uuid4().hex[:10]}",
-        "candidate_id": exp.get("candidate_id"),
+        "candidate_id": cand_id,
+        "workorder_id": cand_id,
         "type": "expense_approved",
         "title": "Expense Approved",
         "message": f"Your expense of ₹{exp.get('amount', 0):,.0f} ({exp.get('category', '')}) has been approved by your hiring manager.",
@@ -953,7 +966,7 @@ def reject_expense(
     if not exp:
         raise HTTPException(status_code=404, detail="Expense not found")
 
-    cand_id = exp.get("candidate_id") or ""
+    cand_id = exp.get("workorder_id") or exp.get("candidate_id") or ""
     cand_id_clean = cand_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
     cand_ids_clean = {c.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip() for c in cand_ids}
 
@@ -976,7 +989,8 @@ def reject_expense(
     notif_coll = db["candidate_notifications"]
     notif_coll.insert_one({
         "id": f"notif_{_uuid.uuid4().hex[:10]}",
-        "candidate_id": exp.get("candidate_id"),
+        "candidate_id": cand_id,
+        "workorder_id": cand_id,
         "type": "expense_rejected",
         "title": "Expense Rejected",
         "message": f"Your expense of ₹{exp.get('amount', 0):,.0f} ({exp.get('category', '')}) was rejected.{' Reason: ' + payload.notes if payload.notes else ''}",
@@ -1002,8 +1016,9 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
 
     # Batch: all onboardings
     ob_map = {}
-    for doc in db["onboarding_checklists"].find({"candidate_id": {"$in": cand_ids}}):
-        ob_map[doc.get("candidate_id")] = doc
+    for doc in db["onboarding_checklists"].find({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}]}):
+        cid = doc.get("workorder_id") or doc.get("candidate_id")
+        ob_map[cid] = doc
 
     active_count = 0
     onboarding_count = 0
@@ -1020,16 +1035,16 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
             active_count += 1
 
     ts_coll = db["timesheets"]
-    pending_ts = ts_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": "SUBMITTED"})
+    pending_ts = ts_coll.count_documents({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}], "status": "SUBMITTED"})
 
     exp_coll = db["candidate_expenses"]
-    pending_exp = exp_coll.count_documents({"candidate_id": {"$in": cand_ids}, "status": {"$in": ["Pending", "Submitted"]}})
+    pending_exp = exp_coll.count_documents({"$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}], "status": {"$in": ["Pending", "Submitted"]}})
 
     today = datetime.now(timezone.utc).date()
     week_monday = today - timedelta(days=today.weekday())
     week_start = week_monday.isoformat()
     approved_week = ts_coll.count_documents({
-        "candidate_id": {"$in": cand_ids},
+        "$or": [{"workorder_id": {"$in": cand_ids}}, {"candidate_id": {"$in": cand_ids}}],
         "status": "APPROVED",
         "approved_at": {"$gte": week_start},
     })
@@ -1064,23 +1079,23 @@ def create_work_order(
     if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR", "Recruiter"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
 
-    candidate_id = body.get("candidate_id", "")
+    candidate_id = body.get("workorder_id") or body.get("candidate_id", "")
     if not candidate_id:
-        raise HTTPException(status_code=400, detail="candidate_id is required")
+        raise HTTPException(status_code=400, detail="workorder_id or candidate_id is required")
 
     # Check if a work order already exists for this candidate
-    existing = db["work_orders"].find_one({"candidate_id": candidate_id, "status": {"$ne": "CLOSED"}})
+    existing = db["work_orders"].find_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}], "status": {"$ne": "CLOSED"}})
     if existing:
         existing.pop("_id", None)
         return {"status": "success", "work_order": existing, "message": "Work order already exists"}
 
     # Get the submission data for enrichment
-    sub = db["candidate_submissions"].find_one({"id": candidate_id}) or {}
+    sub = db["candidate_submissions"].find_one({"$or": [{"id": candidate_id}, {"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}) or {}
     req_id = body.get("requisition_id") or sub.get("requisition_id") or ""
     req_doc = db["requisitions"].find_one({"id": req_id}) or {} if req_id else {}
 
     # Check activation gates from onboarding
-    ob_doc = db["onboarding_checklists"].find_one({"candidate_id": candidate_id}) or {}
+    ob_doc = db["onboarding_checklists"].find_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}) or {}
     gates = ob_doc.get("activation_gates", [])
     all_blocking_cleared = all(
         g.get("status") == "cleared" for g in gates if g.get("type") == "blocking"
@@ -1100,6 +1115,7 @@ def create_work_order(
         "requisition_id": req_id,
         "requisition_title": body.get("requisition_title") or req_doc.get("title") or sub.get("title") or "",
         "candidate_id": candidate_id,
+        "workorder_id": candidate_id,
         "candidate_name": body.get("candidate_name") or sub.get("candidate_name") or "",
         "candidate_email": sub.get("candidate_email") or "",
         "vendor_name": body.get("vendor_name") or sub.get("vendor_name") or "",

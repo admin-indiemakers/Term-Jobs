@@ -61,7 +61,7 @@ def _get_client() -> "MongoClient":
                 pass
 
         masked_url = url.split("@")[-1] if "@" in url else url
-        print(f"🔌 [MONGO CLIENT INIT] Connecting to MongoDB: {masked_url} (TLS={kwargs.get('tls', False)})")
+        print(f"[MONGO CLIENT INIT] Connecting to MongoDB: {masked_url} (TLS={kwargs.get('tls', False)})")
         _client = MongoClient(url, **kwargs)
     return _client
 
@@ -329,6 +329,7 @@ def init_db() -> None:
     db["notifications"].create_index("user_id")
     db["notifications"].create_index("created_at")
     db["onboarding_checklists"].create_index("candidate_id")
+    db["onboarding_checklists"].create_index("workorder_id")
 
     # Candidate submissions compound indexes for high-throughput queries
     try:
@@ -337,6 +338,7 @@ def init_db() -> None:
         db["candidate_submissions"].create_index([("vendor_name", 1), ("status", 1)])
         db["candidate_submissions"].create_index("status")
         db["candidate_submissions"].create_index("id", unique=True)
+        db["candidate_submissions"].create_index("workorder_id")
         db["candidates"].create_index([("tenant_id", 1), ("created_at", -1)])
         db["candidates"].create_index("id")
     except Exception as e:
@@ -350,12 +352,16 @@ def init_db() -> None:
         print(f"Index creation warning for screening_cache: {e}")
     try:
         db["work_orders"].create_index("candidate_id")
+        db["work_orders"].create_index("workorder_id")
         db["work_orders"].create_index("work_order_number")
         db["work_orders"].create_index("status")
         db["timesheets"].create_index([("candidate_id", 1), ("week_start_date", -1)])
+        db["timesheets"].create_index([("workorder_id", 1), ("week_start_date", -1)])
         db["timesheets"].create_index("work_order_id")
         db["timesheets"].create_index("status")
         db["attendance_sheets"].create_index([("candidate_id", 1), ("month_year", -1)])
+        db["attendance_sheets"].create_index([("workorder_id", 1), ("month_year", -1)])
+        db["users"].create_index("workorder_id")
     except Exception as e:
         print(f"Index creation warning for candidate_portal collections: {e}")
 

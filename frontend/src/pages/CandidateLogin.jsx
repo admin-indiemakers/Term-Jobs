@@ -13,7 +13,7 @@ export default function CandidateLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to="/" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -55,7 +55,9 @@ export default function CandidateLogin() {
       <aside className="w-[260px] shrink-0 bg-white border-r border-[#EDECE7] flex flex-col justify-between max-lg:hidden">
         <div>
           <div className="flex items-center gap-3 px-6 py-6 border-b border-[#EDECE7]">
-            <img src="/logo.png" alt="TermJobs Logo" className="w-9 h-9 object-contain shrink-0" />
+            <div className="w-9 h-9 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center font-bold text-[14px]">
+              TJ
+            </div>
             <div>
               <div className="text-[14.5px] font-semibold text-[#0A0A0A] leading-tight">
                 Term Jobs
@@ -79,7 +81,7 @@ export default function CandidateLogin() {
 
         <div className="px-6 py-5 border-t border-[#EDECE7]">
           <p className="text-[12px] text-[#A6A59F] leading-relaxed">
-            Sign in with your Candidate ID and password to access your portal.
+            Sign in with your Work Order ID and password to access your portal.
           </p>
         </div>
       </aside>
@@ -106,7 +108,9 @@ export default function CandidateLogin() {
           <div className="fade-up w-full max-w-[420px]">
             {/* mobile brand */}
             <div className="flex items-center gap-3 mb-8 max-lg:flex lg:hidden">
-              <img src="/logo.png" alt="TermJobs Logo" className="w-9 h-9 object-contain shrink-0" />
+              <div className="w-9 h-9 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center font-bold text-[14px]">
+                TJ
+              </div>
               <div>
                 <div className="text-[14.5px] font-semibold text-[#0A0A0A] leading-tight">
                   Term Jobs
@@ -136,7 +140,7 @@ export default function CandidateLogin() {
               <form onSubmit={handleSubmit}>
                 <label className="block mb-5">
                   <span className="flex items-center gap-2 text-[11px] tracking-[0.1em] uppercase text-[#6B6B67] mb-2 font-medium">
-                    Candidate ID
+                    Work Order ID
                   </span>
                   <div className={`field rounded-xl px-4 py-3 ${focused === 'id' ? 'is-focused' : ''}`}>
                     <input
@@ -145,7 +149,7 @@ export default function CandidateLogin() {
                       onChange={(e) => setCandidateId(e.target.value)}
                       onFocus={() => setFocused('id')}
                       onBlur={() => setFocused(null)}
-                      placeholder="e.g. c885133a"
+                      placeholder="e.g. WO-2026-XXXX"
                       required
                       disabled={loading}
                       className="w-full bg-transparent outline-none text-[14.5px] text-[#0A0A0A] placeholder:text-[#B5B4AE]"

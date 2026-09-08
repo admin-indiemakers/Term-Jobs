@@ -91,7 +91,9 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         if lookup.upper() == "ADMIN":
             user = db.query(User).filter(User.role == "Super Admin", User.email == "ADMIN").first()
         elif lookup:
-            user = db.query(User).filter(User.candidate_id == lookup).first()
+            user = db.query(User).filter(User.workorder_id == lookup).first()
+            if not user:
+                user = db.query(User).filter(User.candidate_id == lookup).first()
             if not user:
                 user = db.query(User).filter(User.email == lookup).first()
     except Exception as db_err:
@@ -134,8 +136,9 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
 
     print(f"✅ [AUTH SUCCESS] User '{user.email}' logged in successfully (role='{user.role}', tenant='{user.tenant_id}')")
 
+    effective_wo_id = getattr(user, 'workorder_id', '') or getattr(user, 'candidate_id', '') or ''
     comp = _get_company_profile(user.tenant_id, db)
-    token_data = {"sub": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id}
+    token_data = {"sub": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id, "workorder_id": effective_wo_id}
     token = create_access_token(token_data)
 
     user_resp = UserResponse(
@@ -154,7 +157,8 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         department=user.department or "",
         created_by=user.created_by,
         is_active=user.is_active,
-        candidate_id=getattr(user, 'candidate_id', '') or '',
+        candidate_id=effective_wo_id,
+        workorder_id=effective_wo_id,
     )
 
     return TokenResponse(access_token=token, user=user_resp)
@@ -162,6 +166,7 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def get_user_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     comp = _get_company_profile(current_user.tenant_id, db)
+    effective_wo_id = getattr(current_user, 'workorder_id', '') or getattr(current_user, 'candidate_id', '') or ''
 
     return UserResponse(
         id=current_user.id,
@@ -179,7 +184,8 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
         department=current_user.department or "",
         created_by=current_user.created_by,
         is_active=current_user.is_active,
-        candidate_id=getattr(current_user, 'candidate_id', '') or '',
+        candidate_id=effective_wo_id,
+        workorder_id=effective_wo_id,
     )
 
 
@@ -862,8 +868,10 @@ def list_portal_users(
                 sub_filter["requisition_id"] = {"$in": []}
         
         for sub in mongo_db["candidate_submissions"].find(sub_filter):
+            cid = sub.get("workorder_id") or sub.get("candidate_id") or sub.get("id")
             accepted_subs.append({
-                "candidate_id": sub.get("id"),
+                "candidate_id": cid,
+                "workorder_id": cid,
                 "candidate_name": sub.get("candidate_name", ""),
                 "candidate_email": sub.get("candidate_email", ""),
                 "requisition_id": sub.get("requisition_id", ""),
@@ -880,19 +888,20 @@ def list_portal_users(
                 "id": u.id,
                 "email": u.email,
                 "name": u.name,
-                "candidate_id": getattr(u, 'candidate_id', '') or '',
+                "candidate_id": getattr(u, 'workorder_id', '') or getattr(u, 'candidate_id', '') or '',
+                "workorder_id": getattr(u, 'workorder_id', '') or getattr(u, 'candidate_id', '') or '',
                 "is_active": u.is_active,
                 "created_at": u.created_at.isoformat() if hasattr(u.created_at, 'isoformat') else str(u.created_at) if u.created_at else None,
             }
             for u in users
         ]
     
-    # Build map of existing portal users with flexible candidate ID and email indexing
+    # Build map of existing portal users with flexible candidate/work order ID and email indexing
     portal_users_by_cid = {}
     portal_users_by_email = {}
     
     for u in db.query(User).filter(User.role == "Candidate").all():
-        raw_cid = (getattr(u, 'candidate_id', '') or '').strip()
+        raw_cid = (getattr(u, 'workorder_id', '') or getattr(u, 'candidate_id', '') or '').strip()
         clean_cid = raw_cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
         uemail = (getattr(u, 'email', '') or '').strip().lower()
 
@@ -910,7 +919,7 @@ def list_portal_users(
     # Also index candidate users stored in Mongo users collection
     try:
         for mu in mongo_db["users"].find({"role": "Candidate"}):
-            raw_cid = (mu.get("candidate_id") or "").strip()
+            raw_cid = (mu.get("workorder_id") or mu.get("candidate_id") or "").strip()
             clean_cid = raw_cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
             uemail = (mu.get("email") or "").strip().lower()
 
@@ -920,7 +929,8 @@ def list_portal_users(
                     self.id = str(doc.get("_id") or doc.get("id"))
                     self.email = doc.get("email", "")
                     self.name = doc.get("name", "")
-                    self.candidate_id = doc.get("candidate_id", "")
+                    self.candidate_id = doc.get("workorder_id") or doc.get("candidate_id", "")
+                    self.workorder_id = doc.get("workorder_id") or doc.get("candidate_id", "")
                     self.is_active = doc.get("is_active", True)
 
             wrapper = MongoUserWrapper(mu)
@@ -983,6 +993,7 @@ def list_portal_users(
 
         results.append({
             "candidate_id": cid,
+            "workorder_id": cid,
             "candidate_name": eff_name,
             "candidate_email": eff_email,
             "requisition_title": (req_doc or {}).get("title", ""),
@@ -1009,18 +1020,18 @@ def _sync_candidate_credentials_to_mongo(candidate_id: str, email: str, name: st
         from modules.shared.db import db as mongo_db
         # Sync candidate_submissions
         mongo_db["candidate_submissions"].update_many(
-            {"$or": [{"id": {"$in": id_variants}}, {"candidate_id": {"$in": id_variants}}]},
-            {"$set": {"candidate_email": email, "email": email, "candidate_name": name}}
+            {"$or": [{"id": {"$in": id_variants}}, {"candidate_id": {"$in": id_variants}}, {"workorder_id": {"$in": id_variants}}]},
+            {"$set": {"candidate_email": email, "email": email, "candidate_name": name, "workorder_id": cid}}
         )
         # Sync onboarding_checklists
         mongo_db["onboarding_checklists"].update_many(
-            {"$or": [{"candidate_id": {"$in": id_variants}}, {"candidate_email": email}]},
-            {"$set": {"candidate_email": email, "candidate_name": name}}
+            {"$or": [{"candidate_id": {"$in": id_variants}}, {"workorder_id": {"$in": id_variants}}, {"candidate_email": email}]},
+            {"$set": {"candidate_email": email, "candidate_name": name, "workorder_id": cid}}
         )
         # Sync mongo_db["users"] collection
         mongo_db["users"].update_many(
-            {"$or": [{"candidate_id": {"$in": id_variants}}, {"email": email}]},
-            {"$set": {"candidate_email": email, "email": email, "name": name, "candidate_id": cid}}
+            {"$or": [{"candidate_id": {"$in": id_variants}}, {"workorder_id": {"$in": id_variants}}, {"email": email}]},
+            {"$set": {"candidate_email": email, "email": email, "name": name, "candidate_id": cid, "workorder_id": cid}}
         )
     except Exception as sync_err:
         print(f"MongoDB sync error on portal user update: {sync_err}")
@@ -1042,7 +1053,7 @@ def create_or_update_portal_user(
     email = (body.get("email") or "").strip().lower()
     name = (body.get("name") or "").strip()
     password = body.get("password") or ""
-    candidate_id = (body.get("candidate_id") or "").strip()
+    candidate_id = (body.get("workorder_id") or body.get("candidate_id") or "").strip()
     cid_clean = candidate_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
 
     if not email or "@" not in email:
@@ -1050,17 +1061,18 @@ def create_or_update_portal_user(
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate name is required")
     if not candidate_id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate ID is required")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Work Order ID is required")
 
     tenant_id = current_user.tenant_id
     from modules.shared.db import db as mongo_db
 
-    # 1. Search for existing Candidate user specifically for THIS candidate_id
+    # 1. Search for existing Candidate user specifically for THIS candidate_id / workorder_id
     existing_user = None
     if candidate_id:
+        variants = [candidate_id, cid_clean, f"SDC-{cid_clean}", f"SDC -{cid_clean}", f"BEAR-{cid_clean}"]
         existing_user = db.query(User).filter(
             User.role == "Candidate",
-            User.candidate_id.in_([candidate_id, cid_clean, f"SDC-{cid_clean}", f"SDC -{cid_clean}", f"BEAR-{cid_clean}"])
+            (User.workorder_id.in_(variants)) | (User.candidate_id.in_(variants))
         ).first()
 
     # 2. Check if email is already taken by ANOTHER account (candidate or non-candidate)
@@ -1083,11 +1095,11 @@ def create_or_update_portal_user(
     mongo_email_owner = mongo_db["users"].find_one({"email": email})
     if mongo_email_owner:
         m_id = str(mongo_email_owner.get("_id") or mongo_email_owner.get("id"))
-        m_cid = (mongo_email_owner.get("candidate_id") or "").strip()
+        m_cid = (mongo_email_owner.get("workorder_id") or mongo_email_owner.get("candidate_id") or "").strip()
         m_clean_cid = m_cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
 
         is_same_account = False
-        if existing_user and (existing_user.id == m_id or existing_user.candidate_id in [m_cid, m_clean_cid]):
+        if existing_user and (existing_user.id == m_id or getattr(existing_user, 'workorder_id', '') in [m_cid, m_clean_cid] or existing_user.candidate_id in [m_cid, m_clean_cid]):
             is_same_account = True
         elif candidate_id and (candidate_id == m_cid or cid_clean == m_clean_cid):
             is_same_account = True
@@ -1103,6 +1115,7 @@ def create_or_update_portal_user(
         existing_user.name = name
         existing_user.email = email
         existing_user.candidate_id = candidate_id
+        existing_user.workorder_id = candidate_id
         existing_user.tenant_id = tenant_id  # reassign to correct tenant
         if password:
             existing_user.password_hash = hash_password(password)
@@ -1120,6 +1133,7 @@ def create_or_update_portal_user(
             "email": existing_user.email,
             "name": existing_user.name,
             "candidate_id": existing_user.candidate_id,
+            "workorder_id": existing_user.workorder_id or existing_user.candidate_id,
             "is_active": existing_user.is_active,
             "message": "Portal credentials updated and activated successfully",
         }
@@ -1138,6 +1152,7 @@ def create_or_update_portal_user(
         password_hash=hash_password(password),
         role="Candidate",
         candidate_id=candidate_id,
+        workorder_id=candidate_id,
         created_by=current_user.id,
         is_active=True,
     )
@@ -1155,6 +1170,7 @@ def create_or_update_portal_user(
         "email": new_user.email,
         "name": new_user.name,
         "candidate_id": new_user.candidate_id,
+        "workorder_id": new_user.workorder_id,
         "is_active": new_user.is_active,
         "message": "Portal access created successfully",
     }

@@ -39,94 +39,96 @@ const Icons = {
   ),
   Dashboard: (props) => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+      <polyline points="9 22 9 12 15 12 15 22"/>
     </svg>
   ),
   Requisitions: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
       <rect width="6" height="6" x="9" y="9" />
     </svg>
   ),
   Plus: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
     </svg>
   ),
   Diamond: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0z" />
+      <path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0z"/>
     </svg>
   ),
   CandidatesBank: (props) => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="10" />
-      <circle cx="12" cy="12" r="3.5" />
+      <circle cx="12" cy="12" r="10"/>
+      <circle cx="12" cy="12" r="3.5"/>
     </svg>
   ),
   Shortlisted: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polyline points="20 6 9 17 4 12" />
+      <polyline points="20 6 9 17 4 12"/>
     </svg>
   ),
   Interviews: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
     </svg>
   ),
   Accepted: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="2.5" fill="currentColor" />
+      <circle cx="12" cy="12" r="9"/>
+      <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
     </svg>
   ),
   PortalAccess: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
     </svg>
   ),
   Flag: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
-      <line x1="4" y1="22" x2="4" y2="15" />
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+      <line x1="4" y1="22" x2="4" y2="15"/>
     </svg>
   ),
   Team: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
     </svg>
   ),
   Timesheet: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-      <line x1="16" y1="2" x2="16" y2="6" />
-      <line x1="8" y1="2" x2="8" y2="6" />
-      <line x1="3" y1="10" x2="21" y2="10" />
+      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+      <line x1="16" y1="2" x2="16" y2="6"/>
+      <line x1="8" y1="2" x2="8" y2="6"/>
+      <line x1="3" y1="10" x2="21" y2="10"/>
     </svg>
   ),
   Receipt: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
-      <path d="M14 8H8" />
-      <path d="M16 12H8" />
-      <path d="M13 16H8" />
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/>
+      <path d="M14 8H8"/>
+      <path d="M16 12H8"/>
+      <path d="M13 16H8"/>
     </svg>
   ),
   Agreements: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <polyline points="14 2 14 8 20 8" />
-      <path d="m9 15 2 2 4-4" />
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14 2 14 8 20 8"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
     </svg>
   ),
-  MessageSquare: (props) => (
+  Chat: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   ),
 };
@@ -166,7 +168,7 @@ export default function DashboardLayout() {
           pendingTimesheets: pendingTs,
           pendingExpenses: pendingExp,
         });
-      }).catch(() => { });
+      }).catch(() => {});
     }
   }, [user?.role, token]);
 
@@ -174,6 +176,18 @@ export default function DashboardLayout() {
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Modal event listeners for AI Chat quick dock
+  useEffect(() => {
+    const handleOpenCompany = () => setIsOnboardCompanyModalOpen(true);
+    const handleOpenVendor = () => setIsOnboardVendorModalOpen(true);
+    window.addEventListener('open-onboard-company-modal', handleOpenCompany);
+    window.addEventListener('open-onboard-vendor-modal', handleOpenVendor);
+    return () => {
+      window.removeEventListener('open-onboard-company-modal', handleOpenCompany);
+      window.removeEventListener('open-onboard-vendor-modal', handleOpenVendor);
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -199,12 +213,12 @@ export default function DashboardLayout() {
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
+  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat';
 
   const navItems =
     userRole === 'Hiring Manager'
       ? [
         { to: '/dashboard/hiring-manager', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-        { to: '/dashboard/hiring-manager/chat', label: 'AI Chat Assistant', end: true, section: 'WORKSPACE', icon: Icons.MessageSquare },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
@@ -230,7 +244,7 @@ export default function DashboardLayout() {
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
-              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.MessageSquare },
+              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
               { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
               { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
@@ -332,10 +346,10 @@ export default function DashboardLayout() {
                   const isItemActive = item.to === '/dashboard/requisitions'
                     ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
                     : item.to === '/dashboard/candidates'
-                      ? location.pathname.startsWith('/dashboard/candidates')
-                      : item.end
-                        ? location.pathname === item.to
-                        : location.pathname.startsWith(item.to);
+                    ? location.pathname.startsWith('/dashboard/candidates')
+                    : item.end
+                    ? location.pathname === item.to
+                    : location.pathname.startsWith(item.to);
 
                   return (
                     <React.Fragment key={item.label}>
@@ -410,18 +424,6 @@ export default function DashboardLayout() {
                 <div className="flex items-center gap-2.5">
                   <Icons.Dashboard size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">Dashboard</span>
-                </div>
-              </NavLink>
-
-              <NavLink
-                to="/dashboard/superadmin/chat"
-                end
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.MessageSquare size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">AI Chat</span>
                 </div>
               </NavLink>
 
@@ -600,8 +602,13 @@ export default function DashboardLayout() {
   );
 
   return (
-    <div className={`app-shell ${consoleClass}`}>
+    <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''}`}>
       <style>{`
+        .app-shell.ai-chat-mode {
+          background-color: #E8EBF0 !important;
+          background: #E8EBF0 !important;
+          padding: 0 !important;
+        }
         /* Eliminate any lingering focus/active rectangle on nav links */
         .sidebar a,
         .sidebar button,
@@ -805,19 +812,19 @@ export default function DashboardLayout() {
         }
       `}</style>
 
-      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px or when in AI chat mode) */}
-      {!location.pathname.includes('/superadmin/chat') && (
+      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px, and hidden in AI Chat mode) */}
+      {!isAiChatPage && (
         <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
           {renderSidebarContent()}
         </aside>
       )}
 
-      {/* Mobile / Fullscreen Drawer (Visible when isMobileMenuOpen is true) */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-[100] flex">
+      {/* Mobile Drawer (Visible when isMobileMenuOpen is true on < 1024px) */}
+      {isMobileMenuOpen && !isAiChatPage && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
           {/* Backdrop */}
           <div
-            className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
             onClick={() => setIsMobileMenuOpen(false)}
           />
 
@@ -831,7 +838,7 @@ export default function DashboardLayout() {
               padding: '24px 20px',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
               position: 'relative',
-              zIndex: 110,
+              zIndex: 60,
             }}
             className="flex flex-col justify-between overflow-y-auto animate-in slide-in-from-left duration-200"
           >
@@ -849,8 +856,8 @@ export default function DashboardLayout() {
         </div>
       )}
 
-      <div className="main-area min-w-0 flex-1 flex flex-col">
-        {!location.pathname.includes('/superadmin/chat') && (
+      <div className={`main-area min-w-0 flex-1 flex flex-col ${isAiChatPage ? 'w-full' : ''}`}>
+        {!isAiChatPage && (
           <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
             {/* Breadcrumb & Mobile Menu Toggle Left */}
             <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
@@ -871,11 +878,13 @@ export default function DashboardLayout() {
               <span className="text-[#0A0A0A] font-semibold truncate">
                 {location.pathname.includes('/requisitions') ? 'Requisitions'
                   : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
-                    : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
-                      : location.pathname.includes('/interviews') ? 'Interview Requests'
-                        : location.pathname.includes('/accepted') ? 'Accepted Candidates'
-                          : location.pathname.includes('/portal-access') ? 'Portal Access'
-                            : 'Dashboard'}
+                  : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
+                  : location.pathname.includes('/interviews') ? 'Interview Requests'
+                  : location.pathname.includes('/agreements') ? 'Agreements'
+                  : location.pathname.includes('/chat') ? 'AI Chat'
+                  : location.pathname.includes('/accepted') ? 'Accepted Candidates'
+                  : location.pathname.includes('/portal-access') ? 'Portal Access'
+                  : 'Dashboard'}
               </span>
               <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
               <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
@@ -916,8 +925,8 @@ export default function DashboardLayout() {
           </header>
         )}
 
-        <main className={`content-area w-full max-w-none min-w-0 flex-1 ${location.pathname.includes('/superadmin/chat') ? '!p-0 !m-0 bg-[#fafafa]' : 'pt-1.5 px-3 sm:px-5 pb-4'}`}>
-          <Outlet context={{ onOpenNavMenu: () => setIsMobileMenuOpen(true) }} />
+        <main className={isAiChatPage ? "w-full min-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-x-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
+          <Outlet />
         </main>
       </div>
 
