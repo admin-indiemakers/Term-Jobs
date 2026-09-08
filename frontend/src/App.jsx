@@ -38,9 +38,9 @@ import ReportedIssues from './pages/candidates/ReportedIssues';
 import TeamOverview from './pages/workforce/TeamOverview';
 import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
+import LandingPage from './pages/LandingPage';
 import Archives from './pages/Archives';
 import AdminAccounts from './pages/AdminAccounts';
-
 
 function FullScreenLoader() {
   return (
@@ -92,7 +92,7 @@ export default function App() {
         <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
-        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/" element={<LandingPage />} />
         <Route
           path="/dashboard"
           element={
