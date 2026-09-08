@@ -31,7 +31,8 @@ import {
   Calendar,
   Search,
   Settings,
-  Bell
+  Bell,
+  LogOut
 } from 'lucide-react';
 
 const INITIAL_MESSAGES = [
@@ -128,7 +129,7 @@ const HR_LEADS = [
 ];
 
 export default function AiChat() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [input, setInput] = useState('');
@@ -140,12 +141,27 @@ export default function AiChat() {
   const [notification, setNotification] = useState(null);
   const [sortUrgent, setSortUrgent] = useState(true);
 
+  // Popout controls for Notifications and Sign Out
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [notificationsList, setNotificationsList] = useState([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const notifPanelRef = useRef(null);
+  const userMenuRef = useRef(null);
+
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const userAvatar =
-    user?.avatar ||
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBgbjGZaarShpB4YIPWbhEcxd2gZi04i9spptYq4lnBJMA2IctcQ84_VFBEI7TE9KPn6dzcTnODRvED47P8ykvObVQgeinYDmAhw6u_UYxkRjvbZT6km84uxl2X1feyEx6KlZRWD34I1IOJWdQxceqr7VIcYMgLzMuyqucOoL2JNQRo3arSh52Emy6asNXuQ5LPxdt33rkvMy24SZj0qQuwRd_4pX3pRjw3r7EzzyTPpzNPMy8ga30';
+  // User Initials (no external photos)
+  const userInitials = user?.name
+    ? user.name
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase()
+    : 'SA';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -159,6 +175,44 @@ export default function AiChat() {
     setNotification(msg);
     setTimeout(() => setNotification(null), 3000);
   };
+
+  // Load real notifications from backend
+  const loadNotifications = async (quiet = false) => {
+    if (!token) return;
+    if (!quiet) setNotificationsLoading(true);
+    try {
+      const list = await request('/api/notifications', { token });
+      if (Array.isArray(list)) {
+        setNotificationsList(list);
+      }
+    } catch {
+      // transient ignore
+    } finally {
+      setNotificationsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadNotifications(true);
+    const timer = setInterval(() => loadNotifications(true), 25000);
+    return () => clearInterval(timer);
+  }, [token]);
+
+  // Click outside to dismiss popouts
+  useEffect(() => {
+    const onClickOutside = (e) => {
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
+        setIsNotificationsOpen(false);
+      }
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
+
+  const unreadNotifCount = notificationsList.filter((n) => !n.read).length;
 
   const handleSyncHRMS = () => {
     setIsSyncing(true);
@@ -363,17 +417,16 @@ export default function AiChat() {
         {/* BEGIN: Left Navigation Rail Dock */}
         {/* ================================================================= */}
         <aside className="w-14 shrink-0 flex flex-col items-center justify-between py-1" data-purpose="sidebar-rail">
-          {/* Top Brand Logo */}
+          {/* Top Brand Logo - Term Jobs */}
           <div className="flex flex-col items-center">
-            <div
+            <button
+              type="button"
               onClick={() => navigate('/dashboard/superadmin')}
-              className="w-11 h-11 rounded-full bg-[#111417] flex items-center justify-center cursor-pointer transition hover:scale-105 shadow-sm"
-              title="Enterprise Core AI / Super Admin Dashboard"
+              className="w-11 h-11 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center font-extrabold text-[15px] tracking-tight cursor-pointer transition-all hover:scale-105 shadow-sm border border-black/10 hover:ring-2 hover:ring-black/10"
+              title="Term Jobs · Super Admin Dashboard"
             >
-              <svg className="w-5 h-5 text-[#D8F929]" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24">
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round"></path>
-              </svg>
-            </div>
+              TJ
+            </button>
           </div>
 
           {/* Middle Dock Navigation Icons (Real Super Admin Menu Items) */}
@@ -468,33 +521,180 @@ export default function AiChat() {
           </nav>
 
           {/* Bottom Profile & Notification Dock */}
-          <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/70 flex flex-col items-center gap-2" data-purpose="user-dock">
-            {/* Notification with red dot */}
-            <button
-              type="button"
-              onClick={() => showToast('Audit Alerts: All systems operating within target thresholds')}
-              className="relative w-10 h-10 rounded-xl text-gray-400 hover:text-black flex items-center justify-center transition cursor-pointer"
-              title="Audit Alerts"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" strokeLinecap="round" strokeLinejoin="round"></path>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" strokeLinecap="round" strokeLinejoin="round"></path>
-              </svg>
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#FF4842] rounded-full ring-2 ring-white"></span>
-            </button>
+          <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/70 flex flex-col items-center gap-2 relative" data-purpose="user-dock">
+            {/* Notification with red dot & Popout */}
+            <div className="relative" ref={notifPanelRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsNotificationsOpen(!isNotificationsOpen);
+                  setIsUserMenuOpen(false);
+                  if (!isNotificationsOpen) loadNotifications(true);
+                }}
+                className={`relative w-10 h-10 rounded-xl transition cursor-pointer flex items-center justify-center ${
+                  isNotificationsOpen
+                    ? 'bg-[#0A0A0A] text-white'
+                    : 'text-gray-400 hover:text-black hover:bg-gray-50'
+                }`}
+                title="Notifications"
+              >
+                <Bell size={18} />
+                {unreadNotifCount > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 bg-[#FF4842] rounded-full ring-2 ring-white"></span>
+                )}
+              </button>
 
-            {/* User Avatar (Sarah Miller - Super Admin) */}
-            <div
-              onClick={() => navigate('/dashboard/superadmin')}
-              className="w-9 h-9 rounded-xl overflow-hidden border border-gray-200 cursor-pointer shadow-sm hover:ring-2 hover:ring-[#D8F929] transition relative group"
-              title="Sarah Miller (Super Admin)"
-            >
-              <img
-                alt="Sarah Miller - Super Admin"
-                className="w-full h-full object-cover"
-                src={userAvatar}
-              />
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white"></span>
+              {/* Notifications Popout Panel */}
+              {isNotificationsOpen && (
+                <div className="absolute left-14 bottom-0 w-80 sm:w-88 bg-white rounded-2xl shadow-2xl border border-gray-200/90 z-50 overflow-hidden animate-in fade-in slide-in-from-left-2 text-left text-[12px]">
+                  <div className="p-3.5 border-b border-gray-100 flex items-center justify-between bg-gray-50/70">
+                    <div className="flex items-center gap-2">
+                      <Bell size={15} className="text-[#0A0A0A]" />
+                      <span className="font-bold text-[#0A0A0A] text-[13px]">Notifications</span>
+                      {unreadNotifCount > 0 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white font-bold text-[10px]">
+                          {unreadNotifCount}
+                        </span>
+                      )}
+                    </div>
+                    {unreadNotifCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setNotificationsList((prev) => prev.map((n) => ({ ...n, read: true })));
+                          try {
+                            await request('/api/notifications/read-all', { method: 'POST', token });
+                          } catch {}
+                        }}
+                        className="text-[11px] font-semibold text-gray-500 hover:text-black cursor-pointer transition"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="max-h-72 overflow-y-auto divide-y divide-gray-100">
+                    {notificationsLoading && notificationsList.length === 0 ? (
+                      <div className="p-6 text-center text-gray-400">Loading notifications...</div>
+                    ) : notificationsList.length === 0 ? (
+                      <div className="p-6 text-center text-gray-400 space-y-1">
+                        <div className="text-xl">🔔</div>
+                        <p className="font-medium text-gray-700">No new notifications</p>
+                        <p className="text-[11px] text-gray-400">You're all caught up with system activities.</p>
+                      </div>
+                    ) : (
+                      notificationsList.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={async () => {
+                            if (!n.read) {
+                              setNotificationsList((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
+                              try {
+                                await request(`/api/notifications/${n.id}/read`, { method: 'POST', token });
+                              } catch {}
+                            }
+                            if (n.data?.link) {
+                              setIsNotificationsOpen(false);
+                              navigate(n.data.link);
+                            }
+                          }}
+                          className={`p-3 hover:bg-gray-50 transition cursor-pointer flex items-start gap-2.5 ${!n.read ? 'bg-amber-50/40' : ''}`}
+                        >
+                          <span className="text-base shrink-0 mt-0.5">
+                            {n.type?.includes('requisition') ? '📢' : n.type?.includes('candidate') ? '⭐' : '🔔'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-semibold text-gray-900 leading-snug">{n.title}</div>
+                            <div className="text-gray-600 text-[11.5px] line-clamp-2 mt-0.5">{n.body}</div>
+                            <div className="text-[10px] text-gray-400 mt-1">
+                              {n.created_at ? new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'recently'}
+                            </div>
+                          </div>
+                          {!n.read && <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1.5" />}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* User Avatar with Initials & Sign Out Popout */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsUserMenuOpen(!isUserMenuOpen);
+                  setIsNotificationsOpen(false);
+                }}
+                className="w-10 h-10 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center font-extrabold text-[13px] tracking-tight cursor-pointer shadow-sm hover:ring-2 hover:ring-black/20 hover:scale-105 transition-all relative"
+                title={`${user?.name || 'Super Admin'} · Click for menu & sign out`}
+              >
+                {userInitials}
+                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full ring-2 ring-white"></span>
+              </button>
+
+              {/* Sign Out Popout Menu */}
+              {isUserMenuOpen && (
+                <div className="absolute left-14 bottom-0 w-64 bg-white rounded-2xl shadow-2xl border border-gray-200/90 z-50 p-2.5 text-left animate-in fade-in slide-in-from-left-2">
+                  <div className="p-2.5 flex items-center gap-3 border-b border-gray-100">
+                    <div className="w-10 h-10 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center font-extrabold text-[13px] shrink-0 shadow-xs">
+                      {userInitials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-gray-900 text-[13px] truncate">
+                        {user?.name || 'Super Admin'}
+                      </div>
+                      <div className="text-[11px] text-gray-500 truncate">
+                        {user?.email || 'admin@termjobs.com'}
+                      </div>
+                      <div className="inline-block mt-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-md text-[10px] font-bold uppercase tracking-wider">
+                        {user?.role || 'Super Admin'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="py-1.5 space-y-0.5 text-[12.5px]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        navigate('/dashboard/superadmin');
+                      }}
+                      className="w-full px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-100 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <Building2 size={15} className="text-gray-500" />
+                      <span>Super Admin Dashboard</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        navigate('/dashboard/superadmin/accounts');
+                      }}
+                      className="w-full px-3 py-2 text-left font-medium text-gray-700 hover:bg-gray-100 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <Settings size={15} className="text-gray-500" />
+                      <span>Account Settings</span>
+                    </button>
+                  </div>
+
+                  <div className="pt-1.5 border-t border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsUserMenuOpen(false);
+                        logout();
+                        navigate('/login');
+                      }}
+                      className="w-full px-3 py-2.5 text-left text-[12.5px] font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition flex items-center gap-2 cursor-pointer"
+                    >
+                      <LogOut size={15} />
+                      <span>Sign out</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </aside>
@@ -653,12 +853,8 @@ export default function AiChat() {
                         <div className="bg-[#111417] text-white px-4 py-2.5 rounded-2xl rounded-br-none shadow-xs max-w-[85%]">
                           <p className="text-xs md:text-[13px] leading-relaxed font-normal">{msg.content}</p>
                         </div>
-                        <div className="w-7 h-7 rounded-lg overflow-hidden border border-gray-200 shrink-0 mb-0.5 shadow-xs">
-                          <img
-                            alt="Super Admin User"
-                            className="w-full h-full object-cover"
-                            src={userAvatar}
-                          />
+                        <div className="w-7 h-7 rounded-lg bg-[#0A0A0A] text-white flex items-center justify-center font-bold text-[10px] shrink-0 mb-0.5 shadow-xs uppercase">
+                          {userInitials}
                         </div>
                       </div>
                     );
