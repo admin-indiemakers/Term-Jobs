@@ -165,20 +165,6 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         },
     )
 
-@app.get("/")
-@app.get("/api")
-@app.get("/api/")
-def root_status():
-    """Root endpoint returning API server health & status."""
-    return {
-        "status": "online",
-        "service": "TermJobs Requisition API Backend",
-        "version": "1.0.0",
-        "health_check": "/api/health",
-        "auth": "/api/auth/login",
-        "environment": os.getenv("VERCEL_ENV", "local"),
-    }
-
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
@@ -201,7 +187,6 @@ def health_check():
         "environment": os.getenv("VERCEL_ENV", "local"),
     }
 
-
 app.include_router(identity_router, prefix="/api/auth")
 app.include_router(identity_router, prefix="/auth")
 app.include_router(candidate_router)
@@ -223,30 +208,21 @@ app.include_router(voice_router)
 
 # --- LLM provider selection -------------------------------------------------
 def _build_service():
-    try:
-        from modules.requisition.agent.graph import make_checkpointer
-        from modules.requisition.llm.groq import GroqClient
-        from modules.requisition.llm.mock import MockLLM
-        from modules.requisition.services.requisition_service import RequisitionService
+    from modules.requisition.agent.graph import make_checkpointer
+    from modules.requisition.llm.groq import GroqClient
+    from modules.requisition.llm.mock import MockLLM
+    from modules.requisition.services.requisition_service import RequisitionService
 
-        provider = os.getenv("LLM_PROVIDER", "groq").lower()
-        llm = GroqClient() if provider == "groq" else MockLLM()
-        return RequisitionService(
-            llm=llm,
-            session_factory=get_session,
-            checkpointer=make_checkpointer(),
-        )
-    except Exception as err:
-        print(f"⚠️ [BUILD SERVICE STARTUP WARNING]: {err}", file=sys.stderr)
-        return None
+    provider = os.getenv("LLM_PROVIDER", "groq").lower()
+    llm = GroqClient() if provider == "groq" else MockLLM()
+    return RequisitionService(
+        llm=llm,
+        session_factory=get_session,
+        checkpointer=make_checkpointer(),
+    )
 
 
-try:
-    service = _build_service()
-except Exception as err:
-    service = None
-    print(f"⚠️ [SERVICE INIT FAILED]: {err}", file=sys.stderr)
-
+service = _build_service()
 try:
     init_db()
 except Exception as exc:  # noqa: BLE001
@@ -1232,16 +1208,6 @@ def _extract_structured_fields(text: str) -> dict:
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes."""
     try:
-        import io
-        try:
-            import pypdf
-            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
-            pages_text = [page.extract_text() for page in reader.pages if page.extract_text()]
-            if pages_text:
-                return "\n".join(pages_text)
-        except Exception:
-            pass
-
         import fitz
         extracted_text = ""
         with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -1250,7 +1216,6 @@ def _extract_pdf_text(pdf_bytes: bytes) -> str:
         return extracted_text
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
-
 
 
 def _extract_docx_text(docx_bytes: bytes) -> str:
