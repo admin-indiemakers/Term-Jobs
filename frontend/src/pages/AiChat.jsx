@@ -814,12 +814,12 @@ export default function AiChat() {
     baseAssetPath: '/node_modules/@ricky0123/vad-web/dist/',
     onnxWASMBasePath: '/node_modules/onnxruntime-web/dist/',
     model: 'v5',
-    positiveSpeechThreshold: 0.80,
-    negativeSpeechThreshold: 0.40,
-    userSpeakingThreshold: 0.80,
-    minSpeechMs: 400,
+    positiveSpeechThreshold: 0.60,
+    negativeSpeechThreshold: 0.35,
+    userSpeakingThreshold: 0.60,
+    minSpeechMs: 250,
     preSpeechPadMs: 300,
-    redemptionMs: 900,
+    redemptionMs: 600,
     getStream: getCustomStream,
     onSpeechStart: () => {
       console.log('🎙️ [SILERO VAD] Speech started!');
@@ -1219,7 +1219,15 @@ export default function AiChat() {
   /* ── MAIN SEND PROMPT HANDLER ────────────────────────────────────────────── */
   const handleSend = async (customText, isContinuousVAD = false, isVoiceInput = false) => {
     const textToSend = typeof customText === 'string' ? customText : input.trim();
-    if (!textToSend || loading) return;
+    if (!textToSend) {
+      if (isContinuousVAD) resumeVADListening(500);
+      return;
+    }
+
+    if (loading) {
+      if (isContinuousVAD) resumeVADListening(1000);
+      return;
+    }
 
     const userMsg = {
       id: `user-${Date.now()}`,
