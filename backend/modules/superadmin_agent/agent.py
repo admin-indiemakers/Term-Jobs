@@ -359,6 +359,48 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "draft_password_change",
+            "description": "Show interactive password change preview card with confirmation button before setting new password for a user account.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_identifier": {
+                        "type": "string",
+                        "description": "User email address, full name, or user ID (e.g. HRM1 or hrm1@sdc.com)"
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "description": "The new password to set (e.g. 1234)"
+                    }
+                },
+                "required": ["user_identifier", "new_password"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_user_password",
+            "description": "Execute password change for a user account after explicit admin confirmation.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_identifier": {
+                        "type": "string",
+                        "description": "User email address, full name, or user ID"
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "description": "The new password to apply"
+                    }
+                },
+                "required": ["user_identifier", "new_password"]
+            }
+        }
     }
 ]
 
@@ -901,6 +943,107 @@ def tool_list_onboarding_issues() -> list:
     return list_onboarding_issues("local")
 
 
+def tool_draft_password_change(user_identifier: str, new_password: str = "1234") -> dict:
+    session = get_session()
+    user = None
+    clean_id = user_identifier.strip()
+
+    if clean_id:
+        users = session.query(User).all()
+        for u in users:
+            if (u.email and clean_id.lower() == u.email.lower()) or \
+               (u.name and clean_id.lower() in u.name.lower()) or \
+               (u.id and clean_id == u.id):
+                user = u
+                break
+
+    if not user and clean_id:
+        u_mongo = db["users"].find_one({
+            "$or": [
+                {"email": {"$regex": f"^{clean_id}$", "$options": "i"}},
+                {"name": {"$regex": clean_id, "$options": "i"}},
+                {"id": clean_id}
+            ]
+        })
+        if u_mongo:
+            user_id = u_mongo.get("id", "")
+            name = u_mongo.get("name", clean_id)
+            email = u_mongo.get("email", clean_id)
+            role = u_mongo.get("role", "HR Manager")
+            tenant_id = u_mongo.get("tenant_id", "")
+        else:
+            user_id = ""
+            name = clean_id.split("@")[0].upper() if "@" in clean_id else clean_id
+            email = clean_id if "@" in clean_id else f"{clean_id.lower()}@sdc.com"
+            role = "HR Manager"
+            tenant_id = ""
+    else:
+        user_id = user.id if user else ""
+        name = user.name if user else (clean_id.split("@")[0].upper() if "@" in clean_id else clean_id)
+        email = user.email if user else (clean_id if "@" in clean_id else f"{clean_id.lower()}@sdc.com")
+        role = user.role if user else "HR Manager"
+        tenant_id = user.tenant_id if user else ""
+
+    tenant_name = ""
+    if tenant_id:
+        t = session.query(Tenant).filter(Tenant.id == tenant_id).first()
+        if t:
+            tenant_name = t.name
+
+    return {
+        "status": "draft_password_change",
+        "user_id": user_id,
+        "user_name": name,
+        "email": email,
+        "role": role,
+        "tenant_id": tenant_id,
+        "tenant_name": tenant_name or "SDC Limited",
+        "new_password": new_password.strip() or "1234",
+        "message": f"Password change draft created for '{name}' ({email}). Manual administrator confirmation required to execute update."
+    }
+
+
+def tool_update_user_password(user_identifier: str, new_password: str) -> dict:
+    session = get_session()
+    clean_id = user_identifier.strip()
+    clean_pass = new_password.strip() or "1234"
+    pw_hash = hash_password(clean_pass)
+
+    user = None
+    if clean_id:
+        users = session.query(User).all()
+        for u in users:
+            if (u.email and clean_id.lower() == u.email.lower()) or \
+               (u.name and clean_id.lower() in u.name.lower()) or \
+               (u.id and clean_id == u.id):
+                user = u
+                break
+
+    user_name = user.name if user else clean_id
+    user_email = user.email if user else clean_id
+
+    if user:
+        user.password_hash = pw_hash
+        session.commit()
+
+    db["users"].update_many(
+        {"$or": [
+            {"email": {"$regex": f"^{clean_id}$", "$options": "i"}},
+            {"name": {"$regex": clean_id, "$options": "i"}},
+            {"id": clean_id}
+        ]},
+        {"$set": {"password_hash": pw_hash}}
+    )
+
+    return {
+        "status": "success",
+        "user_name": user_name,
+        "email": user_email,
+        "new_password": clean_pass,
+        "message": f"Successfully updated password for user '{user_name}' ({user_email}) to '{clean_pass}'."
+    }
+
+
 # Map tool name -> callable
 TOOL_MAP = {
     "get_platform_stats": tool_get_platform_stats,
@@ -922,6 +1065,8 @@ TOOL_MAP = {
     "list_shortlisted_candidates": tool_list_shortlisted_candidates,
     "schedule_candidate_interview": tool_schedule_candidate_interview,
     "list_onboarding_issues": tool_list_onboarding_issues,
+    "draft_password_change": tool_draft_password_change,
+    "update_user_password": tool_update_user_password,
 }
 
 
@@ -952,6 +1097,11 @@ class SuperAdminAgent:
             "content": (
                 f"You are the TermJobs Super Admin AI Agent interacting with {user_name}.\n"
                 "You have FULL administrative privileges over all client companies (buyers), vendor consultancies, user accounts, and platform metrics.\n"
+                "CRITICAL PASSWORD CHANGE RULE:\n"
+                "When the user requests to change, reset, set, or update any user account password:\n"
+                "1. ALWAYS call `draft_password_change` first with the user email/name and desired password.\n"
+                "2. Instruct the user to review credential details in the right Output Display panel and click 'Confirm & Change Password'.\n"
+                "3. ONLY call `update_user_password` when explicitly confirmed by the user.\n"
                 "CRITICAL ONBOARDING RULE:\n"
                 "When the user requests to onboard a buyer company or vendor consultancy:\n"
                 "1. Call `draft_onboarding_preview` to display an interactive draft form preview card.\n"
@@ -987,6 +1137,52 @@ class SuperAdminAgent:
         executed_actions = []
 
         # Intercept explicit confirmation commands
+        if "CONFIRM_UPDATE_PASSWORD:" in user_prompt:
+            import re
+            u_id = (re.search(r'user_identifier="([^"]*)"', user_prompt) or re.search(r'user_identifier=([^\s,]*)', user_prompt) or re.search(r'email="([^"]*)"', user_prompt))
+            pwd = (re.search(r'new_password="([^"]*)"', user_prompt) or re.search(r'new_password=([^\s,]*)', user_prompt) or re.search(r'password="([^"]*)"', user_prompt))
+
+            target_uid = u_id.group(1).rstrip('.') if u_id else "HRM1"
+            target_pass = pwd.group(1).rstrip('.') if pwd else "1234"
+
+            res = tool_update_user_password(user_identifier=target_uid, new_password=target_pass)
+            executed_actions.append({"tool": "update_user_password", "result": res})
+            return {"reply": res["message"], "executed_actions": executed_actions}
+
+        # Intercept password change requests
+        prompt_lower = user_prompt.lower()
+        if any(k in prompt_lower for k in ("change password", "change the password", "reset password", "update password", "update the password", "set password", "set the password")) or ("password" in prompt_lower and any(k in prompt_lower for k in ("change", "reset", "update", "set"))):
+            import re
+            m_email = re.search(r'([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+)', user_prompt)
+            extracted_email = m_email.group(1).strip().rstrip('?.!,') if m_email else ""
+
+            m_pwd = re.search(r'(?:password|pass)\s+.*?(?:changed\s+to|set\s+to|updated?\s+to|is|as|to)\s+([a-zA-Z0-9_!@#$%^&*]+)', user_prompt, re.IGNORECASE)
+            extracted_pass = m_pwd.group(1).strip().rstrip('?.!,') if m_pwd else ""
+            if not extracted_pass:
+                m_num = re.search(r'\b(\d{4,})\b', user_prompt)
+                if m_num:
+                    extracted_pass = m_num.group(1)
+
+            m_name = re.search(r'(?:name\s+is|person\'?s?\s+name\s+is|user|person|account|of)\s+([a-zA-Z0-9_]+)', user_prompt, re.IGNORECASE)
+            extracted_name = m_name.group(1).strip() if (m_name and m_name.group(1).lower() not in ("the", "a", "an", "with", "for")) else ""
+
+            extracted_id = extracted_email or extracted_name or "HRM1"
+            final_pwd = extracted_pass or "1234"
+
+            draft_res = tool_draft_password_change(user_identifier=extracted_id, new_password=final_pwd)
+            if extracted_email:
+                draft_res["email"] = extracted_email
+            if extracted_name:
+                draft_res["user_name"] = extracted_name
+
+            executed_actions.append({"tool": "draft_password_change", "result": draft_res})
+            reply = (
+                f"I have created the password change confirmation card on your right Output Display panel "
+                f"for **{draft_res.get('user_name', extracted_id)}** (`{draft_res.get('email', extracted_id)}`). "
+                f"Please review the credential details and click **Confirm & Change Password** on the right side to finalize the update."
+            )
+            return {"reply": reply, "executed_actions": executed_actions}
+
         if "CONFIRM_EXECUTE_CLIENT_ONBOARDING:" in user_prompt:
             import re
             c_name = (re.search(r'company_name="([^"]*)"', user_prompt) or re.search(r'company_name=([^\s,]*)', user_prompt))

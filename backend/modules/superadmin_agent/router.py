@@ -46,7 +46,8 @@ def superadmin_agent_chat(
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
 
-    result = agent_instance.run(
+    agent = SuperAdminAgent()
+    result = agent.run(
         user_prompt=data.prompt.strip(),
         history=data.history or [],
         user_name=user_name

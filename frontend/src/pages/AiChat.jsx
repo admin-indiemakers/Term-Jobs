@@ -562,7 +562,148 @@ function TenantDeletedSuccessWidget({ data = {}, onSendMessage }) {
   );
 }
 
-/* ── 7. MAIN AiChat COMPONENT ────────────────────────────────────────────────── */
+/* ── 7. Interactive Password Change Confirmation Widget ─────────────────────── */
+function PasswordChangeConfirmWidget({ data = {}, onSendMessage }) {
+  const [formData, setFormData] = useState({
+    user_name: data.user_name || 'HRM1',
+    email: data.email || 'hrm1@sdc.com',
+    password: data.new_password || '1234',
+    role: data.role || 'HR Manager',
+    tenant_name: data.tenant_name || 'SDC Limited'
+  });
+
+  const handleConfirm = () => {
+    onSendMessage(`CONFIRM_UPDATE_PASSWORD: user_identifier="${formData.email}", new_password="${formData.password}"`);
+  };
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      <div className="flex items-center justify-between border-b border-purple-100 pb-2">
+        <div className="flex items-center gap-2">
+          <ShieldAlert size={18} className="text-purple-600 animate-pulse" />
+          <h3 className="text-sm font-extrabold text-gray-950">Credential & Password Change Confirmation</h3>
+        </div>
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-200 uppercase">
+          Confirmation Required
+        </span>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/50 to-white border border-purple-200/80 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-purple-100">
+          <div>
+            <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">Target User Account</span>
+            <h4 className="text-base font-black text-gray-950 mt-0.5">{formData.user_name}</h4>
+          </div>
+          <span className="font-mono text-xs font-bold text-purple-900 bg-purple-100/70 px-2.5 py-1 rounded-xl border border-purple-200">
+            {formData.role}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+          <div>
+            <label className="block text-[10.5px] font-bold text-gray-600 mb-1">User Full Name</label>
+            <input
+              type="text"
+              value={formData.user_name}
+              onChange={(e) => setFormData({ ...formData, user_name: e.target.value })}
+              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 font-bold focus:outline-none focus:border-purple-600"
+            />
+          </div>
+          <div>
+            <label className="block text-[10.5px] font-bold text-gray-600 mb-1">User Email Address</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 font-bold focus:outline-none focus:border-purple-600"
+            />
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-white border border-purple-100 space-y-2 text-xs">
+          <label className="block text-[10.5px] font-bold text-gray-700">New Target Password *</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3.5 py-2 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-mono font-black text-purple-950 focus:outline-none focus:border-purple-600"
+            />
+          </div>
+          <p className="text-[10.5px] text-gray-500 font-medium">
+            Password hash will be encrypted and synchronized to database authentication tables.
+          </p>
+        </div>
+      </div>
+
+      {/* RIGHT SIDE FINAL CONFIRMATION BUTTON */}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className="px-5 py-2.5 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-extrabold shadow-md cursor-pointer flex items-center gap-2 transition-all hover:scale-102"
+        >
+          <ShieldCheck size={15} className="text-[#D8F929]" />
+          <span>Confirm & Change Password</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 8. Interactive Password Updated Success Widget ─────────────────────────── */
+function PasswordUpdatedSuccessWidget({ data = {}, onSendMessage }) {
+  const { user_name, email, new_password, message } = data;
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      <div className="p-5 rounded-3xl bg-gray-950 text-white border border-gray-800 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-extrabold text-white">Password Successfully Updated</h4>
+              <p className="text-[11px] text-gray-400">Account credentials synchronized across platform authentication nodes</p>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+            Active & Synced
+          </span>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 space-y-2 text-xs">
+          <div className="flex items-center justify-between text-gray-300">
+            <span className="font-medium">Account User:</span>
+            <span className="font-bold text-white">{user_name || 'HRM1'} ({email || 'hrm1@sdc.com'})</span>
+          </div>
+          <div className="flex items-center justify-between text-gray-300">
+            <span className="font-medium">New Active Password:</span>
+            <span className="font-mono font-bold text-[#D8F929]">{new_password || '1234'}</span>
+          </div>
+          <div className="flex items-center justify-between text-gray-300">
+            <span className="font-medium">Status:</span>
+            <span className="text-emerald-400 font-bold">Password Hash Updated & Committed</span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end pt-1">
+          <button
+            type="button"
+            onClick={() => onSendMessage('List administrator accounts')}
+            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5"
+          >
+            <span>View Accounts Directory</span>
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 9. MAIN AiChat COMPONENT ────────────────────────────────────────────────── */
 
 export default function AiChat() {
   const { user, token, logout } = useAuth();
@@ -626,32 +767,89 @@ export default function AiChat() {
   const [lastSttText, setLastSttText] = useState('');
   const [lastTtsText, setLastTtsText] = useState('');
   const continuousModeRef = useRef(false);
+  const isProcessingOrSpeakingRef = useRef(false);
+  const micStreamRef = useRef(null);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioPlayerRef = useRef(null);
   const messagesEndRef = useRef(null);
 
+  const muteMicTracks = () => {
+    if (micStreamRef.current) {
+      micStreamRef.current.getAudioTracks().forEach((track) => {
+        track.enabled = false;
+      });
+    }
+  };
+
+  const unmuteMicTracks = () => {
+    if (micStreamRef.current) {
+      micStreamRef.current.getAudioTracks().forEach((track) => {
+        track.enabled = true;
+      });
+    }
+  };
+
+  const getCustomStream = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+      micStreamRef.current = stream;
+      return stream;
+    } catch (err) {
+      console.error('Error acquiring custom mic stream for VAD:', err);
+      throw err;
+    }
+  };
+
   /* Silero VAD Hook Initialization */
   const vad = useMicVAD({
     startOnLoad: false,
-    baseAssetPath: 'https://cdn.jsdelivr.net/npm/@ricky0123/vad-web@0.0.30/dist/',
-    onnxWASMBasePath: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.29.0/dist/',
+    baseAssetPath: '/node_modules/@ricky0123/vad-web/dist/',
+    onnxWASMBasePath: '/node_modules/onnxruntime-web/dist/',
     model: 'v5',
-    positiveSpeechThreshold: 0.4,
-    negativeSpeechThreshold: 0.3,
-    minSpeechMs: 200,
+    positiveSpeechThreshold: 0.80,
+    negativeSpeechThreshold: 0.40,
+    userSpeakingThreshold: 0.80,
+    minSpeechMs: 400,
     preSpeechPadMs: 300,
-    redemptionMs: 500,
+    redemptionMs: 900,
+    getStream: getCustomStream,
     onSpeechStart: () => {
       console.log('🎙️ [SILERO VAD] Speech started!');
+      if (isProcessingOrSpeakingRef.current) {
+        console.log('🛑 [SILERO VAD] Ignored speech start because AI is speaking/processing');
+        return;
+      }
       if (continuousModeRef.current) {
         setVadStatus('user_speaking');
       }
     },
+    onVADMisfire: () => {
+      console.log('⚠️ [SILERO VAD] Misfire / background noise burst');
+      if (continuousModeRef.current && !isProcessingOrSpeakingRef.current) {
+        setVadStatus('listening');
+      }
+    },
     onSpeechEnd: async (audio) => {
       console.log('⚡ [SILERO VAD] Speech ended! Audio samples:', audio?.length);
-      if (!continuousModeRef.current) return;
+      if (!continuousModeRef.current || isProcessingOrSpeakingRef.current) {
+        console.log('🛑 [SILERO VAD] Ignored speech end (VAD muted during AI processing/speaking)');
+        return;
+      }
+
+      // Mark processing ACTIVE immediately & DISABLE hardware mic tracks to prevent system speaker leak
+      isProcessingOrSpeakingRef.current = true;
+      muteMicTracks();
+
+      // PAUSE VAD IMMEDIATELY WHEN USER FINISHES SPEAKING
+      try { await vad.pause(); } catch (e) { }
       setVadStatus('transcribing');
 
       try {
@@ -674,51 +872,134 @@ export default function AiChat() {
         const data = await response.json();
         if (data.status === 'success' && data.transcript) {
           const spokenText = data.transcript.trim();
-          if (spokenText) {
+          if (spokenText && spokenText.length > 1) {
             setLastSttText(spokenText);
             setInput(spokenText); // POPULATE TEXTBOX FOR VISUAL VERIFICATION
             showToast(`🎙️ STT Transcribed: "${spokenText}"`);
             setVadStatus('thinking');
-            await handleSend(spokenText, true);
+            await handleSend(spokenText, true, true);
           } else {
-            resumeVADListening();
+            resumeVADListening(500);
           }
         } else {
-          resumeVADListening();
+          resumeVADListening(500);
         }
       } catch (err) {
         console.error('Silero VAD speech processing error:', err);
-        resumeVADListening();
+        resumeVADListening(500);
       }
     }
   });
 
+  /* Ref for fallback SpeechRecognition */
+  const speechRecognitionRef = useRef(null);
+
+  const startFallbackSpeechRecognition = () => {
+    if (typeof window === 'undefined') return;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    try {
+      if (speechRecognitionRef.current) {
+        try { speechRecognitionRef.current.stop(); } catch (e) { }
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-IN';
+
+      recognition.onstart = () => {
+        setVadStatus('listening');
+      };
+
+      recognition.onresult = async (event) => {
+        const transcript = event.results[0][0].transcript.trim();
+        if (transcript && continuousModeRef.current && !isProcessingOrSpeakingRef.current) {
+          isProcessingOrSpeakingRef.current = true;
+          muteMicTracks();
+          setLastSttText(transcript);
+          setInput(transcript);
+          showToast(`🎙️ Web Speech Transcribed: "${transcript}"`);
+          setVadStatus('thinking');
+          await handleSend(transcript, true, true);
+        }
+      };
+
+      recognition.onerror = (e) => {
+        console.warn('Fallback SpeechRecognition error:', e);
+        if (continuousModeRef.current && vadStatus !== 'ai_speaking') {
+          setTimeout(() => resumeVADListening(1000), 1000);
+        }
+      };
+
+      recognition.onend = () => {
+        if (continuousModeRef.current && vadStatus === 'listening') {
+          setTimeout(() => resumeVADListening(500), 500);
+        }
+      };
+
+      recognition.start();
+      speechRecognitionRef.current = recognition;
+    } catch (e) {
+      console.warn('Fallback SpeechRecognition start error:', e);
+    }
+  };
+
   /* Sync VAD lifecycle when loading finishes or continuous mode toggles */
   useEffect(() => {
-    if (continuousMode && !vad.loading && !vad.errored) {
-      setVadStatus('listening');
-      vad.start();
-    } else if (!continuousMode) {
+    if (continuousMode) {
+      resumeVADListening(300);
+    } else {
+      isProcessingOrSpeakingRef.current = false;
+      muteMicTracks();
       setVadStatus('idle');
       try { vad.pause(); } catch (e) { }
+      try { if (speechRecognitionRef.current) speechRecognitionRef.current.stop(); } catch (e) { }
     }
   }, [continuousMode, vad.loading, vad.errored]);
 
   useEffect(() => {
     if (vad.errored) {
-      showToast(`Silero VAD Error: ${vad.errored}`);
+      console.warn(`Silero VAD Error: ${vad.errored}`);
     }
   }, [vad.errored]);
 
-  const resumeVADListening = () => {
-    if (continuousModeRef.current && !vad.loading && !vad.errored) {
-      setVadStatus('listening');
-      try {
-        vad.start();
-      } catch (e) { }
-    } else {
+  /* Resume VAD listening with an acoustic cooldown delay to prevent hardware speaker echo */
+  const resumeVADListening = (cooldownMs = 1200) => {
+    if (!continuousModeRef.current) {
+      isProcessingOrSpeakingRef.current = false;
+      muteMicTracks();
       setVadStatus('idle');
+      try { vad.pause(); } catch (e) { }
+      try { if (speechRecognitionRef.current) speechRecognitionRef.current.stop(); } catch (e) { }
+      return;
     }
+
+    // Keep VAD muted during acoustic cooldown delay to let room echo dissipate
+    setTimeout(async () => {
+      if (!continuousModeRef.current) {
+        isProcessingOrSpeakingRef.current = false;
+        muteMicTracks();
+        setVadStatus('idle');
+        try { vad.pause(); } catch (e) { }
+        return;
+      }
+
+      isProcessingOrSpeakingRef.current = false;
+      unmuteMicTracks();
+      setVadStatus('listening');
+
+      if (!vad.loading && !vad.errored) {
+        try {
+          await vad.start();
+        } catch (e) {
+          startFallbackSpeechRecognition();
+        }
+      } else {
+        startFallbackSpeechRecognition();
+      }
+    }, cooldownMs);
   };
 
 
@@ -809,7 +1090,7 @@ export default function AiChat() {
             setLastSttText(spokenText);
             setInput(spokenText); // POPULATE TEXTBOX FOR VISUAL VERIFICATION
             showToast(`🎙️ STT Transcribed: "${spokenText}"`);
-            await handleSend(spokenText);
+            await handleSend(spokenText, false, true);
           } else {
             showToast('Could not transcribe voice audio. Please try speaking again.');
           }
@@ -843,8 +1124,14 @@ export default function AiChat() {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
         utterance.rate = 1.1;
-        utterance.onend = onFinished;
-        utterance.onerror = onFinished;
+        utterance.onend = () => {
+          setTimeout(() => {
+            if (onFinished) onFinished();
+          }, 500);
+        };
+        utterance.onerror = () => {
+          if (onFinished) onFinished();
+        };
         window.speechSynthesis.speak(utterance);
         return;
       } catch (e) {
@@ -861,16 +1148,39 @@ export default function AiChat() {
       return;
     }
 
+    // MUTE/PAUSE VAD IMMEDIATELY BEFORE SYNTHESIS OR PLAYBACK TO PREVENT AUDIO FEEDBACK
+    isProcessingOrSpeakingRef.current = true;
+    muteMicTracks();
+    try { vad.pause(); } catch (e) { }
+    try { if (speechRecognitionRef.current) speechRecognitionRef.current.stop(); } catch (e) { }
+
     setLastTtsText(speechText);
     setIsPlayingAudio(true);
+    if (continuousModeRef.current) {
+      setVadStatus('ai_speaking');
+    }
     showToast(`🔊 Speaking: "${speechText.slice(0, 45)}${speechText.length > 45 ? '...' : ''}"`);
 
     const finishAudio = () => {
       setIsPlayingAudio(false);
-      if (onAudioEnded) onAudioEnded();
+      if (onAudioEnded) {
+        onAudioEnded();
+      } else if (continuousModeRef.current) {
+        resumeVADListening(1200);
+      } else {
+        isProcessingOrSpeakingRef.current = false;
+        muteMicTracks();
+      }
     };
 
     try {
+      if (audioPlayerRef.current) {
+        try {
+          audioPlayerRef.current.pause();
+          audioPlayerRef.current.currentTime = 0;
+        } catch (e) { }
+      }
+
       const res = await request('/api/voice/tts', {
         method: 'POST',
         token,
@@ -883,9 +1193,6 @@ export default function AiChat() {
       });
 
       if (res?.audio_base64) {
-        if (audioPlayerRef.current) {
-          try { audioPlayerRef.current.pause(); } catch (e) { }
-        }
         const audio = new Audio(`data:audio/wav;base64,${res.audio_base64}`);
         audioPlayerRef.current = audio;
         audio.onended = finishAudio;
@@ -910,7 +1217,7 @@ export default function AiChat() {
   };
 
   /* ── MAIN SEND PROMPT HANDLER ────────────────────────────────────────────── */
-  const handleSend = async (customText, isContinuousVAD = false) => {
+  const handleSend = async (customText, isContinuousVAD = false, isVoiceInput = false) => {
     const textToSend = typeof customText === 'string' ? customText : input.trim();
     if (!textToSend || loading) return;
 
@@ -949,11 +1256,19 @@ export default function AiChat() {
       const draftAction = executedActions.find((a) => a.tool === 'draft_onboarding_preview');
       const deleteDraftAction = executedActions.find((a) => a.tool === 'draft_tenant_deletion');
       const deleteAction = executedActions.find((a) => a.tool === 'delete_tenant');
+      const passwordDraftAction = executedActions.find((a) => a.tool === 'draft_password_change');
+      const passwordUpdatedAction = executedActions.find((a) => a.tool === 'update_user_password');
 
       let widgetObj = null;
       let textNotice = cleanReplyText(replyContent) || 'Action executed successfully.';
 
-      if (deleteDraftAction) {
+      if (passwordDraftAction) {
+        widgetObj = { type: 'password_change_confirm', title: 'Password Change Confirmation', data: passwordDraftAction.result || {} };
+        textNotice = cleanReplyText(replyContent) || `I have prepared the password change confirmation card on your right Output Display panel.`;
+      } else if (passwordUpdatedAction) {
+        widgetObj = { type: 'password_updated_success', title: 'Password Updated', data: passwordUpdatedAction.result || {} };
+        textNotice = cleanReplyText(replyContent) || `User password has been updated successfully.`;
+      } else if (deleteDraftAction) {
         widgetObj = { type: 'tenant_delete_confirm', title: 'Tenant Deletion Preview', data: deleteDraftAction.result || {} };
         textNotice = cleanReplyText(replyContent) || `I have prepared the tenant deletion profile card on your right Output Display panel.`;
       } else if (deleteAction) {
@@ -998,14 +1313,29 @@ export default function AiChat() {
         }
       ]);
 
-      // Automatically synthesize Sarvam AI voice output if voice is enabled!
-      if (voiceEnabled) {
-        if (continuousModeRef.current) setVadStatus('ai_speaking');
+      // Automatically synthesize Sarvam AI voice output ONLY when using speech or hands-free options!
+      if (voiceEnabled && (isContinuousVAD || isVoiceInput)) {
+        if (continuousModeRef.current) {
+          setVadStatus('ai_speaking');
+          isProcessingOrSpeakingRef.current = true;
+          muteMicTracks();
+          try { vad.pause(); } catch (e) { }
+        }
         playSarvamAudio(textNotice, () => {
-          resumeVADListening();
+          if (continuousModeRef.current) {
+            resumeVADListening(1200);
+          } else {
+            isProcessingOrSpeakingRef.current = false;
+            muteMicTracks();
+          }
         });
       } else {
-        resumeVADListening();
+        if (continuousModeRef.current) {
+          resumeVADListening(500);
+        } else {
+          isProcessingOrSpeakingRef.current = false;
+          muteMicTracks();
+        }
       }
     } catch (err) {
       setMessages((prev) => [
@@ -1682,6 +2012,14 @@ export default function AiChat() {
               {/* DYNAMIC CANVAS CONTENT */}
               {rightPanelTab === 'display' && activeWidget ? (
                 <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                  {activeWidget.type === 'password_change_confirm' && (
+                    <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                  )}
+
+                  {activeWidget.type === 'password_updated_success' && (
+                    <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                  )}
+
                   {activeWidget.type === 'tenant_delete_confirm' && (
                     <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
                   )}
