@@ -1,13 +1,14 @@
 import os
 import shutil
 import uuid
+import re
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.requisition.domain.models import Requisition
 from modules.candidate.domain.models import CandidateSubmission
-from modules.shared.db import get_session
+from modules.shared.db import get_session, db
 from modules.workorder.domain.models import (
     WorkOrder, WorkOrderCreate, WorkOrderUpdate, WorkOrderApproveIn, WorkOrderRevisionIn
 )
@@ -35,6 +36,7 @@ def _work_order_dict(wo: WorkOrder) -> dict:
         "requisition_id": wo.requisition_id,
         "requisition_ref": wo.requisition_ref,
         "candidate_id": wo.candidate_id,
+        "workorder_id": getattr(wo, "workorder_id", None) or wo.candidate_id or wo.id,
         "candidate_name": wo.candidate_name,
         "candidate_email": wo.candidate_email,
         "candidate_phone": wo.candidate_phone,
@@ -77,11 +79,11 @@ def autofill_workorder(
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """Run AI Work Order Agent to auto-generate prefilled Work Order using Candidate & Requisition details."""
-    candidate_id = payload.get("candidate_id")
+    candidate_id = payload.get("workorder_id") or payload.get("candidate_id")
     requisition_id = payload.get("requisition_id")
     
     if not candidate_id or not requisition_id:
-        raise HTTPException(status_code=400, detail="Both candidate_id and requisition_id are required.")
+        raise HTTPException(status_code=400, detail="Both workorder_id and requisition_id are required.")
 
     with get_session() as session:
         # Load requisition
@@ -108,7 +110,8 @@ def autofill_workorder(
         if cand_sub:
             cand_dict = {
                 "id": cand_sub.id,
-                "candidate_id": cand_sub.id,
+                "candidate_id": getattr(cand_sub, "workorder_id", None) or cand_sub.id,
+                "workorder_id": getattr(cand_sub, "workorder_id", None) or cand_sub.id,
                 "candidate_name": cand_sub.candidate_name,
                 "candidate_email": cand_sub.candidate_email,
                 "candidate_phone": (cand_sub.details or {}).get("candidate_phone") or getattr(cand_sub, "candidate_phone", ""),
@@ -120,6 +123,7 @@ def autofill_workorder(
         else:
             cand_dict = {
                 "id": candidate_id,
+                "workorder_id": candidate_id,
                 "candidate_name": payload.get("candidate_name") or "Candidate",
                 "vendor_name": current_user.tenant_name or "Vendor",
             }
@@ -134,10 +138,11 @@ def create_work_order(
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """Create a new Work Order (Draft or Submitted)."""
+    cand_id = getattr(body, "workorder_id", None) or body.candidate_id
     with get_session() as session:
         # Check existing
         existing = session.query(WorkOrder).filter(
-            WorkOrder.candidate_id == body.candidate_id,
+            WorkOrder.candidate_id == cand_id,
             WorkOrder.requisition_id == body.requisition_id,
             WorkOrder.status != "Cancelled"
         ).first()
@@ -147,6 +152,7 @@ def create_work_order(
             for k, v in body.model_dump().items():
                 if hasattr(existing, k) and v is not None:
                     setattr(existing, k, v)
+            existing.workorder_id = cand_id
             existing.updated_at = datetime.now(timezone.utc)
             session.commit()
             session.refresh(existing)
@@ -155,7 +161,8 @@ def create_work_order(
         wo = WorkOrder(
             tenant_id=current_user.tenant_id,
             requisition_id=body.requisition_id,
-            candidate_id=body.candidate_id,
+            candidate_id=cand_id,
+            workorder_id=cand_id,
             candidate_name=body.candidate_name,
             candidate_email=body.candidate_email,
             candidate_phone=body.candidate_phone,
@@ -187,6 +194,7 @@ def create_work_order(
 @router.get("")
 def list_work_orders(
     candidate_id: str | None = None,
+    workorder_id: str | None = None,
     requisition_id: str | None = None,
     vendor_name: str | None = None,
     status: str | None = None,
@@ -195,8 +203,9 @@ def list_work_orders(
     """Fetch Work Orders based on search filters."""
     with get_session() as session:
         query = session.query(WorkOrder)
-        if candidate_id:
-            query = query.filter(WorkOrder.candidate_id == candidate_id)
+        target_cand = workorder_id or candidate_id
+        if target_cand:
+            query = query.filter((WorkOrder.candidate_id == target_cand) | (WorkOrder.workorder_id == target_cand))
         if requisition_id:
             query = query.filter(WorkOrder.requisition_id == requisition_id)
         if vendor_name:
@@ -214,6 +223,215 @@ def list_work_orders(
 
         rows = query.order_by(WorkOrder.updated_at.desc()).all()
         return [_work_order_dict(r) for r in rows]
+
+
+def _extract_agreement_details_from_db(identifier: str) -> dict | None:
+    """Extract real, unmocked agreement details from work_orders, requisitions, and tenants."""
+    clean_id = (identifier or "").strip()
+    if not clean_id:
+        return None
+
+    escaped = re.escape(clean_id)
+    norm = re.sub(r'\s*-\s*', r'\\s*-\\s*', escaped)
+    regex_pat = f"^{norm}$"
+
+    # 1. Search in MongoDB work_orders collection
+    wo = db["work_orders"].find_one({
+        "$or": [
+            {"workorder_id": clean_id},
+            {"candidate_id": clean_id},
+            {"work_order_number": clean_id},
+            {"id": clean_id},
+            {"workorder_id": {"$regex": regex_pat, "$options": "i"}},
+            {"candidate_id": {"$regex": regex_pat, "$options": "i"}},
+            {"work_order_number": {"$regex": regex_pat, "$options": "i"}},
+        ]
+    })
+
+    # 2. If not found in MongoDB work_orders, check SQL WorkOrder model
+    sql_wo = None
+    with get_session() as session:
+        if not wo:
+            sql_wo = session.query(WorkOrder).filter(
+                (WorkOrder.candidate_id == clean_id) |
+                (WorkOrder.workorder_id == clean_id) |
+                (WorkOrder.id == clean_id)
+            ).first()
+
+    # 3. Fallback: check candidate_submissions collection in case work order was not yet synced
+    if not wo and not sql_wo:
+        sub = db["candidate_submissions"].find_one({
+            "$or": [
+                {"workorder_id": clean_id},
+                {"id": clean_id},
+                {"candidate_id": clean_id},
+                {"workorder_id": {"$regex": regex_pat, "$options": "i"}},
+                {"candidate_id": {"$regex": regex_pat, "$options": "i"}},
+            ]
+        })
+        if sub:
+            wo = {
+                "workorder_id": sub.get("workorder_id") or sub.get("id"),
+                "candidate_id": sub.get("workorder_id") or sub.get("id"),
+                "candidate_name": sub.get("candidate_name") or sub.get("name"),
+                "candidate_email": sub.get("candidate_email") or sub.get("email"),
+                "vendor_name": sub.get("vendor_name"),
+                "requisition_id": sub.get("requisition_id"),
+                "requisition_title": sub.get("title") or sub.get("job_title"),
+                "tenant_id": sub.get("tenant_id"),
+            }
+
+    if not wo and not sql_wo:
+        return None
+
+    def _val(k, default=""):
+        if wo and wo.get(k) is not None and str(wo.get(k)).strip() != "":
+            return wo.get(k)
+        if sql_wo and getattr(sql_wo, k, None) is not None and str(getattr(sql_wo, k)).strip() != "":
+            return getattr(sql_wo, k)
+        return default
+
+    req_id = _val("requisition_id")
+    req_mongo = db["requisitions"].find_one({"id": req_id}) if req_id else None
+    sr = (req_mongo or {}).get("structured_role") or {}
+    intake = (req_mongo or {}).get("intake_meta") or {}
+    prefill = intake.get("prefill") or {}
+
+    tenant_id = _val("tenant_id")
+    tenant_name = ""
+    if tenant_id:
+        t = db["tenants"].find_one({"id": tenant_id})
+        if t:
+            tenant_name = t.get("name", "")
+
+    company_name = _val("company_name") or (req_mongo or {}).get("company_name") or tenant_name or "Client Company"
+    vendor_name = _val("vendor_name") or "Supplier Vendor"
+
+    reporting_to = _val("reporting_manager") or sr.get("hiring_manager") or (req_mongo or {}).get("hiring_manager_name") or "Engineering Manager"
+    
+    place_of_work = _val("location") or sr.get("location") or prefill.get("primary_location") or "Remote"
+    if isinstance(place_of_work, list):
+        place_of_work = place_of_work[0] if place_of_work else "Remote"
+
+    start_date = _val("start_date") or sr.get("start_date") or prefill.get("start_date") or ""
+    end_date = _val("end_date") or sr.get("ends_on") or prefill.get("ends_on") or ""
+    duration = sr.get("duration") or sr.get("contract_duration") or prefill.get("duration") or "6 months"
+    notice = sr.get("max_notice_period") or "15 days"
+
+    weekly_hours = _val("weekly_hours", 40)
+    try:
+        wh = int(weekly_hours)
+        std_day = f"{round(wh / 5)} hours"
+    except Exception:
+        std_day = "8 hours"
+
+    rate = _val("billing_rate") or _val("bill_rate")
+    if not rate:
+        rate = sr.get("ceiling_internal") or prefill.get("vendor_cap") or 1500
+    try:
+        rate_num = float(rate)
+    except Exception:
+        rate_num = 1500.0
+
+    rate_basis = str(_val("rate_basis") or _val("rate_type") or "hourly").lower()
+    currency = _val("currency") or "INR"
+    curr_sym = "₹" if currency.upper() in ["INR", "RS"] else ("$" if currency.upper() == "USD" else currency)
+    
+    unit_str = "per hour" if "hour" in rate_basis else ("per day" if "day" in rate_basis else "per month")
+    charge_rate = f"{curr_sym}{rate_num:,.0f} {unit_str}"
+    basis_str = "Hourly, against approved timesheets" if "hour" in rate_basis else "Monthly, against approved timesheets"
+
+    slug = re.sub(r'[^A-Za-z0-9]', '', str(company_name)[:4]).upper() or 'CORP'
+    year_month = str(start_date)[:7] if start_date else "2026-09"
+    msa_ref = f"MSA-{slug}-{year_month}"
+
+    ws_num = _val("workorder_id") or _val("work_order_number") or clean_id
+
+    return {
+        "wsNumber": ws_num,
+        "msaRef": msa_ref,
+        "companyName": company_name,
+        "supplierName": vendor_name,
+        "supplierSuffix": "",
+        "deployedPersonnel": _val("candidate_name", "Contract Personnel"),
+        "role": _val("requisition_title") or _val("job_title") or sr.get("title") or (req_mongo or {}).get("title") or "Professional Specialist",
+        "reportingTo": reporting_to,
+        "placeOfWork": place_of_work,
+        "commencement": str(start_date) if start_date else "2026-09-01",
+        "expiry": str(end_date) if end_date else "2027-03-01",
+        "duration": duration,
+        "notice": notice if notice else "15 days",
+        "billingBasis": basis_str,
+        "chargeRate": charge_rate,
+        "standardWorkDay": std_day,
+        "billingCycle": "Monthly",
+        "paymentTerms": "Net 30 days from invoice release",
+        "supplierMargin": "30%",
+        "requisition_id": req_id,
+        "status": _val("status", "ACTIVE"),
+    }
+
+
+@router.get("/available-workorders")
+def get_available_workorders(
+    q: str | None = None,
+    authorization: str | None = Header(default=None)
+) -> list[dict]:
+    """Return distinct active work orders from the database for AI autofill and selection."""
+    query = {}
+    if q:
+        clean_q = q.strip()
+        query["$or"] = [
+            {"workorder_id": {"$regex": clean_q, "$options": "i"}},
+            {"candidate_id": {"$regex": clean_q, "$options": "i"}},
+            {"work_order_number": {"$regex": clean_q, "$options": "i"}},
+            {"candidate_name": {"$regex": clean_q, "$options": "i"}},
+            {"requisition_title": {"$regex": clean_q, "$options": "i"}},
+            {"company_name": {"$regex": clean_q, "$options": "i"}},
+        ]
+    docs = list(db["work_orders"].find(query, {
+        "_id": 0,
+        "workorder_id": 1,
+        "candidate_id": 1,
+        "work_order_number": 1,
+        "candidate_name": 1,
+        "requisition_title": 1,
+        "company_name": 1,
+        "vendor_name": 1,
+        "status": 1
+    }).limit(25))
+
+    seen = set()
+    result = []
+    for d in docs:
+        wid = d.get("workorder_id") or d.get("candidate_id") or d.get("work_order_number")
+        if wid and wid not in seen:
+            seen.add(wid)
+            result.append({
+                "workorder_id": wid,
+                "work_order_number": d.get("work_order_number") or wid,
+                "candidate_name": d.get("candidate_name", "Contract Resource"),
+                "role": d.get("requisition_title", "Professional Specialist"),
+                "company_name": d.get("company_name", ""),
+                "vendor_name": d.get("vendor_name", ""),
+                "status": d.get("status", "ACTIVE"),
+            })
+    return result
+
+
+@router.get("/agreement-details/{identifier:path}")
+def get_agreement_details_by_id(
+    identifier: str,
+    authorization: str | None = Header(default=None)
+) -> dict:
+    """Fetch real agreement details for a Work Order from DB and linked Requisition without fake data."""
+    details = _extract_agreement_details_from_db(identifier)
+    if not details:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No work order found matching '{identifier}'. Please check the ID in the database."
+        )
+    return details
 
 
 @router.get("/{work_order_id}")

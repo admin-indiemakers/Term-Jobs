@@ -169,7 +169,8 @@ def raise_onboarding_issue(data: dict, authorization: str | None = Header(None))
         tenant_id = data["tenant_id"]
     issue = {
         "id": f"issue_{uuid.uuid4().hex[:8]}",
-        "candidate_id": data.get("candidate_id", ""),
+        "candidate_id": data.get("workorder_id") or data.get("candidate_id", ""),
+        "workorder_id": data.get("workorder_id") or data.get("candidate_id", ""),
         "candidate_name": data.get("candidate_name", ""),
         "company_name": data.get("company_name", ""),
         "category": data.get("category", "other"),
@@ -229,9 +230,12 @@ def resolve_onboarding_issue(issue_id: str):
     doc.pop("_id", None)
 
     # Create notification for the candidate in both collections
-    candidate_id = doc.get("candidate_id", "")
+    candidate_id = doc.get("workorder_id") or doc.get("candidate_id", "")
     try:
-        candidate_user_doc = db["users"].find_one({"candidate_id": candidate_id, "role": "Candidate"})
+        candidate_user_doc = db["users"].find_one({
+            "$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}],
+            "role": "Candidate"
+        })
         user_id = candidate_user_doc.get("id", "") if candidate_user_doc else ""
         tenant_id = candidate_user_doc.get("tenant_id", "") if candidate_user_doc else ""
         notif_id = f"notif_{uuid.uuid4().hex[:8]}"
@@ -241,6 +245,7 @@ def resolve_onboarding_issue(issue_id: str):
             "category": doc.get("category"),
             "category_label": doc.get("category_label"),
             "candidate_id": candidate_id,
+            "workorder_id": candidate_id,
         }
         # Save to 'notifications' collection (onboarding module)
         db["notifications"].insert_one({
@@ -248,7 +253,7 @@ def resolve_onboarding_issue(issue_id: str):
             "user_id": user_id,
             "tenant_id": tenant_id,
             "type": "issue.resolved",
-            "title": "Issue Resolved",
+            "title": f"Issue Resolved: {doc.get('category_label', 'Issue')}",
             "body": notif_body,
             "data": notif_data,
             "read": False,
@@ -256,15 +261,13 @@ def resolve_onboarding_issue(issue_id: str):
         })
         # Also save to 'candidate_notifications' collection (candidate portal)
         db["candidate_notifications"].insert_one({
-            "id": f"notif_{uuid.uuid4().hex[:8]}",
+            "id": notif_id,
             "candidate_id": candidate_id,
-            "title": "Issue Resolved",
+            "workorder_id": candidate_id,
+            "type": "issue.resolved",
+            "title": f"Issue Resolved: {doc.get('category_label', 'Issue')}",
             "message": notif_body,
-            "category": "onboarding",
-            "timestamp_label": "Just now",
             "is_read": False,
-            "target_tab": "onboarding",
-            "data": notif_data,
             "created_at": now,
         })
     except Exception as e:
@@ -280,7 +283,10 @@ def resolve_onboarding_issue(issue_id: str):
 @router.get("/notifications/{candidate_id}")
 def get_candidate_notifications(candidate_id: str):
     """Get issue-related notifications for a candidate."""
-    candidate_user = db["users"].find_one({"candidate_id": candidate_id, "role": "Candidate"})
+    candidate_user = db["users"].find_one({
+        "$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}],
+        "role": "Candidate"
+    })
     if not candidate_user:
         return []
     user_id = candidate_user.get("id", "")
@@ -316,6 +322,7 @@ def _get_or_create_onboarding_doc(candidate_id: str) -> dict:
         return None
     doc = _coll().find_one({
         "$or": [
+            {"workorder_id": cid},
             {"candidate_id": cid},
             {"candidate_email": cid},
             {"id": cid},
@@ -342,7 +349,7 @@ def _get_or_create_onboarding_doc(candidate_id: str) -> dict:
     now = datetime.now(timezone.utc).isoformat()
 
     sub = db["candidate_submissions"].find_one({
-        "$or": [{"id": cid}, {"candidate_id": cid}, {"candidate_email": cid}]
+        "$or": [{"id": cid}, {"candidate_id": cid}, {"workorder_id": cid}, {"candidate_email": cid}]
     }) or {}
     req_id = sub.get("requisition_id") or ""
     req_doc = db["requisitions"].find_one({"id": req_id}) or {} if req_id else {}
@@ -351,6 +358,7 @@ def _get_or_create_onboarding_doc(candidate_id: str) -> dict:
 
     doc = {
         "candidate_id": cid,
+        "workorder_id": cid,
         "candidate_name": sub.get("candidate_name") or "",
         "candidate_email": sub.get("candidate_email") or "",
         "requisition_id": req_id,
@@ -433,7 +441,7 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
     doc.pop("_id", None)
     new_status = _auto_status(doc)
     if new_status != doc.get("status"):
-        _coll().update_one({"candidate_id": candidate_id}, {"$set": {"status": new_status}})
+        _coll().update_one({"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}]}, {"$set": {"status": new_status}})
         doc["status"] = new_status
 
     # --- Sync enriched data to work order so the candidate portal shows it ---
@@ -450,7 +458,7 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
             wo_update["requisition_id"] = updates["requisition_id"]
         if wo_update:
             _db["work_orders"].update_one(
-                {"candidate_id": candidate_id, "status": "ACTIVE"},
+                {"$or": [{"workorder_id": candidate_id}, {"candidate_id": candidate_id}], "status": "ACTIVE"},
                 {"$set": wo_update},
             )
     except Exception:
@@ -497,10 +505,15 @@ def activate_work_order(candidate_id: str, authorization: str | None = Header(No
 
         or_conditions = [
             {"candidate_id": cid},
+            {"workorder_id": cid},
             {"candidate_id": cid_clean},
+            {"workorder_id": cid_clean},
             {"candidate_id": f"SDC-{cid_clean}"},
+            {"workorder_id": f"SDC-{cid_clean}"},
             {"candidate_id": f"SDC -{cid_clean}"},
+            {"workorder_id": f"SDC -{cid_clean}"},
             {"candidate_id": doc.get("candidate_id")},
+            {"workorder_id": doc.get("workorder_id")},
         ]
         if cemail:
             or_conditions.append({"candidate_email": cemail})
@@ -531,6 +544,7 @@ def activate_work_order(candidate_id: str, authorization: str | None = Header(No
         db["candidate_notifications"].insert_one({
             "id": notif_id,
             "candidate_id": candidate_id,
+            "workorder_id": candidate_id,
             "type": "work_order_activated",
             "title": "Work Order Activated",
             "message": "Your work order has been activated. You can now log hours and submit timesheets.",
@@ -700,14 +714,30 @@ def list_onboarding(authorization: str | None = Header(None)):
     return docs
 
 
+@router.post("/assistant/chat")
 @router.post("/assistant")
 def ai_assistant_chat(data: dict):
-    """AI Assistant for Hiring Managers powered by Groq API.
-    Can summarize candidate onboarding issues and auto-resolve issues mentioned in the chat.
+    """AI Assistant for Hiring Managers and Super Admins powered by Groq API.
+    Can summarize candidate onboarding issues, handle platform tool calls, and control features.
     """
-    user_message = data.get("message", "").strip()
+    user_role = data.get("user_role", "")
+    user_message = (data.get("prompt") or data.get("message") or "").strip()
     if not user_message:
-        raise HTTPException(status_code=400, detail="Message is required")
+        raise HTTPException(status_code=400, detail="Message or prompt is required")
+
+    # Delegate Super Admin requests to Groq Super Admin Agent
+    if user_role == "Super Admin" or "super admin" in user_message.lower() or "tenant" in user_message.lower() or "company" in user_message.lower() or "audit" in user_message.lower():
+        try:
+            from modules.superadmin_agent.agent import SuperAdminAgent
+            agent = SuperAdminAgent()
+            res = agent.run(user_prompt=user_message, user_name=data.get("user_name", "Super Admin"))
+            return {
+                "reply": res["reply"],
+                "executed_actions": res.get("executed_actions", []),
+                "status": "success"
+            }
+        except Exception as e:
+            pass
 
     from datetime import datetime, timezone
     # Fetch current onboarding issues & candidate checklists

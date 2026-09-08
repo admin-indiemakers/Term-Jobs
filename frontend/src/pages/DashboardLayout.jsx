@@ -117,11 +117,18 @@ const Icons = {
       <path d="M13 16H8"/>
     </svg>
   ),
-  FileCheck: (props) => (
+  Agreements: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
       <polyline points="14 2 14 8 20 8"/>
-      <path d="m9 15 2 2 4-4"/>
+      <line x1="16" y1="13" x2="8" y2="13"/>
+      <line x1="16" y1="17" x2="8" y2="17"/>
+      <polyline points="10 9 9 9 8 9"/>
+    </svg>
+  ),
+  Chat: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   ),
 };
@@ -137,9 +144,6 @@ export default function DashboardLayout() {
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
-
-  // Dynamic live count badges for Director / Admin
-  const [directorCounts, setDirectorCounts] = useState({ pendingApprovals: 0, requisitions: 0 });
 
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token) {
@@ -166,22 +170,24 @@ export default function DashboardLayout() {
         });
       }).catch(() => {});
     }
-
-    if ((user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin') && token) {
-      request('/requisitions', { token })
-        .then((reqs) => {
-          const list = Array.isArray(reqs) ? reqs : [];
-          const pending = list.filter((r) => (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved).length;
-          setDirectorCounts({ pendingApprovals: pending, requisitions: list.length });
-        })
-        .catch(() => {});
-    }
   }, [user?.role, token]);
 
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [location.pathname]);
+
+  // Modal event listeners for AI Chat quick dock
+  useEffect(() => {
+    const handleOpenCompany = () => setIsOnboardCompanyModalOpen(true);
+    const handleOpenVendor = () => setIsOnboardVendorModalOpen(true);
+    window.addEventListener('open-onboard-company-modal', handleOpenCompany);
+    window.addEventListener('open-onboard-vendor-modal', handleOpenVendor);
+    return () => {
+      window.removeEventListener('open-onboard-company-modal', handleOpenCompany);
+      window.removeEventListener('open-onboard-vendor-modal', handleOpenVendor);
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -207,6 +213,7 @@ export default function DashboardLayout() {
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
+  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat';
 
   const navItems =
     userRole === 'Hiring Manager'
@@ -228,18 +235,16 @@ export default function DashboardLayout() {
           { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true, section: 'WORKSPACE', icon: Icons.CandidatesBank },
           { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true, section: 'WORKSPACE', icon: Icons.Shortlisted },
           { to: '/dashboard/recruiter/interviews', label: 'Interview Requests', end: true, section: 'WORKSPACE', icon: Icons.Interviews },
+          { to: '/dashboard/recruiter/agreements', label: 'Agreements', end: true, section: 'WORKSPACE', icon: Icons.Agreements },
           { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
           { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
         ]
         : userRole === 'Director'
-          ? [
-              { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
-              { to: '/dashboard/director/approvals', label: 'Requisition Approvals', end: false, icon: Icons.FileCheck, badge: directorCounts.pendingApprovals },
-              { to: '/dashboard/director/requisitions', label: 'All Requisitions', end: false, icon: Icons.Requisitions },
-            ]
+          ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
               { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
               { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
@@ -256,7 +261,18 @@ export default function DashboardLayout() {
         <div className="sidebar-brand pb-4 border-b border-[#EAEAE6] mb-5">
           {userRole === 'Recruiter' ? (
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                }}
+                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
+              >
+                TJ
+              </div>
               <div className="leading-tight">
                 <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
@@ -264,23 +280,45 @@ export default function DashboardLayout() {
             </div>
           ) : userRole === 'Hiring Manager' ? (
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                }}
+                className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
+              >
+                {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
+              </div>
               <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'SDC Limited'}</div>
+                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
               </div>
             </div>
           ) : ['Admin', 'HR', 'Director'].includes(userRole) ? (
-            <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
-              <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Term Jobs'}</div>
-                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">{userRole} Console</div>
+            <>
+              <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
+              <div className="brand-text">
+                <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
+                <span className="brand-sub">{userRole} Console</span>
               </div>
-            </div>
+            </>
           ) : userRole === 'Super Admin' ? (
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="TermJobs Logo" className="w-10 h-10 object-contain shrink-0" />
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                }}
+                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
+              >
+                SA
+              </div>
               <div className="leading-tight">
                 <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Super Admin</div>
@@ -499,13 +537,6 @@ export default function DashboardLayout() {
                 Directors
               </NavLink>
               <NavLink
-                to="/dashboard/admin/procurement"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Procurement
-              </NavLink>
-              <NavLink
                 to="/dashboard/admin/partner-vendors"
                 onClick={onLinkClick}
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
@@ -571,8 +602,13 @@ export default function DashboardLayout() {
   );
 
   return (
-    <div className={`app-shell ${consoleClass}`}>
+    <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''}`}>
       <style>{`
+        .app-shell.ai-chat-mode {
+          background-color: #E8EBF0 !important;
+          background: #E8EBF0 !important;
+          padding: 0 !important;
+        }
         /* Eliminate any lingering focus/active rectangle on nav links */
         .sidebar a,
         .sidebar button,
@@ -776,13 +812,15 @@ export default function DashboardLayout() {
         }
       `}</style>
 
-      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px) */}
-      <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
-        {renderSidebarContent()}
-      </aside>
+      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px, and hidden in AI Chat mode) */}
+      {!isAiChatPage && (
+        <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
+          {renderSidebarContent()}
+        </aside>
+      )}
 
       {/* Mobile Drawer (Visible when isMobileMenuOpen is true on < 1024px) */}
-      {isMobileMenuOpen && (
+      {isMobileMenuOpen && !isAiChatPage && (
         <div className="fixed inset-0 z-50 lg:hidden flex">
           {/* Backdrop */}
           <div
@@ -818,72 +856,76 @@ export default function DashboardLayout() {
         </div>
       )}
 
-      <div className="main-area min-w-0 flex-1 flex flex-col">
-        <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
-          {/* Breadcrumb & Mobile Menu Toggle Left */}
-          <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
-            {/* Hamburger Toggle (Mobile / Tablet only) */}
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
-              aria-label="Open menu"
-            >
-              <Menu size={21} strokeWidth={2.2} />
-            </button>
+      <div className={`main-area min-w-0 flex-1 flex flex-col ${isAiChatPage ? 'w-full' : ''}`}>
+        {!isAiChatPage && (
+          <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
+            {/* Breadcrumb & Mobile Menu Toggle Left */}
+            <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
+              {/* Hamburger Toggle (Mobile / Tablet only) */}
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                aria-label="Open menu"
+              >
+                <Menu size={21} strokeWidth={2.2} />
+              </button>
 
-            <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
-              {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
-            </span>
-            <span className="text-[#8A8A85] font-normal">/</span>
-            <span className="text-[#0A0A0A] font-semibold truncate">
-              {location.pathname.includes('/requisitions') ? 'Requisitions'
-                : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
-                : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
-                : location.pathname.includes('/interviews') ? 'Interview Requests'
-                : location.pathname.includes('/accepted') ? 'Accepted Candidates'
-                : location.pathname.includes('/portal-access') ? 'Portal Access'
-                : 'Dashboard'}
-            </span>
-            <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
-            <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
-          </div>
+              <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
+                {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
+              </span>
+              <span className="text-[#8A8A85] font-normal">/</span>
+              <span className="text-[#0A0A0A] font-semibold truncate">
+                {location.pathname.includes('/requisitions') ? 'Requisitions'
+                  : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
+                  : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
+                  : location.pathname.includes('/interviews') ? 'Interview Requests'
+                  : location.pathname.includes('/agreements') ? 'Agreements'
+                  : location.pathname.includes('/chat') ? 'AI Chat'
+                  : location.pathname.includes('/accepted') ? 'Accepted Candidates'
+                  : location.pathname.includes('/portal-access') ? 'Portal Access'
+                  : 'Dashboard'}
+              </span>
+              <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
+              <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
+            </div>
 
-          {/* Actions Right */}
-          <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
-            <button
-              type="button"
-              onClick={() => setIsAssistantOpen((prev) => !prev)}
-              title="AI Assistant"
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: '50%',
-                backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
-                border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
-                color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
-              }}
-              className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
-            >
-              <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
-            </button>
+            {/* Actions Right */}
+            <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAssistantOpen((prev) => !prev)}
+                title="AI Assistant"
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: '50%',
+                  backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
+                  border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
+                  color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
+                }}
+                className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
+              >
+                <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
+              </button>
 
-            <span
-              style={{
-                backgroundColor: '#FFFFFF',
-                border: '1px solid #E2E2DC',
-                borderRadius: 9999,
-              }}
-              className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-              <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
-              <span className="xs:hidden sm:hidden">SECURE</span>
-            </span>
-          </div>
-        </header>
+              <span
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  border: '1px solid #E2E2DC',
+                  borderRadius: 9999,
+                }}
+                className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
+                <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
+                <span className="xs:hidden sm:hidden">SECURE</span>
+              </span>
+            </div>
+          </header>
+        )}
 
-        <main className="content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1">
+        <main className={isAiChatPage ? "w-full min-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-x-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
           <Outlet />
         </main>
       </div>

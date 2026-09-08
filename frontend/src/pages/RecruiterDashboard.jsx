@@ -164,7 +164,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
   const [selectedCompanyTab, setSelectedCompanyTab] = useState('All');
   const [limitReachedModal, setLimitReachedModal] = useState(null);
   const [limitToast, setLimitToast] = useState(null);
-  const [shortlistQuota, setShortlistQuota] = useState({ limit: 1, used: 0, is_limit_reached: false });
+  const [shortlistQuota, setShortlistQuota] = useState({ limit: 3, used: 0, is_limit_reached: false });
   const [shortlistingCandidateIds, setShortlistingCandidateIds] = useState(new Set());
   const [autoScreenFilterMode, setAutoScreenFilterMode] = useState('all'); // 'all' | 'exclude_accepted'
   const [rowFilterModes, setRowFilterModes] = useState({});
@@ -823,7 +823,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           const st = (s.status || '').toLowerCase();
           return st === 'shortlisted' || st === 'accepted' || st === 'hired' || st === 'under review';
         }).length;
-        const currentCap = shortlistQuota?.limit || 1;
+        const currentCap = shortlistQuota?.limit || 3;
 
         if (activeSubCount >= currentCap) {
           const limitMsg = `Maximum candidate shortlist limit of ${currentCap} reached for this requisition. You cannot shortlist more candidates.`;
@@ -920,7 +920,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           title: 'Maximum Shortlist Limit Reached',
           message: msg,
           candidateName: sub.candidate_name,
-          limit: shortlistQuota?.limit || 1,
+          limit: shortlistQuota?.limit || 3,
         });
       }
       setError(msg);
@@ -6208,7 +6208,7 @@ function AcceptedCandidatesView({ authToken }) {
                     <thead>
                       <tr style={{ background: '#fafafa', borderBottom: '1px solid #e5e5e0' }}>
                         <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Candidate</th>
-                        <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Candidate ID</th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Work Order ID</th>
                         <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Requisition</th>
                         <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Match Score</th>
                       </tr>
@@ -6365,21 +6365,17 @@ function PortalAccessView({ authToken }) {
   // Strict Candidate matching to actual Database Portal User credentials
   const candidateRows = candidates.map((c) => {
     const cid = (c.submission_id || c.id || '').trim();
-    const cleanCid = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").trim();
     const candEmail = (c.candidate_email || '').trim().toLowerCase();
 
-    // 1. Flexible primary match by candidate_id / submission_id
-    let user = portalUsers.find((u) => {
-      if (!u.candidate_id) return false;
-      const uCid = u.candidate_id.trim();
-      const uCleanCid = uCid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").trim();
-      return uCid === cid || (uCleanCid && uCleanCid === cleanCid);
-    });
+    // 1. Strict primary match by candidate_id / submission_id
+    let user = portalUsers.find(
+      (u) => u.candidate_id && u.candidate_id.trim() === cid
+    );
 
-    // 2. Secondary fallback by email
+    // 2. Secondary fallback by email ONLY if candidate_email is valid non-empty and candidate_id matches
     if (!user && candEmail && candEmail.length > 3) {
       user = portalUsers.find(
-        (u) => (u.email || '').trim().toLowerCase() === candEmail
+        (u) => (u.email || '').trim().toLowerCase() === candEmail && (!u.candidate_id || u.candidate_id.trim() === cid)
       );
     }
 
@@ -6704,7 +6700,7 @@ function PortalAccessView({ authToken }) {
                     Candidate
                   </th>
                   <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85]">
-                    Candidate ID
+                    Work Order ID
                   </th>
                   <th className="py-3 px-4 text-[10.5px] font-black uppercase tracking-wider text-[#8A8A85]">
                     Requisition & Role
@@ -6753,7 +6749,7 @@ function PortalAccessView({ authToken }) {
                               {candName}
                             </div>
                             <div className="text-[11.5px] text-[#8A8A85] truncate">
-                              {c.portalUser?.email || c.candidate_email || 'No email provided'}
+                              {c.candidate_email || 'No email provided'}
                             </div>
                           </div>
                         </div>
@@ -6963,7 +6959,7 @@ function PortalAccessView({ authToken }) {
                   Create Portal Access
                 </h3>
                 <p className="text-[12px] text-[#8A8A85]">
-                  Candidate ID: <span className="font-mono font-bold text-[#0A0A0A]">{createCandidateId}</span>
+                  Work Order ID: <span className="font-mono font-bold text-[#0A0A0A]">{createCandidateId}</span>
                 </p>
               </div>
               <button

@@ -47,13 +47,33 @@ from modules.onboarding.router import router as onboarding_router
 from modules.candidate_portal.router import router as candidate_portal_router
 from modules.workforce.router import router as workforce_router
 from modules.workorder.router import router as workorder_router
+from modules.superadmin_agent.router import router as superadmin_agent_router
+from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
+from modules.superadmin_agent.voice_router import router as voice_router
 
 
 app = FastAPI(
     title="TermJobs Requisition API",
     description="Intake and structure job requisitions using AI agents.",
+    
     version="1.0.0",
 )
+
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Route Not Found",
+            "requested_url": str(request.url),
+            "scope_path": request.scope.get("path"),
+            "scope_root_path": request.scope.get("root_path"),
+            "scope_raw_path": str(request.scope.get("raw_path")),
+            "query_params": dict(request.query_params),
+            "headers": dict(request.headers),
+        }
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,31 +85,24 @@ app.add_middleware(
 
 @app.middleware("http")
 async def vercel_routing_middleware(request: Request, call_next):
-    # Support Vercel serverless rewritten paths via query param or headers
-    current_path = request.scope.get("path", "")
-    if current_path in ("/api/index.py", "/api/index", "/api/index.py/") or current_path.startswith("/api/index.py"):
-        forwarded = (
-            request.query_params.get("__vercel_path")
-            or request.headers.get("x-forwarded-uri")
-            or request.headers.get("x-matched-path")
-            or "/"
-        )
-        if "?" in forwarded:
-            forwarded = forwarded.split("?")[0]
-        if forwarded.startswith("//"):
-            forwarded = "/" + forwarded.lstrip("/")
-        request.scope["path"] = forwarded
-
+    target = request.query_params.get("__vercel_path")
+    if target:
+        if target.startswith("//"):
+            target = "/" + target.lstrip("/")
+        if "?" in target:
+            target = target.split("?")[0]
+        request.scope["path"] = target
+        request.scope["root_path"] = ""
 
     origin = request.headers.get("origin")
     req_headers = request.headers.get("access-control-request-headers", "*")
 
-    print(f"🌐 [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | RequestedHeaders: {req_headers}")
+    print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | RequestedHeaders: {req_headers}")
 
     # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
     if request.method == "OPTIONS":
         from fastapi.responses import Response
-        print(f"✨ [CORS PREFLIGHT OK] Returning 200 for OPTIONS preflight from Origin: {origin}")
+        print(f" [CORS PREFLIGHT OK] Returning 200 for OPTIONS preflight from Origin: {origin}")
         return Response(
             status_code=200,
             headers={
@@ -117,7 +130,7 @@ from fastapi.responses import JSONResponse
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    error_msg = f"🔥 [UNHANDLED BACKEND SERVER ERROR] {request.method} {request.url.path}: {exc}"
+    error_msg = f" [UNHANDLED BACKEND SERVER ERROR] {request.method} {request.url.path}: {exc}"
     print(error_msg, file=sys.stderr)
     traceback.print_exc(file=sys.stderr)
     
@@ -139,7 +152,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
-    print(f"⚠️ [HTTP EXCEPTION {exc.status_code}] {request.method} {request.url.path}: {exc.detail}", file=sys.stderr)
+    print(f" [HTTP EXCEPTION {exc.status_code}] {request.method} {request.url.path}: {exc.detail}", file=sys.stderr)
     origin = request.headers.get("origin") or "*"
     return JSONResponse(
         status_code=exc.status_code,
@@ -179,7 +192,7 @@ def health_check():
     except Exception as err:
         db_status = "error"
         db_error = str(err)
-        print(f"🚨 [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
+        print(f" [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
 
     return {
         "status": "ok" if db_status == "connected" else "degraded",
@@ -190,6 +203,7 @@ def health_check():
 
 
 app.include_router(identity_router, prefix="/api/auth")
+app.include_router(identity_router, prefix="/auth")
 app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api", tags=["Calendar"])
@@ -201,6 +215,9 @@ app.include_router(onboarding_router)
 app.include_router(candidate_portal_router)
 app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
 app.include_router(workorder_router)
+app.include_router(superadmin_agent_router)
+app.include_router(hiring_manager_agent_router)
+app.include_router(voice_router)
 
 
 
@@ -608,7 +625,7 @@ async def upload_template(
             tpl = models.RoleTemplate(
                 tenant_id=current_user.tenant_id,
                 created_by=current_user.id,
-                name=name or f"Template â€” {title}",
+                name=name or f"Template  {title}",
                 description=description or "",
                 structured_role=role,
             )
@@ -850,7 +867,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             pass
         elif current_user.role == "Recruiter":
             # Vendors only see requisitions from companies that engaged them,
-            # and only published requisitions — never drafts or in-progress ones.
+            # and only published requisitions  never drafts or in-progress ones.
             engaged_company_ids = {
                 e.tenant_id
                 for e in session.query(VendorEngagement)
@@ -1249,13 +1266,13 @@ def _extract_docx_text(docx_bytes: bytes) -> str:
 
 # --- static UI / health ------------------------------------------------------
 @app.get("/", include_in_schema=False)
-@app.get("/api", include_in_schema=False)
 def index(request: Request) -> Any:
-    # If the requested path or query was for health/docs
     p = str(request.url)
     if "/health" in p:
         return health()
-    return FileResponse(Path(__file__).parent / "index.html")
+    if (Path(__file__).parent / "index.html").exists():
+        return FileResponse(Path(__file__).parent / "index.html")
+    return {"status": "online"}
 
 
 @app.get("/health")
