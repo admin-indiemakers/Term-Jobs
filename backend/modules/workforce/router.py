@@ -1063,6 +1063,26 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
 
 
 # ---------------------------------------------------------------------------
+# GET /workforce/work-orders — List all work orders for onboarding/workforce
+# ---------------------------------------------------------------------------
+
+@router.get("/work-orders")
+def list_workforce_work_orders(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return all work orders for workforce and onboarding management."""
+    wo_coll = db["work_orders"]
+    docs = list(wo_coll.find().sort("updated_at", -1))
+    for d in docs:
+        d.pop("_id", None)
+        if not d.get("work_order_number"):
+            wid = d.get("workorder_id") or d.get("candidate_id") or d.get("id") or ""
+            clean = str(wid).replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
+            d["work_order_number"] = f"WO-2026-{clean[:4].upper()}" if clean else "WO-2026-0001"
+    return {"status": "success", "work_orders": docs}
+
+
+# ---------------------------------------------------------------------------
 # POST /workforce/work-orders — Create a work order for a candidate
 # ---------------------------------------------------------------------------
 

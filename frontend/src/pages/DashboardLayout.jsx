@@ -172,6 +172,24 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token]);
 
+  // Dynamic live count for Director pending agreements
+  const [directorPendingAgreements, setDirectorPendingAgreements] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'Director' && token) {
+      request('/api/work-orders/director-agreements', { token })
+        .then((res) => {
+          if (Array.isArray(res)) {
+            const pending = res.filter(
+              (a) => a.status === 'Pending Director Approval' || a.status === 'Submitted'
+            ).length;
+            setDirectorPendingAgreements(pending);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token, location.pathname]);
+
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -238,9 +256,13 @@ export default function DashboardLayout() {
           { to: '/dashboard/recruiter/agreements', label: 'Agreements', end: true, section: 'WORKSPACE', icon: Icons.Agreements },
           { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
           { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
+          { to: '/dashboard/recruiter/billing', label: 'Billing', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
         ]
         : userRole === 'Director'
-          ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
+          ? [
+              { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/director/agreements', label: 'Agreements', end: true, icon: Icons.Agreements, badge: directorPendingAgreements }
+            ]
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
@@ -546,17 +568,40 @@ export default function DashboardLayout() {
             </>
           ) : (
             <>
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.label}
-                  to={item.to}
-                  end={item.end}
-                  onClick={onLinkClick}
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+              {navItems.map((item) => {
+                const IconComp = item.icon;
+                return (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    end={item.end}
+                    onClick={onLinkClick}
+                    className={({ isActive }) =>
+                      `nav-link ${isActive ? 'active' : ''} flex items-center justify-between`
+                    }
+                  >
+                    <span className="flex items-center gap-2.5">
+                      {IconComp && <IconComp size={15} className="shrink-0" />}
+                      <span>{item.label}</span>
+                    </span>
+                    {item.badge > 0 && (
+                      <span
+                        style={{
+                          background: '#F59E0B',
+                          color: '#000000',
+                          fontSize: '0.7rem',
+                          fontWeight: 800,
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          marginLeft: 6
+                        }}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              })}
             </>
           )}
         </nav>

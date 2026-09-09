@@ -1,5 +1,6 @@
 import InterviewRequests from './pages/recruiter/InterviewRequests';
 import VendorAgreements from './pages/recruiter/VendorAgreements';
+import VendorBilling from './pages/recruiter/VendorBilling';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
@@ -18,6 +19,7 @@ import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import AiChat from './pages/AiChat';
 import DirectorDashboard from './pages/DirectorDashboard';
+import DirectorAgreements from './pages/DirectorAgreements';
 import OnboardCompany from './pages/OnboardCompany';
 import OnboardVendor from './pages/OnboardVendor';
 import ConfigureCompanyAccounts from './pages/ConfigureCompanyAccounts';
@@ -128,12 +130,14 @@ export default function App() {
           <Route path="recruiter/agreements" element={<VendorAgreements />} />
           <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
           <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
+          <Route path="recruiter/billing" element={<VendorBilling />} />
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/directors" element={<ManageDirectors />} />
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="admin/vendors" element={<ManagePartnerVendors />} />
           <Route path="director" element={<DirectorDashboard />} />
+          <Route path="director/agreements" element={<DirectorAgreements />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
           <Route path="superadmin/chat" element={<AiChat />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />

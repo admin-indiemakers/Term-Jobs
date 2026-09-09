@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronDown, ChevronUp, Zap, Building2, Phone, Mail as MailIcon, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle, Bell, Clock } from 'lucide-react';
+import { ArrowRight, ChevronDown, ChevronUp, Zap, Building2, Phone, Mail as MailIcon, X, Sparkles, Briefcase, Users, CheckCheck, Calendar, UserCheck, Shield, ExternalLink, ChevronRight, Check, FileText, AlertCircle, Bell, Clock, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -6107,15 +6107,30 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
 
 function AcceptedCandidatesView({ authToken }) {
+  const navigate = useNavigate();
   const [candidates, setCandidates] = useState([]);
+  const [workOrdersMap, setWorkOrdersMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedCompany, setSelectedCompany] = useState(null);
 
   useEffect(() => {
     setLoading(true);
-    request('/candidates?status=Accepted', { token: authToken })
-      .then((data) => setCandidates(Array.isArray(data) ? data : data?.candidates || []))
+    Promise.all([
+      request('/candidates?status=Accepted', { token: authToken }),
+      request('/api/work-orders/available-workorders', { token: authToken }).catch(() => [])
+    ])
+      .then(([candsData, wosData]) => {
+        const list = Array.isArray(candsData) ? candsData : candsData?.candidates || [];
+        setCandidates(list);
+        const map = {};
+        (wosData || []).forEach((w) => {
+          if (w.workorder_id) map[w.workorder_id.trim()] = w;
+          if (w.candidate_id) map[w.candidate_id.trim()] = w;
+          if (w.candidate_name) map[w.candidate_name.trim().toLowerCase()] = w;
+        });
+        setWorkOrdersMap(map);
+      })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   }, [authToken]);
@@ -6210,12 +6225,19 @@ function AcceptedCandidatesView({ authToken }) {
                         <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Candidate</th>
                         <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Work Order ID</th>
                         <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Requisition</th>
-                        <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Match Score</th>
+                        <th style={{ textAlign: 'left', padding: '12px 16px', fontWeight: 600, color: '#475569' }}>Agreement & Director Approval</th>
                       </tr>
                     </thead>
                     <tbody>
                       {selectedCandidates.map((c) => {
-                        const cid = c.submission_id || c.id;
+                        const cid = (c.workorder_id || c.submission_id || c.id || '').trim();
+                        const woInfo = workOrdersMap[cid] || workOrdersMap[c.candidate_name?.trim().toLowerCase()] || {};
+                        const rawStatus = woInfo.status || c.agreement_status;
+                        const isApproved = rawStatus === 'Approved';
+                        const isRejected = rawStatus === 'Rejected';
+                        const isPending = rawStatus === 'Pending Director Approval' || rawStatus === 'Submitted';
+                        const isRevision = rawStatus === 'Revision Requested';
+
                         return (
                           <tr key={cid} style={{ borderBottom: '1px solid #f1f0ec' }}>
                             <td style={{ padding: '12px 16px' }}>
@@ -6227,8 +6249,116 @@ function AcceptedCandidatesView({ authToken }) {
                               <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.8rem' }}>{c.requisition_ref || '—'}</div>
                               <div style={{ fontSize: '0.76rem', color: '#64748b' }}>{c.requisition_title || ''}</div>
                             </td>
-                            <td style={{ padding: '12px 16px', fontWeight: 800, color: c.match_score >= 70 ? '#059669' : c.match_score >= 40 ? '#d97706' : '#dc2626' }}>
-                              {c.match_score != null ? `${Math.round(c.match_score)}%` : '—'}
+                            <td style={{ padding: '12px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                                {/* Director Approval Status Badge */}
+                                {isApproved ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#ECFDF5',
+                                    color: '#065F46',
+                                    border: '1px solid #A7F3D0',
+                                    padding: '3px 9px',
+                                    borderRadius: 999,
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700
+                                  }}>
+                                    <Check size={12} /> Approved
+                                  </span>
+                                ) : isRejected ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#FEF2F2',
+                                    color: '#991B1B',
+                                    border: '1px solid #FECACA',
+                                    padding: '3px 9px',
+                                    borderRadius: 999,
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700
+                                  }}>
+                                    <XCircle size={12} /> Rejected
+                                  </span>
+                                ) : isPending ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#EFF6FF',
+                                    color: '#1E40AF',
+                                    border: '1px solid #BFDBFE',
+                                    padding: '3px 9px',
+                                    borderRadius: 999,
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700
+                                  }}>
+                                    <Clock size={12} /> Pending Approval
+                                  </span>
+                                ) : isRevision ? (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#FFFBEB',
+                                    color: '#92400E',
+                                    border: '1px solid #FDE68A',
+                                    padding: '3px 9px',
+                                    borderRadius: 999,
+                                    fontSize: '0.74rem',
+                                    fontWeight: 700
+                                  }}>
+                                    <AlertCircle size={12} /> Revision Requested
+                                  </span>
+                                ) : (
+                                  <span style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4,
+                                    background: '#F1F5F9',
+                                    color: '#475569',
+                                    border: '1px solid #E2E8F0',
+                                    padding: '3px 9px',
+                                    borderRadius: 999,
+                                    fontSize: '0.74rem',
+                                    fontWeight: 600
+                                  }}>
+                                    Draft
+                                  </span>
+                                )}
+
+                                {/* View Agreement Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const targetId = woInfo.workorder_id || cid;
+                                    navigate(`/dashboard/recruiter/agreements?wo=${encodeURIComponent(targetId)}`);
+                                  }}
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    background: '#0A0A0A',
+                                    color: '#FFFFFF',
+                                    border: '1px solid #0A0A0A',
+                                    padding: '5px 12px',
+                                    borderRadius: 8,
+                                    fontSize: '0.78rem',
+                                    fontWeight: 700,
+                                    cursor: 'pointer',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                                    transition: 'all 0.15s ease'
+                                  }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#262626'; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = '#0A0A0A'; }}
+                                  title="Open Master Service Agreement to review terms or send to director for approval"
+                                >
+                                  <FileText size={13} />
+                                  <span>View Agreement →</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

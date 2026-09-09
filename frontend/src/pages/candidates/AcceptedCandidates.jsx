@@ -103,7 +103,18 @@ export default function AcceptedCandidates() {
   const woMap = useMemo(() => {
     const map = {};
     workOrders.forEach((wo) => {
-      if (wo.candidate_id) map[wo.candidate_id] = wo;
+      const id = wo.candidate_id || wo.workorder_id || wo.id;
+      if (id) {
+        map[id] = wo;
+        const clean = String(id).replace('SDC-', '').replace('SDC -', '').replace('BEAR-', '').replace('BEAR -', '').trim();
+        map[clean] = wo;
+        map[`SDC-${clean}`] = wo;
+        map[`SDC -${clean}`] = wo;
+        map[`BEAR-${clean}`] = wo;
+      }
+      if (wo.candidate_name) {
+        map[wo.candidate_name.trim().toLowerCase()] = wo;
+      }
     });
     return map;
   }, [workOrders]);
@@ -386,7 +397,12 @@ export default function AcceptedCandidates() {
                   const isCompleted = obDoc?.status === 'completed';
                   const isInProgress = obDoc?.status === 'in_progress';
 
-                  const wo = woMap[id];
+                  const wo =
+                    woMap[id] ||
+                    woMap[rawId] ||
+                    (obDoc?.workorder_id && woMap[obDoc.workorder_id]) ||
+                    (cand.workorder_id && woMap[cand.workorder_id]) ||
+                    woMap[candName.trim().toLowerCase()];
                   let woBadge = (
                     <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 rounded-full text-[11px] font-bold">
                       Pending Vendor MSA

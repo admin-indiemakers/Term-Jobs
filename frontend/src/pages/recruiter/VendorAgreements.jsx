@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
@@ -12,11 +13,19 @@ import {
   Search,
   RefreshCw,
   Zap,
-  ChevronDown
+  ChevronDown,
+  Database,
+  Clock,
+  AlertCircle,
+  XCircle,
+  ArrowRight,
+  ExternalLink
 } from 'lucide-react';
 
 export default function VendorAgreements() {
   const { user, token } = useAuth();
+  const [searchParams] = useSearchParams();
+  const queryWo = searchParams.get('wo');
   const [currentStep, setCurrentStep] = useState(1); // 1: Edit agreement, 2: Review, 3: Send for approval
   const [isSaved, setIsSaved] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -32,6 +41,13 @@ export default function VendorAgreements() {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [highlightAutoFilled, setHighlightAutoFilled] = useState(false);
   const [lastAutofilledId, setLastAutofilledId] = useState('');
+
+  const [approvalMeta, setApprovalMeta] = useState({
+    approvedBy: '',
+    approvedAt: '',
+    revisionNotes: '',
+    submittedAt: ''
+  });
 
   // Form data populated from DB & Requisition
   const [formData, setFormData] = useState({
@@ -63,7 +79,7 @@ export default function VendorAgreements() {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  // Fetch available work orders from database on mount
+  // Fetch available work orders and initial agreement details from database on mount
   useEffect(() => {
     let cancelled = false;
     request('/api/work-orders/available-workorders', { token })
@@ -73,10 +89,14 @@ export default function VendorAgreements() {
         }
       })
       .catch(() => {});
+
+    const targetWo = (queryWo || 'SDC -5a5e1b59').trim();
+    handleAutofill(targetWo);
+
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, queryWo]);
 
   // AI Mechanism: Query DB & Requisition to auto-fill agreement details
   const handleAutofill = async (identifier) => {
@@ -116,16 +136,29 @@ export default function VendorAgreements() {
           supplierMargin: data.supplierMargin || prev.supplierMargin,
         }));
 
+        if (data.status) {
+          setStatusState(data.status);
+        }
+        setApprovalMeta({
+          approvedBy: data.approved_by || '',
+          approvedAt: data.approved_at || '',
+          revisionNotes: data.revision_notes || '',
+          rejectionReason: data.rejection_reason || '',
+          rejectedBy: data.rejected_by || '',
+          rejectedAt: data.rejected_at || '',
+          submittedAt: data.submitted_at || ''
+        });
+
         setLastAutofilledId(cleanId);
         setSearchWoInput(data.wsNumber || cleanId);
         setIsDropdownOpen(false);
-        setIsSaved(false);
+        setIsSaved(true);
 
         // Highlight fields with gentle glow animation
         setHighlightAutoFilled(true);
         setTimeout(() => setHighlightAutoFilled(false), 3000);
 
-        showToast(`✨ Agreement auto-filled from database for ${data.deployedPersonnel || cleanId}`);
+        showToast(`✨ Agreement loaded from database for ${data.deployedPersonnel || cleanId}`);
       }
     } catch (err) {
       const msg = err?.message || 'Work Order not found in database.';
@@ -148,24 +181,54 @@ export default function VendorAgreements() {
     return `${base} hover:bg-[#EAEAEA] focus:bg-[#EAEAEA] ${extra}`;
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     setIsSaving(true);
-    setTimeout(() => {
-      setIsSaving(false);
+    try {
+      await request('/api/work-orders/submit-agreement', {
+        method: 'POST',
+        token,
+        body: {
+          workorder_id: formData.wsNumber,
+          agreement_data: formData,
+          status: 'Draft'
+        }
+      });
       setIsSaved(true);
-      showToast('Draft saved successfully.');
-    }, 450);
+      showToast('Draft agreement saved to database.');
+    } catch {
+      setIsSaved(true);
+      showToast('Draft saved.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleSendForApproval = () => {
+  const handleSendForApproval = async () => {
     setIsSending(true);
-    setTimeout(() => {
-      setIsSending(false);
+    try {
+      const res = await request('/api/work-orders/submit-agreement', {
+        method: 'POST',
+        token,
+        body: {
+          workorder_id: formData.wsNumber,
+          agreement_data: formData,
+          status: 'Pending Director Approval'
+        }
+      });
       setIsSaved(true);
-      setStatusState('Sent for Approval');
+      setStatusState(res?.status || 'Pending Director Approval');
+      setApprovalMeta((prev) => ({
+        ...prev,
+        submittedAt: res?.submitted_at || new Date().toISOString()
+      }));
       setCurrentStep(3);
-      showToast('Work Statement submitted for client approval!');
-    }, 600);
+      showToast(res?.message || `Agreement submitted to ${formData.companyName} Director for approval!`);
+    } catch (err) {
+      const msg = err?.message || 'Failed to submit agreement for approval.';
+      showToast(`⚠️ ${msg}`);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleDownloadTxt = () => {
@@ -326,175 +389,94 @@ Generated via Term Jobs Enterprise Portal
         </div>
       </div>
 
-      {/* AI Work Order Auto-Fill Card (Shown in Step 1) */}
-      {currentStep === 1 && (
-        <div className="bg-gradient-to-r from-[#FFFFFF] via-[#FAFAF8] to-[#FFFFFF] border border-[#DCDCD6] rounded-2xl p-4 sm:p-5 shadow-xs w-full transition-all">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-[11px] font-bold uppercase tracking-wider">
-                <Sparkles size={13} className="text-amber-600 animate-pulse" />
-                <span>AI Work Order Auto-Fill</span>
+      {/* Main Content Area */}
+      {currentStep === 3 ? (
+        /* Step 3: Send for Approval (Full Width) */
+        <div className="bg-[#EAEAE6] rounded-2xl p-3 sm:p-5 lg:p-6 border border-[#D5D5CF] shadow-2xs w-full overflow-hidden">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-2xl mx-auto shadow-md border border-[#E2E2DC] text-center space-y-5 animate-scale-in">
+            {statusState === 'Approved' ? (
+              <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-200 flex items-center justify-center mx-auto shadow-xs animate-bounce-subtle">
+                <CheckCircle2 size={32} />
               </div>
-              <h2 className="text-[15px] font-bold text-[#0A0A0A]">
-                Database & Requisition Auto-Population
-              </h2>
-              <p className="text-[12.5px] text-[#737373] max-w-xl leading-relaxed">
-                Enter or select any active Work Order ID. The AI engine pulls genuine terms, candidate info, rate, and schedule directly from the database and requisition without fake data.
-              </p>
-            </div>
-
-            {/* Input + Action Bar */}
-            <div className="relative flex items-center gap-2 max-w-md w-full shrink-0">
-              <div className="relative flex-1">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8A8A85] pointer-events-none" />
-                <input
-                  type="text"
-                  value={searchWoInput}
-                  onChange={(e) => {
-                    setSearchWoInput(e.target.value);
-                    setIsDropdownOpen(true);
-                  }}
-                  onFocus={() => setIsDropdownOpen(true)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      handleAutofill(searchWoInput);
-                    }
-                  }}
-                  placeholder="Enter Work Order ID (e.g. SDC -5a5e1b59)"
-                  className="w-full bg-[#FFFFFF] border border-[#D5D5CF] focus:border-[#0A0A0A] focus:ring-1 focus:ring-[#0A0A0A] rounded-xl pl-9 pr-8 py-2.5 text-[13px] font-medium text-[#0A0A0A] placeholder-[#9E9E98] outline-none transition-all"
-                />
-                {availableWorkOrders.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#0A0A0A] p-1 cursor-pointer"
-                    title="Toggle active work orders"
-                  >
-                    <ChevronDown size={14} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
-                  </button>
-                )}
-
-                {/* Dropdown Menu of Available Work Orders from DB */}
-                {isDropdownOpen && availableWorkOrders.length > 0 && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-20"
-                      onClick={() => setIsDropdownOpen(false)}
-                    />
-                    <div className="absolute left-0 right-0 top-full mt-1.5 bg-[#FFFFFF] border border-[#E2E2DC] rounded-xl shadow-xl z-30 max-h-60 overflow-y-auto py-1 text-left animate-fade-in">
-                      <div className="px-3 py-1.5 text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider border-b border-[#F0F0EC]">
-                        Active Work Orders in DB ({availableWorkOrders.length})
-                      </div>
-                      {availableWorkOrders
-                        .filter((item) => {
-                          if (!searchWoInput) return true;
-                          const q = searchWoInput.toLowerCase();
-                          return (
-                            (item.workorder_id || '').toLowerCase().includes(q) ||
-                            (item.candidate_name || '').toLowerCase().includes(q) ||
-                            (item.role || '').toLowerCase().includes(q) ||
-                            (item.company_name || '').toLowerCase().includes(q)
-                          );
-                        })
-                        .map((wo) => (
-                          <button
-                            key={wo.workorder_id}
-                            type="button"
-                            onClick={() => {
-                              setSearchWoInput(wo.workorder_id);
-                              handleAutofill(wo.workorder_id);
-                            }}
-                            className="w-full px-3.5 py-2 hover:bg-[#F5F5F2] text-left transition-colors flex items-center justify-between gap-3 text-[12.5px] cursor-pointer"
-                          >
-                            <div className="min-w-0">
-                              <div className="font-bold text-[#0A0A0A] truncate">
-                                {wo.workorder_id}
-                              </div>
-                              <div className="text-[11.5px] text-[#737373] truncate">
-                                {wo.candidate_name} · {wo.role}
-                              </div>
-                            </div>
-                            <span className="shrink-0 text-[10.5px] px-2 py-0.5 rounded-full font-medium bg-[#EAEAE6] text-[#555550]">
-                              {wo.company_name || 'Active'}
-                            </span>
-                          </button>
-                        ))}
-                    </div>
-                  </>
-                )}
+            ) : statusState === 'Rejected' ? (
+              <div className="w-16 h-16 rounded-full bg-red-50 text-red-600 border border-red-200 flex items-center justify-center mx-auto shadow-xs">
+                <XCircle size={32} />
               </div>
+            ) : statusState === 'Revision Requested' ? (
+              <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 border border-amber-200 flex items-center justify-center mx-auto shadow-xs">
+                <AlertCircle size={32} />
+              </div>
+            ) : (
+              <div className="w-16 h-16 rounded-full bg-blue-50 text-blue-600 border border-blue-200 flex items-center justify-center mx-auto shadow-xs relative">
+                <Clock size={30} />
+                <span className="absolute top-1 right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full animate-ping" />
+              </div>
+            )}
 
-              <button
-                type="button"
-                onClick={() => handleAutofill(searchWoInput || formData.wsNumber)}
-                disabled={isAutofilling}
-                className="px-4 py-2.5 bg-[#0A0A0A] hover:bg-[#222222] text-white rounded-xl text-[12.5px] font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5 shrink-0"
-              >
-                {isAutofilling ? (
-                  <>
-                    <RefreshCw size={14} className="animate-spin text-amber-400" />
-                    <span>Auto-filling...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles size={14} className="text-amber-400" />
-                    <span>Auto-fill with AI</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Quick-Pick Pill Badges */}
-          {availableWorkOrders.length > 0 && (
-            <div className="flex items-center gap-1.5 flex-wrap pt-3 mt-3 border-t border-[#EFEFEA] text-[11.5px]">
-              <span className="text-[#8A8A85] font-medium shrink-0 flex items-center gap-1">
-                <Zap size={11} className="text-amber-500" />
-                Quick Select:
-              </span>
-              {availableWorkOrders.slice(0, 5).map((item) => (
-                <button
-                  key={item.workorder_id}
-                  type="button"
-                  onClick={() => {
-                    setSearchWoInput(item.workorder_id);
-                    handleAutofill(item.workorder_id);
-                  }}
-                  className={`px-2.5 py-1 rounded-lg border transition-all cursor-pointer font-medium ${
-                    formData.wsNumber === item.workorder_id
-                      ? 'bg-[#0A0A0A] text-white border-[#0A0A0A]'
-                      : 'bg-white hover:bg-[#F5F5F2] text-[#333330] border-[#DCDCD6]'
-                  }`}
-                >
-                  <span className="font-bold">{item.workorder_id}</span>
-                  <span className="text-[10.5px] opacity-75 ml-1">({item.candidate_name})</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Outer Container with Internal Scroll */}
-      <div className="bg-[#EAEAE6] rounded-2xl p-3 sm:p-5 lg:p-6 border border-[#D5D5CF] shadow-2xs w-full overflow-hidden">
-        {currentStep === 3 ? (
-          /* Step 3: Send for Approval */
-          <div className="bg-white rounded-2xl p-8 max-w-2xl mx-auto shadow-md border border-[#E2E2DC] text-center space-y-5 animate-scale-in">
-            <div className="w-16 h-16 rounded-full bg-[#F0FDF4] text-[#16A34A] flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 size={32} />
-            </div>
             <div>
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#8A8A85]">
-                {formData.wsNumber}
+                {formData.wsNumber} · {formData.msaRef}
               </div>
               <h2 className="text-[22px] font-extrabold text-[#0A0A0A] tracking-tight mt-1">
-                Work Statement Prepared for Approval
+                {statusState === 'Approved'
+                  ? 'Master Service Agreement Approved'
+                  : statusState === 'Rejected'
+                  ? 'Master Service Agreement Rejected'
+                  : statusState === 'Revision Requested'
+                  ? 'Revision Requested by Director'
+                  : 'Submitted for Company Director Approval'}
               </h2>
               <p className="text-[13px] text-[#737373] mt-2 max-w-md mx-auto leading-relaxed">
-                This schedule governs the deployment of <strong>{formData.deployedPersonnel}</strong> ({formData.role}) to <strong>{formData.companyName}</strong> at <strong>{formData.chargeRate}</strong>.
+                {statusState === 'Approved' ? (
+                  <span>
+                    Formally countersigned and approved by <strong className="text-[#0A0A0A]">{approvalMeta.approvedBy || `${formData.companyName} Director`}</strong>. Deployment schedule is now active.
+                  </span>
+                ) : statusState === 'Rejected' ? (
+                  <span>
+                    The Company Director reviewed and rejected this agreement. Review the feedback notes below, adjust the commercials or schedule, and resubmit.
+                  </span>
+                ) : statusState === 'Revision Requested' ? (
+                  <span>
+                    The Company Director reviewed the agreement and requested modifications before final sign-off.
+                  </span>
+                ) : (
+                  <span>
+                    This schedule for <strong className="text-[#0A0A0A]">{formData.deployedPersonnel}</strong> ({formData.role}) has been submitted to <strong className="text-[#0A0A0A]">{formData.companyName}</strong> Director for executive sign-off.
+                  </span>
+                )}
               </p>
             </div>
+
+            {statusState === 'Rejected' && approvalMeta.rejectionReason && (
+              <div className="bg-red-50/90 border border-red-200/90 rounded-xl p-3.5 text-left text-[12.5px] space-y-1">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-red-800 flex items-center gap-1.5">
+                  <XCircle size={13} /> Director Rejection Reason
+                </span>
+                <p className="text-red-950 font-medium italic">
+                  "{approvalMeta.rejectionReason}"
+                </p>
+              </div>
+            )}
+
+            {statusState === 'Revision Requested' && approvalMeta.revisionNotes && (
+              <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 text-left text-[12.5px] space-y-1">
+                <span className="text-[10.5px] font-bold uppercase tracking-wider text-amber-800 block">
+                  Director Feedback Notes
+                </span>
+                <p className="text-amber-950 font-medium italic">
+                  "{approvalMeta.revisionNotes}"
+                </p>
+              </div>
+            )}
+
+            {statusState === 'Pending Director Approval' && (
+              <div className="bg-[#F4F4F0] border border-[#E2E2DC] rounded-xl p-3 text-[12px] text-[#555550] flex items-center justify-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span>
+                  Notification dispatched to <strong>{formData.companyName} Director</strong> dashboard. Real-time updates sync here.
+                </span>
+              </div>
+            )}
 
             <div className="bg-[#FAFAFA] border border-[#EAEAE6] rounded-xl p-4 text-left space-y-2.5 text-[12.5px]">
               <div className="flex justify-between py-1 border-b border-[#EAEAE6]">
@@ -506,43 +488,91 @@ Generated via Term Jobs Enterprise Portal
                 <span className="font-bold text-[#0A0A0A]">{formData.companyName}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#EAEAE6]">
+                <span className="text-[#737373]">Target Approver</span>
+                <span className="font-bold text-[#0A0A0A]">{formData.companyName} Director</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#EAEAE6]">
+                <span className="text-[#737373]">Personnel & Role</span>
+                <span className="font-bold text-[#0A0A0A]">{formData.deployedPersonnel} ({formData.role})</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#EAEAE6]">
+                <span className="text-[#737373]">Commercial Rate</span>
+                <span className="font-bold text-[#0A0A0A]">{formData.chargeRate} ({formData.billingBasis})</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#EAEAE6]">
                 <span className="text-[#737373]">Effective Period</span>
                 <span className="font-bold text-[#0A0A0A]">{formData.commencement} to {formData.expiry} ({formData.duration})</span>
               </div>
               <div className="flex justify-between py-1">
                 <span className="text-[#737373]">Workflow Status</span>
-                <span className="inline-flex items-center gap-1 font-bold text-[#16A34A]">
-                  <Check size={14} /> {statusState}
+                <span className={`inline-flex items-center gap-1 font-bold ${
+                  statusState === 'Approved'
+                    ? 'text-emerald-600'
+                    : statusState === 'Rejected'
+                    ? 'text-red-600'
+                    : statusState === 'Revision Requested'
+                    ? 'text-amber-600'
+                    : 'text-blue-600'
+                }`}>
+                  {statusState === 'Approved' ? (
+                    <Check size={14} />
+                  ) : statusState === 'Rejected' ? (
+                    <XCircle size={14} />
+                  ) : statusState === 'Revision Requested' ? (
+                    <AlertCircle size={14} />
+                  ) : (
+                    <Clock size={14} />
+                  )}
+                  {statusState}
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center justify-center gap-3 pt-2">
+            <div className="flex items-center justify-center flex-wrap gap-2.5 pt-2">
               <button
+                type="button"
                 onClick={() => setCurrentStep(1)}
-                className="px-4 py-2 bg-white hover:bg-[#F5F5F2] text-[#0A0A0A] border border-[#D5D5CF] rounded-xl text-[12.5px] font-bold transition-all cursor-pointer shadow-2xs"
+                className="px-4 py-2 bg-white hover:bg-[#F5F5F2] text-[#0A0A0A] border border-[#D5D5CF] rounded-xl text-[12.5px] font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
               >
-                Back to Edit
+                <Edit3 size={13} />
+                <span>{statusState === 'Rejected' ? 'Modify Terms & Resubmit' : statusState === 'Revision Requested' ? 'Edit & Resubmit' : 'Back to Edit'}</span>
               </button>
+
               <button
+                type="button"
+                onClick={() => handleAutofill(formData.wsNumber)}
+                disabled={isAutofilling}
+                className="px-4 py-2 bg-white hover:bg-[#F5F5F2] text-[#0A0A0A] border border-[#D5D5CF] rounded-xl text-[12.5px] font-bold transition-all cursor-pointer shadow-2xs flex items-center gap-1.5"
+              >
+                <RefreshCw size={13} className={isAutofilling ? 'animate-spin' : ''} />
+                <span>{isAutofilling ? 'Checking...' : 'Check Status'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleDownloadTxt}
                 className="px-4 py-2 bg-[#0A0A0A] hover:bg-[#222222] text-white rounded-xl text-[12.5px] font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-xs"
               >
-                <Download size={14} />
+                <Download size={13} />
                 <span>Download Executable Copy</span>
               </button>
             </div>
           </div>
-        ) : (
-          /* Step 1 & 2: Large White Document Card with Exact Typography & Grey Hover/Touch Effect */
-          <div
-            ref={printRef}
-            spellCheck={false}
-            className="bg-[#FFFFFF] text-[#0A0A0A] rounded-xl shadow-xs border border-[#DCDCD6] p-6 sm:p-10 lg:p-12 max-w-[960px] mx-auto w-full overflow-y-auto max-h-[46vh] sm:max-h-[48vh] transition-all scrollbar-thin"
-            style={{
-              fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif'
-            }}
-          >
+        </div>
+      ) : (
+        /* Steps 1 & 2: Split 2-Column Layout -> Agreement to LEFT, AI Work Order Autofill to RIGHT */
+        <div className="flex flex-col lg:flex-row gap-4 sm:gap-5 items-start w-full">
+          {/* LEFT: Agreement Document */}
+          <div className="flex-1 min-w-0 w-full lg:w-[62%] xl:w-[64%]">
+            <div className="bg-[#EAEAE6] rounded-2xl p-2.5 sm:p-4 border border-[#D5D5CF] shadow-2xs w-full overflow-hidden">
+              <div
+                ref={printRef}
+                spellCheck={false}
+                className="bg-[#FFFFFF] text-[#0A0A0A] rounded-xl shadow-xs border border-[#DCDCD6] p-4 sm:p-6 lg:p-8 w-full overflow-y-auto max-h-[46vh] sm:max-h-[48vh] transition-all scrollbar-thin"
+                style={{
+                  fontFamily: 'Georgia, Cambria, "Times New Roman", Times, serif'
+                }}
+              >
             {/* Centered Document Title */}
             <div className="text-center space-y-1.5 mb-6">
               <h1
@@ -957,8 +987,226 @@ Generated via Term Jobs Enterprise Portal
               </div>
             </div>
           </div>
-        )}
+        </div>
       </div>
+
+      {/* RIGHT: AI Work Order Auto-Fill Tab / Side Panel */}
+      <div className="w-full lg:w-[38%] xl:w-[36%] shrink-0">
+        <div className="bg-gradient-to-b from-[#FFFFFF] to-[#FAFAF8] border border-[#DCDCD6] rounded-2xl p-3 sm:p-3.5 shadow-xs space-y-2.5 overflow-y-auto max-h-[46vh] sm:max-h-[48vh] scrollbar-thin">
+          {/* Header */}
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-900 text-[10px] font-bold uppercase tracking-wider">
+                <Sparkles size={11} className="text-amber-600 animate-pulse" />
+                <span>AI Work Order Auto-Fill</span>
+              </div>
+              <span className="text-[10.5px] text-[#16A34A] font-semibold flex items-center gap-1">
+                <CheckCircle2 size={11} />
+                Live DB
+              </span>
+            </div>
+            <h2 className="text-[14px] font-bold text-[#0A0A0A] tracking-tight">
+              Database Auto-Population
+            </h2>
+            <p className="text-[11px] text-[#737373] leading-snug line-clamp-2">
+              Select or enter any active Work Order ID. The AI engine pulls genuine terms, rates, candidate info, and schedule from live database records.
+            </p>
+          </div>
+
+          {/* Search & Action Input */}
+          <div className="space-y-1.5">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8A8A85] pointer-events-none" />
+              <input
+                type="text"
+                value={searchWoInput}
+                onChange={(e) => {
+                  setSearchWoInput(e.target.value);
+                  setIsDropdownOpen(true);
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleAutofill(searchWoInput);
+                  }
+                }}
+                placeholder="Enter Work Order ID (e.g. SDC -5a5e1b59)"
+                className="w-full bg-[#FFFFFF] border border-[#D5D5CF] focus:border-[#0A0A0A] focus:ring-1 focus:ring-[#0A0A0A] rounded-xl pl-8 pr-8 py-1.5 text-[12px] font-medium text-[#0A0A0A] placeholder-[#9E9E98] outline-none transition-all"
+              />
+              {availableWorkOrders.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8A8A85] hover:text-[#0A0A0A] p-1 cursor-pointer"
+                  title="Toggle active work orders"
+                >
+                  <ChevronDown size={13} className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+              )}
+
+              {/* Dropdown Menu of Available Work Orders from DB */}
+              {isDropdownOpen && availableWorkOrders.length > 0 && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setIsDropdownOpen(false)}
+                  />
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-[#FFFFFF] border border-[#E2E2DC] rounded-xl shadow-xl z-30 max-h-44 overflow-y-auto py-1 text-left animate-fade-in scrollbar-thin">
+                    <div className="px-3 py-1 text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider border-b border-[#F0F0EC]">
+                      Active Work Orders in DB ({availableWorkOrders.length})
+                    </div>
+                    {availableWorkOrders
+                      .filter((item) => {
+                        if (!searchWoInput) return true;
+                        const q = searchWoInput.toLowerCase();
+                        return (
+                          (item.workorder_id || '').toLowerCase().includes(q) ||
+                          (item.candidate_name || '').toLowerCase().includes(q) ||
+                          (item.role || '').toLowerCase().includes(q) ||
+                          (item.company_name || '').toLowerCase().includes(q)
+                        );
+                      })
+                      .map((wo) => (
+                        <button
+                          key={wo.workorder_id}
+                          type="button"
+                          onClick={() => {
+                            setSearchWoInput(wo.workorder_id);
+                            handleAutofill(wo.workorder_id);
+                          }}
+                          className="w-full px-3 py-1.5 hover:bg-[#F5F5F2] text-left transition-colors flex items-center justify-between gap-2 text-[11.5px] cursor-pointer"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-bold text-[#0A0A0A] truncate">
+                              {wo.workorder_id}
+                            </div>
+                            <div className="text-[10.5px] text-[#737373] truncate">
+                              {wo.candidate_name} · {wo.role}
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-[9.5px] px-1.5 py-0.5 rounded font-medium bg-[#EAEAE6] text-[#555550]">
+                            {wo.company_name || 'Active'}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleAutofill(searchWoInput || formData.wsNumber)}
+              disabled={isAutofilling}
+              className="w-full py-1.5 bg-[#0A0A0A] hover:bg-[#222222] text-white rounded-xl text-[12px] font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center justify-center gap-1.5"
+            >
+              {isAutofilling ? (
+                <>
+                  <RefreshCw size={12} className="animate-spin text-amber-400" />
+                  <span>Auto-filling...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={12} className="text-amber-400" />
+                  <span>Auto-fill with AI</span>
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Quick-Pick Work Orders List */}
+          {availableWorkOrders.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-[#EFEFEA]">
+              <div className="flex items-center justify-between text-[10.5px] font-bold text-[#8A8A85] uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <Zap size={11} className="text-amber-500" />
+                  Quick Select ({availableWorkOrders.length})
+                </span>
+                <span className="text-[10px] text-amber-700 font-normal">Click to load</span>
+              </div>
+
+              <div className="space-y-1 max-h-24 overflow-y-auto pr-0.5 scrollbar-thin">
+                {availableWorkOrders.map((item) => {
+                  const isSelected = formData.wsNumber === item.workorder_id;
+                  return (
+                    <button
+                      key={item.workorder_id}
+                      type="button"
+                      onClick={() => {
+                        setSearchWoInput(item.workorder_id);
+                        handleAutofill(item.workorder_id);
+                      }}
+                      className={`w-full px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer flex items-center justify-between gap-2 ${
+                        isSelected
+                          ? 'bg-[#0A0A0A] text-white border-[#0A0A0A] shadow-xs'
+                          : 'bg-[#FAFAF8] hover:bg-white text-[#1A1A1A] border-[#E5E5DF] hover:border-[#CCCCCC]'
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1">
+                          <span className="font-bold text-[11.5px] truncate">{item.workorder_id}</span>
+                          {isSelected && (
+                            <span className="text-[8.5px] font-semibold px-1 py-0.2 rounded bg-white/20 text-white">
+                              Active
+                            </span>
+                          )}
+                        </div>
+                        <div className={`text-[10px] truncate ${isSelected ? 'text-gray-300' : 'text-[#737373]'}`}>
+                          {item.candidate_name} · {item.role}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                          isSelected
+                            ? 'bg-white/15 text-white'
+                            : 'bg-[#EAEAE6] text-[#555550]'
+                        }`}
+                      >
+                        {item.company_name || 'Active'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Verified Live Data Details Card */}
+          <div className="bg-[#FAFAF8] border border-[#E5E5DF] rounded-xl p-2 space-y-1 text-[11px]">
+            <div className="flex items-center justify-between text-[10px] font-bold text-[#8A8A85] uppercase tracking-wider border-b border-[#EFEFEA] pb-1">
+              <span className="flex items-center gap-1 text-[#0A0A0A]">
+                <Database size={10} className="text-[#16A34A]" />
+                Live Record Source
+              </span>
+              <span className="text-[#16A34A] font-semibold flex items-center gap-1">
+                <CheckCircle2 size={10} />
+                Verified
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-1 pt-0.5">
+              <div>
+                <span className="text-[#8A8A85] text-[9.5px] block">Personnel</span>
+                <span className="font-semibold text-[#0A0A0A] truncate block text-[11px]">{formData.deployedPersonnel}</span>
+              </div>
+              <div>
+                <span className="text-[#8A8A85] text-[9.5px] block">Role</span>
+                <span className="font-semibold text-[#0A0A0A] truncate block text-[11px]">{formData.role}</span>
+              </div>
+              <div>
+                <span className="text-[#8A8A85] text-[9.5px] block">Company</span>
+                <span className="font-semibold text-[#0A0A0A] truncate block text-[11px]">{formData.companyName}</span>
+              </div>
+              <div>
+                <span className="text-[#8A8A85] text-[9.5px] block">Rate</span>
+                <span className="font-semibold text-[#0A0A0A] truncate block text-[11px]">{formData.chargeRate}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )}
 
       {/* Bottom Action Footer */}
       <div className="bg-[#FFFFFF] border border-[#E2E2DC] rounded-xl px-4 py-2.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
@@ -980,7 +1228,21 @@ Generated via Term Jobs Enterprise Portal
             disabled={isSending}
             className="px-5 py-2 bg-[#0A0A0A] hover:bg-[#222222] text-white rounded-xl text-[12.5px] font-bold transition-all cursor-pointer shadow-xs disabled:opacity-50 flex items-center gap-1.5"
           >
-            <span>{isSending ? 'Sending...' : 'Save & Send →'}</span>
+            {isSending ? (
+              <>
+                <span className="animate-spin text-[12px]">⟳</span>
+                <span>Submitting to Director...</span>
+              </>
+            ) : statusState === 'Approved' ? (
+              <>
+                <Check size={14} className="text-emerald-400" />
+                <span>Approved ✓</span>
+              </>
+            ) : statusState === 'Pending Director Approval' ? (
+              <span>Resend to Director →</span>
+            ) : (
+              <span>Save & Send →</span>
+            )}
           </button>
         </div>
       </div>

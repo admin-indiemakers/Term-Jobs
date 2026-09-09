@@ -117,35 +117,41 @@ def _get_current_user(authorization: str | None) -> dict | None:
 
 
 def _auto_status(doc: dict) -> str:
-    """Compute onboarding status strictly based on completed items."""
-    required = []
-    # Equipment
-    if doc.get("laptop_required"):
-        required.append("laptop")
-    if doc.get("badge_required"):
-        required.append("badge")
-    # Software
-    for s in doc.get("software", []):
-        if s.get("enabled"):
-            required.append(s["id"])
-    # Training
-    for t in doc.get("training", []):
-        if t.get("enabled"):
-            required.append(t["id"])
-    # Custom items
-    for ci in doc.get("custom_items", []):
-        if ci.get("enabled"):
-            required.append(ci["id"])
-
+    """Compute onboarding status strictly based on setup status and candidate completed items."""
     completed = doc.get("completed_items", {})
-    if not required:
-        return "completed" if (completed and len(completed) > 0) else "not_started"
+    if completed and len(completed) > 0:
+        required = []
+        # Equipment
+        if doc.get("laptop_required"):
+            required.append("laptop")
+        if doc.get("badge_required"):
+            required.append("badge")
+        # Software
+        for s in doc.get("software", []):
+            if s.get("enabled"):
+                required.append(s["id"])
+        # Training
+        for t in doc.get("training", []):
+            if t.get("enabled"):
+                required.append(t["id"])
+        # Custom items
+        for ci in doc.get("custom_items", []):
+            if ci.get("enabled"):
+                required.append(ci["id"])
 
-    done_count = sum(1 for r in required if completed.get(r))
-    if done_count >= len(required):
+        if required:
+            done_count = sum(1 for r in required if completed.get(r))
+            if done_count >= len(required):
+                return "completed"
+            if done_count > 0:
+                return "in_progress"
+
+    # If setup is configured/completed by hiring manager
+    if doc.get("setup_status") == "completed" or doc.get("status") == "completed":
         return "completed"
-    if done_count > 0:
+    if doc.get("setup_status") == "in_progress" or doc.get("status") == "in_progress":
         return "in_progress"
+
     return "not_started"
 
 
@@ -427,6 +433,11 @@ def update_onboarding(candidate_id: str, body: OnboardingUpdate):
     from datetime import datetime, timezone
     updates = {k: v for k, v in body.model_dump().items() if v is not None and k != "candidate_id"}
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    # If manager is saving software/training setup or explicitly setting status
+    if body.software is not None or body.training is not None or body.status in ("completed", "in_progress"):
+        updates["setup_status"] = "completed"
+        updates["status"] = body.status or "completed"
 
     # Merge completed_items (don't replace entirely)
     if body.completed_items is not None:
