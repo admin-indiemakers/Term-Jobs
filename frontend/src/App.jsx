@@ -17,6 +17,7 @@ import ManageHiringManagers from './pages/ManageHiringManagers';
 import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import AiChat from './pages/AiChat';
+import HiringManagerChat from './pages/HiringManagerChat';
 import DirectorDashboard from './pages/DirectorDashboard';
 import OnboardCompany from './pages/OnboardCompany';
 import OnboardVendor from './pages/OnboardVendor';
@@ -103,6 +104,7 @@ export default function App() {
         >
           <Route index element={<DashboardIndex />} />
           <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+          <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
           <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />

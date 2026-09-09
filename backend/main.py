@@ -12,7 +12,7 @@ Quick test (company -> requisition -> approve -> publish):
          -d '{"name":"Acme","location":"Bangalore","tech_stack":["Python","Django","Postgres"]}'
     # then POST /requisitions with the returned profile id
 """
-from __future__ import annotations
+
 
 import json
 import os

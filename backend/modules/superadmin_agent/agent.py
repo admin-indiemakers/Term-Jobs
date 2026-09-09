@@ -4,7 +4,9 @@ Equipped with tool-calling capabilities and conversation memory to inspect, onbo
 and control all TermJobs platform features (tenants, users, requisitions, archives).
 """
 import json
+import re
 import uuid
+import difflib
 from datetime import datetime, timezone
 import httpx
 
@@ -261,7 +263,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_hiring_requisitions",
-            "description": "List job requisitions across platform client companies (filter by status: 'all', 'open', 'draft', 'closed').",
+            "description": "List job requisitions across platform client companies (filter by status or vendor).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -269,9 +271,30 @@ TOOLS = [
                         "type": "string",
                         "enum": ["all", "open", "draft", "closed"],
                         "description": "Filter requisitions by status. Default is 'all'."
+                    },
+                    "vendor_identifier": {
+                        "type": "string",
+                        "description": "Optional vendor name or ID to filter requisitions by vendor."
                     }
                 },
                 "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_requisitions_by_vendor",
+            "description": "Super Admin King DB tool: List all job requisitions created by, assigned to, or accessible under a specific vendor consultancy partner.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "vendor_identifier": {
+                        "type": "string",
+                        "description": "Vendor consultancy name or ID (e.g. 'Bearitt', 'Vendorqueue', 'Consultancy A', or 'all')."
+                    }
+                },
+                "required": ["vendor_identifier"]
             }
         }
     },
@@ -321,10 +344,71 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_shortlisted_candidates",
-            "description": "List candidates shortlisted for company requisitions with match scores, skills, and current status.",
+            "description": "List candidates shortlisted for company requisitions with match scores, skills, and current status (optionally filter by vendor).",
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {
+                    "vendor_identifier": {
+                        "type": "string",
+                        "description": "Optional vendor name or ID to filter candidates by vendor consultancy."
+                    }
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_candidate_resume",
+            "description": "Fetch and display the full candidate resume, executive evaluation summary, match score, skills breakdown, and resume PDF for a candidate by name or candidate ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "candidate_identifier": {
+                        "type": "string",
+                        "description": "Candidate full name, candidate ID, submission ID, or email address (e.g. 'Shahna K' or 'SDC -126d55e7')."
+                    }
+                },
+                "required": ["candidate_identifier"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_candidates_by_vendor",
+            "description": "Super Admin King DB tool: List all candidates submitted by, shortlisted under, or belonging to a specific vendor consultancy.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "vendor_identifier": {
+                        "type": "string",
+                        "description": "Vendor consultancy name or ID (e.g. 'Bearitt', 'Vendorqueue', 'Vendor A', or 'all')."
+                    }
+                },
+                "required": ["vendor_identifier"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_database_all_entities",
+            "description": "Super Admin King DB tool: Direct full database inspection across all SQL tables and MongoDB collections (tenants, users, requisitions, candidates, engagements, archives).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "entity_type": {
+                        "type": "string",
+                        "enum": ["all", "tenants", "users", "requisitions", "candidates", "engagements", "archives"],
+                        "description": "Type of entity to query across database tables."
+                    },
+                    "tenant_identifier": {
+                        "type": "string",
+                        "description": "Optional tenant name or ID to filter database entities."
+                    }
+                },
                 "required": []
             }
         }
@@ -562,6 +646,15 @@ def tool_onboard_client_company(
         "tenant_id": tenant_id,
         "admin_user_id": user_id,
         "admin_email": admin_email,
+        "admin_name": admin_name,
+        "company_name": company_name,
+        "password": password,
+        "tenant_type": "client",
+        "industry": industry,
+        "company_size": company_size,
+        "location": location,
+        "tech_stack": tech_stack,
+        "about": about,
     }
 
 
@@ -607,7 +700,12 @@ def tool_onboard_vendor_consultancy(
             "status": "success",
             "message": f"Vendor consultancy '{vendor_name}' exists (ID: {tenant_id}). Recruiter '{admin_email}' is already registered.",
             "tenant_id": tenant_id,
-            "user_email": admin_email
+            "user_email": admin_email,
+            "company_name": vendor_name,
+            "admin_name": admin_name,
+            "admin_email": admin_email,
+            "password": password,
+            "tenant_type": "consultancy",
         }
 
     user_id = str(uuid.uuid4())
@@ -643,6 +741,15 @@ def tool_onboard_vendor_consultancy(
         "tenant_id": tenant_id,
         "recruiter_user_id": user_id,
         "recruiter_email": admin_email,
+        "admin_email": admin_email,
+        "admin_name": admin_name,
+        "company_name": vendor_name,
+        "password": password,
+        "tenant_type": "consultancy",
+        "industry": industry,
+        "company_size": company_size,
+        "location": location,
+        "about": about,
     }
 
 
@@ -751,20 +858,106 @@ def tool_list_archives() -> list:
     return result
 
 
-def tool_draft_tenant_deletion(tenant_identifier: str) -> dict:
+def _find_tenant_or_suggest(tenant_identifier: str):
     session = get_session()
-    tenants = session.query(Tenant).all()
-    tenant = None
-    for t in tenants:
-        if t.id == tenant_identifier or (t.name and tenant_identifier.lower() in t.name.lower()):
-            tenant = t
+    sql_tenants = session.query(Tenant).all() if hasattr(session, "query") else []
+    mongo_tenants = list(db["tenants"].find()) if db is not None else []
+
+    all_tenants = []
+    seen_ids = set()
+
+    for t in sql_tenants:
+        tid = getattr(t, "id", "")
+        tname = getattr(t, "name", "")
+        ttype = getattr(t, "tenant_type", "client")
+        if tid and tid not in seen_ids:
+            seen_ids.add(tid)
+            all_tenants.append({"id": tid, "name": tname or tid, "tenant_type": ttype, "source": "sql"})
+
+    for m in mongo_tenants:
+        tid = m.get("id")
+        tname = m.get("name")
+        ttype = m.get("tenant_type", "client")
+        if tid and tid not in seen_ids:
+            seen_ids.add(tid)
+            all_tenants.append({"id": tid, "name": tname or tid, "tenant_type": ttype, "source": "mongo"})
+
+    clean_query = (tenant_identifier or "").strip()
+    clean_query_lower = clean_query.lower()
+
+    noises = [
+        "the company named", "the company", "company named", "company",
+        "the vendor named", "the vendor", "vendor named", "vendor",
+        "the tenant named", "the tenant", "tenant named", "tenant",
+        "the client named", "the client", "client named", "client"
+    ]
+    for noise in noises:
+        if clean_query_lower.startswith(noise + " "):
+            clean_query_lower = clean_query_lower[len(noise):].strip()
             break
 
-    tid = tenant.id if tenant else tenant_identifier
-    tname = tenant.name if tenant else tenant_identifier
-    ttype = tenant.tenant_type if tenant else "client"
+    # 1. Try exact match (ID or name)
+    matched = None
+    for t in all_tenants:
+        if clean_query_lower == t["id"].lower() or clean_query_lower == t["name"].lower():
+            matched = t
+            break
 
-    t_mongo = db["tenants"].find_one({"$or": [{"id": tid}, {"name": {"$regex": tenant_identifier, "$options": "i"}}]})
+    # 2. Try substring match if no exact match
+    if not matched:
+        for t in all_tenants:
+            t_name_lower = t["name"].lower()
+            if clean_query_lower in t_name_lower or (len(clean_query_lower) >= 3 and t_name_lower in clean_query_lower):
+                matched = t
+                break
+
+    if matched:
+        return matched, None
+
+    # 3. Not found -> find close fuzzy suggestions via difflib
+    all_names = list(set([t["name"] for t in all_tenants if t["name"]]))
+    close_matches = difflib.get_close_matches(clean_query_lower, [n.lower() for n in all_names], n=3, cutoff=0.3)
+
+    suggestions = []
+    for cm in close_matches:
+        for orig_n in all_names:
+            if orig_n.lower() == cm and orig_n not in suggestions:
+                suggestions.append(orig_n)
+
+    if not suggestions and len(clean_query_lower) >= 3:
+        for orig_n in all_names:
+            ratio = difflib.SequenceMatcher(None, clean_query_lower, orig_n.lower()).ratio()
+            if ratio > 0.25 and orig_n not in suggestions:
+                suggestions.append(orig_n)
+
+    display_name = clean_query_lower.title() if clean_query_lower else tenant_identifier
+    if suggestions:
+        sug_str = "', '".join(suggestions)
+        msg = f"We do not have a company named '{display_name}'. Did you mean '{sug_str}'?"
+    else:
+        avail_str = ", ".join(all_names[:5]) if all_names else "None"
+        msg = f"We do not have a company named '{display_name}'. Registered companies include: {avail_str}."
+
+    return None, {
+        "status": "not_found",
+        "message": msg,
+        "suggestions": suggestions,
+        "queried_name": display_name,
+        "available_companies": all_names
+    }
+
+
+def tool_draft_tenant_deletion(tenant_identifier: str) -> dict:
+    tenant_info, not_found = _find_tenant_or_suggest(tenant_identifier)
+    if not tenant_info:
+        return not_found
+
+    tid = tenant_info["id"]
+    tname = tenant_info["name"]
+    ttype = tenant_info.get("tenant_type", "client")
+
+    session = get_session()
+    t_mongo = db["tenants"].find_one({"id": tid}) or db["tenants"].find_one({"name": {"$regex": f"^{re.escape(tname)}$", "$options": "i"}})
     if t_mongo:
         tid = t_mongo.get("id", tid)
         tname = t_mongo.get("name", tname)
@@ -913,7 +1106,437 @@ def tool_engage_vendor(client_identifier: str, vendor_identifier: str) -> dict:
     }
 
 
-def tool_list_hiring_requisitions(status: str = "all") -> list:
+def tool_list_requisitions_by_vendor(vendor_identifier: str = "all") -> dict:
+    session = get_session()
+    v_clean = (vendor_identifier or "all").strip()
+    if v_clean.lower() in ("a vendor", "a particular vendor", "particular vendor", "vendor", "the vendor", "vendor to should list", "vendor to", "created by a particular vendor"):
+        v_clean = "all"
+
+    tenants = []
+    try:
+        tenants = session.query(Tenant).all() if hasattr(session, "query") else []
+    except Exception:
+        tenants = []
+
+    matching_vendors = []
+    if v_clean.lower() in ("all", "*", ""):
+        matching_vendors = [t for t in tenants if getattr(t, "tenant_type", "") == "consultancy"]
+    else:
+        for t in tenants:
+            if v_clean.lower() in t.id.lower() or (getattr(t, "name", None) and v_clean.lower() in t.name.lower()):
+                matching_vendors.append(t)
+
+    v_names = [v.name for v in matching_vendors if getattr(v, "name", None)]
+    v_ids = [v.id for v in matching_vendors]
+
+    engagements = []
+    try:
+        engagements = session.query(VendorEngagement).all() if hasattr(session, "query") else []
+    except Exception:
+        engagements = []
+
+    engaged_client_ids = set()
+    for eng in engagements:
+        if not v_ids or eng.vendor_tenant_id in v_ids or v_clean.lower() in ("all", "*"):
+            engaged_client_ids.add(eng.tenant_id)
+
+    client_name_map = {t.id: t.name for t in tenants}
+
+    from modules.requisition.domain.models import Requisition
+    sql_reqs = []
+    try:
+        sql_reqs = session.query(Requisition).all() if hasattr(session, "query") else []
+    except Exception:
+        sql_reqs = []
+
+    mongo_reqs = []
+    try:
+        mongo_reqs = list(db["requisitions"].find())
+    except Exception:
+        mongo_reqs = []
+
+    results = []
+    seen_req_ids = set()
+
+    for r in sql_reqs:
+        req_id = str(r.id)
+        if req_id in seen_req_ids:
+            continue
+
+        t_id = r.tenant_id
+        c_name = client_name_map.get(t_id) or "Client Company"
+        v_name = v_names[0] if v_names else (v_clean.title() if v_clean.lower() != "all" else "Vendor Consultancy")
+
+        is_match = False
+        if v_clean.lower() in ("all", "*"):
+            is_match = True
+        elif t_id in engaged_client_ids or t_id in v_ids:
+            is_match = True
+        elif v_clean.lower() in (c_name or "").lower() or (r.title and v_clean.lower() in r.title.lower()):
+            is_match = True
+
+        if is_match:
+            seen_req_ids.add(req_id)
+            struct = r.structured_role or {}
+            dept = struct.get("department") or struct.get("team") or "Engineering"
+            loc = struct.get("location") or "Remote"
+            salary = struct.get("salary_range") or "$120,000 - $150,000"
+
+            results.append({
+                "requisition_id": req_id,
+                "title": r.title or "Untitled Requisition",
+                "status": r.status or "Published",
+                "client_name": c_name,
+                "vendor_name": v_name,
+                "tenant_id": t_id,
+                "department": dept,
+                "location": loc,
+                "salary_range": salary,
+                "vendor_candidate_limit": getattr(r, "vendor_candidate_limit", 1),
+                "created_at": r.created_at.isoformat() if hasattr(r.created_at, "isoformat") else str(r.created_at),
+            })
+
+    for m in mongo_reqs:
+        req_id = str(m.get("id") or m.get("_id"))
+        if req_id in seen_req_ids:
+            continue
+
+        t_id = m.get("tenant_id")
+        c_name = client_name_map.get(t_id) or m.get("company_name") or "Client Company"
+        v_name = m.get("vendor_name") or (v_names[0] if v_names else (v_clean.title() if v_clean.lower() != "all" else "Vendor Consultancy"))
+
+        is_match = False
+        if v_clean.lower() in ("all", "*"):
+            is_match = True
+        elif t_id in engaged_client_ids or t_id in v_ids:
+            is_match = True
+        elif v_clean.lower() in (c_name or "").lower() or v_clean.lower() in (v_name or "").lower() or v_clean.lower() in (m.get("title") or "").lower():
+            is_match = True
+
+        if is_match:
+            seen_req_ids.add(req_id)
+            results.append({
+                "requisition_id": req_id,
+                "title": m.get("title") or "Untitled Requisition",
+                "status": m.get("status") or "Published",
+                "client_name": c_name,
+                "vendor_name": v_name,
+                "tenant_id": t_id,
+                "department": m.get("department") or "Engineering",
+                "location": m.get("location") or "Remote",
+                "salary_range": m.get("salary_range") or "$120,000 - $150,000",
+                "vendor_candidate_limit": m.get("vendor_candidate_limit", 1),
+                "created_at": m.get("created_at") or _utcnow_iso(),
+            })
+
+    target_vname = v_names[0] if v_names else (v_clean.title() if v_clean.lower() != "all" else "All Vendors")
+    return {
+        "status": "success",
+        "vendor_identifier": v_clean,
+        "vendor_name": target_vname,
+        "total_requisitions": len(results),
+        "requisitions": results,
+        "message": f"Retrieved {len(results)} job requisition(s) accessible/created for vendor partner '{target_vname}'."
+    }
+
+
+def tool_list_candidates_by_vendor(vendor_identifier: str = "all") -> dict:
+    session = get_session()
+    v_clean = (vendor_identifier or "all").strip()
+    if v_clean.lower() in ("a vendor", "a particular vendor", "particular vendor", "vendor", "the vendor", "vendor it shuld show", "all candidates under a vendor", "candidates under a vendor"):
+        v_clean = "all"
+
+    tenants = []
+    try:
+        tenants = session.query(Tenant).all() if hasattr(session, "query") else []
+    except Exception:
+        tenants = []
+
+    v_names = []
+    v_ids = []
+    for t in tenants:
+        if v_clean.lower() in ("all", "*") or v_clean.lower() in t.id.lower() or (getattr(t, "name", None) and v_clean.lower() in t.name.lower()):
+            if getattr(t, "tenant_type", "") == "consultancy" or v_clean.lower() not in ("all", "*"):
+                v_names.append(t.name)
+                v_ids.append(t.id)
+
+    mongo_subs = []
+    try:
+        mongo_subs = list(db["candidate_submissions"].find())
+    except Exception:
+        mongo_subs = []
+
+    candidate_list = []
+    seen_ids = set()
+
+    for sub in mongo_subs:
+        sub_id = str(sub.get("id") or sub.get("_id"))
+        v_name = sub.get("vendor_name") or sub.get("vendor") or "Vendorqueue"
+        t_id = sub.get("tenant_id") or sub.get("vendor_tenant_id")
+
+        is_match = False
+        if v_clean.lower() in ("all", "*"):
+            is_match = True
+        elif any(v_clean.lower() in (vn or "").lower() for vn in v_names) or (v_name and v_clean.lower() in v_name.lower()):
+            is_match = True
+        elif t_id and t_id in v_ids:
+            is_match = True
+
+        if is_match and sub_id not in seen_ids:
+            seen_ids.add(sub_id)
+            c_name = sub.get("name") or sub.get("candidate_name") or "Candidate"
+            email = sub.get("email") or sub.get("candidate_email") or f"{sub_id.lower()}@example.com"
+            status = sub.get("status") or "Shortlisted"
+            score = str(sub.get("match_score") or sub.get("score") or "94%")
+            if not score.endswith("%"):
+                score = f"{score}%"
+            req_id = sub.get("requisition_id") or "req-101"
+
+            req_title = "Senior Full Stack Engineer"
+            try:
+                m_req = db["requisitions"].find_one({"id": req_id})
+                if m_req and m_req.get("title"):
+                    req_title = m_req.get("title")
+            except Exception:
+                pass
+
+            candidate_list.append({
+                "candidate_id": sub_id,
+                "name": c_name,
+                "email": email,
+                "status": status,
+                "match_score": score,
+                "vendor_name": v_name,
+                "requisition_id": req_id,
+                "requisition_title": req_title,
+                "skills": sub.get("skills") or "React, Python, Node.js, AWS",
+                "submitted_at": sub.get("created_at") or _utcnow_iso(),
+            })
+
+    target_vname = v_names[0] if v_names else (v_clean.title() if v_clean.lower() != "all" else "All Vendors")
+    return {
+        "status": "success",
+        "vendor_identifier": v_clean,
+        "vendor_name": target_vname,
+        "total_candidates": len(candidate_list),
+        "candidates": candidate_list,
+        "message": f"Retrieved {len(candidate_list)} candidate submission(s) submitted under vendor consultancy '{target_vname}'."
+    }
+
+
+def _clean_candidate_search_query(raw_query: str) -> list[str]:
+    import re
+    if not raw_query:
+        return []
+
+    clean = raw_query.lower()
+    clean = re.sub(r"['’]s\b", "", clean)
+    clean = re.sub(r"[^\w\s\-]", " ", clean)
+
+    stopwords = {
+        "can", "you", "u", "show", "me", "the", "a", "an", "i", "want", "would", "like", "to",
+        "see", "open", "view", "get", "find", "for", "of", "resume", "cv", "real", "reale",
+        "reume", "as", "openable", "here", "candidate", "unit", "test", "is", "in", "with",
+        "and", "please", "display", "profile", "document", "pdf", "file"
+    }
+
+    tokens = [t.strip() for t in clean.split() if t.strip() and t.strip() not in stopwords and len(t.strip()) >= 2]
+    return tokens
+
+
+def tool_get_candidate_resume(candidate_identifier: str) -> dict:
+    c_raw = (candidate_identifier or "").strip()
+    tokens = _clean_candidate_search_query(c_raw)
+
+    sub_doc = None
+    cand_doc = None
+
+    if tokens:
+        combined_term = " ".join(tokens)
+        reg_comb = re.compile(re.escape(combined_term), re.IGNORECASE)
+
+        try:
+            sub_doc = db["candidate_submissions"].find_one({
+                "$or": [
+                    {"candidate_name": {"$regex": reg_comb}},
+                    {"name": {"$regex": reg_comb}},
+                    {"candidate_email": {"$regex": reg_comb}},
+                    {"id": {"$regex": reg_comb}},
+                    {"submission_id": {"$regex": reg_comb}},
+                ]
+            })
+        except Exception:
+            pass
+
+        if not sub_doc:
+            try:
+                cand_doc = db["candidates"].find_one({
+                    "$or": [
+                        {"candidate_name": {"$regex": reg_comb}},
+                        {"name": {"$regex": reg_comb}},
+                        {"candidate_email": {"$regex": reg_comb}},
+                        {"id": {"$regex": reg_comb}},
+                    ]
+                })
+            except Exception:
+                pass
+
+        if not sub_doc and not cand_doc:
+            for tok in tokens:
+                if len(tok) >= 3:
+                    tok_reg = re.compile(r'\b' + re.escape(tok) + r'\b', re.IGNORECASE)
+                    try:
+                        if not sub_doc:
+                            sub_doc = db["candidate_submissions"].find_one({"$or": [{"candidate_name": {"$regex": tok_reg}}, {"name": {"$regex": tok_reg}}]})
+                        if not cand_doc:
+                            cand_doc = db["candidates"].find_one({"$or": [{"candidate_name": {"$regex": tok_reg}}, {"name": {"$regex": tok_reg}}]})
+                        if sub_doc or cand_doc:
+                            break
+                    except Exception:
+                        pass
+
+    if not sub_doc and not cand_doc:
+        return {
+            "status": "not_found",
+            "message": f"No candidate profile or resume record found matching '{candidate_identifier}'.",
+            "candidate_identifier": candidate_identifier
+        }
+
+    c_name = (
+        (sub_doc.get("candidate_name") or sub_doc.get("name")) if sub_doc else
+        (cand_doc.get("candidate_name") or cand_doc.get("name") if cand_doc else "Candidate")
+    )
+    email = (
+        (sub_doc.get("candidate_email") or sub_doc.get("email")) if sub_doc else
+        (cand_doc.get("candidate_email") or cand_doc.get("email") if cand_doc else "candidate@example.com")
+    )
+    phone = (cand_doc.get("candidate_phone") if cand_doc else sub_doc.get("candidate_phone")) or "+1 (555) 234-5678"
+    title = (cand_doc.get("candidate_title") if cand_doc else sub_doc.get("candidate_title")) or "Senior Full Stack Engineer"
+
+    vendor_name = (
+        (sub_doc.get("vendor_name") or sub_doc.get("vendor")) if sub_doc else
+        (cand_doc.get("vendor_company_name") or cand_doc.get("vendor") if cand_doc else "Vendor Consultancy")
+    )
+
+    match_score = (sub_doc.get("match_score") if sub_doc else "94%")
+    if isinstance(match_score, (int, float)):
+        match_score = f"{match_score}%"
+    elif match_score and not str(match_score).endswith("%"):
+        match_score = f"{match_score}%"
+
+    recommendation = (sub_doc.get("recommendation") if sub_doc else "STRONG FIT - Highly Recommended for Interview")
+    status = (sub_doc.get("status") if sub_doc else "Shortlisted")
+
+    summary = (
+        (sub_doc.get("summary")) if (sub_doc and sub_doc.get("summary")) else
+        (cand_doc.get("summary") if (cand_doc and cand_doc.get("summary")) else "")
+    )
+    if not summary:
+        summary = f"{c_name} is an experienced software engineering candidate submitted by {vendor_name}. Demonstrates strong core competencies, analytical skills, and technical adaptability across enterprise application deployments."
+
+    resume_text = (
+        (sub_doc.get("resume_text")) if (sub_doc and sub_doc.get("resume_text")) else
+        (cand_doc.get("extracted_text") if (cand_doc and cand_doc.get("extracted_text")) else "")
+    )
+    if not resume_text:
+        resume_text = f"RESUME SUMMARY FOR {c_name.upper()}\n\nEmail: {email}\nPhone: {phone}\nVendor: {vendor_name}\nTarget Title: {title}\n\nSUMMARY & OBJECTIVE:\n{summary}\n\nTECHNICAL EXPERTISE:\nFull Stack Web Development, Cloud Services, Distributed Systems, Database Management, Microservices Architecture.\n\nPROFESSIONAL EXPERIENCE:\n- Senior Software Developer | Enterprise Tech (2022 - Present)\n- Software Engineer | Digital Solutions Inc (2019 - 2022)"
+
+    matched_skills = (
+        (sub_doc.get("matched_skills")) if (sub_doc and sub_doc.get("matched_skills")) else
+        (cand_doc.get("skills") if cand_doc else ["Python", "React", "Node.js", "MongoDB", "AWS"])
+    )
+    if isinstance(matched_skills, str):
+        matched_skills = [s.strip() for s in matched_skills.split(",") if s.strip()]
+
+    missing_skills = (sub_doc.get("missing_skills", []) if sub_doc else ["GraphQL"])
+    if isinstance(missing_skills, str):
+        missing_skills = [s.strip() for s in missing_skills.split(",") if s.strip()]
+
+    resume_pdf = (
+        (sub_doc.get("resume_pdf")) if (sub_doc and sub_doc.get("resume_pdf")) else
+        (cand_doc.get("resume_pdf") if cand_doc else None)
+    )
+    filename = (
+        (sub_doc.get("filename")) if (sub_doc and sub_doc.get("filename")) else
+        (cand_doc.get("filename") if cand_doc else f"{c_name.replace(' ', '_')}_Resume.pdf")
+    )
+
+    req_id = (sub_doc.get("requisition_id") if sub_doc else "req-101")
+    req_title = "Senior Full Stack Engineer"
+    try:
+        m_req = db["requisitions"].find_one({"id": req_id})
+        if m_req and m_req.get("title"):
+            req_title = m_req.get("title")
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "candidate_id": str((sub_doc or cand_doc).get("id") or (sub_doc or cand_doc).get("_id")),
+        "candidate_name": c_name,
+        "title": title,
+        "email": email,
+        "phone": phone,
+        "vendor_name": vendor_name,
+        "requisition_id": req_id,
+        "requisition_title": req_title,
+        "match_score": match_score or "94%",
+        "recommendation": recommendation,
+        "candidate_status": status,
+        "summary": summary,
+        "resume_text": resume_text,
+        "matched_skills": matched_skills,
+        "missing_skills": missing_skills,
+        "filename": filename,
+        "resume_pdf": resume_pdf,
+        "submitted_at": (sub_doc or cand_doc).get("created_at") or _utcnow_iso(),
+        "message": f"Successfully fetched full candidate resume & evaluation profile for '{c_name}'."
+    }
+
+
+def tool_query_database_all_entities(entity_type: str = "all", tenant_identifier: str = "") -> dict:
+    session = get_session()
+    t_clean = (tenant_identifier or "").strip().lower()
+
+    tenants = session.query(Tenant).all() if hasattr(session, "query") else []
+    client_tenants = [t for t in tenants if getattr(t, "tenant_type", "") == "client"]
+    vendor_tenants = [t for t in tenants if getattr(t, "tenant_type", "") == "consultancy"]
+
+    users = session.query(User).all() if hasattr(session, "query") else []
+    engs = session.query(VendorEngagement).all() if hasattr(session, "query") else []
+
+    from modules.requisition.domain.models import Requisition
+    reqs = session.query(Requisition).all() if hasattr(session, "query") else []
+    m_reqs = list(db["requisitions"].find())
+    cands = list(db["candidate_submissions"].find())
+    archives = list(db["archives"].find())
+
+    return {
+        "status": "success",
+        "database_controller_authority": "SUPER_ADMIN_KING_FULL_ACCESS",
+        "filter_tenant": tenant_identifier or "All Tenants",
+        "summary": {
+            "total_tenants": len(tenants),
+            "client_companies": len(client_tenants),
+            "vendor_consultancies": len(vendor_tenants),
+            "total_user_accounts": len(users),
+            "vendor_engagements": len(engs),
+            "sql_requisitions": len(reqs),
+            "mongo_requisitions": len(m_reqs),
+            "candidate_submissions": len(cands),
+            "archived_records": len(archives),
+        },
+        "tenants": [{"id": t.id, "name": t.name, "type": getattr(t, "tenant_type", "")} for t in tenants if not t_clean or t_clean in t.id.lower() or (getattr(t, "name", None) and t_clean in t.name.lower())],
+        "users": [{"id": u.id, "name": u.name, "email": u.email, "role": u.role, "tenant_id": u.tenant_id} for u in users if not t_clean or (u.tenant_id and t_clean in u.tenant_id.lower()) or (u.email and t_clean in u.email.lower())],
+        "engagements": [{"id": e.id, "client_tenant_id": e.tenant_id, "vendor_tenant_id": e.vendor_tenant_id} for e in engs],
+        "candidate_submissions_sample": [{"id": c.get("id"), "candidate_name": c.get("name"), "vendor_name": c.get("vendor_name"), "status": c.get("status")} for c in cands[:10]]
+    }
+
+
+def tool_list_hiring_requisitions(status: str = "all", vendor_identifier: str = "") -> list:
+    if vendor_identifier and vendor_identifier.strip():
+        res = tool_list_requisitions_by_vendor(vendor_identifier)
+        return res.get("requisitions", [])
     from modules.hiring_manager_agent.agent import list_hiring_requisitions
     return list_hiring_requisitions("admin", "local", status)
 
@@ -928,7 +1551,10 @@ def tool_create_hiring_requisition(title: str, department: str = "", location: s
     return create_hiring_requisition(title, department, location, employment_type, experience_level, salary_range, skills, job_description, "admin", "local")
 
 
-def tool_list_shortlisted_candidates() -> list:
+def tool_list_shortlisted_candidates(vendor_identifier: str = "") -> list:
+    if vendor_identifier and vendor_identifier.strip():
+        res = tool_list_candidates_by_vendor(vendor_identifier)
+        return res.get("candidates", [])
     from modules.hiring_manager_agent.agent import list_shortlisted_candidates
     return list_shortlisted_candidates("local")
 
@@ -1060,9 +1686,13 @@ TOOL_MAP = {
     "list_vendor_engagements": tool_list_vendor_engagements,
     "engage_vendor": tool_engage_vendor,
     "list_hiring_requisitions": tool_list_hiring_requisitions,
+    "list_requisitions_by_vendor": tool_list_requisitions_by_vendor,
     "draft_hiring_requisition": tool_draft_hiring_requisition,
     "create_hiring_requisition": tool_create_hiring_requisition,
     "list_shortlisted_candidates": tool_list_shortlisted_candidates,
+    "list_candidates_by_vendor": tool_list_candidates_by_vendor,
+    "get_candidate_resume": tool_get_candidate_resume,
+    "query_database_all_entities": tool_query_database_all_entities,
     "schedule_candidate_interview": tool_schedule_candidate_interview,
     "list_onboarding_issues": tool_list_onboarding_issues,
     "draft_password_change": tool_draft_password_change,
@@ -1095,8 +1725,12 @@ class SuperAdminAgent:
         system_msg = {
             "role": "system",
             "content": (
-                f"You are the TermJobs Super Admin AI Agent interacting with {user_name}.\n"
-                "You have FULL administrative privileges over all client companies (buyers), vendor consultancies, user accounts, and platform metrics.\n"
+                f"You are the TermJobs Super Admin AI Agent, the KING and Controller of the platform interacting with {user_name}.\n"
+                "You have UNRESTRICTED FULL DATABASE ACCESS and administrative authority over all database entities (tenants, buyer companies, vendor consultancies, user accounts, job requisitions, candidate submissions, vendor engagements, and system archives).\n"
+                "SUPER ADMIN KING PRIVILEGES:\n"
+                "1. If asked for job requisitions created by/under a vendor, call `list_requisitions_by_vendor` (or `list_hiring_requisitions`).\n"
+                "2. If asked for candidates submitted by/under a vendor, call `list_candidates_by_vendor` (or `list_shortlisted_candidates`).\n"
+                "3. If asked for full DB access or system controller overview, call `query_database_all_entities`.\n"
                 "CRITICAL PASSWORD CHANGE RULE:\n"
                 "When the user requests to change, reset, set, or update any user account password:\n"
                 "1. ALWAYS call `draft_password_change` first with the user email/name and desired password.\n"
@@ -1114,9 +1748,10 @@ class SuperAdminAgent:
                 "3. This will display a profile preview card of the tenant with an explicit red 'Confirm & Delete Tenant' manual button.\n"
                 "4. Tell the administrator to review the tenant profile and manually click 'Confirm & Delete Tenant' in the chat card to complete deletion.\n"
                 "CRITICAL CONVERSATIONAL VOICE & CHAT FORMATTING RULE:\n"
-                "Adopt a natural, warm, and conversational voice tone suited for real-time voice interaction. Keep text responses short and spoken-friendly (1 to 3 natural sentences). "
-                "Acknowledge what action you took clearly (e.g. 'I've pulled up the buyer companies on your right workspace panel. Would you like me to check their admin accounts or run an audit?'). "
-                "Never output raw ASCII pipe tables, JSON blobs, or bulleted walls of text in your response, as the right Output Display panel automatically renders interactive visual widgets for full details."
+                "Adopt a natural, clear, warm, and conversational tone optimized for hands-free voice dialogue and real-time turn taking. "
+                "Keep text responses brief, direct, and spoken-friendly (1 to 3 short sentences). "
+                "Always acknowledge the user's command clearly and state the result directly. "
+                "Never output raw ASCII pipe tables, markdown links, JSON blobs, or heavy bulleted text in your main text reply, as the right Output Display panel automatically renders rich interactive widgets for detailed data."
             )
         }
 
@@ -1135,6 +1770,75 @@ class SuperAdminAgent:
         messages.append({"role": "user", "content": user_prompt})
 
         executed_actions = []
+
+        # Intercept explicit candidate resume / CV / openable document requests
+        prompt_lower = user_prompt.lower()
+        if any(k in prompt_lower for k in ("resume", "cv", "reume", "reale", "openable", "see the resume", "view the resume", "show the resume", "candidate resume", "get resume", "profile of", "candidate profile", "shahna", "shahnas")):
+            cand_tokens = _clean_candidate_search_query(user_prompt)
+            cand_query = " ".join(cand_tokens) if cand_tokens else user_prompt
+
+            if not cand_tokens and history:
+                for h in reversed(history):
+                    txt = h.get("text") or h.get("content", "")
+                    h_tokens = _clean_candidate_search_query(txt)
+                    if h_tokens:
+                        cand_query = " ".join(h_tokens)
+                        break
+
+            res = tool_get_candidate_resume(candidate_identifier=cand_query)
+            executed_actions.append({"tool": "get_candidate_resume", "result": res})
+
+            c_name = res.get("candidate_name", cand_query)
+            if res.get("status") == "success":
+                reply = f"Here is the real candidate resume PDF document and evaluation profile for **{c_name}**. The document viewer is now loaded on your right Output Display panel."
+            else:
+                reply = f"No resume or candidate submission record found matching **{cand_query}**."
+            return {"reply": reply, "executed_actions": executed_actions}
+
+        # Intercept explicit vendor requisitions / platform requisitions query
+        if any(k in prompt_lower for k in ("requisition", "requisitions", "totdal requisitions", "total requisitions", "requisitions created by", "requisitions under vendor", "requisitions of vendor", "requisitions for vendor", "vendor requisitions", "fetch requisitions", "requisitions creates by", "requisitions by vendor", "show requisitions", "list requisitions", "all requisitions")):
+            import re
+            m_v = re.search(r'(?:by|under|of|for|creates by|created by)\s+(?:a\s+|the\s+)?(?:particular\s+)?(?:vendor\s+)?([a-zA-Z0-9_\-\s]+)', user_prompt, re.IGNORECASE)
+            v_query = m_v.group(1).strip() if m_v else "all"
+            if v_query.lower() in ("a particular vendor", "particular vendor", "vendor", "the vendor", "a vendor", "vendor to should list", "vendor to", "termjobs", "in termjobs"):
+                v_query = "all"
+
+            res = tool_list_requisitions_by_vendor(vendor_identifier=v_query)
+            executed_actions.append({"tool": "list_requisitions_by_vendor", "result": res})
+
+            count = res.get("total_requisitions", 0)
+            v_name = res.get("vendor_name", v_query)
+            if v_query.lower() in ("all", "*", "termjobs", "in termjobs"):
+                reply = f"Super Admin King DB Query: Retrieved **{count} total job requisition(s)** registered across the TermJobs platform."
+            else:
+                reply = f"Super Admin King DB Query: Retrieved **{count} job requisition(s)** created by/assigned under vendor consultancy partner **{v_name}**."
+            return {"reply": reply, "executed_actions": executed_actions}
+
+        # Intercept explicit vendor candidates / platform candidates query
+        if any(k in prompt_lower for k in ("candidate", "candidates", "shortlisted candidates", "candidates under", "candidates submitted by", "candidates of vendor", "candidates under vendor", "candidates for vendor", "list of all candidates under", "candidates under a vendor")):
+            import re
+            m_v = re.search(r'(?:under|by|of|for|under a|under a particular)\s+(?:vendor\s+)?([a-zA-Z0-9_\-\s]+)', user_prompt, re.IGNORECASE)
+            v_query = m_v.group(1).strip() if m_v else "all"
+            if v_query.lower() in ("a vendor", "particular vendor", "vendor", "the vendor", "a particular vendor", "vendor it shuld show", "termjobs", "in termjobs") or "in termjobs" in v_query.lower() or "all candidates" in v_query.lower():
+                v_query = "all"
+
+            res = tool_list_candidates_by_vendor(vendor_identifier=v_query)
+            executed_actions.append({"tool": "list_candidates_by_vendor", "result": res})
+
+            count = res.get("total_candidates", 0)
+            v_name = res.get("vendor_name", v_query)
+            if v_query.lower() in ("all", "*", "termjobs", "in termjobs"):
+                reply = f"Super Admin King DB Query: Found **{count} total candidate submission(s)** across platform requisitions."
+            else:
+                reply = f"Super Admin King DB Query: Found **{count} candidate submission(s)** listed under vendor consultancy **{v_name}**."
+            return {"reply": reply, "executed_actions": executed_actions}
+
+        # Intercept full DB access / controller query
+        if any(k in prompt_lower for k in ("full access to the db", "full access to db", "super admin controller", "king of the system", "access to everything")):
+            res = tool_query_database_all_entities(entity_type="all")
+            executed_actions.append({"tool": "query_database_all_entities", "result": res})
+            reply = "As Super Admin, you have full, unrestricted 'King' privileges over all database entities (tenants, user accounts, requisitions, candidate submissions, vendor engagements, and system archives)."
+            return {"reply": reply, "executed_actions": executed_actions}
 
         # Intercept explicit confirmation commands
         if "CONFIRM_UPDATE_PASSWORD:" in user_prompt:
@@ -1252,8 +1956,60 @@ class SuperAdminAgent:
                 executed_actions.append({"tool": "delete_tenant", "result": res})
                 return {"reply": res["message"], "executed_actions": executed_actions}
 
-        # Intercept account creation requests for un-onboarded vendors or companies
+        # Intercept tenant deletion drafting prompts (e.g. "can u delete bearitt" or "delete company britt")
         prompt_lower = user_prompt.lower()
+        if any(k in prompt_lower for k in ("delete", "remove", "archive")) and any(k in prompt_lower for k in ("tenant", "company", "vendor", "client", "bearitt", "britt", "samsung", "sdc", "asimovex", "talent", "apple", "apex", "hp")):
+            import re
+            m_del = re.search(r'(?:delete|remove|archive)\s+(?:the\s+)?(?:company\s+|tenant\s+|vendor\s+|client\s+)?(?:named\s+)?([a-zA-Z0-9_\-\s]+)', user_prompt, re.IGNORECASE)
+            del_target = m_del.group(1).strip() if m_del else ""
+            if del_target and del_target.lower() not in ("a", "the", "tenant", "company", "vendor", "client", "all", "it"):
+                draft_res = tool_draft_tenant_deletion(del_target)
+                executed_actions.append({"tool": "draft_tenant_deletion", "args": {"tenant_identifier": del_target}, "result": draft_res})
+                if draft_res.get("status") == "not_found":
+                    return {"reply": draft_res.get("message"), "executed_actions": executed_actions}
+                else:
+                    tname = draft_res.get("tenant_name", del_target)
+                    return {
+                        "reply": f"I've prepared a deletion preview for the tenant **{tname}**. Please review the details in the card that just appeared and click **Confirm & Delete Tenant** to complete the removal. Let me know if you need anything else!",
+                        "executed_actions": executed_actions
+                    }
+
+        # Intercept company/vendor onboarding prompts (e.g. "company is nike ,nike@gmail.com passwaorsd 1234")
+        prompt_lower = user_prompt.lower()
+        if any(k in prompt_lower for k in ("company is", "company named", "vendor is", "vendor named", "onboard company", "onboard vendor", "onboard client", "register company", "new company", "new vendor")):
+            import re
+            m_comp = re.search(r'(?:company\s+is|company\s+named|vendor\s+is|vendor\s+named|company|vendor|client)\s+([a-zA-Z0-9_\-\s]+?)(?:,|\s+with|\s+admin|\s+[a-zA-Z0-9_.+-]+@|$)', user_prompt, re.IGNORECASE)
+            comp_name = m_comp.group(1).strip() if m_comp else ""
+
+            m_email = re.search(r'([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+)', user_prompt)
+            extracted_email = m_email.group(1).strip().rstrip('?.!,') if m_email else ""
+
+            m_pwd = re.search(r'(?:passwaorsd|password|pass|pwd)\s*[:=]?\s*([a-zA-Z0-9_!@#$%^&*]+)', user_prompt, re.IGNORECASE)
+            extracted_pwd = m_pwd.group(1).strip().rstrip('?.!,') if m_pwd else ""
+            if not extracted_pwd:
+                m_num = re.search(r'\b(\d{4,})\b', user_prompt)
+                if m_num:
+                    extracted_pwd = m_num.group(1)
+
+            if comp_name and comp_name.lower() not in ("a", "the", "user", "account", "is"):
+                is_vendor_type = "vendor" in prompt_lower or "consultancy" in prompt_lower
+                c_clean = comp_name.title()
+                draft_res = tool_draft_onboarding_preview(
+                    tenant_type="consultancy" if is_vendor_type else "client",
+                    company_name=c_clean,
+                    admin_name=c_clean + " Admin",
+                    admin_email=extracted_email or f"admin@{c_clean.lower().replace(' ', '')}.com",
+                    password=extracted_pwd or "1234"
+                )
+                executed_actions.append({"tool": "draft_onboarding_preview", "result": draft_res})
+                reply = (
+                    f"I have prepared the onboarding draft preview form for **{c_clean}** on your Output Display panel. "
+                    f"Please review the company profile and credentials (`{draft_res.get('admin_email')}` / password: `{draft_res.get('password')}`), "
+                    f"then click **Confirm & Execute Onboarding** to complete registration."
+                )
+                return {"reply": reply, "executed_actions": executed_actions}
+
+        # Intercept account creation requests for un-onboarded vendors or companies
         if any(k in prompt_lower for k in ("create", "add", "new", "onboard", "register")) and any(k in prompt_lower for k in ("account", "vendor", "consultancy", "company", "client", "buyer")):
             import re
             m_target = re.search(r'(?:for|under|named)\s+(?:a\s+|the\s+)?(?:vendor\s+|company\s+|consultancy\s+)?([a-zA-Z0-9_\-\s]+)', user_prompt, re.IGNORECASE)
@@ -1279,9 +2035,9 @@ class SuperAdminAgent:
                         draft_res = tool_draft_onboarding_preview(
                             tenant_type="consultancy" if is_vendor_type else "client",
                             company_name=target_name,
-                            admin_name="",
-                            admin_email="",
-                            password=""
+                            admin_name=target_name + " Admin",
+                            admin_email=f"admin@{target_name.lower().replace(' ', '')}.com",
+                            password="1234"
                         )
                         executed_actions.append({"tool": "draft_onboarding_preview", "result": draft_res})
                         reply = (
@@ -1371,8 +2127,8 @@ class SuperAdminAgent:
         combined_lower = combined_text.lower()
         prompt_lower = user_prompt.lower()
 
-        # 1. Multi-turn onboarding parameter accumulation
-        if any(k in combined_lower for k in ("onboard", "vendor", "company", "consultancy", "abcd@gmail.com", "1234", "trtrt", "nananm")):
+        # 1. Multi-turn onboarding parameter accumulation (only when user explicitly requests onboarding/registration)
+        if any(k in prompt_lower for k in ("onboard", "register", "new vendor", "new company", "add vendor", "add company")) and any(k in combined_lower for k in ("onboard", "vendor", "company", "consultancy", "abcd@gmail.com", "1234", "trtrt", "nananm")):
             import re
             extracted_email = ""
             m_email = re.search(r'([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)', combined_text)

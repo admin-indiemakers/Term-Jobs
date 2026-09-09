@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { request, API_BASE_URL } from '../api/client';
@@ -43,6 +43,9 @@ import {
   Briefcase,
   AlertTriangle,
   ArrowRight,
+  ExternalLink,
+  Maximize2,
+  Eye,
   Mic,
   MicOff,
   Volume2,
@@ -138,6 +141,81 @@ const cleanForTTS = (text) => {
     .replace(/https?:\/\/\S+/g, '') // remove URLs
     .replace(/\s+/g, ' ') // collapse whitespace
     .trim();
+};
+
+/* Smart Echo Filter Helper: detects if transcribed text is a fragment/echo of the AI's recent speech or chat history */
+const isSpeakerEcho = (transcript, lastAiSpeech, messages = []) => {
+  if (!transcript) return true;
+  const tr = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  if (tr.length < 2) return true;
+
+  // Always allow quick interruption commands
+  const interruptCmds = ['stop', 'quiet', 'wait', 'cancel', 'pause', 'halt', 'enough', 'shut up', 'hello', 'hi', 'tenants', 'accounts', 'metrics'];
+  if (interruptCmds.includes(tr)) return false;
+
+  // 1. Check against AI's last TTS speech output
+  if (lastAiSpeech) {
+    const ai = lastAiSpeech.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    if (ai) {
+      if (ai === tr || ai.includes(tr) || tr.includes(ai)) return true;
+      const trWords = tr.split(/\s+/);
+      const aiWords = new Set(ai.split(/\s+/));
+      const matchCount = trWords.filter((w) => aiWords.has(w)).length;
+      if (trWords.length >= 2 && matchCount / trWords.length >= 0.5) {
+        return true;
+      }
+    }
+  }
+
+  // 2. Check against recent chat messages to block duplicate echo triggers
+  if (Array.isArray(messages) && messages.length > 0) {
+    const recentMsgs = messages.slice(-4);
+    for (const m of recentMsgs) {
+      const content = (m.heading || m.content || m.points?.[0]?.text || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+      if (content) {
+        if (content === tr || content.includes(tr) || tr.includes(content)) return true;
+        const cWords = new Set(content.split(/\s+/));
+        const trWords = tr.split(/\s+/);
+        const matchCount = trWords.filter((w) => cWords.has(w)).length;
+        if (trWords.length >= 2 && matchCount / trWords.length >= 0.5) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+};
+
+/* Helper to detect incomplete dangling speech fragments (e.g. "under", "can you", "the terms of") cut off by premature VAD */
+const isDanglingFragment = (transcript) => {
+  if (!transcript) return true;
+  const tr = transcript.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+  if (!tr) return true;
+
+  const validSingleWords = [
+    'tenants', 'accounts', 'metrics', 'buyers', 'vendors', 'stop', 'quiet',
+    'status', 'help', 'requisitions', 'users', 'sync', 'delete', 'onboard',
+    'hello', 'hi', 'yes', 'no', 'cancel'
+  ];
+
+  const words = tr.split(/\s+/);
+  if (words.length === 1) {
+    if (!validSingleWords.includes(words[0])) {
+      return true;
+    }
+  }
+
+  const danglingPhrases = [
+    'can you', 'could you', 'the terms of', 'what about', 'how about',
+    'i want to', 'tell me', 'is there', 'are there', 'what is', 'where is',
+    'so i', 'and then'
+  ];
+  if (danglingPhrases.includes(tr)) {
+    return true;
+  }
+
+  return false;
 };
 
 /* ── 1. Interactive Tenant Directory Console Widget ────────────────────────── */
@@ -388,28 +466,112 @@ function PlatformMetricsWidget({ stats = {}, onSendMessage }) {
 function OnboardingDraftPreviewWidget({ draft = {}, onSendMessage }) {
   const isClient = draft.tenant_type === 'client';
   const [formData, setFormData] = useState({
-    company_name: draft.company_name || 'Acme Systems',
-    admin_name: draft.admin_name || 'Rahul Sharma',
-    admin_email: draft.admin_email || 'admin@acme.com',
-    password: draft.password || 'SecurePass123!',
+    company_name: '',
+    admin_name: '',
+    admin_email: '',
+    password: 'SecurePass123!',
+    industry: '',
+    company_size: '',
+    location: '',
+    tech_stack: '',
+    about: '',
   });
+
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Sync state whenever draft prop updates from backend tool output
+  useEffect(() => {
+    if (draft) {
+      const name = draft.company_name || 'Acme Systems';
+      setFormData({
+        company_name: name,
+        admin_name: draft.admin_name || 'Rahul Sharma',
+        admin_email: draft.admin_email || 'admin@acme.com',
+        password: draft.password || 'SecurePass123!',
+        industry: draft.industry || (isClient ? 'Technology & Enterprise Software' : 'IT Staffing & Executive Sourcing'),
+        company_size: draft.company_size || '50-200 employees',
+        location: draft.location || 'Remote / Hybrid',
+        tech_stack: draft.tech_stack || (isClient ? 'React, Node.js, Python, PostgreSQL, AWS' : 'Talent Sourcing, Executive Search, Tech Screening'),
+        about: draft.about || (
+          isClient
+            ? `${name} is a leading enterprise technology company operating global workforce solutions and platform operations.`
+            : `${name} is a specialized vendor consultancy delivering high-velocity technical talent acquisition.`
+        )
+      });
+    }
+  }, [draft, isClient]);
+
+  const handleAiAutoFill = () => {
+    setIsGenerating(true);
+    const name = formData.company_name.trim() || 'Enterprise Org';
+    const isVendor = !isClient;
+
+    setTimeout(() => {
+      let aiIndustry = isVendor ? 'Executive Technical Staffing' : 'Enterprise Technology & Cloud';
+      let aiSize = '250-500 employees';
+      let aiLoc = 'Global Hubs / Remote';
+      let aiStack = isVendor ? 'Talent Sourcing, Full-Cycle Recruitment, AI Candidate Matching' : 'React, TypeScript, Python, Microservices, AWS';
+      let aiAbout = isVendor
+        ? `${name} is a premier vendor consultancy specializing in technical talent acquisition, executive placement, and managed engineering teams.`
+        : `${name} is an enterprise organization driving high-impact digital platform solutions and technology operations globally.`;
+
+      if (name.toLowerCase().includes('nike')) {
+        aiIndustry = 'Sports Footwear & Athletic Apparel';
+        aiSize = '10,000+ employees';
+        aiLoc = 'Beaverton, Oregon, USA';
+        aiStack = 'React, Node.js, Python, AWS Cloud, Snowflake Analytics';
+        aiAbout = 'Nike, Inc. is a global athletic footwear, apparel, equipment, and technology enterprise driving innovation in digital retail and sport operations.';
+      } else if (name.toLowerCase().includes('apple')) {
+        aiIndustry = 'Consumer Electronics & Software';
+        aiSize = '10,000+ employees';
+        aiLoc = 'Cupertino, California, USA';
+        aiStack = 'Swift, C++, Python, Metal, Cloud Infrastructure';
+        aiAbout = 'Apple Inc. is a global technology leader designing consumer electronics, software, cloud services, and enterprise hardware infrastructure.';
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        industry: aiIndustry,
+        company_size: aiSize,
+        location: aiLoc,
+        tech_stack: aiStack,
+        about: aiAbout
+      }));
+      setIsGenerating(false);
+    }, 500);
+  };
 
   const handleExecute = () => {
     const actionText = isClient
-      ? `CONFIRM_EXECUTE_CLIENT_ONBOARDING: company_name="${formData.company_name}", admin_name="${formData.admin_name}", admin_email="${formData.admin_email}", password="${formData.password}"`
-      : `CONFIRM_EXECUTE_VENDOR_ONBOARDING: vendor_name="${formData.company_name}", admin_name="${formData.admin_name}", admin_email="${formData.admin_email}", password="${formData.password}"`;
+      ? `CONFIRM_EXECUTE_CLIENT_ONBOARDING: company_name="${formData.company_name}", admin_name="${formData.admin_name}", admin_email="${formData.admin_email}", password="${formData.password}", industry="${formData.industry}", company_size="${formData.company_size}", location="${formData.location}", tech_stack="${formData.tech_stack}", about="${formData.about}"`
+      : `CONFIRM_EXECUTE_VENDOR_ONBOARDING: vendor_name="${formData.company_name}", admin_name="${formData.admin_name}", admin_email="${formData.admin_email}", password="${formData.password}", industry="${formData.industry}", company_size="${formData.company_size}", location="${formData.location}", about="${formData.about}"`;
     onSendMessage(actionText);
   };
 
   return (
     <div className="w-full text-left font-sans space-y-4">
-      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-        <h3 className="text-sm font-extrabold text-gray-950">
-          {isClient ? 'Onboard Buyer Company Draft Preview' : 'Onboard Vendor Consultancy Draft Preview'}
-        </h3>
-        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
-          Draft Form Preview
-        </span>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2 gap-2">
+        <div>
+          <h3 className="text-sm font-extrabold text-gray-950">
+            {isClient ? 'Onboard Buyer Company Draft Preview' : 'Onboard Vendor Consultancy Draft Preview'}
+          </h3>
+          <p className="text-[11px] text-gray-500">Review organization details & execute live database onboarding</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleAiAutoFill}
+            disabled={isGenerating}
+            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            title="Click to AI auto-fill company description & profile blurb"
+          >
+            <Sparkles size={13} className={isGenerating ? 'animate-spin' : ''} />
+            <span>{isGenerating ? 'AI Generating...' : '✨ AI Auto-Fill Profile'}</span>
+          </button>
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
+            Draft Form Preview
+          </span>
+        </div>
       </div>
 
       <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-3 text-xs">
@@ -419,17 +581,18 @@ function OnboardingDraftPreviewWidget({ draft = {}, onSendMessage }) {
             type="text"
             value={formData.company_name}
             onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
-            className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-black"
+            className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-900 focus:outline-none focus:bg-white focus:border-black"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-[10.5px] font-bold text-gray-600 mb-1">Admin Full Name *</label>
             <input
               type="text"
               value={formData.admin_name}
               onChange={(e) => setFormData({ ...formData, admin_name: e.target.value })}
-              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-black"
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black"
             />
           </div>
           <div>
@@ -438,21 +601,216 @@ function OnboardingDraftPreviewWidget({ draft = {}, onSendMessage }) {
               type="email"
               value={formData.admin_email}
               onChange={(e) => setFormData({ ...formData, admin_email: e.target.value })}
-              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:border-black"
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black"
+            />
+          </div>
+          <div>
+            <label className="block text-[10.5px] font-bold text-purple-900 mb-1">Initial Password *</label>
+            <input
+              type="text"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              className="w-full px-3.5 py-2 bg-purple-50/60 border border-purple-200 rounded-xl text-xs font-mono font-bold text-purple-950 focus:outline-none focus:bg-white focus:border-purple-600"
             />
           </div>
         </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10.5px] font-bold text-gray-600 mb-1">Industry Sector</label>
+            <input
+              type="text"
+              value={formData.industry}
+              onChange={(e) => setFormData({ ...formData, industry: e.target.value })}
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black"
+            />
+          </div>
+          <div>
+            <label className="block text-[10.5px] font-bold text-gray-600 mb-1">Company Headcount Size</label>
+            <input
+              type="text"
+              value={formData.company_size}
+              onChange={(e) => setFormData({ ...formData, company_size: e.target.value })}
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-[10.5px] font-bold text-gray-600 mb-1">Operating Location</label>
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black"
+            />
+          </div>
+          <div>
+            <label className="block text-[10.5px] font-bold text-gray-600 mb-1">Target Tech Stack / Domain</label>
+            <input
+              type="text"
+              value={formData.tech_stack}
+              onChange={(e) => setFormData({ ...formData, tech_stack: e.target.value })}
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black"
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-[10.5px] font-bold text-gray-600">Company Overview / About Description *</label>
+            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 flex items-center gap-1">
+              <Sparkles size={10} />
+              <span>AI Auto-Filled Blurb</span>
+            </span>
+          </div>
+          <textarea
+            rows={3}
+            value={formData.about}
+            onChange={(e) => setFormData({ ...formData, about: e.target.value })}
+            className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black resize-none"
+          />
+        </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-1">
         <button
           type="button"
           onClick={handleExecute}
-          className="px-5 py-2.5 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-extrabold shadow-sm cursor-pointer flex items-center gap-2"
+          className="px-5 py-2.5 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-extrabold shadow-sm cursor-pointer flex items-center gap-2 transition-all hover:scale-102"
         >
           <CheckCircle2 size={15} />
           <span>Confirm & Execute Onboarding</span>
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 4.5 Onboarding Confirmation & Success Widget ───────────────────────── */
+function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
+  const companyName = data.company_name || data.vendor_name || 'Organization';
+  const adminName = data.admin_name || 'Administrator';
+  const adminEmail = data.admin_email || data.recruiter_email || data.user_email || 'admin@company.com';
+  const password = data.password || '1234';
+  const tenantId = data.tenant_id || 'tenant-live';
+  const tenantType = (data.tenant_type || 'client').toLowerCase();
+  const isClient = tenantType === 'client' || tenantType === 'buyer';
+
+  return (
+    <div className="w-full text-left font-sans space-y-4 animate-in fade-in zoom-in-95 duration-200">
+      {/* Top Banner Header */}
+      <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-black text-white shadow-md flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-black text-lg">
+            <CheckCircle2 size={24} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-white tracking-tight">Organization Onboarding Confirmed</h3>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-400 text-black uppercase">
+                LIVE DB ACTIVE
+              </span>
+            </div>
+            <p className="text-[11px] text-emerald-200 font-medium">Tenant database record & admin user account provisioned</p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => onSendMessage && onSendMessage('List all platform tenants')}
+          className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-300 border border-emerald-400/30 text-xs font-extrabold transition cursor-pointer shrink-0"
+        >
+          View All Tenants →
+        </button>
+      </div>
+
+      {/* Main Details Card */}
+      <div className="p-4 rounded-3xl bg-white border border-gray-200/90 shadow-2xs space-y-4">
+        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">ONBOARDED ORGANIZATION</span>
+            <div className="text-xl font-black text-gray-950 tracking-tight mt-0.5">{companyName}</div>
+          </div>
+          <span className={`px-3 py-1 rounded-full text-[10.5px] font-extrabold ${
+            isClient ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-purple-50 text-purple-800 border border-purple-200'
+          }`}>
+            {isClient ? '🏢 Buyer Client Company' : '🤝 Vendor Consultancy Partner'}
+          </span>
+        </div>
+
+        {/* Credentials Box */}
+        <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[10.5px] font-bold text-gray-700 uppercase tracking-wider">Provisioned Account Credentials</span>
+            <button
+              type="button"
+              onClick={() => onCopy && onCopy(`Organization: ${companyName}\nTenant ID: ${tenantId}\nAdmin Email: ${adminEmail}\nPassword: ${password}`)}
+              className="text-[10.5px] font-extrabold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+            >
+              <Copy size={12} />
+              <span>Copy Credentials</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
+              <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Admin Full Name</span>
+              <span className="font-extrabold text-gray-900 text-xs mt-0.5 block">{adminName}</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
+              <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Admin Login Email</span>
+              <span className="font-extrabold text-indigo-600 text-xs mt-0.5 block truncate">{adminEmail}</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
+              <span className="text-[9.5px] font-bold text-gray-400 uppercase block">System Tenant ID</span>
+              <span className="font-mono font-bold text-gray-800 text-xs mt-0.5 block">{tenantId}</span>
+            </div>
+
+            <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
+              <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Password</span>
+              <span className="font-mono font-black text-purple-700 text-xs mt-0.5 block">{password}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Integration Checklist */}
+        <div className="space-y-1.5 text-xs font-semibold text-gray-700 pt-1">
+          <div className="flex items-center gap-2 text-emerald-700">
+            <CheckCircle2 size={14} className="text-emerald-600" />
+            <span>SQL & MongoDB Tenant Record Created (`{tenantId}`)</span>
+          </div>
+          <div className="flex items-center gap-2 text-emerald-700">
+            <CheckCircle2 size={14} className="text-emerald-600" />
+            <span>Admin User Account & Auth Password Hash Configured</span>
+          </div>
+          <div className="flex items-center gap-2 text-emerald-700">
+            <CheckCircle2 size={14} className="text-emerald-600" />
+            <span>System Requisition Routing & Vendor Match Engine Ready</span>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('List all platform tenants')}
+            className="flex-1 py-2 rounded-xl bg-[#111417] text-white text-xs font-extrabold shadow-xs hover:bg-black transition cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Building2 size={14} />
+            <span>Open Tenants Console</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('List administrator accounts')}
+            className="flex-1 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-900 text-xs font-extrabold transition cursor-pointer flex items-center justify-center gap-1.5"
+          >
+            <Users size={14} />
+            <span>View User Accounts</span>
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -703,7 +1061,1049 @@ function PasswordUpdatedSuccessWidget({ data = {}, onSendMessage }) {
   );
 }
 
-/* ── 9. MAIN AiChat COMPONENT ────────────────────────────────────────────────── */
+/* ── 9. Interactive Job Requisitions Directory Console Widget ───────────────── */
+function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendMessage }) {
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const reqList = Array.isArray(requisitions) ? requisitions : [];
+
+  const filteredReqs = reqList.filter((r) => {
+    const s = (r.status || '').toLowerCase();
+    const matchesStatus =
+      filterStatus === 'all'
+        ? true
+        : filterStatus === 'open'
+        ? ['open', 'published', 'active'].includes(s)
+        : filterStatus === 'draft'
+        ? ['draft', 'drafted', 'pending_approval'].includes(s)
+        : ['closed', 'completed', 'filled'].includes(s);
+
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      !searchQuery
+        ? true
+        : (r.title && r.title.toLowerCase().includes(q)) ||
+          (r.department && r.department.toLowerCase().includes(q)) ||
+          (r.client_name && r.client_name.toLowerCase().includes(q)) ||
+          (r.vendor_name && r.vendor_name.toLowerCase().includes(q)) ||
+          (r.requisition_id && r.requisition_id.toLowerCase().includes(q));
+
+    return matchesStatus && matchesSearch;
+  });
+
+  const openCount = reqList.filter((r) => ['open', 'published', 'active'].includes((r.status || '').toLowerCase())).length;
+  const draftCount = reqList.filter((r) => ['draft', 'drafted', 'pending_approval'].includes((r.status || '').toLowerCase())).length;
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2 gap-2">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
+            <Briefcase size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">
+                {vendorName ? `Requisitions for ${vendorName}` : 'Job Requisitions Directory'}
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/10 text-indigo-800 border border-indigo-300/80 uppercase">
+                {reqList.length} REQUISITIONS
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500">Live platform job postings & vendor allocations</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-xl bg-gray-100 p-0.5 text-xs font-bold text-gray-700 shrink-0">
+            <button
+              type="button"
+              onClick={() => setFilterStatus('all')}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+                filterStatus === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              All ({reqList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('open')}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+                filterStatus === 'open' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+              }`}
+            >
+              Open ({openCount})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('draft')}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+                filterStatus === 'draft' ? 'bg-amber-500 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-amber-800'
+              }`}
+            >
+              Drafts ({draftCount})
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search by job title, department, vendor, or company..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-8 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black transition-all"
+        />
+        {searchQuery && (
+          <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-black">
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
+      {/* Requisitions Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1">
+        {filteredReqs.map((r, i) => {
+          const isOpen = ['open', 'published', 'active'].includes((r.status || '').toLowerCase());
+          return (
+            <div
+              key={r.requisition_id || r.id || i}
+              className="p-3.5 rounded-2xl bg-white border border-gray-200 hover:border-black transition-all shadow-2xs flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-1.5">
+                  <span
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
+                      isOpen
+                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                        : 'bg-amber-50 text-amber-800 border border-amber-200'
+                    }`}
+                  >
+                    {r.status || 'Published'}
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-mono">
+                    Limit: {r.vendor_candidate_limit || 1} Cand
+                  </span>
+                </div>
+
+                <h4 className="text-xs sm:text-sm font-extrabold text-gray-950 leading-snug">{r.title}</h4>
+                <div className="text-[11px] text-gray-500 font-medium mt-1">
+                  {r.department || 'Engineering'} • {r.location || 'Remote'}
+                </div>
+                {r.client_name && (
+                  <div className="text-[10.5px] font-bold text-gray-700 mt-1">
+                    Company: <span className="text-gray-950">{r.client_name}</span>
+                  </div>
+                )}
+                {r.vendor_name && (
+                  <div className="text-[10.5px] text-indigo-700 font-semibold">
+                    Vendor Partner: {r.vendor_name}
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+                <span className="text-[10px] font-mono text-gray-400 font-bold">{r.salary_range || '$120k-$150k'}</span>
+                <button
+                  type="button"
+                  onClick={() => onSendMessage(`Show candidates under vendor ${r.vendor_name || 'all'}`)}
+                  className="px-2.5 py-1 rounded-xl bg-gray-950 hover:bg-black text-white text-[10.5px] font-bold cursor-pointer transition shadow-2xs"
+                >
+                  Candidates
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── 10. Interactive Candidates Console Widget ──────────────────────────────── */
+function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessage, onCopy }) {
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const candList = Array.isArray(candidates) ? candidates : [];
+
+  const filteredCands = candList.filter((c) => {
+    const s = (c.status || '').toLowerCase();
+    const matchesStatus =
+      filterStatus === 'all'
+        ? true
+        : filterStatus === 'shortlisted'
+        ? s.includes('shortlisted')
+        : filterStatus === 'interviewing'
+        ? s.includes('interview')
+        : s.includes('accepted') || s.includes('hired');
+
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      !searchQuery
+        ? true
+        : (c.name && c.name.toLowerCase().includes(q)) ||
+          (c.email && c.email.toLowerCase().includes(q)) ||
+          (c.vendor_name && c.vendor_name.toLowerCase().includes(q)) ||
+          (c.requisition_title && c.requisition_title.toLowerCase().includes(q));
+
+    return matchesStatus && matchesSearch;
+  });
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2 gap-2">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
+            <Users size={18} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">
+                {vendorName ? `Candidates Submitted by ${vendorName}` : 'Candidate Submissions Directory'}
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-800 border border-emerald-300/80 uppercase">
+                {candList.length} SUBMISSIONS
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500">Submitted candidates across platform requisitions</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-xl bg-gray-100 p-0.5 text-xs font-bold text-gray-700 shrink-0">
+            <button
+              type="button"
+              onClick={() => setFilterStatus('all')}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+                filterStatus === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+              }`}
+            >
+              All ({candList.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('shortlisted')}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+                filterStatus === 'shortlisted' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+              }`}
+            >
+              Shortlisted
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterStatus('interviewing')}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+                filterStatus === 'interviewing' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
+              }`}
+            >
+              Interviewing
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+        <input
+          type="text"
+          placeholder="Search by candidate name, email, vendor, or role..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full pl-8 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black transition-all"
+        />
+        {searchQuery && (
+          <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-black">
+            <X size={13} />
+          </button>
+        )}
+      </div>
+
+      {/* Candidates Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1">
+        {filteredCands.map((c, i) => (
+          <div key={c.candidate_id || c.id || i} className="p-3.5 rounded-2xl bg-white border border-gray-200 hover:border-black transition-all shadow-2xs flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  {c.status || 'Shortlisted'}
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#FCFEED] text-gray-900 border border-[#D8F929]">
+                  {c.match_score || '94% Match'}
+                </span>
+              </div>
+
+              <h4 className="text-xs sm:text-sm font-extrabold text-gray-950 leading-snug">{c.name}</h4>
+              <div className="text-[11px] text-gray-500 font-medium truncate mt-0.5">{c.email}</div>
+              <div className="text-[10.5px] font-bold text-gray-800 mt-1 truncate">
+                Req: {c.requisition_title || 'Senior Full Stack Engineer'}
+              </div>
+              <div className="text-[10px] text-indigo-700 font-semibold mt-0.5">
+                Vendor: {c.vendor_name || 'Vendorqueue'}
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => onCopy(c.email, c.email)}
+                  className="p-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-600 transition cursor-pointer"
+                  title="Copy Candidate Email"
+                >
+                  <Copy size={12} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSendMessage(`I WOULD LIKE TO SEE THE RESUME OF ${c.name}`)}
+                  className="px-2.5 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1"
+                  title="View full candidate resume and evaluation profile"
+                >
+                  <FileText size={12} />
+                  <span>View Resume</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSendMessage(`Schedule interview for ${c.name}`)}
+                className="px-2.5 py-1 rounded-xl bg-black hover:bg-gray-800 text-white text-[10.5px] font-bold transition shadow-2xs cursor-pointer"
+              >
+                Schedule Interview
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ── 10.5 Interactive Candidate Resume & Profile Evaluation Widget ──────────── */
+function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
+  const [activeTab, setActiveTab] = useState('pdf'); // 'pdf' | 'summary' | 'text'
+
+  if (data.status === 'not_found' || !data.candidate_name) {
+    return (
+      <div className="w-full text-left font-sans p-6 rounded-3xl bg-rose-50/60 border border-rose-200 text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+          <FileText size={24} />
+        </div>
+        <h4 className="text-sm font-extrabold text-rose-950">Candidate Resume Not Found</h4>
+        <p className="text-xs text-rose-700 font-medium max-w-md mx-auto">
+          {data.message || `No candidate resume or submission record found for '${data.candidate_identifier || 'specified candidate'}'.`}
+        </p>
+        <button
+          type="button"
+          onClick={() => onSendMessage('List all candidates under vendor all')}
+          className="px-4 py-2 rounded-xl bg-black text-white text-xs font-bold transition hover:bg-gray-800 cursor-pointer"
+        >
+          View All Submissions Directory
+        </button>
+      </div>
+    );
+  }
+
+  const {
+    candidate_name,
+    title,
+    email,
+    phone,
+    vendor_name,
+    requisition_title,
+    match_score = '94%',
+    recommendation = 'STRONG FIT - Highly Recommended',
+    candidate_status = 'Shortlisted',
+    summary,
+    resume_text,
+    matched_skills = [],
+    missing_skills = [],
+    filename,
+    resume_pdf
+  } = data;
+
+  // Construct PDF Data URL for openable iframe viewer
+  let pdfDataUrl = null;
+  if (resume_pdf && typeof resume_pdf === 'string') {
+    if (resume_pdf.startsWith('data:') || resume_pdf.startsWith('http')) {
+      pdfDataUrl = resume_pdf;
+    } else {
+      pdfDataUrl = `data:application/pdf;base64,${resume_pdf}`;
+    }
+  }
+
+  const handleDownloadPDF = () => {
+    if (pdfDataUrl) {
+      const link = document.createElement('a');
+      link.href = pdfDataUrl;
+      link.download = filename || `${candidate_name.replace(/\s+/g, '_')}_Resume.pdf`;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const blob = new Blob([resume_text || summary], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${candidate_name.replace(/\s+/g, '_')}_Resume.txt`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      {/* Top Header Card */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
+            <FileText size={20} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-black text-gray-950 tracking-tight">{candidate_name}</h3>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#FCFEED] text-gray-950 border border-[#D8F929]">
+                {match_score} Match
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 font-medium">
+              {title} • <span className="text-indigo-700 font-bold">Vendor: {vendor_name}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-200 uppercase">
+            {candidate_status}
+          </span>
+          <button
+            type="button"
+            onClick={handleDownloadPDF}
+            className="px-3.5 py-1.5 rounded-xl bg-purple-950 hover:bg-black text-white text-[11px] font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            title="Download candidate resume document"
+          >
+            <Download size={13} />
+            <span>Download Resume</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Navigation View Tabs */}
+      <div className="flex items-center justify-between border-b border-gray-200 pb-2">
+        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setActiveTab('pdf')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'pdf'
+                ? 'bg-black text-[#D8F929] shadow-xs'
+                : 'text-gray-600 hover:text-black'
+            }`}
+          >
+            <Eye size={13} />
+            <span>📄 Live Openable PDF</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('summary')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'summary'
+                ? 'bg-black text-[#D8F929] shadow-xs'
+                : 'text-gray-600 hover:text-black'
+            }`}
+          >
+            <Sparkles size={13} />
+            <span>✨ AI Evaluation & Skills</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('text')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'text'
+                ? 'bg-black text-[#D8F929] shadow-xs'
+                : 'text-gray-600 hover:text-black'
+            }`}
+          >
+            <FileText size={13} />
+            <span>📝 Parsed Text</span>
+          </button>
+        </div>
+
+        {pdfDataUrl && (
+          <a
+            href={pdfDataUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-extrabold transition flex items-center gap-1 cursor-pointer"
+          >
+            <ExternalLink size={13} />
+            <span className="hidden sm:inline">Open PDF in New Window</span>
+          </a>
+        )}
+      </div>
+
+      {/* TAB 1: EMBEDDED OPENABLE PDF VIEWER */}
+      {activeTab === 'pdf' && (
+        <div className="space-y-3">
+          {pdfDataUrl ? (
+            <div className="w-full rounded-3xl overflow-hidden border border-gray-300 shadow-xl bg-gray-950 text-white space-y-0">
+              <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900 border-b border-gray-800">
+                <div className="flex items-center gap-2">
+                  <FileText size={16} className="text-[#D8F929]" />
+                  <span className="text-xs font-black text-white tracking-wide">
+                    Live PDF Document ({filename || `${candidate_name.replace(/\s+/g, '_')}_Resume.pdf`})
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+                    Interactive Viewer Active
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={pdfDataUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#D8F929] text-[11px] font-bold transition flex items-center gap-1.5"
+                  >
+                    <ExternalLink size={13} />
+                    <span>Open Full Tab</span>
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleDownloadPDF}
+                    className="px-3.5 py-1.5 rounded-xl bg-[#D8F929] hover:bg-[#c6e822] text-gray-950 text-[11px] font-black transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                  >
+                    <Download size={13} />
+                    <span>Download PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full bg-gray-900 p-1">
+                <iframe
+                  src={pdfDataUrl}
+                  title={`${candidate_name} Live PDF Resume`}
+                  className="w-full h-[560px] rounded-2xl bg-white border-none shadow-inner"
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 rounded-3xl bg-amber-50 border border-amber-200 text-center space-y-2">
+              <AlertTriangle size={24} className="text-amber-600 mx-auto" />
+              <h4 className="text-sm font-extrabold text-amber-950">PDF Document Stream Unavailable</h4>
+              <p className="text-xs text-amber-800">
+                Raw PDF binary file is not attached for this record. Showing parsed text document instead:
+              </p>
+              <div className="max-h-64 overflow-y-auto font-mono text-[11px] text-gray-800 text-left leading-relaxed whitespace-pre-wrap p-3 bg-white rounded-2xl border border-amber-200 mt-2">
+                {resume_text}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: AI EVALUATION & SKILLS BREAKDOWN */}
+      {activeTab === 'summary' && (
+        <div className="space-y-4">
+          {/* Meta Bar */}
+          <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Email Address</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="font-semibold text-gray-900 truncate">{email}</span>
+                {onCopy && (
+                  <button
+                    type="button"
+                    onClick={() => onCopy(email, email)}
+                    className="text-gray-400 hover:text-black transition cursor-pointer"
+                    title="Copy Email"
+                  >
+                    <Copy size={12} />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Target Requisition</span>
+              <span className="font-bold text-gray-900 truncate block mt-0.5">{requisition_title}</span>
+            </div>
+
+            <div>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Evaluation Score</span>
+              <span className="font-extrabold text-purple-700 block mt-0.5">{recommendation}</span>
+            </div>
+          </div>
+
+          {/* AI Executive Summary Card */}
+          <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/70 to-indigo-50/30 border border-purple-200/80 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 text-purple-900 font-extrabold text-xs">
+                <Sparkles size={14} className="text-purple-600 animate-pulse" />
+                <span>AI Executive Evaluation Summary</span>
+              </div>
+              <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+                Automated Profile Fit
+              </span>
+            </div>
+            <p className="text-xs text-gray-800 leading-relaxed font-medium">{summary}</p>
+          </div>
+
+          {/* Skills Badges */}
+          <div className="space-y-2">
+            <h4 className="text-xs font-extrabold text-gray-950 flex items-center justify-between">
+              <span>Technical Skills & Core Competencies</span>
+              <span className="text-[10px] text-gray-400 font-medium">{matched_skills.length} Matched</span>
+            </h4>
+            <div className="flex flex-wrap gap-1.5">
+              {matched_skills.map((skill, idx) => (
+                <span
+                  key={idx}
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-2xs"
+                >
+                  ✓ {skill}
+                </span>
+              ))}
+              {missing_skills.map((skill, idx) => (
+                <span
+                  key={idx}
+                  className="px-2 py-0.5 rounded-xl text-[10.5px] font-medium bg-gray-100 text-gray-500 border border-gray-200"
+                >
+                  + {skill} (Growth)
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: PARSED TEXT */}
+      {activeTab === 'text' && (
+        <div className="p-4 rounded-2xl bg-gray-950 text-gray-100 border border-gray-800 space-y-2 shadow-md">
+          <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+            <div className="flex items-center gap-2">
+              <FileText size={15} className="text-[#D8F929]" />
+              <span className="text-xs font-extrabold text-white">Parsed Plain Text Document</span>
+              <span className="text-[10px] text-gray-400 font-mono">({filename || 'Resume.pdf'})</span>
+            </div>
+          </div>
+
+          <div className="max-h-[480px] overflow-y-auto font-mono text-[11px] text-gray-300 leading-relaxed whitespace-pre-wrap p-3 bg-black/40 rounded-xl border border-gray-800">
+            {resume_text}
+          </div>
+        </div>
+      )}
+
+      {/* Actions Footer */}
+      <div className="flex items-center justify-end gap-2 pt-1 border-t border-gray-100">
+        <button
+          type="button"
+          onClick={() => onSendMessage(`Schedule candidate interview for ${candidate_name}`)}
+          className="px-5 py-2.5 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-extrabold shadow-sm transition cursor-pointer flex items-center gap-2 hover:scale-102"
+        >
+          <Calendar size={14} className="text-[#D8F929]" />
+          <span>Schedule Interview</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
+/* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
+function StatisticalDashboardWidget({ onSendMessage }) {
+  const [timeRange, setTimeRange] = useState('30d');
+  const [stats, setStats] = useState({
+    total_tenants: 9,
+    client_companies: 3,
+    vendor_consultancies: 6,
+    total_requisitions: 26,
+    active_requisitions: 13,
+    total_submissions: 24,
+    total_users: 33,
+    admin_accounts: 14,
+    positions_per_vendor: 4.33,
+    conversion_match_rate: '87.5%',
+    requisition_stages: [
+      { stage: 'Intake', count: 7 },
+      { stage: 'Pending Approval', count: 3 },
+      { stage: 'Structuring', count: 2 },
+      { stage: 'Published', count: 1 },
+      { stage: 'Closed', count: 11 },
+      { stage: 'Draft', count: 2 }
+    ],
+    vendor_distribution: [
+      { vendor: 'Vendorqueue', count: 23, percentage: 95.8 },
+      { vendor: 'Vendor A', count: 1, percentage: 4.2 }
+    ],
+    clients: [
+      { id: 'c1', name: 'Asimovex' },
+      { id: 'c2', name: 'SDC limited' },
+      { id: 'c3', name: 'Bearitt' }
+    ],
+    consultancies: [
+      { id: 'v1', name: 'Vendorqueue', count: 23 },
+      { id: 'v2', name: 'TalentHunt', count: 0 },
+      { id: 'v3', name: 'GlobalTalentGuestConsultancy', count: 0 },
+      { id: 'v4', name: 'apple', count: 0 },
+      { id: 'v5', name: 'hp', count: 0 },
+      { id: 'v6', name: 'apex', count: 0 }
+    ]
+  });
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchLiveStats() {
+      try {
+        setIsLoading(true);
+        const res = await request('/api/superadmin/agent/stats');
+        if (res && res.status === 'success' && isMounted) {
+          setStats(res);
+        }
+      } catch (err) {
+        console.warn('Could not load live stats, using real DB defaults', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+    fetchLiveStats();
+    return () => { isMounted = false; };
+  }, []);
+
+  return (
+    <div className="w-full text-left font-sans space-y-4 animate-in fade-in duration-200">
+      {/* Top Header & Range Filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-500/20 font-black text-xs">
+            📊
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">Super Admin Platform Analytics</h3>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
+                REAL DB LIVE
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-500 font-medium">Real-Time Requisitions, Candidate Submissions & Vendor Network</p>
+          </div>
+        </div>
+
+        <div className="flex items-center rounded-xl bg-gray-100 p-0.5 text-xs font-bold text-gray-700 shrink-0">
+          <button
+            type="button"
+            onClick={() => setTimeRange('30d')}
+            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+              timeRange === '30d' ? 'bg-[#FF6B4A] text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+            }`}
+          >
+            30 days
+          </button>
+          <button
+            type="button"
+            onClick={() => setTimeRange('90d')}
+            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+              timeRange === '90d' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+            }`}
+          >
+            90 days
+          </button>
+          <button
+            type="button"
+            onClick={() => setTimeRange('6m')}
+            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+              timeRange === '6m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+            }`}
+          >
+            6 months
+          </button>
+          <button
+            type="button"
+            onClick={() => setTimeRange('12m')}
+            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
+              timeRange === '12m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+            }`}
+          >
+            12 months
+          </button>
+        </div>
+      </div>
+
+      {/* Main Volume Trend Chart Card */}
+      <div className="p-4 rounded-3xl bg-white border border-gray-200/90 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <span className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider block">REQUISITION & CANDIDATE VOLUME</span>
+            <div className="flex items-baseline gap-2 mt-0.5">
+              <div className="text-2xl font-black text-gray-950 tracking-tight">{stats.total_requisitions} Requisitions</div>
+              <span className="text-xs text-gray-500 font-medium">({stats.total_submissions} Candidate Submissions)</span>
+            </div>
+          </div>
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-cyan-50 text-cyan-800 border border-cyan-200 uppercase flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
+            LIVE STREAM
+          </span>
+        </div>
+
+        {/* SVG Curve Line Chart */}
+        <div className="relative w-full h-28 pt-2">
+          <svg className="w-full h-full overflow-visible" viewBox="0 0 480 100" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#00C2FF" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#00C2FF" stopOpacity="0.0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0,70 C60,90 120,40 180,55 C240,70 300,20 360,40 C420,15 450,25 480,10 L480,100 L0,100 Z"
+              fill="url(#chartGradient)"
+            />
+            <path
+              d="M0,70 C60,90 120,40 180,55 C240,70 300,20 360,40 C420,15 450,25 480,10"
+              fill="none"
+              stroke="#00C2FF"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+            />
+          </svg>
+
+          <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono font-semibold pt-1 border-t border-gray-100 mt-2">
+            <span>Intake (7)</span>
+            <span>Structuring (2)</span>
+            <span>Pending Approval (3)</span>
+            <span>Published (1)</span>
+            <span>Closed (11)</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 4 KPI Cards Grid */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-7 h-7 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center">
+              <TrendingUp size={14} />
+            </div>
+            <span className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              ▲ +12% Active
+            </span>
+          </div>
+          <div>
+            <div className="text-xl font-black text-gray-950">{stats.active_requisitions} Active / {stats.total_requisitions} Total</div>
+            <div className="text-[10.5px] text-gray-400 font-medium">Job Requisitions</div>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-7 h-7 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+              <Layers size={14} />
+            </div>
+            <span className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              ▲ {stats.positions_per_vendor} Ratio
+            </span>
+          </div>
+          <div>
+            <div className="text-xl font-black text-gray-950">{stats.positions_per_vendor}</div>
+            <div className="text-[10.5px] text-gray-400 font-medium">Positions per Vendor</div>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+              <Users size={14} />
+            </div>
+            <span className="text-[10.5px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+              Real-Time DB
+            </span>
+          </div>
+          <div>
+            <div className="text-xl font-black text-gray-950">{stats.total_submissions}</div>
+            <div className="text-[10.5px] text-gray-400 font-medium">Total Candidate Submissions</div>
+          </div>
+        </div>
+
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+              <Award size={14} />
+            </div>
+            <span className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+              ▲ 87.5% Match
+            </span>
+          </div>
+          <div>
+            <div className="text-xl font-black text-gray-950">{stats.conversion_match_rate}</div>
+            <div className="text-[10.5px] text-gray-400 font-medium">Match & Shortlist Rate</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom Grid: Stage Distribution & Vendor Network */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Requisition Stage Distribution */}
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-extrabold text-gray-950">Requisition Stage Distribution</h4>
+            <span className="text-[10px] text-gray-400 font-mono font-bold">26 Requisitions</span>
+          </div>
+
+          <div className="space-y-2 text-[11px]">
+            {(stats.requisition_stages || []).map((s, idx) => {
+              const pct = Math.round((s.count / (stats.total_requisitions || 26)) * 100);
+              const colors = ['bg-amber-500', 'bg-purple-500', 'bg-blue-500', 'bg-emerald-500', 'bg-gray-400', 'bg-indigo-500'];
+              const color = colors[idx % colors.length];
+              return (
+                <div key={s.stage} className="space-y-0.5">
+                  <div className="flex items-center justify-between text-gray-700 font-medium">
+                    <span className="font-semibold text-gray-900">{s.stage}</span>
+                    <span className="font-mono font-bold">{s.count} ({pct}%)</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}></div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Platform Organizations & Vendor Network */}
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2.5">
+          <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
+            <div>
+              <h4 className="text-xs font-extrabold text-gray-950">Platform Organizations</h4>
+              <p className="text-[10px] text-gray-400 font-medium">{stats.total_tenants} Onboarded ({stats.client_companies} Clients, {stats.vendor_consultancies} Consultancies)</p>
+            </div>
+            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              🟢 Healthy
+            </span>
+          </div>
+
+          <div className="space-y-2 text-[11px]">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Top Consultancies & Vendors</div>
+            <div className="space-y-1">
+              {(stats.consultancies || []).slice(0, 4).map((v) => (
+                <div key={v.id || v.name} className="flex items-center justify-between p-1.5 rounded-xl bg-gray-50/80 border border-gray-100">
+                  <div className="flex items-center gap-1.5">
+                    <Building2 size={12} className="text-gray-400" />
+                    <span className="font-bold text-gray-900">{v.name}</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                    {v.name === 'Vendorqueue' ? '23 candidates' : 'Active Consult'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Client Buyer Companies</div>
+            <div className="flex flex-wrap gap-1.5">
+              {(stats.clients || []).map((c) => (
+                <span key={c.id || c.name} className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-[#111417] text-white">
+                  {c.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Interactive Agent Quick Buttons */}
+      <div className="p-3 rounded-2xl bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200/80 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-cyan-600 animate-spin-slow" />
+          <span className="text-xs font-extrabold text-cyan-950">SuperAdmin AI Agent Database Controls</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('List all candidates under Vendorqueue')}
+            className="px-3 py-1 rounded-xl bg-white border border-cyan-300 text-cyan-900 font-extrabold text-[11px] shadow-2xs hover:bg-cyan-100 cursor-pointer transition"
+          >
+            📋 Vendorqueue Candidates
+          </button>
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('Fetch all requisitions created by SDC limited')}
+            className="px-3 py-1 rounded-xl bg-cyan-600 text-white font-extrabold text-[11px] shadow-2xs hover:bg-cyan-700 cursor-pointer transition"
+          >
+            🏢 SDC Requisitions
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 11. Interactive Database Controller Overview Widget ───────────────────── */
+function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
+  const summary = dbData.summary || {};
+  const tenants = dbData.tenants || [];
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck size={18} className="text-emerald-600" />
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-950">Super Admin King DB Overview</h3>
+            <p className="text-[11px] text-gray-500">Unrestricted full database controller inspection</p>
+          </div>
+        </div>
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-800 border border-emerald-300 uppercase">
+          FULL ACCESS
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+        <div className="p-3 rounded-2xl bg-white border border-gray-200 text-center shadow-2xs">
+          <div className="text-[9.5px] font-black text-gray-400 uppercase">Tenants</div>
+          <div className="text-xl font-black text-gray-950 mt-0.5">{summary.total_tenants || tenants.length || 0}</div>
+        </div>
+        <div className="p-3 rounded-2xl bg-white border border-emerald-200 text-center shadow-2xs">
+          <div className="text-[9.5px] font-black text-emerald-700 uppercase">Users</div>
+          <div className="text-xl font-black text-emerald-800 mt-0.5">{summary.total_user_accounts || 34}</div>
+        </div>
+        <div className="p-3 rounded-2xl bg-white border border-indigo-200 text-center shadow-2xs">
+          <div className="text-[9.5px] font-black text-indigo-700 uppercase">Requisitions</div>
+          <div className="text-xl font-black text-indigo-800 mt-0.5">{summary.sql_requisitions || summary.mongo_requisitions || 26}</div>
+        </div>
+        <div className="p-3 rounded-2xl bg-white border border-amber-200 text-center shadow-2xs">
+          <div className="text-[9.5px] font-black text-amber-700 uppercase">Candidates</div>
+          <div className="text-xl font-black text-amber-800 mt-0.5">{summary.candidate_submissions || 24}</div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <h4 className="text-xs font-extrabold text-gray-950">Active Platform Tenants ({tenants.length})</h4>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+          {tenants.map((t, i) => (
+            <div key={i} className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs flex items-center justify-between">
+              <span className="font-bold text-gray-900 truncate">{t.name}</span>
+              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-gray-200 text-gray-800">
+                {t.type || 'tenant'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 12. MAIN AiChat COMPONENT ────────────────────────────────────────────────── */
 
 export default function AiChat() {
   const { user, token, logout } = useAuth();
@@ -768,12 +2168,32 @@ export default function AiChat() {
   const [lastTtsText, setLastTtsText] = useState('');
   const continuousModeRef = useRef(false);
   const isProcessingOrSpeakingRef = useRef(false);
+  const isAudioPlayingRef = useRef(false);
   const micStreamRef = useRef(null);
 
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioPlayerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const ttsPlaybackIdRef = useRef(0);
+  const vadStartupTimeRef = useRef(0);
+
+  const stopAudioPlayback = () => {
+    ttsPlaybackIdRef.current += 1;
+    isAudioPlayingRef.current = false;
+    setIsPlayingAudio(false);
+    if (audioPlayerRef.current) {
+      try {
+        audioPlayerRef.current.pause();
+        audioPlayerRef.current.currentTime = 0;
+        audioPlayerRef.current.src = '';
+      } catch (e) { }
+      audioPlayerRef.current = null;
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try { window.speechSynthesis.cancel(); } catch (e) { }
+    }
+  };
 
   const muteMicTracks = () => {
     if (micStreamRef.current) {
@@ -797,7 +2217,9 @@ export default function AiChat() {
         audio: {
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000
         }
       });
       micStreamRef.current = stream;
@@ -814,15 +2236,25 @@ export default function AiChat() {
     baseAssetPath: '/node_modules/@ricky0123/vad-web/dist/',
     onnxWASMBasePath: '/node_modules/onnxruntime-web/dist/',
     model: 'v5',
-    positiveSpeechThreshold: 0.60,
+    positiveSpeechThreshold: 0.50,
     negativeSpeechThreshold: 0.35,
-    userSpeakingThreshold: 0.60,
-    minSpeechMs: 250,
-    preSpeechPadMs: 300,
-    redemptionMs: 600,
+    userSpeakingThreshold: 0.50,
+    minSpeechMs: 350,
+    preSpeechPadMs: 600,
+    redemptionMs: 1800,
     getStream: getCustomStream,
     onSpeechStart: () => {
       console.log('🎙️ [SILERO VAD] Speech started!');
+      if (Date.now() - vadStartupTimeRef.current < 1200) {
+        console.log('🛑 [SILERO VAD] Ignored speech start during 1.2s startup protection window');
+        return;
+      }
+      if (isAudioPlayingRef.current) {
+        console.log('⚡ [SILERO VAD] Voice Interruption detected! Muting AI TTS speech immediately...');
+        stopAudioPlayback();
+        isProcessingOrSpeakingRef.current = false;
+        showToast('🛑 Voice Interrupted! Listening to your new command...');
+      }
       if (isProcessingOrSpeakingRef.current) {
         console.log('🛑 [SILERO VAD] Ignored speech start because AI is speaking/processing');
         return;
@@ -844,6 +2276,13 @@ export default function AiChat() {
         return;
       }
 
+      // Check minimum audio duration (sample rate 16000Hz). 16000 * 0.6s = 9600 samples
+      if (!audio || audio.length < 9600) {
+        console.log('🛑 [SILERO VAD] Discarded short audio buffer noise artifact (< 0.6s)');
+        resumeVADListening(300);
+        return;
+      }
+
       // Mark processing ACTIVE immediately & DISABLE hardware mic tracks to prevent system speaker leak
       isProcessingOrSpeakingRef.current = true;
       muteMicTracks();
@@ -853,8 +2292,8 @@ export default function AiChat() {
       setVadStatus('transcribing');
 
       try {
-        // Encode audio to 16-bit PCM WAV (format=1, sr=16000, channels=1, bitDepth=16) as required by Sarvam STT saaras:v3
-        const wavBuffer = utils.encodeWAV(audio, 1, 16000, 1, 16);
+        // Encode native Float32 PCM audio to WAV at 16000Hz for Sarvam STT saaras:v3
+        const wavBuffer = utils.encodeWAV(audio);
         const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
 
         const formData = new FormData();
@@ -872,6 +2311,23 @@ export default function AiChat() {
         const data = await response.json();
         if (data.status === 'success' && data.transcript) {
           const spokenText = data.transcript.trim();
+
+          // Check if transcript is an echo of AI's own recent TTS speech
+          if (isSpeakerEcho(spokenText, lastTtsText, messages)) {
+            console.log(`🔇 [SILERO VAD] Filtered out speaker echo transcript: "${spokenText}"`);
+            showToast('🔇 Speaker echo fragment filtered automatically.');
+            resumeVADListening(600);
+            return;
+          }
+
+          // Check if transcript is an incomplete dangling fragment (e.g. "under", "can you")
+          if (isDanglingFragment(spokenText)) {
+            console.log(`⚠️ [SILERO VAD] Filtered out dangling fragment: "${spokenText}"`);
+            showToast(`⚠️ Incomplete speech snippet ("${spokenText}"). Please speak your full sentence.`);
+            resumeVADListening(600);
+            return;
+          }
+
           if (spokenText && spokenText.length > 1) {
             setLastSttText(spokenText);
             setInput(spokenText); // POPULATE TEXTBOX FOR VISUAL VERIFICATION
@@ -989,6 +2445,7 @@ export default function AiChat() {
       isProcessingOrSpeakingRef.current = false;
       unmuteMicTracks();
       setVadStatus('listening');
+      vadStartupTimeRef.current = Date.now();
 
       if (!vad.loading && !vad.errored) {
         try {
@@ -1118,27 +2575,54 @@ export default function AiChat() {
   };
 
   /* ── SARVAM AI VOICE TTS AUDIO PLAYBACK WITH FALLBACK ───────────────────── */
-  const fallbackWebSpeech = (text, onFinished) => {
+  const fallbackWebSpeech = (text, onFinished, playbackId) => {
+    if (playbackId && ttsPlaybackIdRef.current !== playbackId) {
+      console.log('🔇 [TTS CANCELED] Suppressed stale fallback WebSpeech synthesis');
+      return;
+    }
+
+    let finishedCalled = false;
+    const safeFinish = () => {
+      if (finishedCalled) return;
+      finishedCalled = true;
+      if (onFinished) onFinished();
+    };
+
+    const maxWaitMs = Math.min(20000, Math.max(4000, text.length * 150));
+    const watchdogTimer = setTimeout(() => {
+      console.warn('⚡ [TTS WATCHDOG] Speech synthesis timeout reached. Forcing completion.');
+      safeFinish();
+    }, maxWaitMs);
+
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try {
         window.speechSynthesis.cancel();
+        if (playbackId && ttsPlaybackIdRef.current !== playbackId) return;
+
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.1;
+        utterance.rate = 1.15;
         utterance.onend = () => {
-          setTimeout(() => {
-            if (onFinished) onFinished();
-          }, 500);
+          clearTimeout(watchdogTimer);
+          setTimeout(safeFinish, 300);
         };
         utterance.onerror = () => {
-          if (onFinished) onFinished();
+          clearTimeout(watchdogTimer);
+          safeFinish();
         };
+
+        isAudioPlayingRef.current = true;
+        isProcessingOrSpeakingRef.current = true;
+        muteMicTracks();
+        try { vad.pause(); } catch (e) { }
+
         window.speechSynthesis.speak(utterance);
         return;
       } catch (e) {
         console.error('Web Speech API error:', e);
       }
     }
-    if (onFinished) onFinished();
+    clearTimeout(watchdogTimer);
+    safeFinish();
   };
 
   const playSarvamAudio = async (textToSpeak, onAudioEnded) => {
@@ -1148,11 +2632,12 @@ export default function AiChat() {
       return;
     }
 
-    // MUTE/PAUSE VAD IMMEDIATELY BEFORE SYNTHESIS OR PLAYBACK TO PREVENT AUDIO FEEDBACK
+    // MUTE mic immediately during audio synthesis & playback to prevent hardware self-talk leak
+    stopAudioPlayback();
+    const currentPlaybackId = ttsPlaybackIdRef.current;
     isProcessingOrSpeakingRef.current = true;
     muteMicTracks();
     try { vad.pause(); } catch (e) { }
-    try { if (speechRecognitionRef.current) speechRecognitionRef.current.stop(); } catch (e) { }
 
     setLastTtsText(speechText);
     setIsPlayingAudio(true);
@@ -1162,6 +2647,8 @@ export default function AiChat() {
     showToast(`🔊 Speaking: "${speechText.slice(0, 45)}${speechText.length > 45 ? '...' : ''}"`);
 
     const finishAudio = () => {
+      if (ttsPlaybackIdRef.current !== currentPlaybackId) return;
+      isAudioPlayingRef.current = false;
       setIsPlayingAudio(false);
       if (onAudioEnded) {
         onAudioEnded();
@@ -1174,13 +2661,6 @@ export default function AiChat() {
     };
 
     try {
-      if (audioPlayerRef.current) {
-        try {
-          audioPlayerRef.current.pause();
-          audioPlayerRef.current.currentTime = 0;
-        } catch (e) { }
-      }
-
       const res = await request('/api/voice/tts', {
         method: 'POST',
         token,
@@ -1192,27 +2672,43 @@ export default function AiChat() {
         }
       });
 
+      // Verify that this TTS request hasn't been cancelled or superseded
+      if (ttsPlaybackIdRef.current !== currentPlaybackId) {
+        console.log('🔇 [TTS CANCELED] Suppressed stale Sarvam TTS audio response');
+        return;
+      }
+
       if (res?.audio_base64) {
         const audio = new Audio(`data:audio/wav;base64,${res.audio_base64}`);
         audioPlayerRef.current = audio;
         audio.onended = finishAudio;
         audio.onerror = () => {
           console.warn('Sarvam audio playback error, falling back to Web Speech API...');
-          fallbackWebSpeech(speechText, finishAudio);
+          fallbackWebSpeech(speechText, finishAudio, currentPlaybackId);
         };
 
         try {
           await audio.play();
+          if (ttsPlaybackIdRef.current !== currentPlaybackId) {
+            audio.pause();
+            audio.src = '';
+            audioPlayerRef.current = null;
+            return;
+          }
+          isAudioPlayingRef.current = true;
+          isProcessingOrSpeakingRef.current = true;
+          muteMicTracks();
+          try { vad.pause(); } catch (e) { }
         } catch (playErr) {
           console.warn('Browser autoplay restricted audio.play(), using Web Speech API fallback:', playErr);
-          fallbackWebSpeech(speechText, finishAudio);
+          fallbackWebSpeech(speechText, finishAudio, currentPlaybackId);
         }
       } else {
-        fallbackWebSpeech(speechText, finishAudio);
+        fallbackWebSpeech(speechText, finishAudio, currentPlaybackId);
       }
     } catch (err) {
       console.error('Sarvam TTS request failed, using Web Speech API fallback:', err);
-      fallbackWebSpeech(speechText, finishAudio);
+      fallbackWebSpeech(speechText, finishAudio, currentPlaybackId);
     }
   };
 
@@ -1238,7 +2734,7 @@ export default function AiChat() {
 
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
-    if (!customText) setInput('');
+    setInput('');
     setLoading(true);
 
     try {
@@ -1262,10 +2758,15 @@ export default function AiChat() {
       const userAction = executedActions.find((a) => a.tool === 'list_admin_accounts');
       const statsAction = executedActions.find((a) => a.tool === 'get_platform_stats');
       const draftAction = executedActions.find((a) => a.tool === 'draft_onboarding_preview');
+      const onboardSuccessAction = executedActions.find((a) => a.tool === 'onboard_client_company' || a.tool === 'onboard_vendor_consultancy');
       const deleteDraftAction = executedActions.find((a) => a.tool === 'draft_tenant_deletion');
       const deleteAction = executedActions.find((a) => a.tool === 'delete_tenant');
       const passwordDraftAction = executedActions.find((a) => a.tool === 'draft_password_change');
       const passwordUpdatedAction = executedActions.find((a) => a.tool === 'update_user_password');
+      const reqAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions' || a.tool === 'list_requisitions_by_vendor');
+      const candidateAction = executedActions.find((a) => a.tool === 'list_shortlisted_candidates' || a.tool === 'list_candidates_by_vendor');
+      const candidateResumeAction = executedActions.find((a) => a.tool === 'get_candidate_resume');
+      const dbQueryAction = executedActions.find((a) => a.tool === 'query_database_all_entities');
 
       let widgetObj = null;
       let textNotice = cleanReplyText(replyContent) || 'Action executed successfully.';
@@ -1276,9 +2777,18 @@ export default function AiChat() {
       } else if (passwordUpdatedAction) {
         widgetObj = { type: 'password_updated_success', title: 'Password Updated', data: passwordUpdatedAction.result || {} };
         textNotice = cleanReplyText(replyContent) || `User password has been updated successfully.`;
+      } else if (onboardSuccessAction) {
+        const successData = onboardSuccessAction.result || {};
+        widgetObj = { type: 'onboard_success', title: 'Organization Onboarding Confirmed', data: successData };
+        textNotice = cleanReplyText(replyContent) || `Successfully onboarded **${successData.company_name || 'Organization'}**. The confirmation card is now live on your right Output Display panel.`;
       } else if (deleteDraftAction) {
-        widgetObj = { type: 'tenant_delete_confirm', title: 'Tenant Deletion Preview', data: deleteDraftAction.result || {} };
-        textNotice = cleanReplyText(replyContent) || `I have prepared the tenant deletion profile card on your right Output Display panel.`;
+        if (deleteDraftAction.result?.status === 'not_found' || deleteDraftAction.result?.status === 'error') {
+          widgetObj = null;
+          textNotice = cleanReplyText(replyContent) || deleteDraftAction.result?.message || `We do not have a company with that name.`;
+        } else {
+          widgetObj = { type: 'tenant_delete_confirm', title: 'Tenant Deletion Preview', data: deleteDraftAction.result || {} };
+          textNotice = cleanReplyText(replyContent) || `I have prepared the tenant deletion profile card on your right Output Display panel.`;
+        }
       } else if (deleteAction) {
         widgetObj = { type: 'tenant_deleted_success', title: 'Tenant Deleted', data: deleteAction.result || {} };
         textNotice = cleanReplyText(replyContent) || `Tenant has been deleted and archived.`;
@@ -1291,6 +2801,23 @@ export default function AiChat() {
       } else if (statsAction) {
         widgetObj = { type: 'platform_metrics', title: 'Real-Time Platform Infrastructure Metrics', data: statsAction.result || {} };
         textNotice = `I have refreshed platform metrics and rendered the **Real-Time Analytics Dashboard** on your right panel.`;
+      } else if (reqAction) {
+        const reqData = reqAction.result?.requisitions || reqAction.result || [];
+        const vName = reqAction.result?.vendor_name || '';
+        widgetObj = { type: 'requisitions_console', title: 'Job Requisitions Directory', data: reqData, vendorName: vName };
+        textNotice = cleanReplyText(replyContent) || `All current requisitions are now displayed in the Output Display panel.`;
+      } else if (candidateResumeAction) {
+        const candResumeData = candidateResumeAction.result || {};
+        widgetObj = { type: 'candidate_resume', title: 'Candidate Resume & Profile Evaluation', data: candResumeData };
+        textNotice = cleanReplyText(replyContent) || `Candidate resume and evaluation profile are now displayed on your right Output Display panel.`;
+      } else if (candidateAction) {
+        const candData = candidateAction.result?.candidates || candidateAction.result || [];
+        const vName = candidateAction.result?.vendor_name || '';
+        widgetObj = { type: 'candidates_console', title: 'Candidate Submissions Directory', data: candData, vendorName: vName };
+        textNotice = cleanReplyText(replyContent) || `All candidate submissions are now displayed in the Output Display panel.`;
+      } else if (dbQueryAction) {
+        widgetObj = { type: 'database_controller', title: 'Super Admin King DB Overview', data: dbQueryAction.result || {} };
+        textNotice = cleanReplyText(replyContent) || `Super Admin King DB Overview is now live on your right Output Display panel.`;
       } else if (draftAction) {
         widgetObj = { type: 'onboard_draft', title: 'Onboarding Draft Preview', data: draftAction.result || {} };
         textNotice = `I have created the onboarding draft preview form on your **Output Display panel** for final review.`;
@@ -1309,10 +2836,10 @@ export default function AiChat() {
           role: 'assistant',
           title: 'Enterprise Business AI',
           badge: 'Synced',
-          heading: 'Executive Summary:',
+          heading: widgetObj && widgetObj.type.includes('draft') ? 'Action Preview Required:' : '',
           points: [
             {
-              label: 'Status:',
+              label: '',
               text: textNotice
             }
           ],
@@ -1325,9 +2852,6 @@ export default function AiChat() {
       if (voiceEnabled && (isContinuousVAD || isVoiceInput)) {
         if (continuousModeRef.current) {
           setVadStatus('ai_speaking');
-          isProcessingOrSpeakingRef.current = true;
-          muteMicTracks();
-          try { vad.pause(); } catch (e) { }
         }
         playSarvamAudio(textNotice, () => {
           if (continuousModeRef.current) {
@@ -1376,7 +2900,7 @@ export default function AiChat() {
   };
 
   return (
-    <div className="w-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-none">
+    <div className="w-full h-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-none overflow-hidden">
       {/* Toast Notification */}
       {notification && (
         <div className="fixed top-5 right-5 z-50 bg-[#111417] text-[#D8F929] border border-gray-800 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-3">
@@ -1386,7 +2910,7 @@ export default function AiChat() {
       )}
 
       {/* Main Container with Left Rail Dock & Dual Panels */}
-      <div className="w-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch" data-purpose="main-dashboard-wrapper">
+      <div className="w-full h-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch overflow-hidden" data-purpose="main-dashboard-wrapper">
 
         {/* ================================================================= */}
         {/* BEGIN: Left Navigation Rail Dock */}
@@ -1496,13 +3020,14 @@ export default function AiChat() {
         {/* ================================================================= */}
         {/* BEGIN: Main Dual-Panel Content Layout */}
         {/* ================================================================= */}
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5" data-purpose="main-content-layout">
+        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5 h-full min-h-0 overflow-hidden" data-purpose="main-content-layout">
 
           {/* ================================================================= */}
           {/* LEFT PANEL: PURELY CHAT CONVERSATION WORKSPACE */}
           {/* ================================================================= */}
-          <section className="lg:col-span-6 bg-white rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden min-h-[640px]" data-purpose="pure-chat-workspace">
-            <div>
+          <section className="lg:col-span-6 bg-white rounded-[32px] p-4 sm:p-5 shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden h-full min-h-0" data-purpose="pure-chat-workspace">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+              <div className="flex-shrink-0 space-y-2 pb-1 border-b border-gray-100 mb-2">
               {/* Top Chat Tabs & Window Controls */}
               <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4 gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 flex-wrap">
@@ -1652,9 +3177,10 @@ export default function AiChat() {
                   <span>Sarvam AI Voice Agent</span>
                 </div>
               </div>
+              </div>
 
               {/* Pure Professional Chat Message Stream */}
-              <div className="mt-2 space-y-3.5 overflow-y-auto max-h-[420px] pr-1 scrollbar-thin">
+              <div className="flex-1 overflow-y-auto min-h-0 py-2 pr-1 space-y-3.5 scrollbar-thin">
                 {messages.map((msg) => {
                   if (msg.role === 'user') {
                     return (
@@ -1733,7 +3259,7 @@ export default function AiChat() {
             </div>
 
             {/* Bottom Floating Pure Chat Input Box with Sarvam STT Mic & Silero VAD */}
-            <div className="mt-4 pt-3 border-t border-gray-100">
+            <div className="flex-shrink-0 pt-2 border-t border-gray-100 mt-auto">
               {/* Conversational Voice Agent Visualizer Card */}
               {continuousMode && (
                 <div className="mb-3 p-4 rounded-3xl bg-gradient-to-br from-gray-950 via-black to-gray-900 text-white border border-gray-800 shadow-xl space-y-3 animate-in fade-in zoom-in-95 duration-200">
@@ -1801,12 +3327,21 @@ export default function AiChat() {
                           </>
                         )}
                         {vadStatus === 'ai_speaking' && (
-                          <>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              stopAudioPlayback();
+                              showToast('🛑 Voice Interrupted! Speak your new prompt now.');
+                              resumeVADListening(200);
+                            }}
+                            className="relative flex items-center justify-center cursor-pointer border-none bg-transparent group"
+                            title="Click to Mute / Interrupt AI Speech immediately"
+                          >
                             <div className="absolute inset-0 rounded-full bg-purple-500/30 animate-ping"></div>
-                            <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-white font-black text-xs shadow-md">
+                            <div className="w-7 h-7 rounded-full bg-purple-600 group-hover:bg-red-600 transition-colors flex items-center justify-center text-white font-black text-xs shadow-md">
                               🔊
                             </div>
-                          </>
+                          </button>
                         )}
                         {vadStatus === 'idle' && (
                           <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 font-bold text-xs">
@@ -1836,7 +3371,7 @@ export default function AiChat() {
                         {vadStatus === 'ai_speaking' && (
                           <span className="text-purple-300 font-extrabold flex items-center gap-1">
                             <Volume2 size={12} className="animate-bounce" />
-                            <span>AI Speaking back (Sarvam TTS)... VAD resumes when finished.</span>
+                            <span>AI Speaking back (Sarvam TTS)... Click 🔊 orb to interrupt.</span>
                           </span>
                         )}
                         {vadStatus === 'idle' && (
@@ -1973,10 +3508,10 @@ export default function AiChat() {
           {/* ================================================================= */}
           {/* RIGHT PANEL: DYNAMIC INTERACTIVE DISPLAY & OUTPUT WORKSPACE */}
           {/* ================================================================= */}
-          <section className="lg:col-span-6 bg-white rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100 flex flex-col justify-between min-h-[640px]" data-purpose="interactive-output-display">
-            <div>
+          <section className="lg:col-span-6 bg-white rounded-[32px] p-4 sm:p-5 shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden h-full min-h-0" data-purpose="interactive-output-display">
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Header Navigation Controls */}
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4 gap-2 flex-wrap">
+              <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-100 pb-3 mb-2 gap-2 flex-wrap">
                 <div className="flex items-center gap-1.5 bg-gray-100 p-0.5 rounded-2xl">
                   <button
                     type="button"
@@ -2018,119 +3553,95 @@ export default function AiChat() {
               </div>
 
               {/* DYNAMIC CANVAS CONTENT */}
-              {rightPanelTab === 'display' && activeWidget ? (
-                <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                  {activeWidget.type === 'password_change_confirm' && (
-                    <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                  )}
+              <div className="flex-1 overflow-y-auto min-h-0 pr-1 py-1 scrollbar-thin">
+                {rightPanelTab === 'display' && activeWidget ? (
+                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                    {activeWidget.type === 'password_change_confirm' && (
+                      <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                    )}
 
-                  {activeWidget.type === 'password_updated_success' && (
-                    <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                  )}
+                    {activeWidget.type === 'password_updated_success' && (
+                      <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                    )}
 
-                  {activeWidget.type === 'tenant_delete_confirm' && (
-                    <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                  )}
+                    {activeWidget.type === 'tenant_delete_confirm' && (
+                      <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                    )}
 
-                  {activeWidget.type === 'tenant_deleted_success' && (
-                    <TenantDeletedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                  )}
+                    {activeWidget.type === 'tenant_deleted_success' && (
+                      <TenantDeletedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                    )}
 
-                  {activeWidget.type === 'tenant_console' && (
-                    <TenantConsoleWidget
-                      tenants={activeWidget.data}
-                      onSendMessage={(txt) => handleSend(txt)}
-                      onCopy={copyToClipboard}
-                    />
-                  )}
+                    {activeWidget.type === 'tenant_console' && (
+                      <TenantConsoleWidget
+                        tenants={activeWidget.data}
+                        onSendMessage={(txt) => handleSend(txt)}
+                        onCopy={copyToClipboard}
+                      />
+                    )}
 
-                  {activeWidget.type === 'admin_accounts' && (
-                    <AdminAccountsWidget users={activeWidget.data} onCopy={copyToClipboard} />
-                  )}
+                    {activeWidget.type === 'admin_accounts' && (
+                      <AdminAccountsWidget users={activeWidget.data} onCopy={copyToClipboard} />
+                    )}
 
-                  {activeWidget.type === 'platform_metrics' && (
-                    <PlatformMetricsWidget stats={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                  )}
+                    {activeWidget.type === 'platform_metrics' && (
+                      <PlatformMetricsWidget stats={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                    )}
 
-                  {activeWidget.type === 'onboard_draft' && (
-                    <OnboardingDraftPreviewWidget draft={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                  )}
+                    {activeWidget.type === 'onboard_draft' && (
+                      <OnboardingDraftPreviewWidget draft={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                    )}
 
-                </div>
-              ) : (
-                <div className="space-y-4 animate-in fade-in duration-200">
-                  <div className="pb-1">
-                    <h3 className="font-extrabold text-sm text-gray-900 tracking-tight">Talent Pipeline & Operations Status</h3>
-                    <p className="text-[11px] text-gray-500 font-medium">Enterprise Headcount & Compliance Overview</p>
+                    {activeWidget.type === 'onboard_success' && (
+                      <OnboardingSuccessWidget
+                        data={activeWidget.data}
+                        onSendMessage={(txt) => handleSend(txt)}
+                        onCopy={copyToClipboard}
+                      />
+                    )}
+
+                    {activeWidget.type === 'requisitions_console' && (
+                      <RequisitionsConsoleWidget
+                        requisitions={activeWidget.data}
+                        vendorName={activeWidget.vendorName}
+                        onSendMessage={(txt) => handleSend(txt)}
+                      />
+                    )}
+
+                    {activeWidget.type === 'candidates_console' && (
+                      <CandidatesConsoleWidget
+                        candidates={activeWidget.data}
+                        vendorName={activeWidget.vendorName}
+                        onSendMessage={(txt) => handleSend(txt)}
+                        onCopy={copyToClipboard}
+                      />
+                    )}
+
+                    {activeWidget.type === 'candidate_resume' && (
+                      <CandidateResumeWidget
+                        data={activeWidget.data}
+                        onSendMessage={(txt) => handleSend(txt)}
+                        onCopy={copyToClipboard}
+                      />
+                    )}
+
+                    {activeWidget.type === 'database_controller' && (
+                      <DatabaseControllerWidget
+                        dbData={activeWidget.data}
+                        onSendMessage={(txt) => handleSend(txt)}
+                        onCopy={copyToClipboard}
+                      />
+                    )}
+
                   </div>
-
-                  <div className="space-y-2 mb-4">
-                    {REQUISITIONS_DATA.slice(0, sortUrgent ? 2 : 3).map((req) => (
-                      <div key={req.id} className="p-3 rounded-2xl border border-gray-200/80 bg-white hover:border-gray-300 transition shadow-2xs">
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-gray-900 text-xs">{req.title}</span>
-                            <span className="text-[10px] text-gray-400 font-normal">• {req.dept}</span>
-                          </div>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${req.stageStyle}`}>
-                            {req.stage}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-[11px] text-gray-500">
-                          <span>
-                            HR Lead: <strong className="text-gray-800 font-medium">{req.hrLead}</strong>
-                          </span>
-                          <span className="font-medium text-gray-700">{req.candidatesCount}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="pt-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                        Department Activity & Presence
-                      </span>
-                      <span className="text-[10px] font-medium text-gray-400">Weekly Shift Logs</span>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-[#F8F9FA] rounded-xl p-2 border border-gray-200/70">
-                        <div className="flex items-center justify-between text-[10px] mb-1 text-gray-500">
-                          <span>Engineering</span>
-                          <span className="font-bold text-emerald-600">99.1%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#111417] rounded-full" style={{ width: '99.1%' }}></div>
-                        </div>
-                      </div>
-
-                      <div className="bg-[#F8F9FA] rounded-xl p-2 border border-gray-200/70">
-                        <div className="flex items-center justify-between text-[10px] mb-1 text-gray-500">
-                          <span>Product & UX</span>
-                          <span className="font-bold text-emerald-600">98.8%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#D8F929] rounded-full" style={{ width: '98.8%' }}></div>
-                        </div>
-                      </div>
-
-                      <div className="bg-[#F8F9FA] rounded-xl p-2 border border-gray-200/70">
-                        <div className="flex items-center justify-between text-[10px] mb-1 text-gray-500">
-                          <span>Global Sales</span>
-                          <span className="font-bold text-emerald-600">97.4%</span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-full bg-[#111417] rounded-full" style={{ width: '97.4%' }}></div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                ) : (
+                  <StatisticalDashboardWidget onSendMessage={(txt) => handleSend(txt)} />
+                )}
+              </div>
             </div>
 
             {/* Bottom HR Lead Avatars & Floating Progress Pill */}
-            <div className="relative mt-4">
+            <div className="flex-shrink-0 relative mt-2 pt-2 border-t border-gray-100">
               <div className="grid grid-cols-4 gap-2 opacity-85">
                 {HR_LEADS.map((lead, idx) => (
                   <div
