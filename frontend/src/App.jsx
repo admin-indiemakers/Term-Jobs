@@ -18,6 +18,7 @@ import ManageHiringManagers from './pages/ManageHiringManagers';
 import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import AiChat from './pages/AiChat';
+import HiringManagerChat from './pages/HiringManagerChat';
 import DirectorDashboard from './pages/DirectorDashboard';
 import DirectorAgreements from './pages/DirectorAgreements';
 import OnboardCompany from './pages/OnboardCompany';
@@ -40,9 +41,9 @@ import ReportedIssues from './pages/candidates/ReportedIssues';
 import TeamOverview from './pages/workforce/TeamOverview';
 import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
+import LandingPage from './pages/LandingPage';
 import Archives from './pages/Archives';
 import AdminAccounts from './pages/AdminAccounts';
-
 
 function FullScreenLoader() {
   return (
@@ -94,7 +95,7 @@ export default function App() {
         <Route path="/candidate/login" element={<CandidateLogin />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
-        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/" element={<LandingPage />} />
         <Route
           path="/dashboard"
           element={
@@ -105,6 +106,7 @@ export default function App() {
         >
           <Route index element={<DashboardIndex />} />
           <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+          <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
           <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />

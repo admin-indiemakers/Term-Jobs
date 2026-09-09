@@ -127,8 +127,6 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
 
         or_conditions = [
             {"tenant_id": current_user.tenant_id},
-            {"tenant_id": None},
-            {"tenant_id": ""},
         ]
         if tenant_reqs:
             or_conditions.append({"requisition_id": {"$in": tenant_reqs}})

@@ -22,7 +22,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, { method = 'GET', body, token, timeout = 180000 } = {}) {
+export async function request(path, { method = 'GET', body, data: requestData, token, timeout = 180000 } = {}) {
+  const payloadBody = body !== undefined ? body : requestData;
   const fullUrl = `${API_BASE_URL}${path}`;
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
 
@@ -37,7 +38,7 @@ export async function request(path, { method = 'GET', body, token, timeout = 180
     path,
     method,
     headers,
-    body: body !== undefined ? body : null,
+    body: payloadBody !== undefined ? payloadBody : null,
   });
 
   const controller = new AbortController();
@@ -48,7 +49,7 @@ export async function request(path, { method = 'GET', body, token, timeout = 180
     response = await fetch(fullUrl, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: payloadBody !== undefined ? JSON.stringify(payloadBody) : undefined,
       signal: controller.signal,
     });
   } catch (err) {
@@ -74,37 +75,37 @@ export async function request(path, { method = 'GET', body, token, timeout = 180
     return null;
   }
 
-  let data = null;
+  let resData = null;
   try {
-    data = await response.json();
+    resData = await response.json();
   } catch (parseErr) {
     console.warn(`⚠️ [API JSON PARSE WARNING] Unable to parse response as JSON for ${fullUrl}:`, parseErr);
-    data = null;
+    resData = null;
   }
 
   if (!response.ok) {
     let detail = `Request failed (${response.status})`;
-    if (data) {
-      if (typeof data.detail === 'string') {
-        detail = data.detail;
-      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
-        detail = data.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join(', ');
-      } else if (typeof data.message === 'string') {
-        detail = data.message;
-      } else if (typeof data.error === 'string') {
-        detail = data.error;
+    if (resData) {
+      if (typeof resData.detail === 'string') {
+        detail = resData.detail;
+      } else if (Array.isArray(resData.detail) && resData.detail.length > 0) {
+        detail = resData.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join(', ');
+      } else if (typeof resData.message === 'string') {
+        detail = resData.message;
+      } else if (typeof resData.error === 'string') {
+        detail = resData.error;
       }
     }
 
     console.error(`🚨 [API ERROR RESPONSE ${response.status}] ${method} ${fullUrl}`, {
       status: response.status,
       detail,
-      responseBody: data,
+      responseBody: resData,
     });
 
     throw new ApiError(detail, response.status);
   }
 
-  console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${method} ${fullUrl}`, data);
-  return data;
+  console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${method} ${fullUrl}`, resData);
+  return resData;
 }

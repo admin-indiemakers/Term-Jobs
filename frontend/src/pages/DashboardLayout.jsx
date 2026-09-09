@@ -231,12 +231,13 @@ export default function DashboardLayout() {
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
-  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat';
+  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat' || location.pathname === '/dashboard/hiring-manager/chat';
 
   const navItems =
     userRole === 'Hiring Manager'
       ? [
         { to: '/dashboard/hiring-manager', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+        { to: '/dashboard/hiring-manager/chat', label: 'Hiring AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
@@ -970,7 +971,7 @@ export default function DashboardLayout() {
           </header>
         )}
 
-        <main className={isAiChatPage ? "w-full min-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-x-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
+        <main className={isAiChatPage ? "w-full h-screen max-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
           <Outlet />
         </main>
       </div>

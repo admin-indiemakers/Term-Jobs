@@ -24,9 +24,11 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(
     async (email, password) => {
+      const cleanEmail = email ? String(email).trim() : '';
+      const cleanPassword = password ? String(password).trim() : '';
       const data = await request('/api/auth/login', { 
         method: 'POST', 
-        body: { email, password } 
+        body: { email: cleanEmail, username: cleanEmail, password: cleanPassword } 
       });
       applySession(data.access_token, data.user);
       return data.user;
