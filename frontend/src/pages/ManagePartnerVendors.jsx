@@ -31,7 +31,6 @@ const EMPTY_GUEST_FORM = {
   name: '',
   email: '',
   password: '',
-  candidate_limit: 3,
 };
 
 export default function ManagePartnerVendors() {
@@ -179,7 +178,6 @@ export default function ManagePartnerVendors() {
           name: guestForm.name.trim(),
           email: guestForm.email.trim().toLowerCase(),
           password: guestForm.password,
-          candidate_limit: parseInt(guestForm.candidate_limit, 10) || 3,
         },
       });
 
@@ -202,14 +200,13 @@ export default function ManagePartnerVendors() {
     setConfirmModal({
       vendor,
       willEngage,
-      candidateLimit: vendor.candidate_limit ?? 3,
     });
   };
 
   // Confirm Single Vendor Engagement / Disengagement
   const handleConfirmAction = async () => {
     if (!confirmModal) return;
-    const { vendor, willEngage, candidateLimit } = confirmModal;
+    const { vendor, willEngage } = confirmModal;
 
     setActionLoading(true);
     setError('');
@@ -220,7 +217,6 @@ export default function ManagePartnerVendors() {
         return {
           ...v,
           engaged: willEngage,
-          candidate_limit: willEngage ? (candidateLimit || 3) : null,
         };
       }
       return v;
@@ -230,10 +226,6 @@ export default function ManagePartnerVendors() {
 
     try {
       const payload = {
-        engagements: engagedList.map((v) => ({
-          vendor_tenant_id: v.id,
-          candidate_limit: v.candidate_limit ?? 3,
-        })),
         vendor_tenant_ids: engagedList.map((v) => v.id),
       };
 
@@ -267,17 +259,12 @@ export default function ManagePartnerVendors() {
     const updatedVendors = vendors.map((v) => ({
       ...v,
       engaged: willEngageAll,
-      candidate_limit: willEngageAll ? (v.candidate_limit ?? 3) : null,
     }));
 
     const engagedList = willEngageAll ? updatedVendors : [];
 
     try {
       const payload = {
-        engagements: engagedList.map((v) => ({
-          vendor_tenant_id: v.id,
-          candidate_limit: v.candidate_limit ?? 3,
-        })),
         vendor_tenant_ids: engagedList.map((v) => v.id),
       };
 
@@ -298,31 +285,6 @@ export default function ManagePartnerVendors() {
       setError(err.message || 'Failed to update vendor partnerships');
     } finally {
       setActionLoading(false);
-    }
-  };
-
-  const handleUpdateLimitDirectly = async (id, val) => {
-    const num = val === '' ? 3 : Math.max(1, Math.min(100, parseInt(val, 10) || 1));
-    const updatedVendors = vendors.map((v) => (v.id === id ? { ...v, candidate_limit: num } : v));
-    setVendors(updatedVendors);
-
-    const engagedList = updatedVendors.filter((v) => v.engaged);
-
-    try {
-      const payload = {
-        engagements: engagedList.map((v) => ({
-          vendor_tenant_id: v.id,
-          candidate_limit: v.candidate_limit ?? 3,
-        })),
-        vendor_tenant_ids: engagedList.map((v) => v.id),
-      };
-      await request('/api/auth/vendors', {
-        method: 'PUT',
-        token,
-        body: payload,
-      });
-    } catch {
-      // silent fallback
     }
   };
 
@@ -608,7 +570,6 @@ export default function ManagePartnerVendors() {
                   <th className="py-2.5 px-3">VENDOR CONSULTANCY</th>
                   <th className="py-2.5 px-3">LOCATION & INDUSTRY</th>
                   <th className="py-2.5 px-3">SPECIALIZATIONS</th>
-                  <th className="py-2.5 px-3">SUBMISSION LIMIT</th>
                   <th className="py-2.5 px-3">PARTNERSHIP STATUS</th>
                   <th className="py-2.5 px-3 text-right">ACTIONS</th>
                 </tr>
@@ -689,36 +650,6 @@ export default function ManagePartnerVendors() {
                           </div>
                         ) : (
                           <span className="text-gray-400 text-xs">General Sourcing</span>
-                        )}
-                      </td>
-
-                      {/* Candidate Limit */}
-                      <td className="py-3 px-3">
-                        {isEngaged ? (
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="number"
-                              min="1"
-                              max="100"
-                              value={v.candidate_limit ?? ''}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setVendors((prev) =>
-                                  prev.map((item) =>
-                                    item.id === v.id
-                                      ? { ...item, candidate_limit: val === '' ? null : parseInt(val, 10) }
-                                      : item
-                                  )
-                                );
-                              }}
-                              onBlur={(e) => handleUpdateLimitDirectly(v.id, e.target.value)}
-                              placeholder="3"
-                              className="w-14 px-2 py-1 text-xs text-center font-bold text-gray-900 bg-gray-50 border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black focus:bg-white transition-all font-mono"
-                            />
-                            <span className="text-[11px] text-gray-500 font-medium">/ req</span>
-                          </div>
-                        ) : (
-                          <span className="text-gray-400 text-xs">Default (3/req)</span>
                         )}
                       </td>
 
@@ -963,21 +894,6 @@ export default function ManagePartnerVendors() {
                     <p className="text-[11px] text-red-500 mt-1">{guestFieldErrors.password}</p>
                   )}
                 </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1.5">
-                    Candidate Limit / Req
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={guestForm.candidate_limit}
-                    onChange={(e) => setGuestForm({ ...guestForm, candidate_limit: e.target.value })}
-                    placeholder="3"
-                    className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all font-mono"
-                  />
-                </div>
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
@@ -1048,30 +964,6 @@ export default function ManagePartnerVendors() {
                   </>
                 )}
               </p>
-
-              {confirmModal.willEngage && (
-                <div className="bg-gray-50 border border-gray-200/80 rounded-xl p-3 flex items-center justify-between gap-3">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-800">
-                      Candidate Submission Limit
-                    </label>
-                    <span className="text-[11px] text-gray-500">Maximum candidates per requisition</span>
-                  </div>
-                  <input
-                    type="number"
-                    min="1"
-                    max="100"
-                    value={confirmModal.candidateLimit}
-                    onChange={(e) =>
-                      setConfirmModal((prev) => ({
-                        ...prev,
-                        candidateLimit: Math.max(1, Math.min(100, parseInt(e.target.value, 10) || 1)),
-                      }))
-                    }
-                    className="w-16 px-2.5 py-1 text-xs text-right font-bold text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black font-mono"
-                  />
-                </div>
-              )}
             </div>
 
             <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-gray-100">

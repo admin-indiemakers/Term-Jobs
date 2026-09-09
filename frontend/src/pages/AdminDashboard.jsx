@@ -421,9 +421,6 @@ export default function AdminDashboard() {
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   <span className="font-bold text-gray-900">{v.name}</span>
-                  {v.candidate_limit != null && (
-                    <span className="text-[10px] text-gray-400 font-medium font-mono">({v.candidate_limit}/req)</span>
-                  )}
                 </span>
               ))
             )}

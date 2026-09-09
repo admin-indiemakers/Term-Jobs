@@ -24,32 +24,85 @@ def _get_current_week_bounds():
 
 def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_email: str, tenant_id: str):
     """Return the active work order for this candidate/workorder_id, or None if none exists.
-    Does NOT auto-create fake work orders — shows 'No Active Assignment' instead.
-    Deduplicates by keeping only the most recent work order per candidate.
+    Supports work orders with status ACTIVE, ACTIVATED, or Approved, or agreement_status Approved.
     Enriches empty fields from requisition and candidate submission data.
     """
+    import re
     wo_coll = db["work_orders"]
-    candidates = wo_coll.find({
+
+    cid = (candidate_id or "").strip()
+    cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip() if cid else ""
+    cemail = (candidate_email or "").strip()
+    cname = (candidate_name or "").strip()
+
+    status_query = {
         "$or": [
-            {"workorder_id": candidate_id},
-            {"candidate_id": candidate_id},
-            {"id": candidate_id}
-        ],
-        "status": "ACTIVE"
-    }).sort("created_at", -1)
+            {"status": {"$in": ["ACTIVE", "ACTIVATED", "Approved"]}},
+            {"agreement_status": "Approved"},
+            {"activation_gates_cleared": True},
+            {"director_approved": True}
+        ]
+    }
+
+    id_conditions = []
+    if cid:
+        id_conditions.extend([
+            {"workorder_id": cid},
+            {"candidate_id": cid},
+            {"id": cid},
+            {"work_order_number": cid},
+        ])
+    if cid_clean:
+        reg = re.escape(cid_clean)
+        id_conditions.extend([
+            {"workorder_id": {"$regex": reg, "$options": "i"}},
+            {"candidate_id": {"$regex": reg, "$options": "i"}},
+            {"id": {"$regex": reg, "$options": "i"}},
+            {"work_order_number": {"$regex": reg, "$options": "i"}},
+        ])
+    if cemail:
+        id_conditions.append({"candidate_email": {"$regex": f"^{re.escape(cemail)}$", "$options": "i"}})
+    if cname:
+        id_conditions.append({"candidate_name": {"$regex": f"^{re.escape(cname)}$", "$options": "i"}})
+
+    if not id_conditions:
+        return None
+
+    candidates = wo_coll.find({"$or": id_conditions}).sort("updated_at", -1)
     candidates_list = list(candidates)
-    
-    if not candidates_list:
-        candidates_list = list(wo_coll.find({"candidate_email": candidate_email, "status": "ACTIVE"}).sort("created_at", -1))
-    
+
+    if not candidates_list and cemail:
+        candidates_list = list(wo_coll.find({
+            "candidate_email": {"$regex": f"^{re.escape(cemail)}$", "$options": "i"}
+        }).sort("updated_at", -1))
+
     if not candidates_list:
         return None
-    
-    # Keep only the most recent, delete duplicates
-    keep = candidates_list[0]
-    for dup in candidates_list[1:]:
-        wo_coll.delete_one({"_id": dup["_id"]})
+
+    keep = dict(candidates_list[0])
     keep.pop("_id", None)
+    
+    curr_status = keep.get("status") or ""
+    ag_status = keep.get("agreement_status") or ""
+    is_pending_approval = (
+        "Director" in str(curr_status) or 
+        "Approval" in str(curr_status) or 
+        "Director" in str(ag_status) or 
+        "Approval" in str(ag_status) or
+        curr_status in ["Pending Director Approval", "Pending Approval", "Revision Requested", "Rejected", "DRAFT", "PENDING"] or
+        ag_status in ["Pending Director Approval", "Pending Approval", "Revision Requested", "Rejected", "Draft"]
+    )
+    is_approved = (
+        (curr_status in ["ACTIVE", "ACTIVATED", "Approved"] or ag_status == "Approved" or bool(keep.get("director_approved")))
+        and not is_pending_approval
+    )
+
+    if is_approved:
+        keep["status"] = "ACTIVE"
+        keep["is_active"] = True
+    else:
+        keep["status"] = curr_status or "Pending Director Approval"
+        keep["is_active"] = False
     
     # Enrich empty fields from multiple sources
     sub_coll = db["candidate_submissions"]
@@ -134,9 +187,27 @@ def _ensure_active_work_order(candidate_id: str, candidate_name: str, candidate_
 def _sanitize_work_order_for_candidate(wo: dict) -> dict:
     if not wo:
         return {}
+    curr_status = wo.get("status") or ""
+    ag_status = wo.get("agreement_status") or ""
+    is_pending_approval = (
+        "Director" in str(curr_status) or 
+        "Approval" in str(curr_status) or 
+        "Director" in str(ag_status) or 
+        "Approval" in str(ag_status) or
+        curr_status in ["Pending Director Approval", "Pending Approval", "Revision Requested", "Rejected", "DRAFT", "PENDING"] or
+        ag_status in ["Pending Director Approval", "Pending Approval", "Revision Requested", "Rejected", "Draft"]
+    )
+    is_approved = (
+        (curr_status in ["ACTIVE", "ACTIVATED", "Approved"] or ag_status == "Approved" or bool(wo.get("director_approved")))
+        and not is_pending_approval
+    )
+    is_active = is_approved
+
     return {
         "id": wo.get("id"),
         "work_order_number": wo.get("work_order_number", ""),
+        "workorder_id": wo.get("workorder_id", ""),
+        "candidate_id": wo.get("candidate_id", ""),
         "requisition_title": wo.get("requisition_title", ""),
         "company_name": wo.get("company_name", ""),
         "vendor_name": wo.get("vendor_name", ""),
@@ -149,7 +220,10 @@ def _sanitize_work_order_for_candidate(wo: dict) -> dict:
         "overtime_eligible": wo.get("overtime_eligible", True),
         "overtime_policy": wo.get("overtime_policy", ""),
         "engagement_type": wo.get("engagement_type", ""),
-        "status": wo.get("status", "ACTIVE"),
+        "status": "ACTIVE" if is_active else (curr_status or "Pending Director Approval"),
+        "agreement_status": ag_status or ("Approved" if is_active else "Pending Director Approval"),
+        "is_active": is_active,
+        "director_approved": bool(wo.get("director_approved")),
         "activated_at": wo.get("activated_at"),
     }
 
@@ -277,10 +351,21 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
     raw_wo = _ensure_active_work_order(cand_id, cand_name, cand_email, current_user.tenant_id)
     safe_wo = _sanitize_work_order_for_candidate(raw_wo)
 
-    # If no work order exists, candidate has no active assignment yet
+    # Candidate has an assignment if a work order exists
     has_assignment = raw_wo is not None
+    is_wo_active = safe_wo.get("is_active", False) if safe_wo else False
+    is_pending_approval = (
+        not is_wo_active and (
+            "Director" in str(safe_wo.get("status", "")) or
+            "Approval" in str(safe_wo.get("status", "")) or
+            "Director" in str(safe_wo.get("agreement_status", "")) or
+            "Approval" in str(safe_wo.get("agreement_status", "")) or
+            safe_wo.get("status") in ["Pending Director Approval", "Pending Approval", "Revision Requested"] or
+            safe_wo.get("agreement_status") in ["Pending Director Approval", "Pending Approval", "Revision Requested"]
+        )
+    )
 
-    if has_assignment:
+    if has_assignment and is_wo_active:
         _ensure_seed_history(cand_id, current_user.tenant_id, safe_wo)
 
     mon_str, sun_str = _get_current_week_bounds()
@@ -290,11 +375,10 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         "week_start_date": mon_str
     })
 
-    if not current_ts and has_assignment:
+    if not current_ts and has_assignment and is_wo_active:
         entries = _generate_smart_draft_entries(mon_str)
         analysis = _analyze_timesheet_with_assistant(entries, expected_hours=40.0)
-        from datetime import datetime as _dt
-        _week_num = _dt.fromisoformat(mon_str).isocalendar()[1]
+        _week_num = datetime.fromisoformat(mon_str).isocalendar()[1]
         _year = mon_str[:4]
         current_ts = {
             "id": f"ts_{uuid.uuid4().hex[:12]}",
@@ -317,12 +401,14 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             "created_at": datetime.now(timezone.utc).isoformat(),
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
+    elif current_ts and not is_wo_active:
+        current_ts = None
     elif current_ts:
         current_ts.pop("_id", None)
 
     daily_status = []
     logged_hrs = 0.0
-    if current_ts:
+    if current_ts and is_wo_active:
         for e in current_ts.get("daily_entries", [])[:5]:
             h = float(e.get("hours", 0.0))
             logged_hrs += h
@@ -335,19 +421,19 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             })
 
     expected_h = safe_wo.get("weekly_hours", 40.0) if safe_wo else 40.0
-    progress_pct = int(round((logged_hrs / expected_h) * 100)) if expected_h > 0 else 0
+    progress_pct = int(round((logged_hrs / expected_h) * 100)) if (expected_h > 0 and is_wo_active) else 0
 
     recent_ts = list(ts_coll.find({
         "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
         "status": "APPROVED"
-    }).sort("created_at", -1).limit(5))
+    }).sort("created_at", -1).limit(5)) if is_wo_active else []
     for t in recent_ts:
         t.pop("_id", None)
 
     exp_coll = db["candidate_expenses"]
     user_expenses = list(exp_coll.find({
         "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
-    }))
+    })) if is_wo_active else []
     exp_sum = sum(float(e.get("amount", 0)) for e in user_expenses if e.get("status") in ["Submitted", "Pending", "Approved"])
     exp_formatted = f"₹{exp_sum/1000:.1f}K" if exp_sum >= 1000 else f"₹{int(exp_sum)}"
 
@@ -363,30 +449,30 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
             "company": safe_wo.get("company_name") or ob.get("company_name") or "",
             "vendor": safe_wo.get("vendor_name") or ob.get("vendor_name") or "",
             "requisition_title": safe_wo.get("requisition_title") or ob.get("requisition_title") or "",
-            "onboarding_status": ob.get("status") or "not_started",
-            "status": "ACTIVE",
-            "active_badge": "Active candidate",
+            "onboarding_status": ob.get("onboarding_status") or ob.get("status") or ("completed" if is_wo_active else "pending_approval" if is_pending_approval else "not_started"),
+            "status": "ACTIVE" if is_wo_active else ("PENDING_APPROVAL" if is_pending_approval else "PENDING_ACTIVATION"),
+            "active_badge": "Active candidate" if is_wo_active else ("Pending Approval" if is_pending_approval else "Pending Activation"),
         },
         "kpi_stats": {
             "assignment": {
                 "label": "ASSIGNMENT",
-                "value": safe_wo.get("status", "ACTIVE"),
+                "value": "ACTIVE" if is_wo_active else ("PENDING APPROVAL" if is_pending_approval else "PENDING ACTIVATION"),
                 "subtext": safe_wo.get("work_order_number", ""),
             },
             "this_week": {
                 "label": "THIS WEEK",
-                "value": f"{int(logged_hrs)}h",
-                "subtext": f"of {int(expected_h)} expected",
+                "value": f"{int(logged_hrs)}h" if is_wo_active else "0h",
+                "subtext": f"of {int(expected_h)} expected" if is_wo_active else ("Locked until approval" if is_pending_approval else "Locked until activation"),
             },
             "timesheet": {
                 "label": "TIMESHEET",
-                "value": "1" if (current_ts and current_ts.get("status") == "DRAFT") else "0",
-                "subtext": "action required" if (current_ts and current_ts.get("status") == "DRAFT") else "all submitted",
+                "value": "1" if (is_wo_active and current_ts and current_ts.get("status") == "DRAFT") else "0",
+                "subtext": ("action required" if (current_ts and current_ts.get("status") == "DRAFT") else "all submitted") if is_wo_active else ("Locked until approval" if is_pending_approval else "Locked until activation"),
             },
             "expenses": {
                 "label": "EXPENSES",
-                "value": exp_formatted,
-                "subtext": "this month",
+                "value": exp_formatted if is_wo_active else "₹0",
+                "subtext": "this month" if is_wo_active else ("Locked until approval" if is_pending_approval else "Locked until activation"),
             }
         },
         "work_order": safe_wo,
@@ -411,7 +497,7 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         "weekly_summary": {
             "logged_hours": round(logged_hrs, 1),
             "expected_hours": expected_h,
-            "status": current_ts.get("status", "DRAFT"),
+            "status": current_ts.get("status", "DRAFT") if current_ts else "DRAFT",
             "week_start": mon_str,
             "week_end": sun_str,
             "daily_status": daily_status,
@@ -477,7 +563,7 @@ def get_current_timesheet(current_user: User = Depends(get_current_user)):
 
     draft_ts = {
         "id": f"ts_{uuid.uuid4().hex[:12]}",
-        "timesheet_number": f"TS-{mon_str[:4]}-W{_dt.fromisoformat(mon_str).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
+        "timesheet_number": f"TS-{mon_str[:4]}-W{datetime.fromisoformat(mon_str).isocalendar()[1]:02d}-{uuid.uuid4().hex[:4].upper()}",
         "candidate_id": cand_id,
         "workorder_id": cand_id,
         "work_order_id": raw_wo.get("id"),
@@ -678,79 +764,268 @@ def run_ai_timesheet_assistant(
 
 @router.get("/attendance")
 def get_candidate_attendance(
-    month: str = "2026-08",
+    month: Optional[str] = Query(None, description="Month in YYYY-MM format"),
     current_user: User = Depends(get_current_user)
 ):
     if current_user.role != "Candidate":
         raise HTTPException(status_code=403, detail="Candidate role required")
 
-    cand_id = current_user.workorder_id or current_user.candidate_id or ""
-    att_coll = db["attendance_sheets"]
+    import calendar
+    import re
+    from datetime import date
 
-    att = att_coll.find_one({
-        "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}],
-        "month_year": month
-    })
-    if not att:
-        if month == "2026-08":
-            att = {
-                "id": f"att_{uuid.uuid4().hex[:12]}",
-                "attendance_number": f"ATT-2026-08-{uuid.uuid4().hex[:4].upper()}",
-                "candidate_id": cand_id,
-                "workorder_id": cand_id,
-                "worker_name": current_user.name,
-                "month_year": "2026-08",
-                "month_label": "August 2026",
-                "total_calendar_days": 31,
-                "present_days": 0,
-                "paid_leave_days": 0,
-                "client_holidays": 0,
-                "absent_days": 0,
-                "payable_days": 0.0,
-                "status": "ACTIVE",
-                "daily_records": [
-                    {"date": "25 Aug", "date_iso": "2026-08-25", "day": "Tuesday", "status": "Pending", "note": "Assignment start"},
-                    {"date": "26 Aug", "date_iso": "2026-08-26", "day": "Wednesday", "status": "Pending", "note": "Regular"},
-                    {"date": "27 Aug", "date_iso": "2026-08-27", "day": "Thursday", "status": "Pending", "note": "Regular"},
-                    {"date": "28 Aug", "date_iso": "2026-08-28", "day": "Friday", "status": "Pending", "note": "Regular"}
-                ]
-            }
+    now = datetime.now(timezone.utc)
+    current_month_str = now.strftime("%Y-%m")
+    target_month = month or current_month_str
+
+    cand_id = (current_user.workorder_id or current_user.candidate_id or "").strip()
+    cemail = (current_user.email or "").strip()
+    cname = (current_user.name or "").strip()
+
+    # 1. Fetch active/associated work order
+    wo_coll = db["work_orders"]
+    wo = wo_coll.find_one({
+        "$or": [
+            {"workorder_id": cand_id},
+            {"candidate_id": cand_id},
+            {"candidate_email": cemail}
+        ]
+    }) if cand_id or cemail else None
+
+    # 2. Collect candidate identifiers
+    cids = set()
+    if cand_id:
+        cids.add(cand_id)
+    if wo:
+        for k in ["id", "workorder_id", "candidate_id", "work_order_number", "candidate_name", "candidate_email"]:
+            val = wo.get(k)
+            if val and isinstance(val, str):
+                cids.add(val.strip())
+
+    # 3. Query all timesheets for this candidate
+    ts_coll = db["timesheets"]
+    or_clauses = []
+    for c in cids:
+        reg = re.escape(c)
+        or_clauses.extend([
+            {"workorder_id": {"$regex": reg, "$options": "i"}},
+            {"candidate_id": {"$regex": reg, "$options": "i"}},
+            {"work_order_id": {"$regex": reg, "$options": "i"}},
+        ])
+    if cname:
+        or_clauses.append({"worker_name": {"$regex": f"^{re.escape(cname)}$", "$options": "i"}})
+    if cemail:
+        or_clauses.append({"candidate_email": {"$regex": f"^{re.escape(cemail)}$", "$options": "i"}})
+
+    timesheets = list(ts_coll.find({"$or": or_clauses})) if or_clauses else []
+
+    # 4. Map daily entries across all candidate timesheets
+    entries_map = {}
+    for ts in timesheets:
+        ts_status = str(ts.get("status", "DRAFT")).upper()
+        approved_by = ts.get("approved_by") or ""
+        approved_at = ts.get("approved_at_human") or ts.get("approved_at") or ""
+        ts_num = ts.get("timesheet_number") or ""
+        ts_id = str(ts.get("id") or ts.get("_id") or "")
+
+        for entry in ts.get("daily_entries", []):
+            d_iso = entry.get("date")
+            if not d_iso:
+                continue
+
+            # Prioritize APPROVED > SUBMITTED > DRAFT
+            if (
+                d_iso not in entries_map
+                or ts_status == "APPROVED"
+                or (ts_status == "SUBMITTED" and entries_map[d_iso]["ts_status"] != "APPROVED")
+            ):
+                entries_map[d_iso] = {
+                    "entry": entry,
+                    "ts_status": ts_status,
+                    "approved_by": approved_by,
+                    "approved_at": approved_at,
+                    "timesheet_number": ts_num,
+                    "timesheet_id": ts_id,
+                }
+
+    # 5. Build month calendar days
+    try:
+        yr, mo = map(int, target_month.split("-"))
+    except Exception:
+        yr, mo = now.year, now.month
+        target_month = f"{yr:04d}-{mo:02d}"
+
+    days_in_month = calendar.monthrange(yr, mo)[1]
+    month_label = datetime(yr, mo, 1).strftime("%B %Y")
+
+    start_date_str = (wo.get("start_date") if wo else "") or ""
+    today_date = now.date()
+
+    daily_records = []
+    present_days = 0
+    paid_leave_days = 0
+    client_holidays = 0
+    approved_days = 0
+    pending_approval_days = 0
+    total_hours = 0.0
+
+    for d in range(1, days_in_month + 1):
+        cur_d = date(yr, mo, d)
+        d_iso = cur_d.isoformat()
+        date_label = cur_d.strftime("%d %b")
+        day_name = cur_d.strftime("%A")
+        is_weekend = cur_d.weekday() >= 5
+        is_future = cur_d > today_date
+        is_pre_assignment = bool(start_date_str and d_iso < start_date_str)
+
+        if d_iso in entries_map:
+            item = entries_map[d_iso]
+            e = item["entry"]
+            h = float(e.get("hours", 0.0))
+            cat = e.get("category", "Regular")
+            task = e.get("task") or e.get("note") or ""
+            ts_st = item["ts_status"]
+            app_by = item["approved_by"]
+            app_at = item["approved_at"]
+            ts_no = item["timesheet_number"]
+
+            if cat in ["Leave", "Paid Leave", "Sick Leave"]:
+                status = "Leave"
+                paid_leave_days += 1
+            elif cat == "Holiday":
+                status = "Holiday"
+                client_holidays += 1
+            elif h > 0:
+                status = "Present"
+                present_days += 1
+                total_hours += h
+                if ts_st == "APPROVED":
+                    approved_days += 1
+                elif ts_st == "SUBMITTED":
+                    pending_approval_days += 1
+            elif is_weekend:
+                status = "Weekend"
+            elif is_future:
+                status = "Upcoming"
+            else:
+                status = "Absent"
+
+            if ts_st == "APPROVED":
+                ts_label = "Approved by Hiring Manager"
+            elif ts_st == "SUBMITTED":
+                ts_label = "Submitted · Awaiting HM Approval"
+            elif ts_st == "DRAFT":
+                ts_label = "Draft (Unsubmitted)"
+            elif ts_st == "REJECTED":
+                ts_label = "Revision Requested"
+            else:
+                ts_label = "Not Submitted"
+
+            note_val = task or ("Assignment start" if d_iso == start_date_str else ("Regular" if status == "Present" else cat))
+
+            daily_records.append({
+                "date": date_label,
+                "date_iso": d_iso,
+                "day": day_name,
+                "status": status,
+                "category": cat,
+                "hours": h,
+                "timesheet_status": ts_st,
+                "timesheet_status_label": ts_label,
+                "approved_by": app_by,
+                "approved_at": app_at,
+                "timesheet_number": ts_no,
+                "note": note_val
+            })
         else:
-            att = {
-                "id": f"att_{uuid.uuid4().hex[:12]}",
-                "attendance_number": f"ATT-2026-07-{uuid.uuid4().hex[:4].upper()}",
-                "candidate_id": cand_id,
-                "workorder_id": cand_id,
-                "worker_name": current_user.name,
-                "month_year": "2026-07",
-                "month_label": "July 2026",
-                "total_calendar_days": 31,
-                "present_days": 21,
-                "paid_leave_days": 1,
-                "client_holidays": 1,
-                "absent_days": 0,
-                "payable_days": 23.0,
-                "status": "COMPLETED",
-                "daily_records": [
-                    {"date": "28 Jul", "date_iso": "2026-07-28", "day": "Tuesday", "status": "Present", "note": "Regular"},
-                    {"date": "29 Jul", "date_iso": "2026-07-29", "day": "Wednesday", "status": "Present", "note": "Regular"},
-                    {"date": "30 Jul", "date_iso": "2026-07-30", "day": "Thursday", "status": "Present", "note": "Regular"},
-                    {"date": "31 Jul", "date_iso": "2026-07-31", "day": "Friday", "status": "Present", "note": "Regular"}
-                ]
-            }
-        att_coll.insert_one(att.copy())
-        att.pop("_id", None)
-    else:
-        att.pop("_id", None)
-        if "daily_records" not in att:
-            att["daily_records"] = [
-                {"date": "25 Aug", "date_iso": "2026-08-25", "day": "Tuesday", "status": "Present", "note": "Regular"},
-                {"date": "26 Aug", "date_iso": "2026-08-26", "day": "Wednesday", "status": "Present", "note": "Regular"},
-                {"date": "27 Aug", "date_iso": "2026-08-27", "day": "Thursday", "status": "Present", "note": "Regular"},
-                {"date": "28 Aug", "date_iso": "2026-08-28", "day": "Friday", "status": "Pending", "note": "Awaiting entry"}
-            ]
+            if is_pre_assignment and not is_weekend:
+                status = "Pre-Assignment"
+                ts_label = "—"
+                ts_st = "NONE"
+                note_val = "Prior to start"
+            elif is_weekend:
+                status = "Weekend"
+                ts_label = "—"
+                ts_st = "NONE"
+                note_val = "Weekend"
+            elif is_future:
+                status = "Upcoming"
+                ts_label = "Upcoming Cycle"
+                ts_st = "UPCOMING"
+                note_val = "Upcoming workday"
+            else:
+                status = "Pending"
+                ts_label = "Not Submitted"
+                ts_st = "NOT_SUBMITTED"
+                note_val = "Awaiting timesheet"
 
-    return {"status": "success", "attendance": att}
+            daily_records.append({
+                "date": date_label,
+                "date_iso": d_iso,
+                "day": day_name,
+                "status": status,
+                "category": "Weekend" if is_weekend else "Regular",
+                "hours": 0.0,
+                "timesheet_status": ts_st,
+                "timesheet_status_label": ts_label,
+                "approved_by": "",
+                "approved_at": "",
+                "timesheet_number": "",
+                "note": note_val
+            })
+
+    payable_days = present_days + paid_leave_days + client_holidays
+
+    # 6. Generate dynamic available months list
+    months_set = set([current_month_str, target_month, "2026-08", "2026-09"])
+    if start_date_str:
+        months_set.add(start_date_str[:7])
+    for ts in timesheets:
+        w_start = ts.get("week_start_date")
+        if w_start:
+            months_set.add(w_start[:7])
+        for de in ts.get("daily_entries", []):
+            dt = de.get("date")
+            if dt:
+                months_set.add(dt[:7])
+
+    sorted_months = sorted(list(months_set), reverse=True)
+    available_months = []
+    for m in sorted_months:
+        try:
+            my, mm = map(int, m.split("-"))
+            ml = datetime(my, mm, 1).strftime("%B %Y")
+            available_months.append({
+                "value": m,
+                "label": ml,
+                "is_current": m == current_month_str,
+                "is_selected": m == target_month
+            })
+        except Exception:
+            pass
+
+    cand_suffix = cand_id[-4:] if len(cand_id) >= 4 else "0001"
+    att_doc = {
+        "id": f"att_{target_month}_{cand_id.replace(' ', '_')}",
+        "attendance_number": f"ATT-{target_month}-{cand_suffix}",
+        "candidate_id": cand_id,
+        "workorder_id": cand_id,
+        "worker_name": cname or (wo.get("candidate_name") if wo else ""),
+        "month_year": target_month,
+        "month_label": month_label,
+        "total_calendar_days": days_in_month,
+        "present_days": present_days,
+        "paid_leave_days": paid_leave_days,
+        "client_holidays": client_holidays,
+        "payable_days": float(payable_days),
+        "approved_days": approved_days,
+        "pending_approval_days": pending_approval_days,
+        "total_hours": total_hours,
+        "available_months": available_months,
+        "daily_records": daily_records
+    }
+
+    return {"status": "success", "attendance": att_doc}
 
 
 class ExpenseCreateRequest(BaseModel):

@@ -729,7 +729,13 @@ def approve_timesheet(
 
     cand_ids = _get_hm_team_candidate_ids(current_user)
     cand_id = ts.get("workorder_id") or ts.get("candidate_id")
-    if cand_id not in cand_ids:
+    ts_tenant = ts.get("tenant_id")
+    is_team_member = (
+        (cand_id and cand_id in cand_ids) or
+        (ts_tenant and current_user.tenant_id and ts_tenant == current_user.tenant_id) or
+        current_user.role in ("Super Admin", "Admin")
+    )
+    if not is_team_member:
         raise HTTPException(status_code=403, detail="This timesheet does not belong to your team")
 
     if ts.get("status") != "SUBMITTED":
@@ -789,7 +795,13 @@ def reject_timesheet(
 
     cand_ids = _get_hm_team_candidate_ids(current_user)
     cand_id = ts.get("workorder_id") or ts.get("candidate_id")
-    if cand_id not in cand_ids:
+    ts_tenant = ts.get("tenant_id")
+    is_team_member = (
+        (cand_id and cand_id in cand_ids) or
+        (ts_tenant and current_user.tenant_id and ts_tenant == current_user.tenant_id) or
+        current_user.role in ("Super Admin", "Admin")
+    )
+    if not is_team_member:
         raise HTTPException(status_code=403, detail="This timesheet does not belong to your team")
 
     if ts.get("status") != "SUBMITTED":
@@ -1060,6 +1072,26 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
             "approved_this_week": approved_week,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# GET /workforce/work-orders — List all work orders for onboarding/workforce
+# ---------------------------------------------------------------------------
+
+@router.get("/work-orders")
+def list_workforce_work_orders(
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return all work orders for workforce and onboarding management."""
+    wo_coll = db["work_orders"]
+    docs = list(wo_coll.find().sort("updated_at", -1))
+    for d in docs:
+        d.pop("_id", None)
+        if not d.get("work_order_number"):
+            wid = d.get("workorder_id") or d.get("candidate_id") or d.get("id") or ""
+            clean = str(wid).replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
+            d["work_order_number"] = f"WO-2026-{clean[:4].upper()}" if clean else "WO-2026-0001"
+    return {"status": "success", "work_orders": docs}
 
 
 # ---------------------------------------------------------------------------

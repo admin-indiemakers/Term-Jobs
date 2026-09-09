@@ -81,14 +81,45 @@ db = _LazyDB()
 
 
 class Criterion:
-    """A filter expression produced by ``Model.column == value``."""
+    """A filter expression produced by ``Model.column == value`` or composite expressions."""
 
-    __slots__ = ("name", "op", "value")
+    __slots__ = ("name", "op", "value", "clauses")
 
-    def __init__(self, name: str, op: str, value) -> None:
+    def __init__(self, name: str = "", op: str = "$eq", value=None, clauses: list | None = None) -> None:
         self.name = name
         self.op = op
         self.value = value
+        self.clauses = clauses or []
+
+    def __or__(self, other: "Criterion") -> "Criterion":
+        if not isinstance(other, Criterion):
+            return NotImplemented
+        left_clauses = self.clauses if self.op == "$or" else [self]
+        right_clauses = other.clauses if other.op == "$or" else [other]
+        return Criterion(op="$or", clauses=left_clauses + right_clauses)
+
+    def __and__(self, other: "Criterion") -> "Criterion":
+        if not isinstance(other, Criterion):
+            return NotImplemented
+        left_clauses = self.clauses if self.op == "$and" else [self]
+        right_clauses = other.clauses if other.op == "$and" else [other]
+        return Criterion(op="$and", clauses=left_clauses + right_clauses)
+
+    def to_mongo(self) -> dict:
+        if self.op == "$or":
+            return {"$or": [c.to_mongo() for c in self.clauses]}
+        elif self.op == "$and":
+            return {"$and": [c.to_mongo() for c in self.clauses]}
+        elif self.op == "$ne":
+            return {self.name: {"$ne": self.value}}
+        elif self.op == "$in":
+            return {self.name: {"$in": self.value if self.value else [""]}}
+        elif self.op == "$regex":
+            return {self.name: {"$regex": self.value, "$options": "i"}}
+        elif self.op == "$eq":
+            return {self.name: self.value}
+        else:
+            return {self.name: self.value}
 
 
 class Sort:
@@ -134,6 +165,14 @@ class Column:
 
     def in_(self, values) -> Criterion:
         return Criterion(self.name, "$in", list(values))
+
+    def ilike(self, pattern: str) -> Criterion:
+        regex_pattern = pattern.replace("%", ".*")
+        return Criterion(self.name, "$regex", regex_pattern)
+
+    def like(self, pattern: str) -> Criterion:
+        regex_pattern = pattern.replace("%", ".*")
+        return Criterion(self.name, "$regex", regex_pattern)
 
     def asc(self) -> Sort:
         return Sort(self.name, ASCENDING)
@@ -181,12 +220,19 @@ class Query:
     def filter(self, *criteria, **kwargs) -> "Query":
         for c in criteria:
             if isinstance(c, Criterion):
-                if c.op == "$ne":
-                    self._filters[c.name] = {"$ne": c.value}
-                elif c.op == "$in":
-                    self._filters[c.name] = {"$in": c.value if c.value else [""]}
+                mongo_cond = c.to_mongo()
+                if "$or" in mongo_cond:
+                    if "$or" in self._filters:
+                        self._filters["$or"].extend(mongo_cond["$or"])
+                    else:
+                        self._filters["$or"] = mongo_cond["$or"]
+                elif "$and" in mongo_cond:
+                    if "$and" in self._filters:
+                        self._filters["$and"].extend(mongo_cond["$and"])
+                    else:
+                        self._filters["$and"] = mongo_cond["$and"]
                 else:
-                    self._filters[c.name] = c.value
+                    self._filters.update(mongo_cond)
             elif isinstance(c, dict):
                 self._filters.update(c)
         for name, value in kwargs.items():

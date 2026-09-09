@@ -172,6 +172,24 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token]);
 
+  // Dynamic live count for Director pending agreements
+  const [directorPendingAgreements, setDirectorPendingAgreements] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'Director' && token) {
+      request('/api/work-orders/director-agreements', { token })
+        .then((res) => {
+          if (Array.isArray(res)) {
+            const pending = res.filter(
+              (a) => a.status === 'Pending Director Approval' || a.status === 'Submitted'
+            ).length;
+            setDirectorPendingAgreements(pending);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token, location.pathname]);
+
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -213,12 +231,13 @@ export default function DashboardLayout() {
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
-  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat';
+  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat' || location.pathname === '/dashboard/hiring-manager/chat';
 
   const navItems =
     userRole === 'Hiring Manager'
       ? [
         { to: '/dashboard/hiring-manager', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+        { to: '/dashboard/hiring-manager/chat', label: 'Hiring AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
@@ -238,9 +257,13 @@ export default function DashboardLayout() {
           { to: '/dashboard/recruiter/agreements', label: 'Agreements', end: true, section: 'WORKSPACE', icon: Icons.Agreements },
           { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
           { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
+          { to: '/dashboard/recruiter/billing', label: 'Billing', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
         ]
         : userRole === 'Director'
-          ? [{ to: '/dashboard/director', label: 'Executive Overview', end: true }]
+          ? [
+              { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/director/agreements', label: 'Agreements', end: true, icon: Icons.Agreements, badge: directorPendingAgreements }
+            ]
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
@@ -546,17 +569,40 @@ export default function DashboardLayout() {
             </>
           ) : (
             <>
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.label}
-                  to={item.to}
-                  end={item.end}
-                  onClick={onLinkClick}
-                  className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+              {navItems.map((item) => {
+                const IconComp = item.icon;
+                return (
+                  <NavLink
+                    key={item.label}
+                    to={item.to}
+                    end={item.end}
+                    onClick={onLinkClick}
+                    className={({ isActive }) =>
+                      `nav-link ${isActive ? 'active' : ''} flex items-center justify-between`
+                    }
+                  >
+                    <span className="flex items-center gap-2.5">
+                      {IconComp && <IconComp size={15} className="shrink-0" />}
+                      <span>{item.label}</span>
+                    </span>
+                    {item.badge > 0 && (
+                      <span
+                        style={{
+                          background: '#F59E0B',
+                          color: '#000000',
+                          fontSize: '0.7rem',
+                          fontWeight: 800,
+                          padding: '1px 6px',
+                          borderRadius: 999,
+                          marginLeft: 6
+                        }}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              })}
             </>
           )}
         </nav>
@@ -925,7 +971,7 @@ export default function DashboardLayout() {
           </header>
         )}
 
-        <main className={isAiChatPage ? "w-full min-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-x-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
+        <main className={isAiChatPage ? "w-full h-screen max-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
           <Outlet />
         </main>
       </div>

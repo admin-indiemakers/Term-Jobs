@@ -12,7 +12,7 @@ Quick test (company -> requisition -> approve -> publish):
          -d '{"name":"Acme","location":"Bangalore","tech_stack":["Python","Django","Postgres"]}'
     # then POST /requisitions with the returned profile id
 """
-from __future__ import annotations
+
 
 import json
 import os
@@ -49,6 +49,7 @@ from modules.workforce.router import router as workforce_router
 from modules.workorder.router import router as workorder_router
 from modules.superadmin_agent.router import router as superadmin_agent_router
 from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
+from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
 
 
@@ -202,6 +203,7 @@ app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
 app.include_router(workorder_router)
 app.include_router(superadmin_agent_router)
 app.include_router(hiring_manager_agent_router)
+app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 
 

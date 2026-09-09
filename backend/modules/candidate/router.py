@@ -19,8 +19,8 @@ from modules.shared.db import get_session
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
 
 
-def _make_candidate_id(session, requisition_id: str | None = None) -> str:
-    """Generate a candidate ID prefixed with company initials (e.g. BEAR-a1b2c3d4)."""
+def _make_workorder_id(session, requisition_id: str | None = None) -> str:
+    """Generate a work order ID prefixed with company initials (e.g. BEAR-a1b2c3d4 or SDC-a1b2c3d4)."""
     initials = "CND"
     if requisition_id:
         try:
@@ -32,6 +32,8 @@ def _make_candidate_id(session, requisition_id: str | None = None) -> str:
         except Exception:
             pass
     return f"{initials}-{str(uuid.uuid4())[:8]}"
+
+_make_candidate_id = _make_workorder_id
 
 RESUME_UPLOAD_DIRS = [
     os.path.join(os.path.dirname(__file__), "..", "candidate_screening_agent", "uploads"),
@@ -75,9 +77,12 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
     req_title = (getattr(req, "title", None) if req else None) or ""
     hm_name = (req.structured_role or {}).get("hiring_manager") if req else ""
     details = row.details or {}
+    wo_id = getattr(row, "workorder_id", None) or row.id
     return {
         "id": row.id,
         "submission_id": row.id,
+        "candidate_id": wo_id,
+        "workorder_id": wo_id,
         "requisition_id": row.requisition_id,
         "requisition_ref": f"REQ-{str(row.requisition_id)[:6].upper()}" if row.requisition_id else None,
         "requisition_title": req_title,
@@ -122,8 +127,6 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
 
         or_conditions = [
             {"tenant_id": current_user.tenant_id},
-            {"tenant_id": None},
-            {"tenant_id": ""},
         ]
         if tenant_reqs:
             or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
@@ -156,6 +159,24 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         for cd in db["company_profiles"].find({"id": {"$in": comp_ids}}, {"id": 1, "name": 1}):
             comp_cache[cd.get("id")] = cd.get("name")
 
+    # Pre-cache work orders for agreement status
+    all_c_ids = [doc.get("id") for doc in all_docs if doc.get("id")]
+    wo_cache = {}
+    if all_c_ids:
+        try:
+            for wod in db["work_orders"].find({
+                "$or": [
+                    {"workorder_id": {"$in": all_c_ids}},
+                    {"candidate_id": {"$in": all_c_ids}},
+                    {"id": {"$in": all_c_ids}}
+                ]
+            }, {"workorder_id": 1, "candidate_id": 1, "id": 1, "status": 1, "agreement_status": 1, "approved_by": 1}):
+                for k in ["workorder_id", "candidate_id", "id"]:
+                    if wod.get(k):
+                        wo_cache[wod.get(k)] = wod
+        except Exception:
+            pass
+
     results = []
     for doc in all_docs:
         req_id = doc.get("requisition_id")
@@ -167,9 +188,18 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         details = doc.get("details") or {}
         created_val = doc.get("created_at")
         hm_name = (req_doc.get("structured_role") or {}).get("hiring_manager") or ""
+        doc_id = doc.get("id")
+        wo_match = wo_cache.get(doc_id) or {}
+        agr_status = wo_match.get("agreement_status") or wo_match.get("status") or "Draft"
+        if agr_status == "ACTIVE":
+            agr_status = "Draft"
+
         results.append({
-            "id": doc.get("id"),
-            "submission_id": doc.get("id"),
+            "id": doc_id,
+            "submission_id": doc_id,
+            "workorder_id": wo_match.get("workorder_id") or doc_id,
+            "agreement_status": agr_status,
+            "agreement_approved_by": wo_match.get("approved_by") or "",
             "requisition_id": req_id,
             "requisition_ref": f"REQ-{str(req_id)[:6].upper()}" if req_id else None,
             "requisition_title": req_title,
@@ -1290,7 +1320,7 @@ def shortlist_candidate(
             session.add(existing_sub)
             sub_id = existing_sub.id
         else:
-            sub_id = _make_candidate_id(session, requisition_id)
+            sub_id = _make_workorder_id(session, requisition_id)
             new_sub = CandidateSubmission(
                 id=sub_id,
                 requisition_id=requisition_id,
@@ -1307,7 +1337,8 @@ def shortlist_candidate(
                 matched_skills=[],
                 missing_skills=[],
                 hiring_manager_notes="",
-                resume_pdf=resume_pdf_data
+                resume_pdf=resume_pdf_data,
+                workorder_id=sub_id,
             )
             new_sub.tenant_id = current_user.tenant_id
             session.add(new_sub)
@@ -1321,9 +1352,11 @@ def shortlist_candidate(
             if sub_id:
                 mongo_or_filters.append({"id": sub_id})
                 mongo_or_filters.append({"submission_id": sub_id})
+                mongo_or_filters.append({"workorder_id": sub_id})
             if cand_id:
                 mongo_or_filters.append({"id": cand_id})
                 mongo_or_filters.append({"submission_id": cand_id})
+                mongo_or_filters.append({"workorder_id": cand_id})
             if cand_email_clean:
                 mongo_or_filters.append({"candidate_email": {"$regex": f"^{_re.escape(cand_email_clean)}$", "$options": "i"}})
             if cand_name_clean:
@@ -1351,14 +1384,18 @@ def shortlist_candidate(
                 "summary": summary or "",
                 "tenant_id": current_user.tenant_id,
                 "updated_at": datetime.now(timezone.utc).isoformat(),
+                "workorder_id": sub_id,
+                "candidate_id": sub_id,
             }
             if resume_pdf_data:
                 mongo_doc["resume_pdf"] = resume_pdf_data
 
             if existing_mongo:
-                final_id = existing_mongo.get("id") or existing_mongo.get("submission_id") or sub_id
+                final_id = existing_mongo.get("workorder_id") or existing_mongo.get("id") or existing_mongo.get("submission_id") or sub_id
                 mongo_doc["id"] = final_id
                 mongo_doc["submission_id"] = final_id
+                mongo_doc["workorder_id"] = final_id
+                mongo_doc["candidate_id"] = final_id
                 db["candidate_submissions"].update_one(
                     {"_id": existing_mongo["_id"]},
                     {"$set": mongo_doc}
@@ -1367,6 +1404,8 @@ def shortlist_candidate(
             else:
                 mongo_doc["id"] = sub_id
                 mongo_doc["submission_id"] = sub_id
+                mongo_doc["workorder_id"] = sub_id
+                mongo_doc["candidate_id"] = sub_id
                 db["candidate_submissions"].update_one(
                     {"id": sub_id},
                     {"$set": mongo_doc},

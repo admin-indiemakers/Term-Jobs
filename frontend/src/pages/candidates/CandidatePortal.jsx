@@ -679,11 +679,31 @@ export default function CandidatePortal() {
     }
   };
 
-  // Determine if work order is active
+  // Work order and pending approval flags
+  const woRaw = data?.work_order;
+  const isPendingApproval = Boolean(
+    woRaw?.status === 'Pending Director Approval' ||
+    woRaw?.status === 'Pending Approval' ||
+    woRaw?.agreement_status === 'Pending Director Approval' ||
+    woRaw?.agreement_status === 'Pending Approval' ||
+    woRaw?.status === 'Revision Requested' ||
+    woRaw?.status === 'Rejected' ||
+    woRaw?.status === 'DRAFT' ||
+    woRaw?.is_active === false
+  );
+
+  // Determine if work order is active / approved by director
   const isWorkOrderActive = Boolean(
     data?.has_assignment &&
-    data?.work_order &&
-    (data.work_order.status === 'ACTIVE' || data.work_order.status === 'ACTIVATED')
+    woRaw &&
+    !isPendingApproval &&
+    (
+      woRaw.status === 'ACTIVE' ||
+      woRaw.status === 'ACTIVATED' ||
+      woRaw.status === 'Approved' ||
+      woRaw.agreement_status === 'Approved' ||
+      woRaw.status === 'ACCEPTED'
+    )
   );
 
   // Dynamic candidate & work order fallback
@@ -694,46 +714,46 @@ export default function CandidatePortal() {
     company: 'Company',
     vendor: 'Vendor',
     requisition_title: 'Contractor Role',
-    status: isWorkOrderActive ? 'ACTIVE' : 'PENDING_ACTIVATION',
-    active_badge: isWorkOrderActive ? 'Active candidate' : 'Pending Activation',
+    status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING_APPROVAL' : 'PENDING_ACTIVATION',
+    active_badge: isWorkOrderActive ? 'Active candidate' : isPendingApproval ? 'Pending Approval' : 'Pending Activation',
   };
 
   const wo = data?.work_order || {
-    work_order_number: 'Pending Activation',
+    work_order_number: isPendingApproval ? (woRaw?.work_order_number || 'Pending Approval') : 'Pending Activation',
     requisition_title: cand.requisition_title || 'Contractor Role',
     company_name: cand.company || 'Company',
     vendor_name: cand.vendor || 'Vendor',
-    start_date: isWorkOrderActive ? '25 Aug 2026' : 'Awaiting Activation',
-    end_date: isWorkOrderActive ? '25 Feb 2027' : '—',
+    start_date: isWorkOrderActive ? (woRaw?.start_date || '25 Aug 2026') : 'Awaiting Approval',
+    end_date: isWorkOrderActive ? (woRaw?.end_date || '25 Feb 2027') : '—',
     weekly_hours: 40,
     location: 'Bangalore',
     work_arrangement: 'Hybrid',
     reporting_manager: 'Hiring Manager',
     overtime_policy: 'Standard Cap',
     engagement_type: 'Contractor',
-    status: isWorkOrderActive ? 'ACTIVE' : 'PENDING',
+    status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING APPROVAL' : 'PENDING',
   };
 
   const kpis = {
     assignment: {
       label: 'ASSIGNMENT',
-      value: isWorkOrderActive ? (wo.status || 'ACTIVE') : 'PENDING ACTIVATION',
-      subtext: wo.work_order_number || 'Awaiting activation',
+      value: isWorkOrderActive ? (wo.status || 'ACTIVE') : isPendingApproval ? 'PENDING APPROVAL' : 'PENDING ACTIVATION',
+      subtext: wo.work_order_number || (isPendingApproval ? 'Awaiting Director approval' : 'Awaiting activation'),
     },
     this_week: {
       label: 'THIS WEEK',
       value: isWorkOrderActive ? `${calculatedMetrics.totalHours}h` : '0h',
-      subtext: isWorkOrderActive ? 'of 40 expected' : 'Locked until activation',
+      subtext: isWorkOrderActive ? 'of 40 expected' : isPendingApproval ? 'Locked until approval' : 'Locked until activation',
     },
     timesheet: {
       label: 'TIMESHEET',
       value: isWorkOrderActive ? (data?.kpi_stats?.timesheet?.value || '1') : '0',
-      subtext: isWorkOrderActive ? 'action required' : 'Locked until activation',
+      subtext: isWorkOrderActive ? 'action required' : isPendingApproval ? 'Locked until approval' : 'Locked until activation',
     },
     expenses: {
       label: 'EXPENSES',
       value: isWorkOrderActive ? `₹${expenseTotalThisMonth.toLocaleString()}` : '₹0',
-      subtext: isWorkOrderActive ? 'this month' : 'Locked until activation',
+      subtext: isWorkOrderActive ? 'this month' : isPendingApproval ? 'Locked until approval' : 'Locked until activation',
     },
   };
 
@@ -1337,10 +1357,16 @@ export default function CandidatePortal() {
                     </span>
                     <span
                       className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold ${
-                        isWorkOrderActive ? 'bg-[#ECFDF5] text-[#059669]' : 'bg-[#FEF3C7] text-[#D97706]'
+                        isWorkOrderActive 
+                          ? 'bg-[#ECFDF5] text-[#059669]' 
+                          : 'bg-[#FEF3C7] text-[#D97706]'
                       }`}
                     >
-                      {isWorkOrderActive ? 'Active Work Order' : 'Work Order Pending Activation'}
+                      {isWorkOrderActive 
+                        ? 'Active Work Order' 
+                        : isPendingApproval 
+                          ? 'Work Order Pending Director Approval' 
+                          : 'Work Order Pending Activation'}
                     </span>
                   </div>
                   <h1 className="text-[1.75rem] md:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
@@ -1349,7 +1375,9 @@ export default function CandidatePortal() {
                   <p className="text-[13px] md:text-[13.5px] text-[#5A5A57] mt-2 font-normal leading-relaxed max-w-xl">
                     {isWorkOrderActive
                       ? `Your onboarding is complete. Your assignment start date is ${wo.start_date || '25 Aug 2026'}, and your workspace is ready.`
-                      : 'Your candidate account is set up. Timesheets, attendance, and expense submissions will unlock automatically once your Hiring Manager activates your Work Order.'}
+                      : isPendingApproval
+                        ? `Your Master Service Agreement has been submitted to Company Director for approval. Timesheets, attendance, and expense submissions will unlock automatically once approved.`
+                        : 'Your candidate account is set up. Timesheets, attendance, and expense submissions will unlock automatically once your Hiring Manager activates your Work Order.'}
                   </p>
                 </div>
 
@@ -1364,7 +1392,7 @@ export default function CandidatePortal() {
               </div>
             </div>
 
-            {/* PENDING ACTIVATION STEPPER CARD */}
+            {/* PENDING ACTIVATION / APPROVAL STEPPER CARD */}
             {!isWorkOrderActive && (
               <div
                 style={{
@@ -1383,14 +1411,16 @@ export default function CandidatePortal() {
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="text-[1.1rem] font-extrabold text-[#92400E] tracking-tight">
-                          Work Order Awaiting Activation
+                          {isPendingApproval ? 'Work Order Pending Director Approval' : 'Work Order Awaiting Activation'}
                         </h3>
                         <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D97706] text-white uppercase tracking-wider">
-                          Awaiting Manager Clearance
+                          {isPendingApproval ? 'Awaiting Director Sign-off' : 'Awaiting Manager Clearance'}
                         </span>
                       </div>
                       <p className="text-[12.5px] text-[#B45309] mt-1 font-medium leading-relaxed max-w-2xl">
-                        Your onboarding verification checklist is being finalized. Dashboard tracking features will activate as soon as your Hiring Manager verifies clearance and activates Work Order {wo?.work_order_number || ''}.
+                        {isPendingApproval
+                          ? `The Master Service Agreement for Work Order ${wo?.work_order_number || ''} was submitted to the Company Director for executive approval. Tracking features and timesheets will unlock immediately once approved.`
+                          : `Your onboarding verification checklist is being finalized. Dashboard tracking features will activate as soon as your Hiring Manager verifies clearance and activates Work Order ${wo?.work_order_number || ''}.`}
                       </p>
                     </div>
                   </div>
@@ -1409,22 +1439,24 @@ export default function CandidatePortal() {
                   </div>
 
                   <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full bg-[#F59E0B] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
-                      2
+                    <div className="w-7 h-7 rounded-full bg-[#10B981] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      ✓
                     </div>
                     <div>
                       <div className="text-[12px] font-bold text-[#0A0A0A]">2. Verification Gates</div>
-                      <div className="text-[11px] text-[#D97706] font-semibold">Under Review</div>
+                      <div className="text-[11px] text-[#059669] font-semibold">Cleared & Verified</div>
                     </div>
                   </div>
 
                   <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
-                    <div className="w-7 h-7 rounded-full bg-[#E5E7EB] text-[#9CA3AF] flex items-center justify-center text-[12px] font-bold shrink-0">
+                    <div className="w-7 h-7 rounded-full bg-[#F59E0B] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
                       3
                     </div>
                     <div>
-                      <div className="text-[12px] font-bold text-[#0A0A0A]">3. Work Order Activation</div>
-                      <div className="text-[11px] text-[#6B7280] font-semibold">Pending Manager Sign-off</div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">3. Director Approval</div>
+                      <div className="text-[11px] text-[#D97706] font-semibold">
+                        {isPendingApproval ? 'Pending Executive Approval' : 'Pending Manager Sign-off'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1826,7 +1858,9 @@ export default function CandidatePortal() {
           !isWorkOrderActive ? (
             renderLockedFeatureCard(
               'Timesheet',
-              `Timesheet logging and hour submissions are locked until your Hiring Manager clears verification gates and activates Work Order ${wo?.work_order_number || ''}.`
+              isPendingApproval
+                ? `Timesheet logging and hour submissions will unlock automatically once Company Director approves Master Service Agreement for Work Order ${wo?.work_order_number || ''}.`
+                : `Timesheet logging and hour submissions are locked until your Hiring Manager clears verification gates and activates Work Order ${wo?.work_order_number || ''}.`
             )
           ) : (
           <div className="space-y-4 pb-6">
@@ -2547,7 +2581,9 @@ export default function CandidatePortal() {
           !isWorkOrderActive ? (
             renderLockedFeatureCard(
               'Attendance',
-              'Attendance tracking and monthly payable day records are locked until your Work Order is activated.'
+              isPendingApproval
+                ? 'Attendance tracking and monthly payable day records will unlock once your Work Order is approved by the Company Director.'
+                : 'Attendance tracking and monthly payable day records are locked until your Work Order is activated.'
             )
           ) : (
           <div className="space-y-4 pb-6">
@@ -2750,7 +2786,9 @@ export default function CandidatePortal() {
           !isWorkOrderActive ? (
             renderLockedFeatureCard(
               'Expenses',
-              'Expense submissions are locked until your Work Order is activated by your Hiring Manager.'
+              isPendingApproval
+                ? 'Expense submissions will unlock as soon as your Work Order is approved by the Company Director.'
+                : 'Expense submissions are locked until your Work Order is activated by your Hiring Manager.'
             )
           ) : (
           <div className="space-y-4 pb-6">

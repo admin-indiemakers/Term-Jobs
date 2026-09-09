@@ -259,7 +259,6 @@ export default function ConfigureAccounts({ defaultTab }) {
                   <th className="py-3 px-3">ACCOUNT</th>
                   <th className="py-3 px-3">ROLE</th>
                   <th className="py-3 px-3">COMPANY / TENANT</th>
-                  {activeTab !== 'buyers' && <th className="py-3 px-3">LIMIT</th>}
                   <th className="py-3 px-3">JOINED</th>
                   <th className="py-3 px-3">STATUS</th>
                   <th className="py-3 px-3 text-right">ACTIONS</th>
@@ -297,19 +296,6 @@ export default function ConfigureAccounts({ defaultTab }) {
                         <div className="font-semibold text-gray-900">{u.tenant_name || '—'}</div>
                         <div className="text-[10px] text-gray-400 capitalize">{u.tenant_type || 'Client'}</div>
                       </td>
-
-                      {/* Candidate Limit */}
-                      {activeTab !== 'buyers' && (
-                        <td className="py-3.5 px-3">
-                          {isRecruiter ? (
-                            <span className="font-bold text-gray-900">
-                              {u.candidate_limit != null ? `${u.candidate_limit} / req` : '3 / req (default)'}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">—</span>
-                          )}
-                        </td>
-                      )}
 
                       {/* Joined Date */}
                       <td className="py-3.5 px-3">

@@ -15,6 +15,7 @@ class WorkOrder(Model):
         "requisition_id": "",
         "requisition_ref": "",
         "candidate_id": "",
+        "workorder_id": "",
         "candidate_name": "",
         "candidate_email": "",
         "candidate_phone": "",
@@ -55,6 +56,7 @@ class WorkOrder(Model):
     requisition_id = Column("requisition_id")
     requisition_ref = Column("requisition_ref")
     candidate_id = Column("candidate_id")
+    workorder_id = Column("workorder_id")
     candidate_name = Column("candidate_name")
     candidate_email = Column("candidate_email")
     candidate_phone = Column("candidate_phone")

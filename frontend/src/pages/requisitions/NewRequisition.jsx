@@ -184,6 +184,389 @@ export default function NewRequisition() {
     });
   };
 
+const PREDEFINED_ROLES = [
+  {
+    id: 'devsecops_eng',
+    title: 'DevSecOps Engineer',
+    department: 'Security & Infrastructure',
+    job_family: 'Platform Engineering',
+    seniority: 'Senior',
+    experience_band: '5-8 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['Kubernetes', 'Terraform', 'AWS', 'CI/CD', 'Docker', 'Vault'],
+    nice_to_have_skills: ['Python', 'Linux', 'Ansible', 'Prometheus'],
+    certifications: ['AWS Certified Security', 'CKA'],
+    engagement_type: 'Contract',
+    duration: '6 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('6 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '2500',
+    vendor_floor: '1800',
+    vendor_cap: '2200',
+    budget_cap_currency: 'INR',
+    work_mode: 'Hybrid',
+    primary_location: 'Kochi / Bengaluru',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM - 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 14 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 7 * 86400000)),
+    interview_rounds: '3 Rounds (L1 Tech, L2 Architecture, HM Culture Fit)',
+    priority: 'High',
+    job_description: 'We are seeking an experienced DevSecOps Engineer to lead cloud infrastructure security, automate CI/CD security scanning, manage Kubernetes security policies, and enforce compliance across AWS environments.'
+  },
+  {
+    id: 'senior_backend_python',
+    title: 'Senior Backend Engineer',
+    department: 'Core Product Engineering',
+    job_family: 'Backend Engineering',
+    seniority: 'Senior',
+    experience_band: '5-7 yrs',
+    headcount: 2,
+    vendor_candidate_limit: 3,
+    must_have_skills: ['Python', 'FastAPI', 'PostgreSQL', 'Redis', 'Docker', 'Microservices'],
+    nice_to_have_skills: ['Celery', 'AWS', 'GraphQL', 'Kafka'],
+    certifications: ['AWS Certified Solutions Architect'],
+    engagement_type: 'Contract',
+    duration: '6 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('6 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '2200',
+    vendor_floor: '1600',
+    vendor_cap: '2000',
+    budget_cap_currency: 'INR',
+    work_mode: 'Hybrid',
+    primary_location: 'Bengaluru / Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM - 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 14 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 7 * 86400000)),
+    interview_rounds: '3 Rounds (Coding Screening, System Design, HM Review)',
+    priority: 'High',
+    job_description: 'Looking for a Senior Backend Engineer proficient in Python (FastAPI/Django), asynchronous microservices, PostgreSQL query optimization, and distributed caching to build enterprise scalability APIs.'
+  },
+  {
+    id: 'frontend_react',
+    title: 'Frontend Engineer (React / Next.js)',
+    department: 'Web Applications',
+    job_family: 'Frontend Engineering',
+    seniority: 'Mid',
+    experience_band: '3-5 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['React', 'TypeScript', 'Next.js', 'TailwindCSS', 'Redux Toolkit'],
+    nice_to_have_skills: ['Webpack', 'Jest', 'Cypress', 'GraphQL'],
+    certifications: ['Meta Frontend Developer Professional Certificate'],
+    engagement_type: 'Contract',
+    duration: '6 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('6 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '2000',
+    vendor_floor: '1400',
+    vendor_cap: '1800',
+    budget_cap_currency: 'INR',
+    work_mode: 'Remote',
+    primary_location: 'Remote (India)',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '10:00 AM - 7:00 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 10 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 5 * 86400000)),
+    interview_rounds: '2 Rounds (Live React Machine Coding, HM Technical Discussion)',
+    priority: 'Normal',
+    job_description: 'High-performing Frontend Engineer needed to build responsive, accessible, pixel-perfect web interfaces using React, Next.js, and TypeScript with state management and micro-frontend architecture.'
+  },
+  {
+    id: 'data_engineer',
+    title: 'Data Engineer',
+    department: 'Data & Analytics',
+    job_family: 'Data Engineering',
+    seniority: 'Senior',
+    experience_band: '4-7 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['PySpark', 'Databricks', 'Apache Airflow', 'Snowflake', 'SQL', 'Python'],
+    nice_to_have_skills: ['dbt', 'AWS Glue', 'Kafka', 'Delta Lake'],
+    certifications: ['Databricks Certified Data Engineer Senior'],
+    engagement_type: 'Contract',
+    duration: '12 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('12 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '2400',
+    vendor_floor: '1700',
+    vendor_cap: '2100',
+    budget_cap_currency: 'INR',
+    work_mode: 'Remote',
+    primary_location: 'Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM - 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 14 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 7 * 86400000)),
+    interview_rounds: '3 Rounds (SQL & Data Modeling, ETL Pipeline Coding, HM Fit)',
+    priority: 'High',
+    job_description: 'We are hiring a Senior Data Engineer to architect scalable ETL pipelines, design data models in Snowflake, and manage batch & streaming data workflows on Databricks.'
+  },
+  {
+    id: 'mobile_engineer',
+    title: 'Mobile Engineer (Flutter / React Native)',
+    department: 'Mobile Engineering',
+    job_family: 'Mobile Apps',
+    seniority: 'Mid',
+    experience_band: '3-6 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['Flutter', 'Dart', 'React Native', 'iOS', 'Android', 'REST APIs'],
+    nice_to_have_skills: ['GraphQL', 'CI/CD Fastlane', 'Firebase'],
+    certifications: ['Google Certified Associate Android Developer'],
+    engagement_type: 'Contract',
+    duration: '6 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('6 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '1900',
+    vendor_floor: '1300',
+    vendor_cap: '1700',
+    budget_cap_currency: 'INR',
+    work_mode: 'Hybrid',
+    primary_location: 'Kochi / Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM - 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 10 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 5 * 86400000)),
+    interview_rounds: '2 Rounds (Mobile App Live Coding, Technical Architecture)',
+    priority: 'Normal',
+    job_description: 'Seeking a skilled Mobile Engineer to build cross-platform mobile apps for iOS and Android using Flutter and React Native, focusing on smooth UI animations and offline-first data sync.'
+  },
+  {
+    id: 'ui_ux_designer',
+    title: 'UI/UX Designer',
+    department: 'Product Design',
+    job_family: 'User Experience',
+    seniority: 'Mid',
+    experience_band: '3-5 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['Figma', 'User Research', 'Wireframing', 'Prototyping', 'Design Systems'],
+    nice_to_have_skills: ['Usability Testing', 'Framer', 'Design Tokens'],
+    certifications: ['Google UX Design Professional Certificate'],
+    engagement_type: 'Contract',
+    duration: '3 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('3 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '1800',
+    vendor_floor: '1200',
+    vendor_cap: '1600',
+    budget_cap_currency: 'INR',
+    work_mode: 'Remote',
+    primary_location: 'Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '10:00 AM - 7:00 PM IST',
+    equipment_provided: 'BYOD',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 7 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 4 * 86400000)),
+    interview_rounds: '2 Rounds (Portfolio Walkthrough, Product Design Challenge)',
+    priority: 'Normal',
+    job_description: 'Creative UI/UX Designer needed to research user personas, design intuitive user flows, build reusable design systems in Figma, and iterate based on usability feedback.'
+  },
+  {
+    id: 'product_manager',
+    title: 'Product Manager',
+    department: 'Product Management',
+    job_family: 'Product',
+    seniority: 'Senior',
+    experience_band: '5-8 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['Product Strategy', 'Agile/Scrum', 'Roadmap Design', 'Jira', 'PRDs', 'Analytics'],
+    nice_to_have_skills: ['Mixpanel', 'A/B Testing', 'SQL'],
+    certifications: ['Certified Scrum Product Owner (CSPO)'],
+    engagement_type: 'Full-time',
+    duration: 'Permanent',
+    start_date: toISODate(new Date()),
+    ends_on: '',
+    extension_likely: 'N/A',
+    rate_basis: 'Monthly rate',
+    ceiling_internal: '250000',
+    vendor_floor: '180000',
+    vendor_cap: '220000',
+    budget_cap_currency: 'INR',
+    work_mode: 'Hybrid',
+    primary_location: 'Bengaluru',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM - 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Permanent offer',
+    target_start_date: toISODate(new Date(Date.now() + 21 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 10 * 86400000)),
+    interview_rounds: '3 Rounds (Product Vision & Strategy, Technical Product Case, Executive Culture)',
+    priority: 'High',
+    job_description: 'Looking for a Senior Product Manager to drive product roadmap execution, define feature specifications (PRDs), collaborate with engineering & design teams, and measure product KPIs.'
+  },
+  {
+    id: 'qa_automation_eng',
+    title: 'QA Automation Engineer',
+    department: 'Quality Assurance',
+    job_family: 'Software Testing',
+    seniority: 'Mid',
+    experience_band: '3-5 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['Selenium', 'Cypress', 'Playwright', 'Python', 'API Testing', 'Postman'],
+    nice_to_have_skills: ['CI/CD Integration', 'JMeter', 'Appium'],
+    certifications: ['ISTQB Advanced Test Automation Engineer'],
+    engagement_type: 'Contract',
+    duration: '6 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('6 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '1600',
+    vendor_floor: '1100',
+    vendor_cap: '1450',
+    budget_cap_currency: 'INR',
+    work_mode: 'Remote',
+    primary_location: 'Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '9:30 AM - 6:30 PM IST',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 10 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 5 * 86400000)),
+    interview_rounds: '2 Rounds (Test Automation Live Coding, QA Process Strategy)',
+    priority: 'Normal',
+    job_description: 'QA Automation Engineer needed to build automated test frameworks with Cypress/Playwright, create regression test suites, and integrate automated testing into CI/CD build pipelines.'
+  },
+  {
+    id: 'sre_eng',
+    title: 'Site Reliability Engineer (SRE)',
+    department: 'Infrastructure & Platform',
+    job_family: 'Site Reliability',
+    seniority: 'Senior',
+    experience_band: '6-9 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 2,
+    must_have_skills: ['Kubernetes', 'Prometheus', 'Grafana', 'Terraform', 'Go', 'Linux'],
+    nice_to_have_skills: ['Incident Management', 'Chaos Engineering', 'Datadog'],
+    certifications: ['Certified Kubernetes Administrator (CKA)'],
+    engagement_type: 'Contract',
+    duration: '12 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('12 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '2800',
+    vendor_floor: '2000',
+    vendor_cap: '2500',
+    budget_cap_currency: 'INR',
+    work_mode: 'Remote',
+    primary_location: 'Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: '24/7 On-Call Rotation Support',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 14 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 7 * 86400000)),
+    interview_rounds: '3 Rounds (System Reliability Architecture, Live Incident Debugging, Leadership)',
+    priority: 'High',
+    job_description: 'Experienced SRE to maintain 99.99% system availability, optimize Kubernetes cluster performance, define SLOs/SLIs, and automate infrastructure recovery.'
+  },
+  {
+    id: 'technical_writer',
+    title: 'Technical Writer',
+    department: 'Product Documentation',
+    job_family: 'Documentation',
+    seniority: 'Mid',
+    experience_band: '2-5 yrs',
+    headcount: 1,
+    vendor_candidate_limit: 1,
+    must_have_skills: ['API Documentation', 'Markdown', 'GitBook', 'Swagger/OpenAPI', 'Developer Portals'],
+    nice_to_have_skills: ['Postman', 'Git', 'Docusaurus'],
+    certifications: ['Society for Technical Communication (STC) Certified'],
+    engagement_type: 'Contract',
+    duration: '3 Months',
+    start_date: toISODate(new Date()),
+    ends_on: addDuration('3 Months', new Date()),
+    extension_likely: 'Yes',
+    rate_basis: 'Hourly rate',
+    ceiling_internal: '1400',
+    vendor_floor: '900',
+    vendor_cap: '1250',
+    budget_cap_currency: 'INR',
+    work_mode: 'Remote',
+    primary_location: 'Remote',
+    timezone: 'IST (UTC+5:30)',
+    shift_hours: 'Flexible',
+    equipment_provided: 'BYOD',
+    bgv_required: 'Yes',
+    drug_test_required: 'No',
+    nda_required: 'Yes',
+    ip_assignment_required: 'Yes',
+    contract_template: 'Consultancy agreement',
+    target_start_date: toISODate(new Date(Date.now() + 7 * 86400000)),
+    submission_deadline: toISODate(new Date(Date.now() + 4 * 86400000)),
+    interview_rounds: '2 Rounds (Writing Sample Review, Developer Experience Interview)',
+    priority: 'Low',
+    job_description: 'Technical Writer to author REST API references, developer integration guides, release notes, and architecture diagrams for external developer portal.'
+  }
+];
+
   const handleTemplateSelect = (templateId) => {
     setSelectedTemplateId(templateId);
     if (!templateId) {
@@ -223,6 +606,49 @@ export default function NewRequisition() {
         submission_deadline: '',
         interview_rounds: '',
         priority: '',
+      });
+      return;
+    }
+
+    // Check predefined roles first for 100% complete prefilling
+    const preRole = PREDEFINED_ROLES.find((r) => String(r.id) === String(templateId) || r.title.toLowerCase() === String(templateId).toLowerCase());
+    if (preRole) {
+      setRoleTitle(preRole.title);
+      setDepartment(preRole.department);
+      setRawJd(preRole.job_description);
+      setPrefill({
+        job_family: preRole.job_family,
+        seniority: preRole.seniority,
+        experience_band: preRole.experience_band,
+        headcount: preRole.headcount,
+        vendor_candidate_limit: preRole.vendor_candidate_limit,
+        must_have_skills: [...preRole.must_have_skills],
+        nice_to_have_skills: [...preRole.nice_to_have_skills],
+        certifications: [...preRole.certifications],
+        engagement_type: preRole.engagement_type,
+        duration: preRole.duration,
+        start_date: preRole.start_date,
+        ends_on: preRole.ends_on,
+        extension_likely: preRole.extension_likely,
+        rate_basis: preRole.rate_basis,
+        ceiling_internal: preRole.ceiling_internal,
+        vendor_floor: preRole.vendor_floor,
+        vendor_cap: preRole.vendor_cap,
+        budget_cap_currency: preRole.budget_cap_currency,
+        work_mode: preRole.work_mode,
+        primary_location: preRole.primary_location,
+        timezone: preRole.timezone,
+        shift_hours: preRole.shift_hours,
+        equipment_provided: preRole.equipment_provided,
+        bgv_required: preRole.bgv_required,
+        drug_test_required: preRole.drug_test_required,
+        nda_required: preRole.nda_required,
+        ip_assignment_required: preRole.ip_assignment_required,
+        contract_template: preRole.contract_template,
+        target_start_date: preRole.target_start_date,
+        submission_deadline: preRole.submission_deadline,
+        interview_rounds: preRole.interview_rounds,
+        priority: preRole.priority,
       });
       return;
     }
@@ -531,34 +957,66 @@ export default function NewRequisition() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Form Sections (8 cols) */}
         <div className="lg:col-span-8 space-y-4">
-          {/* Template Import Card */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs space-y-2.5">
+          {/* Step 1: Select Role & Instant 100% Autofill Banner */}
+          <div className="bg-gradient-to-r from-gray-900 via-black to-gray-900 border border-gray-800 rounded-2xl p-5 shadow-md text-white space-y-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <BookOpen size={14} className="text-gray-900" />
-                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                  Import from Template (Optional)
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-xs border border-emerald-500/30">
+                  1
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-white tracking-tight flex items-center gap-2">
+                    <span>Select Role to 100% Autofill</span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                      ⚡ Instant Auto-populator
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-gray-400">
+                    Pick a role from the dropdown below. All 34 parameters across Role, Engagement, Budget, Work Setup & Compliance will be 100% autofilled automatically.
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] text-gray-400">Pre-fill standard company fields</span>
             </div>
 
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => handleTemplateSelect(e.target.value)}
-              className="w-full bg-gray-50 hover:bg-gray-100/70 border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-semibold text-gray-800 focus:outline-none focus:border-black transition-colors"
-            >
-              <option value="">— Choose an approved role template —</option>
-              {templates.map((tpl) => {
-                const label = tpl.name || tpl.title || tpl.role_title || (tpl.structured_role && (tpl.structured_role.title || tpl.structured_role.role_title)) || `Template #${tpl.id.slice(0, 8)}`;
-                const dept = tpl.department || (tpl.structured_role && (tpl.structured_role.department || tpl.structured_role.job_family));
-                return (
-                  <option key={tpl.id} value={tpl.id}>
-                    {label} {dept ? `(${dept})` : ''}
-                  </option>
-                );
-              })}
-            </select>
+            <div className="pt-1">
+              <select
+                value={selectedTemplateId}
+                onChange={(e) => handleTemplateSelect(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-700 hover:border-gray-500 rounded-xl px-4 py-3 text-xs font-bold text-white focus:outline-none focus:border-emerald-400 transition-colors shadow-inner"
+              >
+                <option value="">✨ Select a role from dropdown to 100% autofill...</option>
+                <optgroup label="⚡ Standard Role Templates (Instant 100% Prefill)">
+                  {PREDEFINED_ROLES.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.title} — {r.department} ({r.seniority}, {r.experience_band})
+                    </option>
+                  ))}
+                </optgroup>
+                {templates.length > 0 && (
+                  <optgroup label="🏢 Approved Company Templates">
+                    {templates.map((tpl) => {
+                      const label = tpl.name || tpl.title || tpl.role_title || (tpl.structured_role && (tpl.structured_role.title || tpl.structured_role.role_title)) || `Template #${tpl.id.slice(0, 8)}`;
+                      const dept = tpl.department || (tpl.structured_role && (tpl.structured_role.department || tpl.structured_role.job_family));
+                      return (
+                        <option key={tpl.id} value={tpl.id}>
+                          {label} {dept ? `(${dept})` : ''}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+            
+            {roleTitle && (
+              <div className="flex items-center justify-between text-[11px] text-emerald-400 font-semibold pt-1">
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle2 size={13} className="text-emerald-400" />
+                  <span>Role selected: <strong>{roleTitle}</strong> ({prefill.job_family || department})</span>
+                </span>
+                <span className="text-gray-400 text-[10px]">All 34 requisition fields autofilled!</span>
+              </div>
+            )}
           </div>
 
           {/* Core Requisition Builder Card */}
