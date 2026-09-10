@@ -182,8 +182,8 @@ nav.hide {
 .app-shell.console-recruiter { --console-h: 28; --console-s: 90%; --console-l: 55%; }
 
 /* Recruiter portal: polished, high-contrast operational workspace */
-.app-shell.console-recruiter { --console-h: 222; --console-s: 38%; --console-l: 18%; background: #ECECE9; }
-.app-shell.console-recruiter .content-area { background: #ECECE9; }
+.app-shell.console-recruiter { --console-h: 222; --console-s: 38%; --console-l: 18%; background: #E8EBF0; }
+.app-shell.console-recruiter .content-area { background: #E8EBF0; }
 .app-shell.console-recruiter .sidebar { width: 320px; padding: 28px 30px; }
 .app-shell.console-recruiter .nav-link.active { background: #e5e7eb; color: #111827; }
 .app-shell.console-recruiter .nav-link { color: #29466e; font-size: 1rem; padding: 13px 15px; }
@@ -222,7 +222,7 @@ nav.hide {
     margin: 0;
     min-width: 320px;
     min-height: 100vh;
-    background: #ECECE9;
+    background: #E8EBF0;
     overflow-x: clip;
   }
 
@@ -5612,7 +5612,7 @@ nav.hide {
 
 /* ============ PREVENT ELASTIC PULL / OVERSCROLL BOUNCE ============ */
 html, body, #root {
-  background-color: #ECECE9 !important;
+  background-color: #E8EBF0 !important;
   overscroll-behavior: none !important;
   overscroll-behavior-y: none !important;
   margin: 0 !important;
@@ -5666,3 +5666,50 @@ html, body, #root {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: #D1D5DB;
 }
+
+/* ============ VISIONOS GLASSMORPHIC AI CHAT ============ */
+.aichat-visionos-panel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(248, 250, 252, 0.68) 100%) !important;
+  backdrop-filter: blur(36px) saturate(190%) !important;
+  -webkit-backdrop-filter: blur(36px) saturate(190%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 20px 60px -15px rgba(0, 0, 0, 0.04), inset 0 1px 2px rgba(255, 255, 255, 1) !important;
+}
+
+.visionos-input-capsule {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(28px) saturate(200%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(200%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.06), inset 0 1px 2px rgba(255, 255, 255, 1) !important;
+}
+
+.visionos-header-pill {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 4px 18px -2px rgba(0, 0, 0, 0.04), inset 0 1px 1.5px rgba(255, 255, 255, 1) !important;
+}
+
+.visionos-circle-btn {
+  background: rgba(255, 255, 255, 0.88) !important;
+  backdrop-filter: blur(20px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 4px 18px -2px rgba(0, 0, 0, 0.04), inset 0 1px 1.5px rgba(255, 255, 255, 1) !important;
+}
+
+@keyframes orbFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+  }
+}
+
+.animate-orb-float {
+  animation: orbFloat 4.5s ease-in-out infinite;
+}
+
