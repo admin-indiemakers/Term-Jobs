@@ -5,8 +5,9 @@ import NotificationBell from '../components/NotificationBell';
 import AssistantWidget from '../components/AssistantWidget';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
 import OnboardVendorModal from '../components/OnboardVendorModal';
-import { Sparkles, Menu, X } from 'lucide-react';
+import { Sparkles, Menu, X, Building2, Users, Bell, UserCheck } from 'lucide-react';
 import { request } from '../api/client';
+import { motion, AnimatePresence } from 'motion/react';
 
 function initials(name) {
   if (!name) return 'HR';
@@ -252,7 +253,7 @@ export default function DashboardLayout() {
 
   if (authLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#ECECE9]">
+      <div className="flex h-screen w-screen items-center justify-center bg-[#E8EBF0]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A0A0A]"></div>
       </div>
     );
@@ -260,7 +261,7 @@ export default function DashboardLayout() {
 
   if (!user) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#ECECE9]">
+      <div className="flex h-screen w-screen items-center justify-center bg-[#E8EBF0]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A0A0A]"></div>
       </div>
     );
@@ -269,7 +270,9 @@ export default function DashboardLayout() {
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
-  const isAiChatPage = location.pathname === '/dashboard/superadmin/chat' || location.pathname === '/dashboard/hiring-manager/chat';
+  const isSuperAdminChat = userRole === 'Super Admin' && location.pathname === '/dashboard/superadmin/chat';
+  const isHiringManagerChat = userRole === 'Hiring Manager' && location.pathname === '/dashboard/hiring-manager/chat';
+  const isAiChatPage = isSuperAdminChat || isHiringManagerChat;
 
   const navItems =
     userRole === 'Hiring Manager'
@@ -711,13 +714,135 @@ export default function DashboardLayout() {
     </div>
   );
 
+  // Render compact floating dock rail for Super Admin AI Chat
+  const renderReducedRail = () => (
+    <div className="flex flex-col items-center justify-between h-full py-1 w-full select-none" data-purpose="sidebar-rail">
+      {/* Top Brand Logo - Term Jobs */}
+      <div className="flex flex-col items-center">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/superadmin')}
+          className="w-11 h-11 rounded-full bg-[#111417]/95 backdrop-blur-md text-white font-extrabold text-[14px] flex items-center justify-center cursor-pointer transition hover:scale-105 shadow-md border border-white/20"
+          title="Super Admin Dashboard"
+        >
+          TJ
+        </button>
+      </div>
+
+      {/* Dock Navigation Icons */}
+      <nav className="glass-dock bg-white border border-[#E2E8F0] shadow-sm rounded-2xl p-1.5 flex flex-col items-center gap-1.5" data-purpose="nav-actions">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/superadmin')}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname === '/dashboard/superadmin' ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
+          title="Dashboard"
+        >
+          <Icons.Dashboard size={17} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/superadmin/chat')}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition shadow-sm cursor-pointer ${location.pathname === '/dashboard/superadmin/chat' ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
+          title="AI Chat"
+        >
+          <Icons.Chat size={17} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (isAiChatPage) {
+              window.dispatchEvent(new CustomEvent('ai-chat-quick-prompt', { detail: { prompt: 'Draft onboarding preview for buyer company' } }));
+            } else {
+              setIsOnboardCompanyModalOpen(true);
+            }
+          }}
+          className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-white/60 flex items-center justify-center transition cursor-pointer"
+          title="Onboard Company"
+        >
+          <Building2 size={18} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (isAiChatPage) {
+              window.dispatchEvent(new CustomEvent('ai-chat-quick-prompt', { detail: { prompt: 'Draft onboarding preview for vendor consultancy' } }));
+            } else {
+              setIsOnboardVendorModalOpen(true);
+            }
+          }}
+          className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-white/60 flex items-center justify-center transition cursor-pointer"
+          title="Onboard Vendor"
+        >
+          <Users size={18} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/superadmin/accounts')}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname.includes('/accounts') ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
+          title="Accounts"
+        >
+          <Icons.Requisitions size={17} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/superadmin/admin-accounts')}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname.includes('/admin-accounts') ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
+          title="Admin Accounts"
+        >
+          <UserCheck size={18} />
+        </button>
+      </nav>
+
+      {/* Bottom Dock */}
+      <div className="glass-dock bg-white border border-[#E2E8F0] shadow-sm rounded-2xl p-1.5 flex flex-col items-center gap-2" data-purpose="user-dock">
+        <button
+          type="button"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('ai-chat-toast', { detail: { message: 'Audit Alerts: All systems operating within target thresholds' } }));
+          }}
+          className="relative w-10 h-10 rounded-xl text-gray-400 hover:text-black flex items-center justify-center transition cursor-pointer"
+          title="Audit Alerts"
+        >
+          <Bell size={18} />
+          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#FF4842] rounded-full ring-2 ring-white"></span>
+        </button>
+
+        <div
+          onClick={() => navigate('/dashboard/superadmin')}
+          className="w-9 h-9 rounded-xl overflow-hidden border border-white/80 cursor-pointer shadow-xs hover:ring-2 hover:ring-black transition relative group flex items-center justify-center bg-[#0A0A0A] text-white font-bold select-none"
+          title={`${user?.name || userRole || 'User'} Profile`}
+        >
+          {user?.avatar && !user.avatar.includes('aida-public') ? (
+            <img alt={user?.name || "Profile"} className="w-full h-full object-cover" src={user.avatar} />
+          ) : (
+            <span className="text-[12px] font-extrabold tracking-tight text-white">
+              {initials(user?.name)}
+            </span>
+          )}
+          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white"></span>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''}`}>
       <style>{`
         .app-shell.ai-chat-mode {
           background-color: #E8EBF0 !important;
-          background: #E8EBF0 !important;
+          background: radial-gradient(circle at 10% 20%, rgba(0, 194, 255, 0.08) 0%, transparent 40%),
+                      radial-gradient(circle at 90% 30%, rgba(216, 249, 41, 0.12) 0%, transparent 45%),
+                      radial-gradient(circle at 50% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+                      #E8EBF0 !important;
           padding: 0 !important;
+          height: 100vh !important;
+          max-height: 100vh !important;
+          overflow: hidden !important;
         }
         /* Eliminate any lingering focus/active rectangle on nav links */
         .sidebar a,
@@ -812,8 +937,8 @@ export default function DashboardLayout() {
         .app-shell.console-recruiter,
         .app-shell.console-hiringmanager,
         .app-shell {
-          background-color: #ECECE9 !important;
-          background: #ECECE9 !important;
+          background-color: #E8EBF0 !important;
+          background: #E8EBF0 !important;
           min-height: 100vh !important;
           width: 100% !important;
           max-width: 100% !important;
@@ -870,23 +995,14 @@ export default function DashboardLayout() {
         .app-shell.console-director .sidebar,
         .app-shell.console-hiringmanager .sidebar,
         .app-shell.console-recruiter .sidebar {
-          width: 272px !important;
-          min-width: 272px !important;
-          max-width: 272px !important;
           height: calc(100vh - 32px) !important;
           max-height: calc(100vh - 32px) !important;
           position: sticky !important;
           top: 16px !important;
           align-self: flex-start !important;
-          background-color: #FFFFFF !important;
-          border: 1px solid #E2E2DC !important;
-          border-radius: 30px !important;
-          margin: 16px 0 16px 16px !important;
-          padding: 24px 20px 20px 20px !important;
           display: flex !important;
           flex-direction: column !important;
           justify-content: space-between !important;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
           box-sizing: border-box !important;
           z-index: 40 !important;
         }
@@ -922,11 +1038,71 @@ export default function DashboardLayout() {
         }
       `}</style>
 
-      {/* Desktop Floating Rounded Sidebar Card (hidden on < 1024px, and hidden in AI Chat mode) */}
-      {!isAiChatPage && (
-        <aside className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}>
-          {renderSidebarContent()}
-        </aside>
+      {/* Desktop Floating Animated Sidebar (smoothly reduces to narrow dock on AI Chat) */}
+      {!isHiringManagerChat && (
+        <motion.aside
+          className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}
+          animate={{
+            width: isSuperAdminChat ? 56 : 272,
+            minWidth: isSuperAdminChat ? 56 : 272,
+            maxWidth: isSuperAdminChat ? 56 : 272,
+            backgroundColor: isSuperAdminChat ? 'rgba(255, 255, 255, 0)' : '#FFFFFF',
+            borderColor: isSuperAdminChat ? 'rgba(226, 226, 220, 0)' : '#E2E2DC',
+            borderWidth: isSuperAdminChat ? 0 : 1,
+            borderStyle: 'solid',
+            borderRadius: isSuperAdminChat ? 0 : 30,
+            paddingTop: isSuperAdminChat ? 4 : 24,
+            paddingBottom: isSuperAdminChat ? 4 : 20,
+            paddingLeft: isSuperAdminChat ? 0 : 20,
+            paddingRight: isSuperAdminChat ? 0 : 20,
+            marginLeft: isSuperAdminChat ? 12 : 16,
+            marginRight: 0,
+            marginTop: isSuperAdminChat ? 8 : 16,
+            marginBottom: isSuperAdminChat ? 8 : 16,
+            boxShadow: isSuperAdminChat ? 'none' : '0 4px 20px rgba(0, 0, 0, 0.02)',
+          }}
+          transition={{
+            type: 'spring',
+            stiffness: 280,
+            damping: 28,
+            mass: 0.8,
+          }}
+          style={{
+            height: isSuperAdminChat ? 'calc(100vh - 16px)' : 'calc(100vh - 32px)',
+            position: 'sticky',
+            top: isSuperAdminChat ? 8 : 16,
+            alignSelf: 'flex-start',
+            boxSizing: 'border-box',
+            zIndex: 40,
+            overflow: 'hidden',
+          }}
+        >
+          <AnimatePresence mode="wait" initial={false}>
+            {isSuperAdminChat ? (
+              <motion.div
+                key="reduced-rail"
+                initial={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="w-full h-full flex flex-col items-center justify-between"
+              >
+                {renderReducedRail()}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="full-sidebar"
+                initial={{ opacity: 0, scale: 0.94, filter: 'blur(4px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 0.94, filter: 'blur(4px)' }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                className="w-full h-full flex flex-col justify-between"
+              >
+                {renderSidebarContent()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.aside>
       )}
 
       {/* Mobile Drawer (Visible when isMobileMenuOpen is true on < 1024px) */}
@@ -966,77 +1142,98 @@ export default function DashboardLayout() {
         </div>
       )}
 
-      <div className={`main-area min-w-0 flex-1 flex flex-col ${isAiChatPage ? 'w-full' : ''}`}>
-        {!isAiChatPage && (
-          <header style={{ backgroundColor: "transparent" }} className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
-            {/* Breadcrumb & Mobile Menu Toggle Left */}
-            <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
-              {/* Hamburger Toggle (Mobile / Tablet only) */}
-              <button
-                type="button"
-                onClick={() => setIsMobileMenuOpen(true)}
-                className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
-                aria-label="Open menu"
-              >
-                <Menu size={21} strokeWidth={2.2} />
-              </button>
+      <div className={`main-area min-w-0 flex-1 flex flex-col ${isAiChatPage ? 'w-full h-screen max-h-screen overflow-hidden' : ''}`}>
+        <AnimatePresence>
+          {!isAiChatPage && (
+            <motion.header
+              key="topbar-header"
+              initial={{ opacity: 0, height: 0, y: -16 }}
+              animate={{ opacity: 1, height: 'auto', y: 0 }}
+              exit={{ opacity: 0, height: 0, y: -16 }}
+              transition={{ duration: 0.22, ease: 'easeInOut' }}
+              style={{ backgroundColor: "transparent" }}
+              className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0 overflow-hidden"
+            >
+              {/* Breadcrumb & Mobile Menu Toggle Left */}
+              <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
+                {/* Hamburger Toggle (Mobile / Tablet only) */}
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(true)}
+                  className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                  aria-label="Open menu"
+                >
+                  <Menu size={21} strokeWidth={2.2} />
+                </button>
 
-              <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
-                {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
-              </span>
-              <span className="text-[#8A8A85] font-normal">/</span>
-              <span className="text-[#0A0A0A] font-semibold truncate">
-                {location.pathname.includes('/requisitions') ? 'Requisitions'
-                  : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
-                  : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
-                  : location.pathname.includes('/interviews') ? 'Interview Requests'
-                  : location.pathname.includes('/agreements') ? 'Agreements'
-                  : location.pathname.includes('/chat') ? 'AI Chat'
-                  : location.pathname.includes('/accepted') ? 'Accepted Candidates'
-                  : location.pathname.includes('/portal-access') ? 'Portal Access'
-                  : 'Dashboard'}
-              </span>
-              <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
-              <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
-            </div>
+                <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
+                  {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
+                </span>
+                <span className="text-[#8A8A85] font-normal">/</span>
+                <span className="text-[#0A0A0A] font-semibold truncate">
+                  {location.pathname.includes('/requisitions') ? 'Requisitions'
+                    : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
+                    : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
+                    : location.pathname.includes('/interviews') ? 'Interview Requests'
+                    : location.pathname.includes('/agreements') ? 'Agreements'
+                    : location.pathname.includes('/chat') ? 'AI Chat'
+                    : location.pathname.includes('/accepted') ? 'Accepted Candidates'
+                    : location.pathname.includes('/portal-access') ? 'Portal Access'
+                    : 'Dashboard'}
+                </span>
+                <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
+                <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
+              </div>
 
-            {/* Actions Right */}
-            <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
-              <button
-                type="button"
-                onClick={() => setIsAssistantOpen((prev) => !prev)}
-                title="AI Assistant"
-                style={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: '50%',
-                  backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
-                  border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
-                  color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
-                }}
-                className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
-              >
-                <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
-              </button>
+              {/* Actions Right */}
+              <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsAssistantOpen((prev) => !prev)}
+                  title="AI Assistant"
+                  style={{
+                    width: 34,
+                    height: 34,
+                    borderRadius: '50%',
+                    backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
+                    border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
+                    color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
+                  }}
+                  className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
+                >
+                  <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
+                </button>
 
-              <span
-                style={{
-                  backgroundColor: '#FFFFFF',
-                  border: '1px solid #E2E2DC',
-                  borderRadius: 9999,
-                }}
-                className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-                <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
-                <span className="xs:hidden sm:hidden">SECURE</span>
-              </span>
-            </div>
-          </header>
-        )}
+                <span
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    border: '1px solid #E2E2DC',
+                    borderRadius: 9999,
+                  }}
+                  className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
+                  <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
+                  <span className="xs:hidden sm:hidden">SECURE</span>
+                </span>
+              </div>
+            </motion.header>
+          )}
+        </AnimatePresence>
 
         <main className={isAiChatPage ? "w-full h-screen max-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={isAiChatPage ? 'chat-panel' : location.pathname}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2, ease: 'easeOut' }}
+              className="w-full h-full flex-1 flex flex-col min-w-0"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 

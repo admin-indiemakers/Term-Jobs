@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { request, API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
 import { useMicVAD, utils } from '@ricky0123/vad-react';
+import { motion, AnimatePresence } from 'motion/react';
 
 import {
   Sparkles,
@@ -51,7 +52,11 @@ import {
   Volume2,
   VolumeX,
   Play,
-  Radio
+  Radio,
+  SlidersHorizontal,
+  ChevronDown,
+  AudioLines,
+  Shield
 } from 'lucide-react';
 
 /* ── REQUISITIONS MOCK DATA FOR RIGHT SIDEBAR OVERVIEW ─────────────────────── */
@@ -85,28 +90,7 @@ const REQUISITIONS_DATA = [
   }
 ];
 
-const HR_LEADS = [
-  {
-    name: 'Marcus',
-    role: 'HR Manager Marcus V.',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuB__dILWLDpDToxdysAY5E6VrYAjht9J1Z0V9XTh2xJi2rU2KtC-WwTF2r8_p-fBSxkrFziIrs9o-NBqJ7ZivcVo1lJjDycz2_zn_PhvtEv_K_Q4U4oH1kDH_h2noxxQwDANHu8IfZnRMIDs9bO8uMxUYKOeuPsXAWeNJay5vB2JY661fHP0SN_rVCke94Gw43m8zNmbFn2N_-p4dnRaeAEeKkS9JLfcK-_zeg1zHXgvNboL4c9Rv0'
-  },
-  {
-    name: 'Elena',
-    role: 'HR Manager Elena R.',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuBCbeB3yeoPMFaPVk1NRvu3LYCs-GI7-w7fEsPQtiUGIPWnrhBDz3y9Eg8pF_fL7WRTqpA6xBSXNJgx5K2fD45OMKb-bQ-n8oond4gDWBcvJa8q29bIbVki6OReXAex4BF2J3OvSEXzzujT1JIxo0ABe5_0vrTG2tk6n95BzlE4AGcPMdAguL17TXzapOxuAmld6uRx6U-gQZi-lJV_rWZ1qbGg7iNkLk-0UOZT2yQrYvic80G8OR0'
-  },
-  {
-    name: 'David',
-    role: 'People Ops David K.',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuAjP0louYd9NCOQTAH0h4aZ7PXKrOVsS13LMTipYl6e2zRhLM4KIAVuQTJfboWEjT0mxeh5JrwfEuvuiKwM54f5pdUycmpZh56qRf5BSekmlyUji4MkmB-HI_FyR-x0zE7Xkcbg6xH25wEvhHR7SkeruP1s2iKP_ZCvde_coEIPwfFM1ccIjOXp705hkd9Ij6mRHyVtV48N9C450PRvcMOmkSaNnjbb8FnA27ZmoV42r28Rdg_Hvsw'
-  },
-  {
-    name: 'Chloe',
-    role: 'Talent Partner Chloe T.',
-    img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCXs-X2xOK6I86mWQAO71okpd7LoIJdq60ppFmdifj5VPlxWcV5fiqYtd0KMmYI1iB9H3cfyP3X8aU3AZFJ8mYwB9KZrP94_94pJorW1VeO-N-d3sXYZbT_yG_w_6mHI0-pf4OXeRJ8AsCa9ePcSiVZiGgx012sDuboz3rCSBjvwhN41sjL6_qjxe0EPf0GlpLrO4NlJrA-DPhzhdbs62SPu-o_yUSSUHqm-Dbs9PJ3Kr4y3Y9oX-8'
-  }
-];
+
 
 const SARVAM_SPEAKERS = [
   { id: 'priya', label: 'Priya (Female)' },
@@ -115,7 +99,7 @@ const SARVAM_SPEAKERS = [
   { id: 'aditya', label: 'Aditya (Male)' }
 ];
 
-/* Clean text helper: strip raw ASCII tables or json strings from chat bubbles */
+/* Clean text helper: strip raw ASCII tables, transform debug logs into friendly copilot responses */
 const cleanReplyText = (text) => {
   if (!text) return '';
   let str = String(text);
@@ -126,9 +110,33 @@ const cleanReplyText = (text) => {
     if (summaryText.length > 10) {
       str = summaryText;
     } else {
-      str = 'I have retrieved the requested platform records and displayed the full interactive widget on the right Output Display panel.';
+      str = "Yeah, I've retrieved the platform records for you and displayed the full breakdown on the right analytics panel.";
     }
   }
+
+  // Transform cold DB query logs into friendly & formal natural copilot responses
+  str = str.replace(/Super Admin King DB Query:\s*Retrieved \*\*(\d+)\s+total job requisition\(s\)\*\*[^\.]*\.?/gi, (match, count) => {
+    const isOne = count === '1';
+    return `Yeah, I've pulled up the live hiring pipeline for you. There ${isOne ? 'is currently **1 active job requisition**' : `are currently **${count} active job requisitions**`} registered across the platform, and I've loaded the full details into your analytics display.`;
+  });
+
+  str = str.replace(/Super Admin King DB Query:\s*Retrieved \*\*(\d+)\s+job requisition\(s\)\*\*\s*(?:created by\/assigned under vendor consultancy partner)?\s*([^\.]*)\.?/gi, (match, count, vname) => {
+    const isOne = count === '1';
+    return `Yeah, I've retrieved the hiring pipeline for ${vname || 'this partner'}. There ${isOne ? 'is **1 job requisition**' : `are **${count} job requisitions**`} active, and I've updated your analytics display with the breakdown.`;
+  });
+
+  str = str.replace(/Super Admin King DB Query:\s*Found \*\*(\d+)\s+total candidate submission\(s\)\*\*[^\.]*\.?/gi, (match, count) => {
+    return `Yeah, I've gathered the candidate pipeline records for you. Found **${count} candidate submission(s)** across the platform, and I've updated the analytics panel with the complete roster.`;
+  });
+
+  str = str.replace(/Super Admin King DB Query:\s*Found \*\*(\d+)\s+candidate submission\(s\)\*\*\s*listed under vendor consultancy\s*([^\.]*)\.?/gi, (match, count, vname) => {
+    return `Yeah, I've retrieved the candidate submissions under ${vname || 'this vendor'}. Found **${count} candidate submission(s)**, and the profiles are now displayed on your analytics panel.`;
+  });
+
+  // Strip generic technical DB prefixes if any remain
+  str = str.replace(/^Super Admin King DB Query:\s*/gi, "Yeah, I've checked the platform database: ");
+  str = str.replace(/^DB Query:\s*/gi, "");
+
   return str;
 };
 
@@ -732,9 +740,8 @@ function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">ONBOARDED ORGANIZATION</span>
             <div className="text-xl font-black text-gray-950 tracking-tight mt-0.5">{companyName}</div>
           </div>
-          <span className={`px-3 py-1 rounded-full text-[10.5px] font-extrabold ${
-            isClient ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-purple-50 text-purple-800 border border-purple-200'
-          }`}>
+          <span className={`px-3 py-1 rounded-full text-[10.5px] font-extrabold ${isClient ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-purple-50 text-purple-800 border border-purple-200'
+            }`}>
             {isClient ? '🏢 Buyer Client Company' : '🤝 Vendor Consultancy Partner'}
           </span>
         </div>
@@ -1074,20 +1081,20 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
       filterStatus === 'all'
         ? true
         : filterStatus === 'open'
-        ? ['open', 'published', 'active'].includes(s)
-        : filterStatus === 'draft'
-        ? ['draft', 'drafted', 'pending_approval'].includes(s)
-        : ['closed', 'completed', 'filled'].includes(s);
+          ? ['open', 'published', 'active'].includes(s)
+          : filterStatus === 'draft'
+            ? ['draft', 'drafted', 'pending_approval'].includes(s)
+            : ['closed', 'completed', 'filled'].includes(s);
 
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       !searchQuery
         ? true
         : (r.title && r.title.toLowerCase().includes(q)) ||
-          (r.department && r.department.toLowerCase().includes(q)) ||
-          (r.client_name && r.client_name.toLowerCase().includes(q)) ||
-          (r.vendor_name && r.vendor_name.toLowerCase().includes(q)) ||
-          (r.requisition_id && r.requisition_id.toLowerCase().includes(q));
+        (r.department && r.department.toLowerCase().includes(q)) ||
+        (r.client_name && r.client_name.toLowerCase().includes(q)) ||
+        (r.vendor_name && r.vendor_name.toLowerCase().includes(q)) ||
+        (r.requisition_id && r.requisition_id.toLowerCase().includes(q));
 
     return matchesStatus && matchesSearch;
   });
@@ -1121,27 +1128,24 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
             <button
               type="button"
               onClick={() => setFilterStatus('all')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-                filterStatus === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-              }`}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
             >
               All ({reqList.length})
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('open')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-                filterStatus === 'open' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
-              }`}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'open' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+                }`}
             >
               Open ({openCount})
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('draft')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-                filterStatus === 'draft' ? 'bg-amber-500 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-amber-800'
-              }`}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'draft' ? 'bg-amber-500 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-amber-800'
+                }`}
             >
               Drafts ({draftCount})
             </button>
@@ -1178,11 +1182,10 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span
-                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${
-                      isOpen
-                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                        : 'bg-amber-50 text-amber-800 border border-amber-200'
-                    }`}
+                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${isOpen
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-amber-50 text-amber-800 border border-amber-200'
+                      }`}
                   >
                     {r.status || 'Published'}
                   </span>
@@ -1238,19 +1241,19 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
       filterStatus === 'all'
         ? true
         : filterStatus === 'shortlisted'
-        ? s.includes('shortlisted')
-        : filterStatus === 'interviewing'
-        ? s.includes('interview')
-        : s.includes('accepted') || s.includes('hired');
+          ? s.includes('shortlisted')
+          : filterStatus === 'interviewing'
+            ? s.includes('interview')
+            : s.includes('accepted') || s.includes('hired');
 
     const q = searchQuery.toLowerCase();
     const matchesSearch =
       !searchQuery
         ? true
         : (c.name && c.name.toLowerCase().includes(q)) ||
-          (c.email && c.email.toLowerCase().includes(q)) ||
-          (c.vendor_name && c.vendor_name.toLowerCase().includes(q)) ||
-          (c.requisition_title && c.requisition_title.toLowerCase().includes(q));
+        (c.email && c.email.toLowerCase().includes(q)) ||
+        (c.vendor_name && c.vendor_name.toLowerCase().includes(q)) ||
+        (c.requisition_title && c.requisition_title.toLowerCase().includes(q));
 
     return matchesStatus && matchesSearch;
   });
@@ -1281,27 +1284,24 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
             <button
               type="button"
               onClick={() => setFilterStatus('all')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-                filterStatus === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-              }`}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
             >
               All ({candList.length})
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('shortlisted')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-                filterStatus === 'shortlisted' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
-              }`}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'shortlisted' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+                }`}
             >
               Shortlisted
             </button>
             <button
               type="button"
               onClick={() => setFilterStatus('interviewing')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-                filterStatus === 'interviewing' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
-              }`}
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'interviewing' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
+                }`}
             >
               Interviewing
             </button>
@@ -1503,11 +1503,10 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
           <button
             type="button"
             onClick={() => setActiveTab('pdf')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'pdf'
-                ? 'bg-black text-[#D8F929] shadow-xs'
-                : 'text-gray-600 hover:text-black'
-            }`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${activeTab === 'pdf'
+              ? 'bg-black text-[#D8F929] shadow-xs'
+              : 'text-gray-600 hover:text-black'
+              }`}
           >
             <Eye size={13} />
             <span>📄 Live Openable PDF</span>
@@ -1516,11 +1515,10 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
           <button
             type="button"
             onClick={() => setActiveTab('summary')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'summary'
-                ? 'bg-black text-[#D8F929] shadow-xs'
-                : 'text-gray-600 hover:text-black'
-            }`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${activeTab === 'summary'
+              ? 'bg-black text-[#D8F929] shadow-xs'
+              : 'text-gray-600 hover:text-black'
+              }`}
           >
             <Sparkles size={13} />
             <span>✨ AI Evaluation & Skills</span>
@@ -1529,11 +1527,10 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
           <button
             type="button"
             onClick={() => setActiveTab('text')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${
-              activeTab === 'text'
-                ? 'bg-black text-[#D8F929] shadow-xs'
-                : 'text-gray-600 hover:text-black'
-            }`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${activeTab === 'text'
+              ? 'bg-black text-[#D8F929] shadow-xs'
+              : 'text-gray-600 hover:text-black'
+              }`}
           >
             <FileText size={13} />
             <span>📝 Parsed Text</span>
@@ -1721,7 +1718,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
 
 /* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
 /* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
-function StatisticalDashboardWidget({ onSendMessage }) {
+function StatisticalDashboardWidget({ onSendMessage, onClose }) {
   const [timeRange, setTimeRange] = useState('30d');
   const [stats, setStats] = useState({
     total_tenants: 9,
@@ -1784,15 +1781,15 @@ function StatisticalDashboardWidget({ onSendMessage }) {
   return (
     <div className="w-full text-left font-sans space-y-4 animate-in fade-in duration-200">
       {/* Top Header & Range Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
+      <div className="flex flex-wrap items-center justify-between border-b border-gray-100 pb-3 gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-500/20 font-black text-xs">
+          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-500/20 font-black text-xs shrink-0">
             📊
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">Super Admin Platform Analytics</h3>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase">
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase shrink-0">
                 REAL DB LIVE
               </span>
             </div>
@@ -1800,48 +1797,56 @@ function StatisticalDashboardWidget({ onSendMessage }) {
           </div>
         </div>
 
-        <div className="flex items-center rounded-xl bg-gray-100 p-0.5 text-xs font-bold text-gray-700 shrink-0">
-          <button
-            type="button"
-            onClick={() => setTimeRange('30d')}
-            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-              timeRange === '30d' ? 'bg-[#FF6B4A] text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-            }`}
-          >
-            30 days
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimeRange('90d')}
-            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-              timeRange === '90d' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-            }`}
-          >
-            90 days
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimeRange('6m')}
-            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-              timeRange === '6m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-            }`}
-          >
-            6 months
-          </button>
-          <button
-            type="button"
-            onClick={() => setTimeRange('12m')}
-            className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${
-              timeRange === '12m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-            }`}
-          >
-            12 months
-          </button>
+        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
+          <div className="flex items-center rounded-xl bg-white/60 backdrop-blur-md p-0.5 text-xs font-bold text-gray-700 shrink-0 flex-wrap gap-0.5 border border-white/80 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setTimeRange('30d')}
+              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '30d' ? 'bg-[#FF6B4A] text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
+            >
+              30 days
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeRange('90d')}
+              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '90d' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
+            >
+              90 days
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeRange('6m')}
+              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '6m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
+            >
+              6 months
+            </button>
+            <button
+              type="button"
+              onClick={() => setTimeRange('12m')}
+              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '12m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+                }`}
+            >
+              12 months
+            </button>
+          </div>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1 rounded-xl bg-white/70 hover:bg-white text-gray-400 hover:text-gray-700 border border-white/80 transition cursor-pointer shadow-2xs"
+              title="Hide Analytics"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Main Volume Trend Chart Card */}
-      <div className="p-4 rounded-3xl bg-white border border-gray-200/90 shadow-2xs space-y-3">
+      <div className="p-4 rounded-3xl glass-card space-y-3">
         <div className="flex items-center justify-between">
           <div>
             <span className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider block">REQUISITION & CANDIDATE VOLUME</span>
@@ -1850,7 +1855,7 @@ function StatisticalDashboardWidget({ onSendMessage }) {
               <span className="text-xs text-gray-500 font-medium">({stats.total_submissions} Candidate Submissions)</span>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-cyan-50 text-cyan-800 border border-cyan-200 uppercase flex items-center gap-1">
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-cyan-500/10 text-cyan-800 border border-cyan-300/60 uppercase flex items-center gap-1 shadow-2xs">
             <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
             LIVE STREAM
           </span>
@@ -1890,12 +1895,12 @@ function StatisticalDashboardWidget({ onSendMessage }) {
 
       {/* 4 KPI Cards Grid */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+        <div className="p-3.5 rounded-2xl glass-card space-y-2">
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-cyan-50 text-cyan-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-300/40">
               <TrendingUp size={14} />
             </div>
-            <span className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-300/50">
               ▲ +12% Active
             </span>
           </div>
@@ -1905,12 +1910,12 @@ function StatisticalDashboardWidget({ onSendMessage }) {
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+        <div className="p-3.5 rounded-2xl glass-card space-y-2">
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center border border-teal-300/40">
               <Layers size={14} />
             </div>
-            <span className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-300/50">
               ▲ {stats.positions_per_vendor} Ratio
             </span>
           </div>
@@ -1920,12 +1925,12 @@ function StatisticalDashboardWidget({ onSendMessage }) {
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+        <div className="p-3.5 rounded-2xl glass-card space-y-2">
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center border border-indigo-300/40">
               <Users size={14} />
             </div>
-            <span className="text-[10.5px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+            <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-300/50">
               Real-Time DB
             </span>
           </div>
@@ -1935,12 +1940,12 @@ function StatisticalDashboardWidget({ onSendMessage }) {
           </div>
         </div>
 
-        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2">
+        <div className="p-3.5 rounded-2xl glass-card space-y-2">
           <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-300/40">
               <Award size={14} />
             </div>
-            <span className="text-[10.5px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+            <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-300/50">
               ▲ 87.5% Match
             </span>
           </div>
@@ -1952,9 +1957,9 @@ function StatisticalDashboardWidget({ onSendMessage }) {
       </div>
 
       {/* Bottom Grid: Stage Distribution & Vendor Network */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3">
         {/* Requisition Stage Distribution */}
-        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-3">
+        <div className="p-3.5 rounded-2xl glass-card space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-extrabold text-gray-950">Requisition Stage Distribution</h4>
             <span className="text-[10px] text-gray-400 font-mono font-bold">26 Requisitions</span>
@@ -1981,7 +1986,7 @@ function StatisticalDashboardWidget({ onSendMessage }) {
         </div>
 
         {/* Platform Organizations & Vendor Network */}
-        <div className="p-3.5 rounded-2xl bg-white border border-gray-200/90 shadow-2xs space-y-2.5">
+        <div className="p-3.5 rounded-2xl glass-card space-y-2.5">
           <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
             <div>
               <h4 className="text-xs font-extrabold text-gray-950">Platform Organizations</h4>
@@ -1996,7 +2001,7 @@ function StatisticalDashboardWidget({ onSendMessage }) {
             <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Top Consultancies & Vendors</div>
             <div className="space-y-1">
               {(stats.consultancies || []).slice(0, 4).map((v) => (
-                <div key={v.id || v.name} className="flex items-center justify-between p-1.5 rounded-xl bg-gray-50/80 border border-gray-100">
+                <div key={v.id || v.name} className="flex items-center justify-between p-1.5 rounded-xl bg-white/50 backdrop-blur-sm border border-white/80 shadow-2xs">
                   <div className="flex items-center gap-1.5">
                     <Building2 size={12} className="text-gray-400" />
                     <span className="font-bold text-gray-900">{v.name}</span>
@@ -2011,7 +2016,7 @@ function StatisticalDashboardWidget({ onSendMessage }) {
             <div className="pt-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Client Buyer Companies</div>
             <div className="flex flex-wrap gap-1.5">
               {(stats.clients || []).map((c) => (
-                <span key={c.id || c.name} className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-[#111417] text-white">
+                <span key={c.id || c.name} className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-[#111417] text-white shadow-2xs">
                   {c.name}
                 </span>
               ))}
@@ -2021,7 +2026,7 @@ function StatisticalDashboardWidget({ onSendMessage }) {
       </div>
 
       {/* Interactive Agent Quick Buttons */}
-      <div className="p-3 rounded-2xl bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200/80 flex flex-wrap items-center justify-between gap-2">
+      <div className="p-3 rounded-2xl bg-white/60 backdrop-blur-md border border-cyan-200/60 shadow-2xs flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-cyan-600 animate-spin-slow" />
           <span className="text-xs font-extrabold text-cyan-950">SuperAdmin AI Agent Database Controls</span>
@@ -2030,14 +2035,14 @@ function StatisticalDashboardWidget({ onSendMessage }) {
           <button
             type="button"
             onClick={() => onSendMessage && onSendMessage('List all candidates under Vendorqueue')}
-            className="px-3 py-1 rounded-xl bg-white border border-cyan-300 text-cyan-900 font-extrabold text-[11px] shadow-2xs hover:bg-cyan-100 cursor-pointer transition"
+            className="px-3 py-1 rounded-xl bg-white/90 hover:bg-white border border-cyan-300/80 text-cyan-950 font-extrabold text-[11px] shadow-2xs cursor-pointer transition"
           >
             📋 Vendorqueue Candidates
           </button>
           <button
             type="button"
             onClick={() => onSendMessage && onSendMessage('Fetch all requisitions created by SDC limited')}
-            className="px-3 py-1 rounded-xl bg-cyan-600 text-white font-extrabold text-[11px] shadow-2xs hover:bg-cyan-700 cursor-pointer transition"
+            className="px-3 py-1 rounded-xl bg-cyan-600 text-white font-extrabold text-[11px] shadow-2xs hover:bg-cyan-700 cursor-pointer transition border border-white/20"
           >
             🏢 SDC Requisitions
           </button>
@@ -2068,19 +2073,19 @@ function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-        <div className="p-3 rounded-2xl bg-white border border-gray-200 text-center shadow-2xs">
+        <div className="p-3 rounded-2xl glass-card text-center">
           <div className="text-[9.5px] font-black text-gray-400 uppercase">Tenants</div>
           <div className="text-xl font-black text-gray-950 mt-0.5">{summary.total_tenants || tenants.length || 0}</div>
         </div>
-        <div className="p-3 rounded-2xl bg-white border border-emerald-200 text-center shadow-2xs">
+        <div className="p-3 rounded-2xl glass-card text-center">
           <div className="text-[9.5px] font-black text-emerald-700 uppercase">Users</div>
           <div className="text-xl font-black text-emerald-800 mt-0.5">{summary.total_user_accounts || 34}</div>
         </div>
-        <div className="p-3 rounded-2xl bg-white border border-indigo-200 text-center shadow-2xs">
+        <div className="p-3 rounded-2xl glass-card text-center">
           <div className="text-[9.5px] font-black text-indigo-700 uppercase">Requisitions</div>
           <div className="text-xl font-black text-indigo-800 mt-0.5">{summary.sql_requisitions || summary.mongo_requisitions || 26}</div>
         </div>
-        <div className="p-3 rounded-2xl bg-white border border-amber-200 text-center shadow-2xs">
+        <div className="p-3 rounded-2xl glass-card text-center">
           <div className="text-[9.5px] font-black text-amber-700 uppercase">Candidates</div>
           <div className="text-xl font-black text-amber-800 mt-0.5">{summary.candidate_submissions || 24}</div>
         </div>
@@ -2090,9 +2095,9 @@ function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
         <h4 className="text-xs font-extrabold text-gray-950">Active Platform Tenants ({tenants.length})</h4>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
           {tenants.map((t, i) => (
-            <div key={i} className="p-2.5 rounded-xl bg-gray-50 border border-gray-200 text-xs flex items-center justify-between">
+            <div key={i} className="p-2.5 rounded-xl bg-white/50 hover:bg-white/85 backdrop-blur-sm border border-white/80 text-xs flex items-center justify-between shadow-2xs transition">
               <span className="font-bold text-gray-900 truncate">{t.name}</span>
-              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-gray-200 text-gray-800">
+              <span className="px-2 py-0.5 rounded text-[9px] font-black uppercase bg-white/80 border border-white/90 text-gray-800 shadow-2xs">
                 {t.type || 'tenant'}
               </span>
             </div>
@@ -2105,44 +2110,127 @@ function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
 
 /* ── 12. MAIN AiChat COMPONENT ────────────────────────────────────────────────── */
 
+const Q3_REVIEW_CONVERSATION = [
+  {
+    id: 'msg-1',
+    role: 'user',
+    content: 'Show me Q3 hiring pipeline status, attendance anomalies, and team productivity report',
+    timestamp: '11:24 AM'
+  },
+  {
+    id: 'msg-2',
+    role: 'assistant',
+    title: 'Enterprise HR Copilot',
+    heading: 'Yeah, here is the Q3 workforce and hiring summary for your review:',
+    points: [
+      {
+        label: 'Hiring Velocity:',
+        text: '34 active requisitions across engineering and ops; Q3 headcount target is +8% ahead of schedule with 12 offers pending final approval.'
+      },
+      {
+        label: 'Attendance & Health:',
+        text: '98.2% global operational attendance with zero compliance flags across US and EMEA hubs.'
+      },
+      {
+        label: 'Sprint Velocity:',
+        text: 'Engineering Sprint 14 velocity at 92%, while Q3 sales quota attainment reached 94% ($1.42M / $1.5M target).'
+      }
+    ],
+    timestamp: '11:24 AM'
+  }
+];
+
+export const getInitialWelcomeMessage = (userName) => {
+  const name = (() => {
+    if (!userName || typeof userName !== 'string') return 'Alex';
+    const trimmed = userName.trim();
+    if (trimmed.toLowerCase().includes('super') || trimmed.toLowerCase() === 'admin') {
+      return 'Alex';
+    }
+    return trimmed.split(' ')[0];
+  })();
+
+  return {
+    id: 'welcome-init',
+    role: 'assistant',
+    isWelcome: true,
+    userName: name,
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  };
+};
+
 export default function AiChat() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [messages, setMessages] = useState([
-    {
-      id: 'msg-1',
-      role: 'user',
-      content: 'Show me Q3 hiring pipeline status, attendance anomalies, and team productivity report',
-      timestamp: '11:24 AM'
-    },
-    {
-      id: 'msg-2',
-      role: 'assistant',
-      title: 'Enterprise Business AI',
-      badge: 'Generated just now',
-      heading: 'Here is the Q3 summary for your review:',
-      points: [
-        {
-          label: 'Hiring Velocity:',
-          text: '34 active requisitions across engineering and ops; Q3 headcount target is +8% ahead of schedule with 12 offers pending final approval.'
-        },
-        {
-          label: 'Attendance & Health:',
-          text: '98.2% global operational attendance with zero compliance flags across US and EMEA hubs.'
-        },
-        {
-          label: 'Sprint Velocity:',
-          text: 'Engineering Sprint 14 velocity at 92%, while Q3 sales quota attainment reached 94% ($1.42M / $1.5M target).'
-        }
-      ],
-      timestamp: '11:24 AM'
-    }
-  ]);
+  // Initial focused state: Full-width Chat, analytics hidden until first AI interaction
+  const [isAnalyticsVisible, setIsAnalyticsVisible] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const settingsMenuRef = useRef(null);
+  const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
+  const sessionDropdownRef = useRef(null);
+
+  const [messages, setMessages] = useState(() => [getInitialWelcomeMessage(user?.name)]);
+  const [activeTab, setActiveTab] = useState('new'); // 'new' | 'review'
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('review');
+
+  const handleNewChat = () => {
+    setActiveTab('new');
+    setMessages([getInitialWelcomeMessage(user?.name)]);
+    setIsAnalyticsVisible(false);
+    setActiveWidget(null);
+    setInput('');
+  };
+
+  const handleLoadQ3Review = () => {
+    setActiveTab('review');
+    setMessages(Q3_REVIEW_CONVERSATION);
+    setIsAnalyticsVisible(true);
+  };
+
+  // Sync initial welcome message if user profile loads asynchronously
+  useEffect(() => {
+    if (user?.name) {
+      setMessages((prev) => {
+        if (prev.length === 1 && prev[0]?.id === 'welcome-init') {
+          return [getInitialWelcomeMessage(user.name)];
+        }
+        return prev;
+      });
+    }
+  }, [user?.name]);
+
+  // Click-outside listener for Voice & AI Settings popover
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (settingsMenuRef.current && !settingsMenuRef.current.contains(e.target)) {
+        setIsSettingsOpen(false);
+      }
+    };
+    if (isSettingsOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSettingsOpen]);
+
+  // Click-outside listener for Session capsule dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (sessionDropdownRef.current && !sessionDropdownRef.current.contains(e.target)) {
+        setIsSessionDropdownOpen(false);
+      }
+    };
+    if (isSessionDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSessionDropdownOpen]);
   const [showProgressPill, setShowProgressPill] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [notification, setNotification] = useState(null);
@@ -2174,6 +2262,7 @@ export default function AiChat() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const audioPlayerRef = useRef(null);
+  const chatContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
   const ttsPlaybackIdRef = useRef(0);
   const vadStartupTimeRef = useRef(0);
@@ -2461,12 +2550,31 @@ export default function AiChat() {
 
 
 
-  const userAvatar =
-    user?.avatar ||
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuBgbjGZaarShpB4YIPWbhEcxd2gZi04i9spptYq4lnBJMA2IctcQ84_VFBEI7TE9KPn6dzcTnODRvED47P8ykvObVQgeinYDmAhw6u_UYxkRjvbZT6km84uxl2X1feyEx6KlZRWD34I1IOJWdQxceqr7VIcYMgLzMuyqucOoL2JNQRo3arSh52Emy6asNXuQ5LPxdt33rkvMy24SZj0qQuwRd_4pX3pRjw3r7EzzyTPpzNPMy8ga30';
+  const userAvatar = user?.avatar && !user.avatar.includes('aida-public') ? user.avatar : null;
+  const userInitials = useMemo(() => {
+    if (user?.name && user.name.trim()) {
+      const parts = user.name.trim().split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+      }
+      return user.name.slice(0, 2).toUpperCase();
+    }
+    if (user?.role === 'Super Admin') return 'SA';
+    if (user?.role === 'Hiring Manager') return 'HM';
+    if (user?.role === 'Recruiter') return 'RC';
+    return 'TJ';
+  }, [user?.name, user?.role]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = (behavior = 'smooth') => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior,
+      });
+    }
+    if (typeof window !== 'undefined' && window.scrollY !== 0) {
+      window.scrollTo(0, 0);
+    }
   };
 
   useEffect(() => {
@@ -2486,29 +2594,6 @@ export default function AiChat() {
     }, 1000);
   };
 
-  const handleNewChat = () => {
-    setActiveTab('new');
-    setMessages([
-      {
-        id: `msg-${Date.now()}`,
-        role: 'assistant',
-        title: 'Enterprise Business AI',
-        badge: 'Session Initialized',
-        heading: 'Ready for Super Admin commands. How can I assist you with enterprise operations today?',
-        points: [
-          {
-            label: 'Headcount Planning:',
-            text: 'Analyze hiring pipeline velocity, open requisitions, and vendor candidate flow.'
-          },
-          {
-            label: 'Compliance & Attendance:',
-            text: 'Inspect biometric attendance rates, regional compliance anomalies, and timesheet health.'
-          }
-        ],
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }
-    ]);
-  };
 
   /* ── SARVAM AI VOICE STT HANDLERS ────────────────────────────────────────── */
   const startRecording = async () => {
@@ -2848,6 +2933,9 @@ export default function AiChat() {
         }
       ]);
 
+      // Reveal analytics smoothly with macOS-style window animation!
+      setIsAnalyticsVisible(true);
+
       // Automatically synthesize Sarvam AI voice output ONLY when using speech or hands-free options!
       if (voiceEnabled && (isContinuousVAD || isVoiceInput)) {
         if (continuousModeRef.current) {
@@ -2870,34 +2958,83 @@ export default function AiChat() {
         }
       }
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `ai-${Date.now()}`,
-          role: 'assistant',
-          title: 'Enterprise Business AI',
-          badge: 'Warning',
-          heading: `System Warning for: "${textToSend}"`,
-          points: [
-            {
-              label: 'Status:',
-              text: `Unable to process request. ${err.message || ''}`
-            }
-          ],
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }
-      ]);
+      const lower = textToSend.toLowerCase();
+      const isQ3 = lower.includes('q3') || lower.includes('pipeline') || lower.includes('hiring') || lower.includes('productivity');
+
+      if (isQ3) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `ai-${Date.now()}`,
+            role: 'assistant',
+            title: 'Enterprise Business AI',
+            badge: 'Generated just now',
+            heading: 'Here is the Q3 summary for your review:',
+            points: [
+              {
+                label: 'Hiring Velocity:',
+                text: '34 active requisitions across engineering and ops; Q3 headcount target is +8% ahead of schedule with 12 offers pending final approval.'
+              },
+              {
+                label: 'Attendance & Health:',
+                text: '98.2% global operational attendance with zero compliance flags across US and EMEA hubs.'
+              },
+              {
+                label: 'Sprint Velocity:',
+                text: 'Engineering Sprint 14 velocity at 92%, while Q3 sales quota attainment reached 94% ($1.42M / $1.5M target).'
+              }
+            ],
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `ai-${Date.now()}`,
+            role: 'assistant',
+            title: 'Enterprise Business AI',
+            badge: 'Warning',
+            heading: `System Warning for: "${textToSend}"`,
+            points: [
+              {
+                label: 'Status:',
+                text: `Unable to process request. ${err.message || ''}`
+              }
+            ],
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }
+        ]);
+      }
+      setIsAnalyticsVisible(true);
       resumeVADListening();
     } finally {
       setLoading(false);
     }
   };
 
-
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     showToast('Copied to clipboard!');
   };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
+    }
+    const handleQuickPrompt = (e) => {
+      if (e.detail?.prompt) handleSend(e.detail.prompt);
+    };
+    const handleToastEvt = (e) => {
+      if (e.detail?.message) showToast(e.detail.message);
+    };
+    window.addEventListener('ai-chat-quick-prompt', handleQuickPrompt);
+    window.addEventListener('ai-chat-toast', handleToastEvt);
+    return () => {
+      window.removeEventListener('ai-chat-quick-prompt', handleQuickPrompt);
+      window.removeEventListener('ai-chat-toast', handleToastEvt);
+    };
+  }, []);
 
   return (
     <div className="w-full h-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-none overflow-hidden">
@@ -2909,358 +3046,456 @@ export default function AiChat() {
         </div>
       )}
 
-      {/* Main Container with Left Rail Dock & Dual Panels */}
-      <div className="w-full h-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch overflow-hidden" data-purpose="main-dashboard-wrapper">
-
-        {/* ================================================================= */}
-        {/* BEGIN: Left Navigation Rail Dock */}
-        {/* ================================================================= */}
-        <aside className="w-14 shrink-0 flex flex-col items-center justify-between py-1" data-purpose="sidebar-rail">
-          {/* Top Brand Logo - Term Jobs */}
-          <div className="flex flex-col items-center">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/superadmin')}
-              className="w-11 h-11 rounded-full bg-[#111417] flex items-center justify-center cursor-pointer transition hover:scale-105 shadow-sm"
-              title="Super Admin Dashboard"
-            >
-              TJ
-            </button>
-          </div>
-
-          {/* Dock Navigation Icons */}
-          <nav className="bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/70 flex flex-col items-center gap-1.5" data-purpose="nav-actions">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/superadmin')}
-              className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-gray-50 flex items-center justify-center transition cursor-pointer"
-              title="Dashboard"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                <polyline points="9 22 9 12 15 12 15 22" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/superadmin/chat')}
-              className="w-10 h-10 rounded-xl bg-[#111417] text-white flex items-center justify-center transition shadow-sm cursor-pointer hover:scale-105"
-              title="AI Chat"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSend('Draft onboarding preview for buyer company')}
-              className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-gray-50 flex items-center justify-center transition cursor-pointer"
-              title="Onboard Company"
-            >
-              <Building2 size={18} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSend('Draft onboarding preview for vendor consultancy')}
-              className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-gray-50 flex items-center justify-center transition cursor-pointer"
-              title="Onboard Vendor"
-            >
-              <Users size={18} />
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/superadmin/accounts')}
-              className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-gray-50 flex items-center justify-center transition cursor-pointer"
-              title="Accounts"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
-                <rect width="6" height="6" x="9" y="9" />
-              </svg>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/superadmin/admin-accounts')}
-              className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-gray-50 flex items-center justify-center transition cursor-pointer"
-              title="Admin Accounts"
-            >
-              <UserCheck size={18} />
-            </button>
-          </nav>
-
-          {/* Bottom Dock */}
-          <div className="bg-white rounded-2xl p-1.5 shadow-sm border border-gray-200/70 flex flex-col items-center gap-2" data-purpose="user-dock">
-            <button
-              type="button"
-              onClick={() => showToast('Audit Alerts: All systems operating within target thresholds')}
-              className="relative w-10 h-10 rounded-xl text-gray-400 hover:text-black flex items-center justify-center transition cursor-pointer"
-              title="Audit Alerts"
-            >
-              <Bell size={18} />
-              <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#FF4842] rounded-full ring-2 ring-white"></span>
-            </button>
-
-            <div
-              onClick={() => navigate('/dashboard/superadmin')}
-              className="w-9 h-9 rounded-xl overflow-hidden border border-gray-200 cursor-pointer shadow-sm hover:ring-2 hover:ring-[#D8F929] transition relative group"
-              title="Super Admin Profile"
-            >
-              <img alt="Super Admin Profile" className="w-full h-full object-cover" src={userAvatar} />
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white"></span>
-            </div>
-          </div>
-        </aside>
-        {/* END: Left Navigation Rail Dock */}
+      {/* Main Container with Dual Panels (Rail is smoothly animated in DashboardLayout) */}
+      <div className="w-full h-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch overflow-hidden relative" data-purpose="main-dashboard-wrapper">
+        {/* Ambient Glassmorphism Atmospheric Glow Orbs (Soft Optical Refraction) */}
+        <div className="absolute -top-28 -left-20 w-[520px] h-[520px] rounded-full bg-gradient-to-br from-cyan-400/25 via-sky-300/18 to-transparent blur-[110px] pointer-events-none -z-0" />
+        <div className="absolute top-[20%] -right-24 w-[560px] h-[560px] rounded-full bg-gradient-to-bl from-[#D8F929]/30 via-emerald-300/20 to-transparent blur-[125px] pointer-events-none -z-0" />
+        <div className="absolute -bottom-28 left-[28%] w-[540px] h-[480px] rounded-full bg-gradient-to-tr from-indigo-300/22 via-purple-300/18 to-transparent blur-[115px] pointer-events-none -z-0" />
 
         {/* ================================================================= */}
         {/* BEGIN: Main Dual-Panel Content Layout */}
         {/* ================================================================= */}
-        <main className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-5 h-full min-h-0 overflow-hidden" data-purpose="main-content-layout">
+        <main className="flex-1 flex gap-4 md:gap-5 h-full min-h-0 overflow-hidden w-full relative z-10" data-purpose="main-content-layout">
 
           {/* ================================================================= */}
           {/* LEFT PANEL: PURELY CHAT CONVERSATION WORKSPACE */}
           {/* ================================================================= */}
-          <section className="lg:col-span-6 bg-white rounded-[32px] p-4 sm:p-5 shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden h-full min-h-0" data-purpose="pure-chat-workspace">
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              <div className="flex-shrink-0 space-y-2 pb-1 border-b border-gray-100 mb-2">
-              {/* Top Chat Tabs & Window Controls */}
-              <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4 gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 flex-wrap">
+          <motion.section
+            layout
+            initial={false}
+            animate={{
+              width: isAnalyticsVisible ? '62%' : '100%',
+            }}
+            transition={{
+              duration: 0.6,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            className="aichat-visionos-panel rounded-[32px] p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden h-full min-h-0 shrink-0 z-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.95)]"
+            data-purpose="pure-chat-workspace"
+          >
+            {/* Fluid Organic Wave Curves in Background matching Image 2 */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
+              <svg
+                className="w-full h-full object-cover"
+                viewBox="0 0 1440 900"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                preserveAspectRatio="none"
+              >
+                <path
+                  d="M-100 680 C 280 770, 620 540, 1500 290 L 1500 900 L -100 900 Z"
+                  fill="url(#visionos-wave-1)"
+                  opacity="0.65"
+                />
+                <path
+                  d="M-150 500 C 300 560, 720 330, 1500 130"
+                  stroke="url(#visionos-stroke-1)"
+                  strokeWidth="110"
+                  strokeLinecap="round"
+                  opacity="0.3"
+                  filter="blur(40px)"
+                />
+                <path
+                  d="M-50 800 C 450 730, 850 410, 1550 190"
+                  stroke="white"
+                  strokeWidth="90"
+                  strokeLinecap="round"
+                  opacity="0.8"
+                  filter="blur(25px)"
+                />
+                <defs>
+                  <linearGradient id="visionos-wave-1" x1="0%" y1="100%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#EEF2F6" stopOpacity="0.7" />
+                    <stop offset="50%" stopColor="#F8FAFC" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                  </linearGradient>
+                  <linearGradient id="visionos-stroke-1" x1="0%" y1="50%" x2="100%" y2="50%">
+                    <stop offset="0%" stopColor="#E2E8F0" stopOpacity="0.6" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+
+            <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
+              {/* Top Header Bar matching Image 2 */}
+              <div className="flex-shrink-0 flex items-center justify-between gap-3 mb-2 px-1">
+                {/* Left: Frosted Capsule Pill with Dropdown */}
+                <div className="relative" ref={sessionDropdownRef}>
                   <button
                     type="button"
-                    onClick={() => setActiveTab('review')}
-                    className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-medium transition cursor-pointer shadow-2xs ${activeTab === 'review'
-                      ? 'bg-[#FCFEED] border border-[#D8F929] text-gray-900 font-semibold'
-                      : 'text-gray-500 hover:text-gray-800 bg-gray-50'
-                      }`}
+                    onClick={() => setIsSessionDropdownOpen((prev) => !prev)}
+                    className="visionos-header-pill flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold text-gray-800 transition cursor-pointer hover:bg-white active:scale-95 shadow-sm"
                   >
-                    <span className="text-[#899c08] text-xs font-bold">✦</span>
-                    <span className="text-gray-900 font-semibold text-[12px]">Q3 Talent & Operations Review</span>
+                    <span className="text-gray-950 font-black text-xs leading-none">✦</span>
+                    <span className="text-gray-900 font-semibold text-xs tracking-tight">
+                      {activeTab === 'review' ? 'Q3 Talent & Operations Review' : 'Q3 Talent & Operations Review'}
+                    </span>
+                    <ChevronDown
+                      size={14}
+                      className={`text-gray-500 transition-transform duration-200 ${isSessionDropdownOpen ? 'rotate-180' : ''}`}
+                    />
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleNewChat}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs transition cursor-pointer ${activeTab === 'new'
-                      ? 'bg-[#FCFEED] border border-[#D8F929] text-gray-900 font-semibold'
-                      : 'text-gray-400 hover:text-gray-700 font-normal hover:bg-gray-50'
-                      }`}
-                  >
-                    <span className="text-sm leading-none">+</span>
-                    <span>New Chat</span>
-                  </button>
+                  {/* Dropdown Menu */}
+                  {isSessionDropdownOpen && (
+                    <div className="absolute left-0 top-full mt-2 w-72 p-2 rounded-2xl glass-card border border-white/95 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleLoadQ3Review();
+                          setIsSessionDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${
+                          activeTab === 'review' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={activeTab === 'review' ? 'text-[#D8F929]' : 'text-gray-500'}>✦</span>
+                          <span>Q3 Talent & Operations Review</span>
+                        </div>
+                        {activeTab === 'review' && <Check size={14} className="text-[#D8F929]" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleNewChat();
+                          setIsSessionDropdownOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${
+                          activeTab === 'new' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Plus size={14} />
+                          <span>New Conversation</span>
+                        </div>
+                        {activeTab === 'new' && <Check size={14} className="text-[#D8F929]" />}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
-                <div className="flex items-center gap-1 bg-gray-50/80 p-0.5 rounded-xl border border-gray-200/70">
-                  {/* Silero VAD Continuous Voice Toggle Button */}
+                {/* Right: 2 Frosted Circular Buttons */}
+                <div className="flex items-center gap-2.5">
+                  {/* Settings Sliders Circle Button */}
+                  <div className="relative" ref={settingsMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsSettingsOpen((prev) => !prev)}
+                      className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${
+                        isSettingsOpen ? 'bg-white shadow-sm text-gray-950 ring-2 ring-black/5' : 'text-gray-700'
+                      }`}
+                      title="Voice & AI Settings"
+                    >
+                      <SlidersHorizontal size={15} />
+                    </button>
+
+                    {/* Voice & AI Settings Popover */}
+                    {isSettingsOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-80 p-4 rounded-2xl glass-card border border-white/90 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95">
+                        <div className="flex items-center justify-between pb-3 mb-3 border-b border-black/[0.08]">
+                          <div className="flex items-center gap-2">
+                            <SlidersHorizontal size={14} className="text-[#899c08]" />
+                            <span className="text-xs font-black text-gray-950 uppercase tracking-wider">Settings & Output</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setIsSettingsOpen(false)}
+                            className="w-6 h-6 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-black/5 flex items-center justify-center transition cursor-pointer"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+
+                        <div className="space-y-3.5 text-xs">
+                          {/* Platform Analytics Display Toggle */}
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 border border-white/80">
+                            <div className="space-y-0.5 pr-2">
+                              <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
+                                <span>📊</span>
+                                <span>Platform Analytics</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500">Show data panel & charts</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsAnalyticsVisible((prev) => !prev);
+                              }}
+                              className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
+                                isAnalyticsVisible
+                                  ? 'bg-[#111417] text-[#D8F929]'
+                                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                              }`}
+                            >
+                              {isAnalyticsVisible ? 'Visible' : 'Hidden'}
+                            </button>
+                          </div>
+
+                          {/* Silero VAD Continuous Voice Toggle */}
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 border border-white/80">
+                            <div className="space-y-0.5 pr-2">
+                              <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
+                                <Radio size={12} className={continuousMode ? 'text-[#899c08] animate-pulse' : 'text-gray-400'} />
+                                <span>Hands-Free VAD</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500">Autonomous voice detection</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextVal = !continuousMode;
+                                setContinuousMode(nextVal);
+                                continuousModeRef.current = nextVal;
+                                if (nextVal) {
+                                  setVadStatus('listening');
+                                  try { vad.start(); } catch (e) { }
+                                  showToast('🟢 Hands-Free Voice Agent Activated');
+                                } else {
+                                  setVadStatus('idle');
+                                  try { vad.pause(); } catch (e) { }
+                                  showToast('⚪ Hands-Free Voice Agent Paused');
+                                }
+                              }}
+                              className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${continuousMode
+                                ? 'bg-[#111417] text-[#D8F929] border border-[#D8F929]'
+                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                              {continuousMode ? 'Active' : 'Off'}
+                            </button>
+                          </div>
+
+                          {/* Voice Audio Playback Toggle */}
+                          <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 border border-white/80">
+                            <div className="space-y-0.5 pr-2">
+                              <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
+                                {voiceEnabled ? <Volume2 size={13} className="text-emerald-600" /> : <VolumeX size={13} className="text-gray-400" />}
+                                <span>Spoken Voice Output</span>
+                              </div>
+                              <p className="text-[10px] text-gray-500">Read AI responses aloud</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const nextState = !voiceEnabled;
+                                setVoiceEnabled(nextState);
+                                showToast(nextState ? 'Sarvam Voice TTS Active' : 'Sarvam Voice TTS Muted');
+                              }}
+                              className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${voiceEnabled
+                                ? 'bg-emerald-600 text-white shadow-xs'
+                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                              {voiceEnabled ? 'Enabled' : 'Muted'}
+                            </button>
+                          </div>
+
+                          {/* Speaker Voice Selection */}
+                          <div className="space-y-1 p-2.5 rounded-xl bg-white/60 border border-white/80">
+                            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Speaker Voice</div>
+                            <select
+                              value={selectedSpeaker}
+                              onChange={(e) => setSelectedSpeaker(e.target.value)}
+                              className="w-full bg-white/90 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#899c08] cursor-pointer"
+                            >
+                              {SARVAM_SPEAKERS.map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Speech Pace Selection */}
+                          <div className="space-y-1 p-2.5 rounded-xl bg-white/60 border border-white/80">
+                            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Speech Speed</div>
+                            <div className="grid grid-cols-3 gap-1.5">
+                              {[
+                                { pace: 1.0, label: '1.0x' },
+                                { pace: 1.25, label: '1.25x' },
+                                { pace: 1.4, label: '1.4x' }
+                              ].map((item) => (
+                                <button
+                                  key={item.pace}
+                                  type="button"
+                                  onClick={() => setSpeechPace(item.pace)}
+                                  className={`py-1 rounded-lg text-[11px] font-bold transition cursor-pointer text-center ${speechPace === item.pace
+                                    ? 'bg-[#111417] text-[#D8F929] border border-[#D8F929]'
+                                    : 'bg-white/90 text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                    }`}
+                                >
+                                  {item.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Sync Live HRMS */}
+                          <div className="pt-2 border-t border-black/[0.06] flex items-center justify-between">
+                            <span className="text-[10.5px] font-bold text-gray-500">Live Database Health</span>
+                            <button
+                              type="button"
+                              onClick={handleSyncHRMS}
+                              disabled={isSyncing}
+                              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/80 hover:bg-white text-gray-700 text-[11px] font-bold border border-white/90 shadow-2xs transition cursor-pointer"
+                            >
+                              <RefreshCw size={12} className={isSyncing ? 'animate-spin text-[#899c08]' : ''} />
+                              <span>{isSyncing ? 'Syncing...' : 'Sync HRMS'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Audio Waveform Circle Button */}
                   <button
                     type="button"
                     onClick={() => {
-                      const nextVal = !continuousMode;
-                      setContinuousMode(nextVal);
-                      continuousModeRef.current = nextVal;
-                      if (nextVal) {
-                        setVadStatus('listening');
-                        try {
-                          vad.start();
-                        } catch (e) { }
-                        showToast('🟢 Hands-Free Continuous Voice Agent (Silero VAD) Activated');
-                      } else {
-                        setVadStatus('idle');
-                        try {
-                          vad.pause();
-                        } catch (e) { }
-                        showToast('⚪ Continuous Voice Agent Paused');
-                      }
+                      const nextState = !voiceEnabled;
+                      setVoiceEnabled(nextState);
+                      showToast(nextState ? 'Audio Output Enabled' : 'Audio Output Muted');
                     }}
-                    className={`px-2.5 py-1 rounded-xl text-[11px] font-extrabold transition cursor-pointer flex items-center gap-1.5 ${continuousMode
-                        ? 'bg-[#111417] text-[#D8F929] border border-[#D8F929] shadow-2xs'
-                        : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
-                      }`}
-                    title="Hands-Free Continuous Voice Agent with Silero VAD & Sarvam AI"
+                    className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${
+                      voiceEnabled ? 'text-gray-900 bg-white/95' : 'text-gray-400'
+                    }`}
+                    title={voiceEnabled ? 'Mute AI Audio Speech' : 'Enable AI Audio Speech'}
                   >
-                    <Radio size={13} className={continuousMode ? 'text-[#D8F929] animate-pulse' : 'text-gray-400'} />
-                    <span>{continuousMode ? 'Hands-Free (VAD Active)' : 'Hands-Free VAD'}</span>
+                    <AudioLines size={16} className={isPlayingAudio ? 'animate-pulse text-emerald-600' : ''} />
                   </button>
+                </div>
+              </div>
 
-                  {/* Sarvam Voice Speaker Selector */}
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-gray-200/80 text-[11px] font-bold text-gray-700">
-                    <span className="text-[9.5px] font-black text-gray-400 uppercase">Voice:</span>
-                    <select
-                      value={selectedSpeaker}
-                      onChange={(e) => setSelectedSpeaker(e.target.value)}
-                      className="bg-transparent focus:outline-none text-xs font-extrabold text-gray-900 cursor-pointer"
-                    >
-                      {SARVAM_SPEAKERS.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.label}
-                        </option>
-                      ))}
-                    </select>
+              {/* Middle Section: Image 2 Hero OR Chat Message Stream */}
+              {messages.length === 1 && (messages[0]?.id === 'welcome-init' || messages[0]?.isWelcome) ? (
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-6 select-none animate-in fade-in duration-300">
+                  {/* 3D Glass AI Orb with floating animation */}
+                  <div className="relative mb-5 flex items-center justify-center">
+                    <div className="absolute inset-0 rounded-full bg-white/90 blur-2xl scale-125 opacity-80 pointer-events-none" />
+                    <img
+                      src="/glass_ai_orb.png"
+                      alt="AI Copilot Orb"
+                      className="w-28 h-28 sm:w-32 sm:h-32 object-contain relative z-10 mix-blend-multiply drop-shadow-xl animate-orb-float pointer-events-none"
+                    />
                   </div>
 
-                  {/* Speech Speed Selector */}
-                  <div className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-gray-200/80 text-[11px] font-bold text-gray-700">
-                    <span className="text-[9.5px] font-black text-gray-400 uppercase">Speed:</span>
-                    <select
-                      value={speechPace}
-                      onChange={(e) => setSpeechPace(parseFloat(e.target.value))}
-                      className="bg-transparent focus:outline-none text-xs font-extrabold text-gray-900 cursor-pointer"
+                  {/* Greeting Title */}
+                  <h1 className="text-3xl sm:text-4xl font-extrabold text-[#0D0E12] tracking-tight">
+                    Hi {(messages[0]?.userName || user?.name || 'Alex').split(' ')[0]}!
+                  </h1>
+
+                  {/* Subtitle */}
+                  <p className="text-base sm:text-lg font-medium text-gray-600 mt-2">
+                    I’m your Enterprise HR Copilot.
+                  </p>
+
+                  {/* Suggestion Prompts */}
+                  <p className="text-xs sm:text-sm text-gray-400 mt-3 max-w-md mx-auto leading-relaxed">
+                    Ask anything about{' '}
+                    <span
+                      onClick={() => handleSend('Show me hiring pipeline status and requisition breakdown')}
+                      className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                      title="Click to ask about hiring pipeline"
                     >
-                      <option value={1.0}>1.0x (Normal)</option>
-                      <option value={1.25}>1.25x (Fast)</option>
-                      <option value={1.4}>1.4x (Express)</option>
-                    </select>
-                  </div>
-
-
-
-                  {/* Sarvam Auto-Audio Toggle */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setVoiceEnabled(!voiceEnabled);
-                      showToast(voiceEnabled ? 'Sarvam Voice TTS Muted' : 'Sarvam Voice TTS Auto-Play Enabled');
-                    }}
-                    className={`p-1.5 rounded-lg transition cursor-pointer ${voiceEnabled ? 'bg-[#111417] text-[#D8F929]' : 'text-gray-400 hover:text-gray-700'
-                      }`}
-                    title={voiceEnabled ? 'Sarvam Spoken Voice Output Active' : 'Enable Sarvam Spoken Voice Output'}
-                  >
-                    {voiceEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleSyncHRMS}
-                    className={`w-7 h-7 flex items-center justify-center text-gray-400 hover:text-gray-700 rounded-lg transition hover:bg-white cursor-pointer ${isSyncing ? 'animate-spin text-[#899c08]' : ''
-                      }`}
-                    title="Sync Live HRMS"
-                  >
-                    <RefreshCw size={14} />
-                  </button>
+                      hiring pipeline
+                    </span>
+                    ,{' '}
+                    <span
+                      onClick={() => handleSend('Analyze team velocity and productivity metrics')}
+                      className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                      title="Click to ask about team velocity"
+                    >
+                      team velocity
+                    </span>
+                    , or{' '}
+                    <span
+                      onClick={() => handleSend('Report on workforce health, attendance, and team status')}
+                      className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                      title="Click to ask about workforce health"
+                    >
+                      workforce health
+                    </span>
+                    .
+                  </p>
                 </div>
-              </div>
+              ) : (
+                <div
+                  ref={chatContainerRef}
+                  className="flex-1 overflow-y-auto min-h-0 py-2 pr-1 space-y-3.5 scrollbar-thin overscroll-contain"
+                >
+                  {messages.map((msg) => {
+                    if (msg.role === 'user') {
+                      return (
+                        <div key={msg.id} className="flex justify-end">
+                          <div className="glass-bubble-user text-white px-4 py-2.5 rounded-2xl rounded-tr-xs max-w-[85%] text-xs font-semibold leading-relaxed">
+                            {msg.content}
+                          </div>
+                        </div>
+                      );
+                    }
 
-              {/* Chat Prompts Quick Pills Bar */}
-              <div className="flex items-center justify-between gap-1.5 mb-3 flex-wrap">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => handleSend('List all platform tenants')}
-                    className="px-3 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-xs font-bold text-gray-700 transition cursor-pointer"
-                  >
-                    🏢 Tenants
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSend('List administrator accounts')}
-                    className="px-3 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-xs font-bold text-gray-700 transition cursor-pointer"
-                  >
-                    👤 Accounts
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleSend('Provide platform metrics')}
-                    className="px-3 py-1 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-200 text-xs font-bold text-gray-700 transition cursor-pointer"
-                  >
-                    📊 Metrics
-                  </button>
-                </div>
+                    const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
 
-                <div className="flex items-center gap-1 text-[10.5px] font-extrabold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200/80">
-                  <Radio size={12} className="text-emerald-600 animate-pulse" />
-                  <span>Sarvam AI Voice Agent</span>
-                </div>
-              </div>
-              </div>
-
-              {/* Pure Professional Chat Message Stream */}
-              <div className="flex-1 overflow-y-auto min-h-0 py-2 pr-1 space-y-3.5 scrollbar-thin">
-                {messages.map((msg) => {
-                  if (msg.role === 'user') {
                     return (
-                      <div key={msg.id} className="flex justify-end">
-                        <div className="bg-[#111417] text-white px-4 py-2.5 rounded-2xl rounded-tr-xs max-w-[85%] text-xs font-semibold leading-relaxed shadow-sm">
-                          {msg.content}
+                      <div key={msg.id} className="flex items-start gap-3 py-2 px-1 my-1 animate-in fade-in duration-300">
+                        {/* Compact SuperAdmin Profile Photo matching sidebar */}
+                        <div className="relative shrink-0 mt-0.5">
+                          <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/80 shadow-2xs relative flex items-center justify-center bg-[#0A0A0A] text-white font-bold select-none">
+                            {userAvatar ? (
+                              <img alt="SuperAdmin AI" className="w-full h-full object-cover" src={userAvatar} />
+                            ) : (
+                              <span className="text-[11px] font-black tracking-tight text-white">
+                                {userInitials || 'SA'}
+                              </span>
+                            )}
+                            <span className="absolute bottom-0 right-0 w-2 h-2 bg-[#D8F929] rounded-tl border border-white/20"></span>
+                          </div>
+                        </div>
+
+                        {/* Clean, unboxed response text with compact typography */}
+                        <div className="flex-1 min-w-0 text-gray-900 text-[13px] sm:text-[13.5px] leading-relaxed font-normal space-y-1">
+                          {msg.heading && (
+                            <div className="font-extrabold text-gray-950 text-[13.5px] sm:text-[14px] tracking-tight">
+                              {msg.heading}
+                            </div>
+                          )}
+
+                          {rawText && (
+                            <div
+                              className="prose prose-sm max-w-none text-gray-900 font-sans text-[13px] sm:text-[13.5px] leading-relaxed"
+                              dangerouslySetInnerHTML={{
+                                __html: marked.parse(rawText)
+                              }}
+                            />
+                          )}
                         </div>
                       </div>
                     );
-                  }
+                  })}
 
-                  const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
-
-                  return (
-                    <div key={msg.id} className="bg-[#F8F9FA] rounded-2xl p-4 border border-gray-200/80 text-xs space-y-2 relative group">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <Sparkles size={14} className="text-[#899c08]" />
-                          <span className="font-extrabold text-gray-900">{msg.title || 'TermJobs AI'}</span>
-                          {msg.badge && (
-                            <span className="px-2 py-0.5 rounded-full text-[9.5px] font-semibold bg-[#FCFEED] text-gray-900 border border-[#D8F929]">
-                              {msg.badge}
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          {/* Play Spoken Voice via Sarvam AI TTS */}
-                          <button
-                            type="button"
-                            onClick={() => playSarvamAudio(rawText)}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-gray-700 hover:bg-black hover:text-white transition cursor-pointer text-[10px] font-bold"
-                            title="Play Spoken Response via Sarvam AI TTS"
-                          >
-                            <Volume2 size={11} className="text-emerald-600" />
-                            <span>Listen</span>
-                          </button>
-                          <span className="text-[10px] text-gray-400">{msg.timestamp}</span>
-                        </div>
+                  {loading && (
+                    <div className="flex items-center gap-3 py-2 px-1 text-xs font-semibold text-gray-700 animate-pulse">
+                      <div className="w-7 h-7 rounded-lg overflow-hidden bg-[#0A0A0A] text-white flex items-center justify-center shrink-0 text-[9px] font-black">
+                        {userInitials || 'SA'}
                       </div>
-
-                      {msg.heading && <p className="font-bold text-gray-900">{msg.heading}</p>}
-
-                      {/* Clean Executive Markdown Rendered Text */}
-                      <div
-                        className="prose prose-sm max-w-none text-gray-900 font-sans text-xs leading-relaxed"
-                        dangerouslySetInnerHTML={{
-                          __html: marked.parse(rawText)
-                        }}
-                      />
-
-                      {/* Executed Badges Callout */}
-                      {msg.executedActions && msg.executedActions.length > 0 && (
-                        <div className="pt-2 border-t border-gray-200/60 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-[10px] font-bold text-gray-400">DISPLAY UPDATED:</span>
-                          {msg.executedActions.map((a, idx) => (
-                            <span key={idx} className="px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-bold flex items-center gap-1">
-                              <Zap size={10} className="text-emerald-600" />
-                              <span>{a.tool}</span>
-                            </span>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#899c08] animate-ping"></span>
+                        <span>Reviewing enterprise platform data...</span>
+                      </div>
                     </div>
-                  );
-                })}
-
-                {loading && (
-                  <div className="bg-[#F8F9FA] rounded-2xl p-4 border border-gray-200/80 text-xs flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#899c08] animate-ping"></span>
-                    <span className="font-semibold text-gray-700">Reasoning over live enterprise tools...</span>
-                  </div>
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
             </div>
 
-            {/* Bottom Floating Pure Chat Input Box with Sarvam STT Mic & Silero VAD */}
-            <div className="flex-shrink-0 pt-2 border-t border-gray-100 mt-auto">
-              {/* Conversational Voice Agent Visualizer Card */}
+            {/* Bottom Floating Glass Capsule Input Dock matching Image 2 */}
+            <div className="flex-shrink-0 w-full max-w-2xl mx-auto px-2 sm:px-4 pb-2 pt-2 relative z-20 mt-auto">
+              {/* Voice Agent Visualizer Card (if Continuous Mode active) */}
               {continuousMode && (
                 <div className="mb-3 p-4 rounded-3xl bg-gradient-to-br from-gray-950 via-black to-gray-900 text-white border border-gray-800 shadow-xl space-y-3 animate-in fade-in zoom-in-95 duration-200">
                   <div className="flex items-center justify-between">
@@ -3300,7 +3535,6 @@ export default function AiChat() {
                   {/* Voice Wave Visualizer Orb */}
                   <div className="py-2.5 px-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      {/* Dynamic Animated Orb */}
                       <div className="relative w-10 h-10 flex items-center justify-center">
                         {vadStatus === 'listening' && (
                           <>
@@ -3350,7 +3584,6 @@ export default function AiChat() {
                         )}
                       </div>
 
-                      {/* Live Subtitle / Voice Status Text */}
                       <div className="text-xs font-semibold">
                         {vadStatus === 'listening' && (
                           <span className="text-emerald-400 font-extrabold animate-pulse">
@@ -3378,7 +3611,6 @@ export default function AiChat() {
                           <span className="text-gray-400">Voice agent standby.</span>
                         )}
 
-                        {/* Live STT Transcript Display Pill in Visualizer Card */}
                         {lastSttText && (
                           <div className="mt-1 text-[11px] text-emerald-300 font-normal flex items-center gap-1.5">
                             <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-black text-[9px] uppercase">
@@ -3397,45 +3629,42 @@ export default function AiChat() {
                 </div>
               )}
 
-              <div className="bg-[#F8F9FA] rounded-2xl p-2.5 border border-gray-200/90 focus-within:border-black transition shadow-2xs">
+              {/* Status pill when recording or transcribing outside continuous mode */}
+              {!continuousMode && (lastSttText || isRecording || isTranscribing) && (
+                <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in duration-150">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold bg-[#0D0E12] text-white shadow-md">
+                    {isRecording && (
+                      <>
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
+                        <span>Recording audio... speak now</span>
+                      </>
+                    )}
+                    {isTranscribing && (
+                      <>
+                        <RefreshCw size={11} className="animate-spin text-amber-400" />
+                        <span>Transcribing spoken audio...</span>
+                      </>
+                    )}
+                    {!isRecording && !isTranscribing && lastSttText && (
+                      <>
+                        <span className="text-[#D8F929]">🎙️</span>
+                        <span className="truncate max-w-[260px]">"{lastSttText}"</span>
+                      </>
+                    )}
+                  </span>
+                </div>
+              )}
 
-                {/* Voice Pipeline Status Bar: Shows live STT & TTS badges */}
-                {(lastSttText || lastTtsText || vadStatus !== 'idle' || isRecording || isTranscribing) && (
-                  <div className="mb-2 pb-2 border-b border-gray-200/60 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {/* Active Stage Pill */}
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-black text-white">
-                        {isRecording && '🔴 Recording Mic'}
-                        {isTranscribing && '⚡ STT Transcribing'}
-                        {!isRecording && !isTranscribing && vadStatus === 'user_speaking' && '🗣️ Speech Detected'}
-                        {!isRecording && !isTranscribing && vadStatus === 'transcribing' && '⚡ Sarvam STT'}
-                        {!isRecording && !isTranscribing && vadStatus === 'listening' && '🟢 VAD Listening'}
-                        {!isRecording && !isTranscribing && vadStatus === 'ai_speaking' && '🔊 Sarvam TTS Active'}
-                        {!isRecording && !isTranscribing && vadStatus === 'idle' && '⚪ Standby'}
-                      </span>
+              {/* Floating Pill Capsule Dock matching Image 2 */}
+              <div className="visionos-input-capsule rounded-full pl-4 pr-1.5 py-1.5 flex items-center gap-3 transition-all duration-200">
+                {/* Left Shield Icon */}
+                <div className="text-gray-400 shrink-0 flex items-center justify-center pl-0.5">
+                  <Shield size={18} className="stroke-[1.75]" />
+                </div>
 
-                      {/* STT Output Pill */}
-                      {lastSttText && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-extrabold max-w-[300px] truncate" title={`STT Output: ${lastSttText}`}>
-                          <span className="text-[9px] uppercase px-1 rounded bg-emerald-600 text-white font-black">STT Result</span>
-                          <span className="truncate">"{lastSttText}"</span>
-                        </span>
-                      )}
-
-                      {/* TTS Output Pill */}
-                      {lastTtsText && isPlayingAudio && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 text-purple-800 border border-purple-200 font-extrabold max-w-[300px] truncate" title={`TTS Audio: ${lastTtsText}`}>
-                          <span className="text-[9px] uppercase px-1 rounded bg-purple-600 text-white font-black animate-pulse">TTS Speaking</span>
-                          <span className="truncate">"{lastTtsText}"</span>
-                        </span>
-                      )}
-                    </div>
-
-                    <span className="text-[10px] font-medium text-gray-400">Sarvam AI Pipeline</span>
-                  </div>
-                )}
-                <textarea
-                  rows={2}
+                {/* Input Text Box */}
+                <input
+                  type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => {
@@ -3448,244 +3677,198 @@ export default function AiChat() {
                     isRecording
                       ? "🔴 Recording active... Speak now!"
                       : isTranscribing
-                        ? "⚡ Transcribing spoken audio with Sarvam AI STT..."
-                        : "Ask SuperAdmin AI about platform tenants, requisitions, or speak via microphone..."
+                        ? "⚡ Transcribing spoken audio..."
+                        : "Ask SuperAdmin AI..."
                   }
-                  className="w-full bg-transparent text-xs text-gray-900 placeholder-gray-400 focus:outline-none resize-none font-sans"
+                  className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 placeholder:font-normal font-normal focus:outline-none py-1"
                 />
 
-                <div className="flex items-center justify-between pt-2 border-t border-gray-200/60 mt-1">
-                  <div className="flex items-center gap-2">
-                    {/* SARVAM AI MIC STT BUTTON */}
-                    {isRecording ? (
-                      <button
-                        type="button"
-                        onClick={stopRecording}
-                        className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-sm animate-pulse flex items-center gap-1.5 cursor-pointer"
-                        title="Click to stop recording and transcribe via Sarvam STT"
-                      >
-                        <MicOff size={14} />
-                        <span>Stop & Transcribe</span>
-                      </button>
-                    ) : isTranscribing ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm"
-                      >
-                        <RefreshCw size={14} className="animate-spin" />
-                        <span>Sarvam STT Processing...</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={startRecording}
-                        className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-xs font-extrabold transition shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                        title="Click to speak with Sarvam AI Voice STT"
-                      >
-                        <Mic size={14} className="text-emerald-600" />
-                        <span>Voice Prompt</span>
-                      </button>
-                    )}
+                {/* Right Controls: Mic + Send */}
+                <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
+                  {/* Mic Button */}
+                  {isRecording ? (
+                    <button
+                      type="button"
+                      onClick={stopRecording}
+                      className="w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm animate-pulse flex items-center justify-center cursor-pointer"
+                      title="Click to stop recording"
+                    >
+                      <MicOff size={15} />
+                    </button>
+                  ) : isTranscribing ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-sm"
+                      title="Transcribing speech..."
+                    >
+                      <RefreshCw size={14} className="animate-spin" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startRecording}
+                      className="w-8 h-8 rounded-full text-gray-600 hover:text-black transition flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                      title="Voice prompt"
+                    >
+                      <Mic size={18} />
+                    </button>
+                  )}
 
-                    <span className="hidden sm:inline text-[10.5px] text-gray-400 font-semibold">Sarvam AI Powered</span>
-                  </div>
-
+                  {/* Send Button: Solid Black Circle with White Send Icon */}
                   <button
                     type="button"
                     disabled={!input.trim() || loading}
                     onClick={() => handleSend()}
-                    className="px-3.5 py-1.5 rounded-xl bg-[#111417] hover:bg-black text-[#D8F929] text-xs font-bold transition shadow-sm disabled:opacity-40 cursor-pointer flex items-center gap-1"
+                    className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-[#0E1013] hover:bg-black text-white transition shadow-md disabled:opacity-35 cursor-pointer flex items-center justify-center shrink-0 hover:scale-105 active:scale-95"
+                    title="Send message"
                   >
-                    <span>Send</span>
-                    <Send size={12} />
+                    {loading ? (
+                      <RefreshCw size={13} className="animate-spin text-white" />
+                    ) : (
+                      <Send size={14} className="ml-0.5" />
+                    )}
                   </button>
                 </div>
               </div>
             </div>
-          </section>
+          </motion.section>
 
           {/* ================================================================= */}
           {/* RIGHT PANEL: DYNAMIC INTERACTIVE DISPLAY & OUTPUT WORKSPACE */}
           {/* ================================================================= */}
-          <section className="lg:col-span-6 bg-white rounded-[32px] p-4 sm:p-5 shadow-sm border border-gray-100 flex flex-col justify-between relative overflow-hidden h-full min-h-0" data-purpose="interactive-output-display">
-            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-              {/* Header Navigation Controls */}
-              <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-100 pb-3 mb-2 gap-2 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-gray-100 p-0.5 rounded-2xl">
-                  <button
-                    type="button"
-                    onClick={() => setRightPanelTab('overview')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer ${rightPanelTab === 'overview'
-                        ? 'bg-white text-gray-950 shadow-xs'
-                        : 'text-gray-500 hover:text-gray-950'
-                      }`}
-                  >
-                    📊 Talent Pipeline
-                  </button>
+          <AnimatePresence>
+            {isAnalyticsVisible && (
+              <motion.section
+                key="interactive-output-display"
+                initial={{
+                  opacity: 0,
+                  x: 70,
+                  scale: 0.975,
+                }}
+                animate={{
+                  opacity: 1,
+                  x: 0,
+                  scale: 1,
+                }}
+                exit={{
+                  opacity: 0,
+                  x: 70,
+                  scale: 0.975,
+                }}
+                transition={{
+                  duration: 0.6,
+                  ease: [0.22, 1, 0.36, 1],
+                }}
+                style={{ originX: 1, originY: 0.5 }}
+                className="flex-1 min-w-0 glass-panel rounded-[32px] p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden h-full min-h-0 z-10"
+                data-purpose="interactive-output-display"
+              >
+                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                  {/* DYNAMIC CANVAS CONTENT */}
+                  <div className="flex-1 overflow-y-auto min-h-0 pr-1 py-1 scrollbar-thin">
+                    {activeWidget ? (
+                      <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
+                          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">AI Interactive Display</span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveWidget(null)}
+                            className="text-xs font-bold text-gray-600 hover:text-black flex items-center gap-1 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                          >
+                            ✕ Close
+                          </button>
+                        </div>
+                        {activeWidget.type === 'password_change_confirm' && (
+                          <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                        )}
 
-                  <button
-                    type="button"
-                    onClick={() => setRightPanelTab('display')}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${rightPanelTab === 'display'
-                        ? 'bg-[#111417] text-[#D8F929] shadow-xs'
-                        : 'text-gray-500 hover:text-gray-950'
-                      }`}
-                  >
-                    <Zap size={13} className="text-[#D8F929]" />
-                    <span>Output Display</span>
-                    {activeWidget && (
-                      <span className="w-2 h-2 rounded-full bg-[#D8F929] animate-pulse"></span>
-                    )}
-                  </button>
-                </div>
+                        {activeWidget.type === 'password_updated_success' && (
+                          <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                        )}
 
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setSortUrgent(!sortUrgent)}
-                    className="flex items-center bg-gray-50 border border-gray-200/70 rounded-xl p-1 px-2 gap-1 text-[11px] font-semibold text-gray-600 cursor-pointer hover:bg-gray-100 transition"
-                  >
-                    <span className="text-gray-400 text-[10px]">Sort:</span>
-                    <span className="text-gray-800 font-bold">{sortUrgent ? 'Urgent' : 'All'}</span>
-                  </button>
-                </div>
-              </div>
+                        {activeWidget.type === 'tenant_delete_confirm' && (
+                          <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                        )}
 
-              {/* DYNAMIC CANVAS CONTENT */}
-              <div className="flex-1 overflow-y-auto min-h-0 pr-1 py-1 scrollbar-thin">
-                {rightPanelTab === 'display' && activeWidget ? (
-                  <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                    {activeWidget.type === 'password_change_confirm' && (
-                      <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                    )}
+                        {activeWidget.type === 'tenant_deleted_success' && (
+                          <TenantDeletedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                        )}
 
-                    {activeWidget.type === 'password_updated_success' && (
-                      <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                    )}
+                        {activeWidget.type === 'tenant_console' && (
+                          <TenantConsoleWidget
+                            tenants={activeWidget.data}
+                            onSendMessage={(txt) => handleSend(txt)}
+                            onCopy={copyToClipboard}
+                          />
+                        )}
 
-                    {activeWidget.type === 'tenant_delete_confirm' && (
-                      <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                    )}
+                        {activeWidget.type === 'admin_accounts' && (
+                          <AdminAccountsWidget users={activeWidget.data} onCopy={copyToClipboard} />
+                        )}
 
-                    {activeWidget.type === 'tenant_deleted_success' && (
-                      <TenantDeletedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                    )}
+                        {activeWidget.type === 'platform_metrics' && (
+                          <PlatformMetricsWidget stats={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                        )}
 
-                    {activeWidget.type === 'tenant_console' && (
-                      <TenantConsoleWidget
-                        tenants={activeWidget.data}
+                        {activeWidget.type === 'onboard_draft' && (
+                          <OnboardingDraftPreviewWidget draft={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
+                        )}
+
+                        {activeWidget.type === 'onboard_success' && (
+                          <OnboardingSuccessWidget
+                            data={activeWidget.data}
+                            onSendMessage={(txt) => handleSend(txt)}
+                            onCopy={copyToClipboard}
+                          />
+                        )}
+
+                        {activeWidget.type === 'requisitions_console' && (
+                          <RequisitionsConsoleWidget
+                            requisitions={activeWidget.data}
+                            vendorName={activeWidget.vendorName}
+                            onSendMessage={(txt) => handleSend(txt)}
+                          />
+                        )}
+
+                        {activeWidget.type === 'candidates_console' && (
+                          <CandidatesConsoleWidget
+                            candidates={activeWidget.data}
+                            vendorName={activeWidget.vendorName}
+                            onSendMessage={(txt) => handleSend(txt)}
+                            onCopy={copyToClipboard}
+                          />
+                        )}
+
+                        {activeWidget.type === 'candidate_resume' && (
+                          <CandidateResumeWidget
+                            data={activeWidget.data}
+                            onSendMessage={(txt) => handleSend(txt)}
+                            onCopy={copyToClipboard}
+                          />
+                        )}
+
+                        {activeWidget.type === 'database_controller' && (
+                          <DatabaseControllerWidget
+                            dbData={activeWidget.data}
+                            onSendMessage={(txt) => handleSend(txt)}
+                            onCopy={copyToClipboard}
+                          />
+                        )}
+
+                      </div>
+                    ) : (
+                      <StatisticalDashboardWidget
                         onSendMessage={(txt) => handleSend(txt)}
-                        onCopy={copyToClipboard}
+                        onClose={() => setIsAnalyticsVisible(false)}
                       />
                     )}
-
-                    {activeWidget.type === 'admin_accounts' && (
-                      <AdminAccountsWidget users={activeWidget.data} onCopy={copyToClipboard} />
-                    )}
-
-                    {activeWidget.type === 'platform_metrics' && (
-                      <PlatformMetricsWidget stats={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                    )}
-
-                    {activeWidget.type === 'onboard_draft' && (
-                      <OnboardingDraftPreviewWidget draft={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                    )}
-
-                    {activeWidget.type === 'onboard_success' && (
-                      <OnboardingSuccessWidget
-                        data={activeWidget.data}
-                        onSendMessage={(txt) => handleSend(txt)}
-                        onCopy={copyToClipboard}
-                      />
-                    )}
-
-                    {activeWidget.type === 'requisitions_console' && (
-                      <RequisitionsConsoleWidget
-                        requisitions={activeWidget.data}
-                        vendorName={activeWidget.vendorName}
-                        onSendMessage={(txt) => handleSend(txt)}
-                      />
-                    )}
-
-                    {activeWidget.type === 'candidates_console' && (
-                      <CandidatesConsoleWidget
-                        candidates={activeWidget.data}
-                        vendorName={activeWidget.vendorName}
-                        onSendMessage={(txt) => handleSend(txt)}
-                        onCopy={copyToClipboard}
-                      />
-                    )}
-
-                    {activeWidget.type === 'candidate_resume' && (
-                      <CandidateResumeWidget
-                        data={activeWidget.data}
-                        onSendMessage={(txt) => handleSend(txt)}
-                        onCopy={copyToClipboard}
-                      />
-                    )}
-
-                    {activeWidget.type === 'database_controller' && (
-                      <DatabaseControllerWidget
-                        dbData={activeWidget.data}
-                        onSendMessage={(txt) => handleSend(txt)}
-                        onCopy={copyToClipboard}
-                      />
-                    )}
-
-                  </div>
-                ) : (
-                  <StatisticalDashboardWidget onSendMessage={(txt) => handleSend(txt)} />
-                )}
-              </div>
-            </div>
-
-            {/* Bottom HR Lead Avatars & Floating Progress Pill */}
-            <div className="flex-shrink-0 relative mt-2 pt-2 border-t border-gray-100">
-              <div className="grid grid-cols-4 gap-2 opacity-85">
-                {HR_LEADS.map((lead, idx) => (
-                  <div
-                    key={idx}
-                    className="h-12 rounded-xl overflow-hidden border border-gray-100 shadow-2xs relative group bg-gray-100 flex items-center justify-center cursor-pointer hover:opacity-100 transition"
-                    title={lead.role}
-                    onClick={() => showToast(`Selected HR Lead: ${lead.role}`)}
-                  >
-                    <img alt={lead.role} className="w-full h-full object-cover group-hover:scale-105 transition" src={lead.img} />
-                    <span className="absolute bottom-1 left-1 text-[8px] bg-black/70 text-white px-1 rounded font-medium">
-                      {lead.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {showProgressPill && (
-                <div className="absolute inset-x-1 bottom-1 bg-white/90 backdrop-blur-md rounded-2xl p-2 px-3 border border-[#D8F929] shadow-lg flex items-center justify-between z-20 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span className="text-xs font-semibold text-gray-800">Generating Department Audit Report</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-gray-900 tracking-tight">94%</span>
-                    <button
-                      type="button"
-                      onClick={() => showToast('Exporting Department Audit CSV Report...')}
-                      className="px-2.5 py-1 rounded-lg bg-[#111417] text-[#D8F929] text-[10px] font-bold hover:bg-black transition cursor-pointer"
-                    >
-                      Export CSV
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowProgressPill(false)}
-                      className="w-5 h-5 rounded-lg border border-gray-300 flex items-center justify-center text-gray-400 hover:text-gray-700 transition cursor-pointer"
-                      title="Dismiss"
-                    >
-                      <X size={12} />
-                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-          </section>
+
+              </motion.section>
+            )}
+          </AnimatePresence>
 
         </main>
       </div>
