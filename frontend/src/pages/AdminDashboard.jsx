@@ -150,6 +150,7 @@ export default function AdminDashboard() {
   const hiringManagers = useMemo(() => users.filter((u) => u.role === 'Hiring Manager'), [users]);
   const directors = useMemo(() => users.filter((u) => u.role === 'Director'), [users]);
   const procurementUsers = useMemo(() => users.filter((u) => u.role === 'Procurement' || u.role === 'Procurement Team'), [users]);
+  const financeUsers = useMemo(() => users.filter((u) => u.role === 'Finance' || u.role === 'Finance Team'), [users]);
   const pendingApprovals = useMemo(
     () => requisitions.filter((r) => (r.status || '').toLowerCase() === 'pending_approval'),
     [requisitions]
@@ -170,8 +171,9 @@ export default function AdminDashboard() {
     if (teamTab === 'managers') return hiringManagers;
     if (teamTab === 'directors') return directors;
     if (teamTab === 'procurement') return procurementUsers;
+    if (teamTab === 'finance') return financeUsers;
     return engagedVendors;
-  }, [teamTab, hiringManagers, directors, procurementUsers, engagedVendors]);
+  }, [teamTab, hiringManagers, directors, procurementUsers, financeUsers, engagedVendors]);
 
   const handleInviteSubmit = async (e) => {
     e.preventDefault();
@@ -191,7 +193,9 @@ export default function AdminDashboard() {
           name: inviteForm.name.trim(),
           email: inviteForm.email.trim(),
           password: inviteForm.password,
-          department: inviteForm.role === 'Hiring Manager' ? inviteForm.department.trim() : undefined,
+          department: (inviteForm.role === 'Hiring Manager' || inviteForm.role === 'Finance Team' || inviteForm.role === 'Finance')
+            ? inviteForm.department.trim() || undefined
+            : undefined,
         },
       });
       setSuccess(`${inviteForm.role} account created for ${inviteForm.email}.`);
@@ -282,7 +286,7 @@ export default function AdminDashboard() {
               {user?.tenant_name || 'Client'}
             </span>
             <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {hiringManagers.length + directors.length} team members
+              {hiringManagers.length + directors.length + procurementUsers.length + financeUsers.length} team members
             </span>
           </div>
         </div>
@@ -307,8 +311,8 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* 5 Stat Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+      {/* 6 Stat Metric Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
         <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
           <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
             HIRING MANAGERS
@@ -329,7 +333,31 @@ export default function AdminDashboard() {
             {directors.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium">
-            Executive reviewers
+            Executive sign-off
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            PROCUREMENT
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {procurementUsers.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Rate cards & SOWs
+          </div>
+        </div>
+
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+            FINANCE
+          </div>
+          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
+            {financeUsers.length}
+          </div>
+          <div className="text-[11px] text-gray-500 font-medium">
+            Billing & accounts
           </div>
         </div>
 
@@ -341,7 +369,7 @@ export default function AdminDashboard() {
             {requisitions.length}
           </div>
           <div className="text-[11px] text-gray-500 font-medium">
-            Total job requisitions
+            Total job pipelines
           </div>
         </div>
 
@@ -354,18 +382,6 @@ export default function AdminDashboard() {
           </div>
           <div className="text-[11px] text-gray-500 font-medium">
             Awaiting sign-off
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
-          <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-            ACTIVE / OPEN
-          </div>
-          <div className="text-2xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {activePublished.length}
-          </div>
-          <div className="text-[11px] text-gray-500 font-medium">
-            Live pipeline
           </div>
         </div>
       </div>
@@ -516,8 +532,8 @@ export default function AdminDashboard() {
               <p className="text-[11px] text-gray-500 mt-0.5">Managers and Directors in this company</p>
             </div>
 
-            {/* Tabs for Managers / Directors / Vendors */}
-            <div className="flex items-center gap-1 bg-gray-100/90 p-1 rounded-xl">
+            {/* Tabs for Managers / Directors / Procurement / Finance / Vendors */}
+            <div className="flex items-center gap-1 bg-gray-100/90 p-1 rounded-xl flex-wrap">
               <button
                 type="button"
                 onClick={() => setTeamTab('managers')}
@@ -553,6 +569,17 @@ export default function AdminDashboard() {
               </button>
               <button
                 type="button"
+                onClick={() => setTeamTab('finance')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  teamTab === 'finance'
+                    ? 'bg-white text-black shadow-2xs'
+                    : 'text-gray-600 hover:text-black'
+                }`}
+              >
+                Finance ({financeUsers.length})
+              </button>
+              <button
+                type="button"
                 onClick={() => setTeamTab('vendors')}
                 className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   teamTab === 'vendors'
@@ -569,7 +596,7 @@ export default function AdminDashboard() {
             <div className="py-10 text-center text-xs text-gray-400">Loading data...</div>
           ) : displayedTeamMembers.length === 0 ? (
             <div className="py-8 text-center text-xs text-gray-400">
-              No {teamTab === 'managers' ? 'Hiring Managers' : teamTab === 'directors' ? 'Directors' : 'engaged Partner Vendors'} found.
+              No {teamTab === 'managers' ? 'Hiring Managers' : teamTab === 'directors' ? 'Directors' : teamTab === 'procurement' ? 'Procurement members' : teamTab === 'finance' ? 'Finance members' : 'engaged Partner Vendors'} found.
             </div>
           ) : (
             <div
@@ -645,7 +672,7 @@ export default function AdminDashboard() {
           onClick={() => setShowInviteModal(false)}
         >
           <div
-            className="relative w-full max-w-[500px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            className="relative w-full max-w-[520px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
@@ -668,11 +695,11 @@ export default function AdminDashboard() {
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Account Role *
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <button
                     type="button"
                     onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Hiring Manager' }))}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                       inviteForm.role === 'Hiring Manager'
                         ? 'bg-black text-white shadow-2xs'
                         : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
@@ -683,7 +710,7 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Director' }))}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                       inviteForm.role === 'Director'
                         ? 'bg-black text-white shadow-2xs'
                         : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
@@ -694,13 +721,24 @@ export default function AdminDashboard() {
                   <button
                     type="button"
                     onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Procurement Team' }))}
-                    className={`py-2 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
                       inviteForm.role === 'Procurement Team' || inviteForm.role === 'Procurement'
                         ? 'bg-black text-white shadow-2xs'
                         : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
                     }`}
                   >
                     Procurement
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setInviteForm((prev) => ({ ...prev, role: 'Finance Team', department: prev.department || 'Finance & Accounts' }))}
+                    className={`py-2 px-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-center ${
+                      inviteForm.role === 'Finance Team' || inviteForm.role === 'Finance'
+                        ? 'bg-black text-white shadow-2xs'
+                        : 'bg-gray-50 text-gray-700 border border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    Finance
                   </button>
                 </div>
               </div>
@@ -751,17 +789,17 @@ export default function AdminDashboard() {
                 />
               </div>
 
-              {/* Department (for HM) */}
-              {inviteForm.role === 'Hiring Manager' && (
+              {/* Department (for HM and Finance) */}
+              {(inviteForm.role === 'Hiring Manager' || inviteForm.role === 'Finance Team' || inviteForm.role === 'Finance') && (
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Department (Optional)
+                    Department {inviteForm.role === 'Hiring Manager' ? '(Optional)' : ''}
                   </label>
                   <input
                     type="text"
                     value={inviteForm.department}
                     onChange={(e) => setInviteForm({ ...inviteForm, department: e.target.value })}
-                    placeholder="e.g. Engineering, Product, Marketing"
+                    placeholder={inviteForm.role === 'Hiring Manager' ? 'e.g. Engineering, Product, Marketing' : 'e.g. Finance & Accounts, Invoicing'}
                     className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                   />
                 </div>

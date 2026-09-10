@@ -1809,9 +1809,11 @@ class SuperAdminAgent:
             count = res.get("total_requisitions", 0)
             v_name = res.get("vendor_name", v_query)
             if v_query.lower() in ("all", "*", "termjobs", "in termjobs"):
-                reply = f"Super Admin King DB Query: Retrieved **{count} total job requisition(s)** registered across the TermJobs platform."
+                req_text = "is currently **1 active job requisition**" if count == 1 else f"are currently **{count} active job requisitions**"
+                reply = f"Yeah, I've pulled up the live hiring pipeline for you. There {req_text} registered across the platform, and I've loaded the full details into your analytics display."
             else:
-                reply = f"Super Admin King DB Query: Retrieved **{count} job requisition(s)** created by/assigned under vendor consultancy partner **{v_name}**."
+                req_text = "is **1 job requisition**" if count == 1 else f"are **{count} job requisitions**"
+                reply = f"Yeah, I've retrieved the hiring pipeline for **{v_name}**. There {req_text} assigned under this partner, and I've updated your analytics display with the breakdown."
             return {"reply": reply, "executed_actions": executed_actions}
 
         # Intercept explicit vendor candidates / platform candidates query
@@ -1828,16 +1830,18 @@ class SuperAdminAgent:
             count = res.get("total_candidates", 0)
             v_name = res.get("vendor_name", v_query)
             if v_query.lower() in ("all", "*", "termjobs", "in termjobs"):
-                reply = f"Super Admin King DB Query: Found **{count} total candidate submission(s)** across platform requisitions."
+                cand_text = "is currently **1 candidate submission**" if count == 1 else f"are currently **{count} candidate submissions**"
+                reply = f"Yeah, I've gathered the candidate pipeline records for you. There {cand_text} across platform requisitions, and I've updated the analytics panel with the complete roster."
             else:
-                reply = f"Super Admin King DB Query: Found **{count} candidate submission(s)** listed under vendor consultancy **{v_name}**."
+                cand_text = "is **1 candidate submission**" if count == 1 else f"are **{count} candidate submissions**"
+                reply = f"Yeah, I've retrieved the candidate submissions under **{v_name}**. There {cand_text}, and the profiles are now displayed on your analytics panel."
             return {"reply": reply, "executed_actions": executed_actions}
 
         # Intercept full DB access / controller query
         if any(k in prompt_lower for k in ("full access to the db", "full access to db", "super admin controller", "king of the system", "access to everything")):
             res = tool_query_database_all_entities(entity_type="all")
             executed_actions.append({"tool": "query_database_all_entities", "result": res})
-            reply = "As Super Admin, you have full, unrestricted 'King' privileges over all database entities (tenants, user accounts, requisitions, candidate submissions, vendor engagements, and system archives)."
+            reply = "You have full, unrestricted administrative oversight across all database entities including tenants, user accounts, live requisitions, candidate submissions, and system metrics."
             return {"reply": reply, "executed_actions": executed_actions}
 
         # Intercept explicit confirmation commands

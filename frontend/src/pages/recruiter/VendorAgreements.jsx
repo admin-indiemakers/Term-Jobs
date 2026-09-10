@@ -21,6 +21,7 @@ import {
   ArrowRight,
   ExternalLink
 } from 'lucide-react';
+import WorkOrderProgressBar from '../../components/WorkOrderProgressBar';
 
 export default function VendorAgreements() {
   const { user, token } = useAuth();
@@ -503,7 +504,7 @@ Generated via Term Jobs Enterprise Portal
                 <span className="text-[#737373]">Effective Period</span>
                 <span className="font-bold text-[#0A0A0A]">{formData.commencement} to {formData.expiry} ({formData.duration})</span>
               </div>
-              <div className="flex justify-between py-1">
+              <div className="flex justify-between py-1 border-b border-[#EAEAE6]">
                 <span className="text-[#737373]">Workflow Status</span>
                 <span className={`inline-flex items-center gap-1 font-bold ${
                   statusState === 'Approved'
@@ -525,6 +526,11 @@ Generated via Term Jobs Enterprise Portal
                   )}
                   {statusState}
                 </span>
+              </div>
+
+              {/* 4-Stage Governance & Settlement Progress Tracker */}
+              <div className="pt-3 pb-1">
+                <WorkOrderProgressBar status={statusState} variant="full" />
               </div>
             </div>
 
