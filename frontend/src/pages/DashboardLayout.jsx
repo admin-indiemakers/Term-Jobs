@@ -7,7 +7,7 @@ import OnboardCompanyModal from '../components/OnboardCompanyModal';
 import OnboardVendorModal from '../components/OnboardVendorModal';
 import { Sparkles, Menu, X, Building2, Users, Bell, UserCheck } from 'lucide-react';
 import { request } from '../api/client';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 function initials(name) {
   if (!name) return 'HR';
