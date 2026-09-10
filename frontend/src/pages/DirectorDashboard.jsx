@@ -19,7 +19,8 @@ import {
   ArrowRight,
   Building,
   Check,
-  AlertCircle
+  AlertCircle,
+  Receipt
 } from 'lucide-react';
 
 function formatDate(iso) {
@@ -56,26 +57,31 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const loadTemplates = () => {
     request('/templates', { token })
-      .then((res) => setTemplates(res || []))
-      .catch((err) => setError(err.message));
+      .then((res) => setTemplates(Array.isArray(res) ? res : res?.templates || []))
+      .catch((err) => setError(err?.message || 'Failed to load templates'));
   };
 
   const loadAll = () => {
     setLoading(true);
     Promise.all([
-      request('/requisitions', { token }),
-      request('/candidates/shortlisted', { token }),
-      request('/api/auth/vendors', { token }),
-      request('/templates', { token }),
+      request('/requisitions', { token }).catch(() => []),
+      request('/candidates/shortlisted', { token }).catch(() => []),
+      request('/api/auth/vendors', { token }).catch(() => []),
+      request('/templates', { token }).catch(() => []),
     ])
       .then(([reqsRes, candsRes, vendorsRes, templatesRes]) => {
-        setRequisitions(reqsRes || []);
-        setCandidates(candsRes || []);
-        setVendors(vendorsRes || []);
-        setTemplates(templatesRes || []);
+        const reqList = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.requisitions || []);
+        const candList = Array.isArray(candsRes) ? candsRes : (candsRes?.shortlisted_candidates || candsRes?.candidates || []);
+        const vendorList = Array.isArray(vendorsRes) ? vendorsRes : (vendorsRes?.vendors || []);
+        const templateList = Array.isArray(templatesRes) ? templatesRes : (templatesRes?.templates || []);
+
+        setRequisitions(reqList);
+        setCandidates(candList);
+        setVendors(vendorList);
+        setTemplates(templateList);
         setError('');
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => setError(err?.message || 'Failed to load dashboard data'))
       .finally(() => setLoading(false));
   };
 
@@ -179,21 +185,24 @@ export default function DirectorDashboard({ view = 'overview' }) {
   };
 
   const pendingApprovalsList = useMemo(() => {
-    return requisitions.filter(
+    const list = Array.isArray(requisitions) ? requisitions : [];
+    return list.filter(
       (r) => (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved
     );
   }, [requisitions]);
 
   const approvedList = useMemo(() => {
-    return requisitions.filter((r) => r.director_approved);
+    const list = Array.isArray(requisitions) ? requisitions : [];
+    return list.filter((r) => r.director_approved);
   }, [requisitions]);
 
-  const publishedCount = requisitions.filter((r) => r.status === 'Published').length;
-  const engagedVendors = vendors.filter((v) => v.engaged).length;
+  const publishedCount = (Array.isArray(requisitions) ? requisitions : []).filter((r) => r.status === 'Published').length;
+  const engagedVendors = (Array.isArray(vendors) ? vendors : []).filter((v) => v.engaged).length;
 
   const candidatesByRequisition = useMemo(() => {
     const map = {};
-    (candidates || []).forEach((c) => {
+    const list = Array.isArray(candidates) ? candidates : [];
+    list.forEach((c) => {
       if (!c.requisition_id) return;
       map[c.requisition_id] = (map[c.requisition_id] || 0) + 1;
     });
@@ -201,7 +210,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
   }, [candidates]);
 
   const filteredRequisitions = useMemo(() => {
-    return requisitions.filter((r) => {
+    const list = Array.isArray(requisitions) ? requisitions : [];
+    return list.filter((r) => {
       const matchSearch =
         !searchTerm.trim() ||
         (r.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -312,6 +322,15 @@ export default function DirectorDashboard({ view = 'overview' }) {
             }`}
           >
             💼 All Requisitions ({requisitions.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/director/work-orders')}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30"
+          >
+            <Receipt size={14} className="text-amber-400" />
+            <span>Work Orders (SOW)</span>
           </button>
         </div>
       </div>

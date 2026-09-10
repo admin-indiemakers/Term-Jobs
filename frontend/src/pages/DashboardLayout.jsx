@@ -172,8 +172,9 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token]);
 
-  // Dynamic live count for Director pending agreements
+  // Dynamic live count for Director pending agreements and work orders
   const [directorPendingAgreements, setDirectorPendingAgreements] = useState(0);
+  const [directorPendingWorkOrders, setDirectorPendingWorkOrders] = useState(0);
 
   useEffect(() => {
     if (user?.role === 'Director' && token) {
@@ -185,6 +186,43 @@ export default function DashboardLayout() {
             ).length;
             setDirectorPendingAgreements(pending);
           }
+        })
+        .catch(() => {});
+
+      request('/api/workforce/director/work-orders', { token })
+        .then((res) => {
+          setDirectorPendingWorkOrders(res?.pending_director_count || 0);
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token, location.pathname]);
+
+  // Dynamic live count for Procurement SOW billing orders
+  const [procurementPendingSows, setProcurementPendingSows] = useState(0);
+
+  useEffect(() => {
+    if ((user?.role === 'Procurement' || user?.role === 'Procurement Team') && token) {
+      request('/api/workforce/procurement/sow-agreements', { token })
+        .then((res) => {
+          if (Array.isArray(res?.sow_agreements)) {
+            const pending = res.sow_agreements.filter(
+              (s) => s.status === 'Sent to Procurement' || s.status === 'Submitted'
+            ).length;
+            setProcurementPendingSows(pending);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token, location.pathname]);
+
+  // Dynamic live count for Finance pending work order payments
+  const [financePendingPayments, setFinancePendingPayments] = useState(0);
+
+  useEffect(() => {
+    if ((user?.role === 'Finance' || user?.role === 'Finance Team') && token) {
+      request('/api/workforce/finance/work-orders', { token })
+        .then((res) => {
+          setFinancePendingPayments(res?.ready_for_payment_count || 0);
         })
         .catch(() => {});
     }
@@ -257,13 +295,25 @@ export default function DashboardLayout() {
           { to: '/dashboard/recruiter/agreements', label: 'Agreements', end: true, section: 'WORKSPACE', icon: Icons.Agreements },
           { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
           { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
+          { to: '/dashboard/recruiter/workers', label: 'Workers', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Team },
           { to: '/dashboard/recruiter/billing', label: 'Billing', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
         ]
         : userRole === 'Director'
           ? [
               { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/director/work-orders', label: 'Work Orders', end: true, icon: Icons.Receipt, badge: directorPendingWorkOrders },
               { to: '/dashboard/director/agreements', label: 'Agreements', end: true, icon: Icons.Agreements, badge: directorPendingAgreements }
             ]
+          : (userRole === 'Procurement' || userRole === 'Procurement Team')
+            ? [
+                { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
+                { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+              ]
+          : (userRole === 'Finance' || userRole === 'Finance Team')
+            ? [
+                { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, icon: Icons.Receipt, badge: financePendingPayments },
+                { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+              ]
           : userRole === 'Super Admin'
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
@@ -320,7 +370,7 @@ export default function DashboardLayout() {
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
               </div>
             </div>
-          ) : ['Admin', 'HR', 'Director'].includes(userRole) ? (
+          ) : ['Admin', 'HR', 'Director', 'Procurement', 'Procurement Team', 'Finance', 'Finance Team'].includes(userRole) ? (
             <>
               <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
               <div className="brand-text">
@@ -558,6 +608,20 @@ export default function DashboardLayout() {
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
                 Directors
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/procurement"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Procurement
+              </NavLink>
+              <NavLink
+                to="/dashboard/admin/finance"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Finance
               </NavLink>
               <NavLink
                 to="/dashboard/admin/partner-vendors"

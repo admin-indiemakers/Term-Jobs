@@ -130,3 +130,27 @@ def update_invoice_status_endpoint(
         "message": f"Invoice status updated to {payload.status}.",
         "invoice": inv
     }
+
+
+class DispatchSowRequest(BaseModel):
+    period: Optional[str] = None
+
+
+@router.post("/candidate/{workorder_id:path}/dispatch-sow")
+def dispatch_sow_endpoint(
+    workorder_id: str,
+    payload: Optional[DispatchSowRequest] = None,
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Recruiter dispatches the contractor billing package directly to the client's Procurement team."""
+    if current_user.role not in ["Recruiter", "Admin", "Super Admin"]:
+        raise HTTPException(status_code=403, detail="Vendor / Recruiter role required to dispatch SOW.")
+
+    from modules.billing.services.billing_service import dispatch_vendor_sow
+    period = payload.period if payload else None
+    try:
+        res = dispatch_vendor_sow(workorder_id, current_user, period=period)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+

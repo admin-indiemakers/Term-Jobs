@@ -142,6 +142,65 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
         gross_billing = reg_amount + ot_amount + total_expenses_amt
 
         # Check existing invoice
+        # Billing Cycle Schedule & SOW Dispatch Window calculation
+        billing_cycle_type = agreement_data.get("billingCycle") or wo.get("billing_cycle") or "Monthly"
+        
+        # Parse period (YYYY-MM)
+        try:
+            year, m_num = [int(p) for p in target_month.split("-")[:2]]
+            num_days_in_month = calendar.monthrange(year, m_num)[1]
+            cycle_start = date(year, m_num, 1)
+            cycle_end = date(year, m_num, num_days_in_month)
+        except Exception:
+            cycle_start = now.date().replace(day=1)
+            cycle_end = now.date()
+
+        days_remaining = (cycle_end - now.date()).days
+        if days_remaining < 0:
+            days_remaining = 0
+
+        # Check SOW status in db["sow_documents"]
+        sow_doc = db["sow_documents"].find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}]}) or {}
+        sow_status = sow_doc.get("status") or "Draft"
+        sow_submitted_at = sow_doc.get("submitted_at")
+        sow_approved_by = sow_doc.get("approved_by")
+        sow_approved_at = sow_doc.get("approved_at")
+        sow_revision_notes = sow_doc.get("revision_notes")
+        sow_rejection_notes = sow_doc.get("rejection_notes")
+
+        if sow_status in ["Approved by Director", "Approved"]:
+            window_status = "APPROVED"
+            window_label = "Work Order Approved by Director"
+            window_color = "emerald"
+        elif sow_status in ["Approved by Procurement", "Pending Director Approval"]:
+            window_status = "DIRECTOR_PENDING"
+            window_label = "Authorized by Procurement · Awaiting Director Approval"
+            window_color = "indigo"
+        elif sow_status == "Sent to Procurement":
+            window_status = "SENT"
+            window_label = "Work Order Sent to Procurement (Awaiting Authorization)"
+            window_color = "amber"
+        elif sow_status == "Revision Requested":
+            window_status = "REVISION"
+            window_label = "Revision Requested"
+            window_color = "red"
+        elif sow_status in ["Rejected by Procurement", "Rejected by Director"]:
+            window_status = "REJECTED"
+            window_label = "Work Order Rejected"
+            window_color = "red"
+        elif days_remaining <= 5:
+            window_status = "OPEN"
+            window_label = "SOW Release Window OPEN"
+            window_color = "emerald"
+        elif days_remaining <= 10:
+            window_status = "DUE_SOON"
+            window_label = f"Cycle Ends in {days_remaining} Days"
+            window_color = "amber"
+        else:
+            window_status = "IN_PROGRESS"
+            window_label = f"Cycle Active ({days_remaining} Days Left)"
+            window_color = "blue"
+
         inv = inv_coll.find_one({
             "workorder_id": cid,
             "period": target_month
@@ -168,6 +227,20 @@ def get_accepted_contractors_for_vendor(current_user: User, month_filter: Option
             "curr_symbol": curr_symbol,
             "supplier_margin": supplier_margin,
             "payment_terms": agreement_data.get("paymentTerms") or wo.get("payment_terms") or "Net 30 days",
+            "billing_cycle": billing_cycle_type,
+            "cycle_period_label": f"{cycle_start.strftime('%b %d')} - {cycle_end.strftime('%b %d, %Y')}",
+            "cycle_start_date": cycle_start.isoformat(),
+            "cycle_end_date": cycle_end.isoformat(),
+            "days_remaining_in_cycle": days_remaining,
+            "sow_status": sow_status,
+            "sow_submitted_at": sow_submitted_at,
+            "sow_approved_by": sow_approved_by,
+            "sow_approved_at": sow_approved_at,
+            "sow_revision_notes": sow_revision_notes,
+            "sow_rejection_notes": sow_rejection_notes,
+            "sow_dispatch_status": window_status,
+            "sow_dispatch_label": window_label,
+            "sow_dispatch_color": window_color,
             "total_regular_hours": round(total_reg_h, 1),
             "total_overtime_hours": round(total_ot_h, 1),
             "total_hours": round(total_h, 1),
@@ -379,6 +452,10 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
     if inv:
         inv.pop("_id", None)
 
+    # Check existing SOW document
+    sow_doc = db["sow_documents"].find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}]}) or {}
+    sow_doc.pop("_id", None)
+
     return {
         "candidate": {
             "name": cname,
@@ -418,6 +495,7 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
         },
         "expenses": month_exp,
         "invoice": inv,
+        "sow": sow_doc if sow_doc else None,
         "notices": {
             "overtime_callout": {
                 "title": f"{int(total_overtime_hours) if total_overtime_hours.is_integer() else total_overtime_hours} overtime hours at 1.5×",
@@ -428,6 +506,119 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
                 "description": f"Your rate and what the buyer pays {agreement_data.get('supplierName') or 'Vendorqueue'} are structured under commercial agreement {agreement_data.get('msaRef') or 'MSA-2026'}."
             }
         }
+    }
+
+
+def dispatch_vendor_sow(workorder_id: str, user: User, period: Optional[str] = None) -> Dict[str, Any]:
+    """Compile contractor billing sheet and dispatch directly as SOW to the company's Procurement team."""
+    breakdown = get_candidate_billing_breakdown(workorder_id, period)
+    sow_coll = db["sow_documents"]
+    notif_coll = db["candidate_notifications"]
+    wo_coll = db["work_orders"]
+
+    cand = breakdown["candidate"]
+    cid = cand["workorder_id"]
+    fin = breakdown["financials"]
+    summ = breakdown["summary"]
+    rates = breakdown["rates"]
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    # Find work order to resolve tenant_id
+    wo = wo_coll.find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}, {"id": cid}]}) or {}
+    tenant_id = wo.get("tenant_id") or ""
+    company_name = cand["company_name"] or wo.get("company_name") or "Bearitt"
+
+    if not tenant_id and company_name:
+        tenant_doc = db["tenants"].find_one({"name": {"$regex": f"^{company_name}$", "$options": "i"}})
+        if tenant_doc:
+            tenant_id = str(tenant_doc.get("_id") or tenant_doc.get("id"))
+    if not tenant_id:
+        tenant_id = "50c9753b-ad12-4783-b519-9080358f5359"
+
+    # Compile structured SOW package
+    sow_payload = {
+        "candidate_id": cid,
+        "workorder_id": cid,
+        "ws_number": cand["work_order_number"] or f"WSOW-2026-{str(cid)[:4].upper()}",
+        "msa_ref": cand["msa_ref"] or "MSA-TB-2024-11",
+        "company_name": company_name,
+        "supplier_name": cand["vendor_name"] or getattr(user, "tenant_name", "") or "Vendor",
+        "deployed_personnel": cand["name"],
+        "role": cand["role"],
+        "reporting_to": wo.get("hiring_manager_name") or wo.get("reporting_manager") or "Arun Deshpande, Engineering",
+        "place_of_work": wo.get("work_location") or wo.get("location") or "Gurgaon",
+        "commencement": cand["start_date"] or "2026-09-01",
+        "start_date": cand["start_date"] or "2026-09-01",
+        "expiry": cand["end_date"] or "2027-03-01",
+        "duration": f"{wo.get('contract_duration_months', 6)} months",
+        "duration_months": int(wo.get("contract_duration_months") or 6),
+        "notice": "15 days",
+        "billing_basis": "Hourly, against approved timesheets",
+        "charge_rate": f"₹{rates['hourly_rate']:,.0f} per hour",
+        "charge_rate_buyer": rates["hourly_rate"],
+        "raw_charge_rate": rates["hourly_rate"],
+        "rate_to_worker": round(rates["hourly_rate"] * 0.7186, 2),
+        "overtime_multiplier": "1.5x base hourly rate",
+        "standard_work_day": "8 hours",
+        "billing_cycle": cand["billing_cycle"] or "Monthly",
+        "cycle_period": breakdown["period_label"],
+        "payment_terms": 30,
+        "payment_terms_label": "30 days",
+        "supplier_margin": cand["supplier_margin"] or "28.1%",
+        "overtime_15x": True,
+        "expenses_reimbursable": len(breakdown["expenses"]) > 0,
+        "extension_permitted": True,
+        "bgv_warranty": True,
+        "regular_hours": summ["regular_hours"],
+        "overtime_hours": summ["overtime_hours"],
+        "base_cost": fin["regular_subtotal"],
+        "overtime_cost": fin["overtime_subtotal"],
+        "expense_items": breakdown["expenses"],
+        "total_expenses": fin["expenses_subtotal"],
+        "grand_total": fin["total_invoice_amount"],
+        "signatory_supplier": f"Authorised Signatory ({user.name})",
+        "signatory_company": "Procurement / Director",
+        "status": "Sent to Procurement",
+        "submitted_at": now_iso,
+    }
+
+    doc_record = {
+        "candidate_id": cid,
+        "workorder_id": cid,
+        "tenant_id": tenant_id,
+        "company_name": company_name,
+        "recruiter_id": user.id,
+        "recruiter_name": user.name,
+        "status": "Sent to Procurement",
+        "submitted_at": now_iso,
+        "sow_data": sow_payload,
+        "updated_at": now_iso,
+    }
+
+    sow_coll.update_one(
+        {"candidate_id": cid},
+        {"$set": doc_record},
+        upsert=True
+    )
+
+    # Insert notification for Procurement
+    notif_coll.insert_one({
+        "id": f"notif_{uuid.uuid4().hex[:10]}",
+        "candidate_id": cid,
+        "tenant_id": tenant_id,
+        "type": "sow_submitted_to_procurement",
+        "title": "New SOW Billing Sheet Released to Procurement",
+        "message": f"Recruiter {user.name} submitted SOW billing sheet for {cand['name']} ({sow_payload['ws_number']}) for {company_name} Procurement authorization.",
+        "is_read": False,
+        "created_at": now_iso,
+    })
+
+    return {
+        "status": "success",
+        "message": f"SOW & Billing Sheet for {cand['name']} delivered to {company_name} Procurement successfully!",
+        "sow_data": sow_payload,
+        "submitted_at": now_iso
     }
 
 
