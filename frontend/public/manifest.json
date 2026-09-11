@@ -1,0 +1,23 @@
+{
+  "short_name": "TermJobs",
+  "name": "Term Jobs - Flexible Workforce & Contract Hiring",
+  "description": "Connecting enterprise teams with verified contract professionals, trusted staffing vendors, and automated billing in one place.",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#f8f9fa",
+  "theme_color": "#0a0a0a",
+  "display": "standalone",
+  "orientation": "portrait"
+}
