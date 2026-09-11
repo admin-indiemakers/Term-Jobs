@@ -1,17 +1,59 @@
-"""Voice Agent Router powered by Sarvam AI (STT & TTS) with connection pooling, retries, and high-quality voice synthesis."""
+"""Voice Agent Router powered by Sarvam AI (STT & TTS) and Pipecat Real-Time WebRTC Streaming.
+
+Provides:
+1. Real-time SmallWebRTC full-duplex audio streaming with Silero VAD barge-in for web browser.
+2. Synchronous REST endpoints (/stt, /tts) with connection pooling and TTS text sanitization for backward compatibility.
+"""
 import os
 import json
+import uuid
 import asyncio
 import logging
 import httpx
-from fastapi import APIRouter, File, UploadFile, Form, HTTPException
+from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request, Response, BackgroundTasks
 from pydantic import BaseModel, Field
+
+from pipecat.transports.smallwebrtc.request_handler import (
+    IceCandidate,
+    SmallWebRTCPatchRequest,
+    SmallWebRTCRequest,
+)
+
+from .voice_pipeline import (
+    small_webrtc_handler,
+    run_superadmin_webrtc_bot,
+    clean_tts_text,
+    active_voice_sessions,
+    session_executed_actions,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
-SARVAM_API_KEY = os.getenv("SARVAM_AI") or os.getenv("SARVAM_API_KEY") or "sk_7wx0x9pf_WncT2BnK0kPQNO0J3TOsp7Ga"
+def get_sarvam_stt_key() -> str:
+    """Retrieve dedicated Sarvam AI key for Speech-to-Text with fresh environment reload."""
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    return (
+        os.getenv("SARVAM_STT_API_KEY")
+        or "sk_kdzj78ak_qF2BIjavt8NrWhAraVv5Mzdd"
+    )
+
+def get_sarvam_tts_key() -> str:
+    """Retrieve dedicated Sarvam AI key for Text-to-Speech with fresh environment reload."""
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    return (
+        os.getenv("SARVAM_TTS_API_KEY")
+        or os.getenv("SARVAM_API_KEY")
+        or "sk_04xikhhl_jzepBtYmbqMhcTIHNC2SF5M5"
+    )
+
+def get_sarvam_api_key() -> str:
+    return get_sarvam_tts_key()
+
+SARVAM_API_KEY = get_sarvam_api_key()
 SARVAM_TIMEOUT = float(os.getenv("SARVAM_TIMEOUT", "10.0"))
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB payload limit
 
@@ -74,6 +116,9 @@ class TTSRequest(BaseModel):
     max_chars: int = Field(2000, description="Max character length limit for synthesis input (default 2000)")
 
 
+# ==============================================================================
+# REST STT / TTS Endpoints (Backward-Compatible)
+# ==============================================================================
 @router.post("/stt")
 async def speech_to_text(
     file: UploadFile = File(...),
@@ -81,9 +126,9 @@ async def speech_to_text(
     language_code: str = Form("en-IN")
 ):
     """Convert spoken voice recording (audio file) into text transcript via Sarvam AI STT."""
-    api_key = os.getenv("SARVAM_AI") or os.getenv("SARVAM_API_KEY") or SARVAM_API_KEY
+    api_key = get_sarvam_stt_key()
     if not api_key:
-        raise HTTPException(status_code=500, detail="SARVAM_AI API key not configured")
+        raise HTTPException(status_code=500, detail="SARVAM STT API key not configured")
 
     audio_bytes = await file.read()
     if not audio_bytes:
@@ -99,7 +144,6 @@ async def speech_to_text(
     headers = {
         "api-subscription-key": api_key
     }
-
     files = {
         "file": (file.filename or "recording.wav", audio_bytes, file.content_type or "audio/wav")
     }
@@ -108,7 +152,18 @@ async def speech_to_text(
         "language_code": language_code
     }
 
-    resp = await post_sarvam_with_retry(url, headers=headers, files=files, data=data)
+    try:
+        resp = await post_sarvam_with_retry(url, headers=headers, files=files, data=data)
+    except HTTPException as ex:
+        if ex.status_code in (402, 403):
+            logger.info("STT key quota reached on REST endpoint, falling back to secondary key...")
+            backup_key = get_sarvam_tts_key()
+            headers["api-subscription-key"] = backup_key
+            files["file"] = (file.filename or "recording.wav", audio_bytes, file.content_type or "audio/wav")
+            resp = await post_sarvam_with_retry(url, headers=headers, files=files, data=data)
+        else:
+            raise ex
+
     result = resp.json()
     transcript = result.get("transcript", "")
     logger.info(f"✅ [SARVAM STT SUCCESS] Transcript: \"{transcript}\"")
@@ -121,23 +176,22 @@ async def speech_to_text(
 
 @router.post("/tts")
 async def text_to_speech(payload: TTSRequest):
-    """Synthesize response text into spoken audio WAV base64 string via Sarvam AI TTS (bulbul:v3)."""
-    api_key = os.getenv("SARVAM_AI") or os.getenv("SARVAM_API_KEY") or SARVAM_API_KEY
+    """Synthesize response text into spoken audio WAV base64 string via Sarvam AI TTS (bulbul:v3) with text cleaning."""
+    api_key = get_sarvam_tts_key()
     if not api_key:
-        raise HTTPException(status_code=500, detail="SARVAM_AI API key not configured")
+        raise HTTPException(status_code=500, detail="SARVAM TTS API key not configured")
 
-    if not payload.text.strip():
-        raise HTTPException(status_code=400, detail="Text payload is empty")
+    # Clean text using Pipecat sanitizer (strips asterisks, backticks, lone punctuation)
+    cleaned = clean_tts_text(payload.text)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Text payload is empty after sanitization")
 
+    input_text = cleaned[:payload.max_chars]
     url = "https://api.sarvam.ai/text-to-speech"
     headers = {
         "api-subscription-key": api_key,
         "Content-Type": "application/json"
     }
-
-    # Clean markdown formatting tags before synthesizing
-    cleaned_text = payload.text.replace("**", "").replace("*", "").replace("`", "").strip()
-    input_text = cleaned_text[:payload.max_chars]
 
     logger.info(f"🔊 [SARVAM TTS INCOMING] Text: \"{input_text[:70]}...\", Speaker: {payload.speaker}, Pace: {payload.pace}")
 
@@ -163,3 +217,103 @@ async def text_to_speech(payload: TTSRequest):
         "status": "success",
         "audio_base64": audio_base64
     }
+
+
+# ==============================================================================
+# Real-Time Pipecat SmallWebRTC Endpoints (Web-Only)
+# ==============================================================================
+@router.post("/start")
+async def webrtc_start(request: Request):
+    """Initialize a real-time Pipecat WebRTC session with STUN server configuration."""
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+
+    session_id = f"superadmin-voice-{uuid.uuid4().hex[:10]}"
+    active_voice_sessions[session_id] = {
+        "user_name": data.get("user_name", "Super Admin"),
+        "created_at": asyncio.get_running_loop().time()
+    }
+    session_executed_actions[session_id] = []
+
+    return {
+        "sessionId": session_id,
+        "session_id": session_id,
+        "iceConfig": {
+            "iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]
+        },
+        "status": "ready"
+    }
+
+
+@router.post("/offer")
+@router.post("/connect")
+async def webrtc_offer(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session_id: str | None = None
+):
+    """Process incoming WebRTC SDP offer and launch the SuperAdmin Pipecat voice pipeline."""
+    request_data = await request.json()
+    resolved_session_id = session_id or request_data.get("session_id") or request_data.get("sessionId") or f"voice-{uuid.uuid4().hex[:8]}"
+
+    webrtc_request = SmallWebRTCRequest(
+        sdp=request_data["sdp"],
+        type=request_data["type"],
+        pc_id=request_data.get("pc_id"),
+        restart_pc=request_data.get("restart_pc"),
+        request_data=request_data.get("request_data") or request_data.get("requestData"),
+    )
+
+    user_name = request_data.get("user_name") or active_voice_sessions.get(resolved_session_id, {}).get("user_name", "Super Admin")
+
+    async def webrtc_connection_callback(connection):
+        logger.info(f"🎙️ [WEBRTC CONNECTION ESTABLISHED] pc_id={connection.pc_id}, session_id={resolved_session_id}")
+        background_tasks.add_task(run_superadmin_webrtc_bot, connection, resolved_session_id, user_name)
+
+    answer = await small_webrtc_handler.handle_web_request(
+        request=webrtc_request,
+        webrtc_connection_callback=webrtc_connection_callback,
+    )
+    return answer
+
+
+@router.patch("/offer")
+@router.patch("/connect")
+async def webrtc_ice_candidate(request: Request):
+    """Handle incoming ICE candidates from the web browser."""
+    request_data = await request.json()
+    candidates = [
+        IceCandidate(
+            candidate=c.get("candidate", ""),
+            sdp_mid=c.get("sdpMid") or c.get("sdp_mid") or "",
+            sdp_mline_index=c.get("sdpMLineIndex") if c.get("sdpMLineIndex") is not None else c.get("sdp_mline_index", 0),
+        )
+        for c in request_data.get("candidates", [])
+    ]
+    patch_request = SmallWebRTCPatchRequest(
+        pc_id=request_data["pc_id"],
+        candidates=candidates,
+    )
+    await small_webrtc_handler.handle_patch_request(patch_request)
+    return {"status": "success"}
+
+
+@router.get("/session/{session_id}/actions")
+def get_session_actions(session_id: str):
+    """Fetch any tool actions executed by the voice agent during this session for UI widget rendering."""
+    actions = session_executed_actions.get(session_id, [])
+    return {
+        "status": "success",
+        "session_id": session_id,
+        "executed_actions": actions
+    }
+
+
+@router.delete("/session/{session_id}")
+def end_voice_session(session_id: str):
+    """Clean up voice session state."""
+    active_voice_sessions.pop(session_id, None)
+    session_executed_actions.pop(session_id, None)
+    return {"status": "success", "message": f"Session {session_id} ended"}

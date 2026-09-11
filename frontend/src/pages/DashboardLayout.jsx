@@ -270,8 +270,8 @@ export default function DashboardLayout() {
   const userRole = user?.role || '';
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
-  const isSuperAdminChat = userRole === 'Super Admin' && location.pathname === '/dashboard/superadmin/chat';
-  const isHiringManagerChat = userRole === 'Hiring Manager' && location.pathname === '/dashboard/hiring-manager/chat';
+  const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
+  const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
   const isAiChatPage = isSuperAdminChat || isHiringManagerChat;
 
   const navItems =
@@ -844,6 +844,19 @@ export default function DashboardLayout() {
           max-height: 100vh !important;
           overflow: hidden !important;
         }
+        .app-shell.ai-chat-mode .sidebar {
+          width: 56px !important;
+          min-width: 56px !important;
+          max-width: 56px !important;
+          background-color: transparent !important;
+          background: transparent !important;
+          border: none !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          padding: 4px 0 !important;
+          margin: 8px 0 8px 12px !important;
+          height: calc(100vh - 16px) !important;
+        }
         /* Eliminate any lingering focus/active rectangle on nav links */
         .sidebar a,
         .sidebar button,
@@ -1041,6 +1054,7 @@ export default function DashboardLayout() {
       {/* Desktop Floating Animated Sidebar (smoothly reduces to narrow dock on AI Chat) */}
       {!isHiringManagerChat && (
         <motion.aside
+          initial={false}
           className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}
           animate={{
             width: isSuperAdminChat ? 56 : 272,
@@ -1068,6 +1082,13 @@ export default function DashboardLayout() {
             mass: 0.8,
           }}
           style={{
+            width: isSuperAdminChat ? 56 : 272,
+            minWidth: isSuperAdminChat ? 56 : 272,
+            maxWidth: isSuperAdminChat ? 56 : 272,
+            backgroundColor: isSuperAdminChat ? 'transparent' : '#FFFFFF',
+            borderRadius: isSuperAdminChat ? 0 : 30,
+            border: isSuperAdminChat ? 'none' : '1px solid #E2E2DC',
+            boxShadow: isSuperAdminChat ? 'none' : '0 4px 20px rgba(0, 0, 0, 0.02)',
             height: isSuperAdminChat ? 'calc(100vh - 16px)' : 'calc(100vh - 32px)',
             position: 'sticky',
             top: isSuperAdminChat ? 8 : 16,
@@ -1081,7 +1102,7 @@ export default function DashboardLayout() {
             {isSuperAdminChat ? (
               <motion.div
                 key="reduced-rail"
-                initial={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
+                initial={false}
                 animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
@@ -1222,13 +1243,13 @@ export default function DashboardLayout() {
         </AnimatePresence>
 
         <main className={isAiChatPage ? "w-full h-screen max-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={isAiChatPage ? 'chat-panel' : location.pathname}
-              initial={{ opacity: 0, y: 10 }}
+              initial={false}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2, ease: 'easeOut' }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
               className="w-full h-full flex-1 flex flex-col min-w-0"
             >
               <Outlet />

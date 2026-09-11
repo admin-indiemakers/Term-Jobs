@@ -761,20 +761,29 @@ def tool_list_tenants(tenant_type: str = "all") -> list:
     tenants = list(db["tenants"].find(query))
     users = list(db["users"].find())
     user_map = {}
+    user_details_map = {}
     for u in users:
         tid = u.get("tenant_id")
         if tid:
             user_map.setdefault(tid, []).append(u.get("name") or u.get("email"))
+            user_details_map.setdefault(tid, []).append(u)
 
     result = []
     for t in tenants:
         tid = t.get("id")
+        t_users = user_details_map.get(tid, [])
+        primary_admin = next((u for u in t_users if u.get("role") in ("admin", "vendor", "company_admin")), t_users[0] if t_users else None)
+        admin_name = primary_admin.get("name") if primary_admin else ""
+        admin_email = primary_admin.get("email") if primary_admin else ""
+
         result.append({
             "id": tid,
             "name": t.get("name"),
             "tenant_type": t.get("tenant_type"),
             "created_at": t.get("created_at", ""),
             "assigned_users": user_map.get(tid, []),
+            "admin_name": admin_name,
+            "admin_email": admin_email,
         })
     return result
 
@@ -1704,7 +1713,8 @@ TOOL_MAP = {
 
 class SuperAdminAgent:
     def __init__(self):
-        self.api_key = settings.groq_api_key
+        from .groq_manager import get_next_groq_key
+        self.api_key = get_next_groq_key() or settings.groq_api_key
         self.base_url = settings.groq_base_url.rstrip("/")
         # Valid Groq tool-calling models
         self.model_candidates = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.6-27b"]
@@ -1717,9 +1727,11 @@ class SuperAdminAgent:
     def run(self, user_prompt: str, history: list[dict] = None, user_name: str = "Super Admin") -> dict:
         """Run the Super Admin Agent tool-calling loop using Groq API and multi-turn conversation memory."""
         chat_url = f"{self.base_url}/chat/completions"
+        from .groq_manager import get_all_groq_keys, get_next_groq_key
+        available_keys = get_all_groq_keys() or [self.api_key]
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {available_keys[0]}",
         }
 
         system_msg = {
@@ -2052,72 +2064,79 @@ class SuperAdminAgent:
                         )
                         return {"reply": reply, "executed_actions": executed_actions}
 
-        # Try Groq models with fast 8.0s timeout per candidate
+        # Try Groq models with fast 8.0s timeout per candidate and key failover
         for target_model in self.model_candidates:
-            payload = {
-                "model": target_model,
-                "messages": messages,
-                "tools": TOOLS,
-                "tool_choice": "auto",
-                "temperature": 0.2,
-            }
-            try:
-                resp = httpx.post(chat_url, json=payload, headers=headers, timeout=8.0)
-                if resp.status_code != 200:
-                    continue
-
-                res_data = resp.json()
-                choice = res_data["choices"][0]["message"]
-                tool_calls = choice.get("tool_calls")
-
-                if tool_calls:
-                    messages.append(choice)
-                    called_tools = set()
-                    for tc in tool_calls:
-                        fn_name = tc["function"]["name"]
-                        if fn_name in called_tools:
-                            continue
-                        called_tools.add(fn_name)
-
-                        raw_args = tc["function"].get("arguments", "{}")
-                        try:
-                            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
-                        except Exception:
-                            args = {}
-
-                        tool_fn = TOOL_MAP.get(fn_name)
-                        if tool_fn:
-                            try:
-                                result = tool_fn(**args)
-                            except Exception as ex:
-                                result = {"status": "error", "error": str(ex)}
-
-                            executed_actions.append({"tool": fn_name, "args": args, "result": result})
-
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": tc["id"],
-                                "name": fn_name,
-                                "content": json.dumps(result, default=str),
-                            })
-
-                    second_payload = {
-                        "model": target_model,
-                        "messages": messages,
-                        "temperature": 0.3,
-                    }
-                    sec_resp = httpx.post(chat_url, json=second_payload, headers=headers, timeout=8.0)
-                    sec_resp.raise_for_status()
-                    final_text = sec_resp.json()["choices"][0]["message"]["content"]
-                else:
-                    final_text = choice.get("content") or "Hello! How can I assist you with the TermJobs platform today?"
-
-                return {
-                    "reply": final_text,
-                    "executed_actions": executed_actions,
+            for active_key in available_keys:
+                headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {active_key}",
                 }
-            except Exception:
-                continue
+                payload = {
+                    "model": target_model,
+                    "messages": messages,
+                    "tools": TOOLS,
+                    "tool_choice": "auto",
+                    "temperature": 0.2,
+                }
+                try:
+                    resp = httpx.post(chat_url, json=payload, headers=headers, timeout=8.0)
+                    if resp.status_code in (401, 429):
+                        continue
+                    if resp.status_code != 200:
+                        continue
+
+                    res_data = resp.json()
+                    choice = res_data["choices"][0]["message"]
+                    tool_calls = choice.get("tool_calls")
+
+                    if tool_calls:
+                        messages.append(choice)
+                        called_tools = set()
+                        for tc in tool_calls:
+                            fn_name = tc["function"]["name"]
+                            if fn_name in called_tools:
+                                continue
+                            called_tools.add(fn_name)
+
+                            raw_args = tc["function"].get("arguments", "{}")
+                            try:
+                                args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                            except Exception:
+                                args = {}
+
+                            tool_fn = TOOL_MAP.get(fn_name)
+                            if tool_fn:
+                                try:
+                                    result = tool_fn(**args)
+                                except Exception as ex:
+                                    result = {"status": "error", "error": str(ex)}
+
+                                executed_actions.append({"tool": fn_name, "args": args, "result": result})
+
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc["id"],
+                                    "name": fn_name,
+                                    "content": json.dumps(result, default=str),
+                                })
+
+                        second_payload = {
+                            "model": target_model,
+                            "messages": messages,
+                            "temperature": 0.3,
+                        }
+                        sec_resp = httpx.post(chat_url, json=second_payload, headers=headers, timeout=8.0)
+                        sec_resp.raise_for_status()
+                        final_text = sec_resp.json()["choices"][0]["message"]["content"]
+                    else:
+                        final_text = choice.get("content") or "Hello! How can I assist you with the TermJobs platform today?"
+
+                    return {
+                        "reply": final_text,
+                        "executed_actions": executed_actions,
+                    }
+                except Exception:
+                    continue
 
         # Multi-turn history analysis & parameter accumulation across turns
         history_texts = []
