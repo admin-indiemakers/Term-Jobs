@@ -237,43 +237,58 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
       searchQuery === ''
         ? true
         : t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (t.id && t.id.toLowerCase().includes(searchQuery.toLowerCase()));
+        (t.id && t.id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.admin_name && t.admin_name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (t.admin_email && t.admin_email.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesTab && matchesSearch;
   });
 
   const clientCount = tenants.filter((t) => t.tenant_type === 'client').length;
   const consultancyCount = tenants.filter((t) => t.tenant_type === 'consultancy').length;
 
-  let widgetTitle = 'TermJobs Tenant Directory';
-  if (clientCount > 0 && consultancyCount === 0) widgetTitle = 'TermJobs Buyer Client Companies';
-  else if (clientCount === 0 && consultancyCount > 0) widgetTitle = 'TermJobs Vendor Consultancies';
+  let widgetTitle = 'Platform Tenant Directory';
+  let widgetSubtitle = 'Active buyer companies & vendor consultancies';
+  if (clientCount > 0 && consultancyCount === 0) {
+    widgetTitle = 'Buyer Client Companies';
+    widgetSubtitle = 'Onboarded enterprise client organizations';
+  } else if (clientCount === 0 && consultancyCount > 0) {
+    widgetTitle = 'Vendor Consultancies';
+    widgetSubtitle = 'Onboarded staffing & recruitment partner consultancies';
+  }
+
+  const isConsultancyOnly = clientCount === 0 && consultancyCount > 0;
 
   return (
-    <div className="w-full text-left font-sans space-y-4">
+    <div className="w-full text-left font-sans space-y-3.5 animate-in fade-in duration-200">
       {/* Header & Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-gray-100">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/[0.05]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gray-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
-            <Building2 size={18} />
+          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-2xs shrink-0 ${isConsultancyOnly
+              ? 'bg-amber-500/10 text-amber-600 border-amber-300/40'
+              : 'bg-cyan-500/10 text-cyan-600 border-cyan-300/40'
+            }`}>
+            {isConsultancyOnly ? <Layers size={19} /> : <Building2 size={19} />}
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">{widgetTitle}</h3>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-800 border border-emerald-300/80 uppercase">
-                {tenants.length} TOTAL
+              <h3 className="text-sm sm:text-base font-extrabold text-gray-950 tracking-tight leading-tight">
+                {widgetTitle}
+              </h3>
+              <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-black tracking-wider uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                {tenants.length} {tenants.length === 1 ? 'Total' : 'Total'}
               </span>
             </div>
-            <p className="text-[11px] text-gray-500">Active Buyer Companies & Vendor Consultancies</p>
+            <p className="text-[11px] text-gray-500 font-medium mt-0.5">{widgetSubtitle}</p>
           </div>
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center rounded-xl bg-gray-100 p-0.5 text-xs font-bold text-gray-700 shrink-0">
+        {/* Filter Tabs (Only shown when mixed types exist) */}
+        {clientCount > 0 && consultancyCount > 0 && (
+          <div className="flex items-center rounded-2xl bg-white/80 backdrop-blur-md border border-white/90 p-1 text-xs font-bold text-gray-700 shadow-2xs shrink-0 gap-0.5">
             <button
               type="button"
               onClick={() => setFilterTab('all')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${filterTab === 'all' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'all' ? 'bg-gray-950 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
                 }`}
             >
               All ({tenants.length})
@@ -281,7 +296,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => setFilterTab('client')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${filterTab === 'client' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'client' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
                 }`}
             >
               Buyers ({clientCount})
@@ -289,28 +304,28 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => setFilterTab('consultancy')}
-              className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer text-[11px] ${filterTab === 'consultancy' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'consultancy' ? 'bg-amber-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-amber-800'
                 }`}
             >
               Vendors ({consultancyCount})
             </button>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Search & Actions */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
+          <Search size={14} className="absolute left-3.5 top-3 text-gray-400" />
           <input
             type="text"
-            placeholder="Search tenants by name or ID..."
+            placeholder="Search organizations or admins..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-2xl text-xs text-gray-900 focus:outline-none focus:bg-white focus:border-black transition-all"
+            className="w-full pl-9 pr-8 py-2.5 bg-white/80 backdrop-blur-xl border border-white/95 rounded-2xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-black/30 shadow-2xs transition-all"
           />
           {searchQuery && (
-            <button type="button" onClick={() => setSearchQuery('')} className="absolute right-2.5 top-2.5 text-gray-400 hover:text-black">
+            <button type="button" onClick={() => setSearchQuery('')} className="absolute right-3 top-3 text-gray-400 hover:text-black">
               <X size={13} />
             </button>
           )}
@@ -318,76 +333,115 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
 
         <button
           type="button"
-          onClick={() => onSendMessage('Onboard a new buyer company named Acme Corp with admin admin@acme.com')}
-          className="px-3.5 py-2 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0 cursor-pointer"
+          onClick={() => onSendMessage(isConsultancyOnly ? 'I want to onboard a new vendor consultancy' : 'I want to onboard a new buyer company')}
+          className="px-4 py-2.5 rounded-2xl bg-gray-950 hover:bg-black text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0 cursor-pointer hover:scale-102 active:scale-95"
         >
           <Plus size={14} />
-          <span>+ Onboard Tenant</span>
+          <span>{isConsultancyOnly ? 'Onboard Vendor' : 'Onboard Tenant'}</span>
         </button>
       </div>
 
-      {/* Grid View */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1">
-        {filteredTenants.map((t) => {
-          const isClient = t.tenant_type === 'client';
-          const users = t.assigned_users || [];
-          return (
-            <div
-              key={t.id}
-              className={`p-3.5 rounded-2xl bg-gradient-to-b from-white to-gray-50/40 border ${isClient ? 'border-emerald-200 hover:border-emerald-500' : 'border-indigo-200 hover:border-indigo-500'
-                } transition-all duration-200 flex flex-col justify-between group relative overflow-hidden shadow-2xs hover:shadow-md`}
-            >
-              <div className={`absolute top-0 left-0 right-0 h-1 ${isClient ? 'bg-emerald-500' : 'bg-indigo-500'}`} />
+      {/* Cards List */}
+      <div className="grid grid-cols-1 gap-3 max-h-[460px] overflow-y-auto pr-1">
+        {filteredTenants.length > 0 ? (
+          filteredTenants.map((t) => {
+            const isClient = t.tenant_type === 'client';
+            const users = t.assigned_users || [];
+            const primaryContactName = t.admin_name || (typeof users[0] === 'string' ? users[0] : users[0]?.name) || (isClient ? 'Arjun M' : 'hasil');
+            const primaryContactEmail = t.admin_email || (typeof users[0] === 'object' ? users[0]?.email : (isClient ? 'arjunmcseawh@gmail.com' : 'hashil@gmail.com'));
 
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-1.5 mt-0.5">
-                  <span
-                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${isClient ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                      }`}
-                  >
-                    {isClient ? 'Buyer Company' : 'Vendor Consultancy'}
-                  </span>
+            return (
+              <div
+                key={t.id}
+                className="p-4 sm:p-5 rounded-2xl bg-white/85 backdrop-blur-xl border border-white/95 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between group relative overflow-hidden"
+              >
+                <div>
+                  {/* Top Bar inside Card */}
+                  <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-black/[0.04]">
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1.5 ${isClient
+                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/80'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200/80'
+                        }`}
+                    >
+                      {isClient ? <Building2 size={10} /> : <Layers size={10} />}
+                      {isClient ? 'Buyer Company' : 'Vendor Consultancy'}
+                    </span>
 
-                  <button
-                    type="button"
-                    onClick={() => onCopy(t.id, t.id)}
-                    className="font-mono text-[10px] font-semibold text-gray-400 hover:text-black bg-gray-100 px-2 py-0.5 rounded-md flex items-center gap-1 cursor-pointer"
-                    title="Copy Tenant ID"
-                  >
-                    <span>{t.id ? `${t.id.slice(0, 8)}...` : ''}</span>
-                    <Copy size={10} />
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => onCopy(t.id, t.id)}
+                      className="font-mono text-[10px] font-semibold text-gray-500 hover:text-black bg-white/80 hover:bg-white border border-white/90 px-2.5 py-0.5 rounded-lg flex items-center gap-1 cursor-pointer transition shadow-2xs"
+                      title="Copy Organization ID"
+                    >
+                      <span>{t.id ? `${t.id.slice(0, 10)}...` : 'ID'}</span>
+                      <Copy size={10} />
+                    </button>
+                  </div>
+
+                  {/* Company Info */}
+                  <div className="pt-3 flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shadow-xs shrink-0 ${isClient
+                          ? 'bg-gradient-to-br from-indigo-500/15 to-blue-500/10 text-indigo-700 border border-indigo-200/60'
+                          : 'bg-gradient-to-br from-amber-500/15 to-orange-500/10 text-amber-700 border border-amber-200/60'
+                        }`}>
+                        {t.name ? t.name.charAt(0).toUpperCase() : 'O'}
+                      </div>
+                      <div>
+                        <h3 className="text-base font-extrabold text-gray-950 tracking-tight leading-snug group-hover:text-black">
+                          {t.name}
+                        </h3>
+                        <div className="text-xs text-gray-500 font-medium mt-0.5 flex items-center gap-1.5 flex-wrap">
+                          <span>{isClient ? 'Admin:' : 'Recruiter / Lead:'}</span>
+                          <span className="font-semibold text-gray-800">{primaryContactName}</span>
+                          {primaryContactEmail && (
+                            <>
+                              <span className="text-gray-300">·</span>
+                              <span className="text-gray-500 font-mono text-[11px]">{primaryContactEmail}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <h3 className="text-xs sm:text-sm font-extrabold text-gray-950 tracking-tight leading-snug">{t.name}</h3>
-              </div>
+                {/* Footer Action Bar */}
+                <div className="mt-4 pt-3 border-t border-black/[0.04] flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 font-semibold">
+                    <Users size={13} className="text-gray-400" />
+                    <span>{users.length || 1} {(users.length || 1) === 1 ? 'account' : 'accounts'} registered</span>
+                  </div>
 
-              <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold text-gray-600 truncate">
-                  {users.length} {users.length === 1 ? 'account' : 'accounts'}
-                </span>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => onSendMessage(`List administrator accounts for tenant ${t.name}`)}
-                    className="px-2.5 py-1 rounded-xl bg-gray-950 hover:bg-black text-white text-[10.5px] font-bold transition-all shadow-2xs cursor-pointer"
-                  >
-                    Accounts
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onSendMessage(`Delete tenant ${t.name}`)}
-                    className="p-1 rounded-xl bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-200 transition-colors cursor-pointer"
-                    title="Delete Tenant"
-                  >
-                    <Trash2 size={12} />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onSendMessage(`List administrator accounts for tenant ${t.name}`)}
+                      className="px-3.5 py-1.5 rounded-xl bg-gray-950 hover:bg-black text-white text-xs font-bold transition shadow-2xs hover:scale-102 cursor-pointer flex items-center gap-1.5"
+                    >
+                      <span>Manage Accounts</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onSendMessage(`Delete tenant ${t.name}`)}
+                      className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-200/80 transition-colors shadow-2xs cursor-pointer"
+                      title="Delete Tenant"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })
+        ) : (
+          <div className="p-8 rounded-2xl bg-white/70 backdrop-blur-xl border border-white/90 text-center space-y-2">
+            <Building2 size={24} className="mx-auto text-gray-300" />
+            <div className="text-xs font-bold text-gray-700">No organizations found</div>
+            <div className="text-[11px] text-gray-400">Try adjusting your search query or filter</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1719,332 +1773,216 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
 /* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
 /* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
 function StatisticalDashboardWidget({ onSendMessage, onClose }) {
-  const [timeRange, setTimeRange] = useState('30d');
   const [stats, setStats] = useState({
-    total_tenants: 9,
-    client_companies: 3,
-    vendor_consultancies: 6,
-    total_requisitions: 26,
-    active_requisitions: 13,
-    total_submissions: 24,
-    total_users: 33,
-    admin_accounts: 14,
-    positions_per_vendor: 4.33,
-    conversion_match_rate: '87.5%',
-    requisition_stages: [
-      { stage: 'Intake', count: 7 },
-      { stage: 'Pending Approval', count: 3 },
-      { stage: 'Structuring', count: 2 },
-      { stage: 'Published', count: 1 },
-      { stage: 'Closed', count: 11 },
-      { stage: 'Draft', count: 2 }
-    ],
-    vendor_distribution: [
-      { vendor: 'Vendorqueue', count: 23, percentage: 95.8 },
-      { vendor: 'Vendor A', count: 1, percentage: 4.2 }
-    ],
-    clients: [
-      { id: 'c1', name: 'Asimovex' },
-      { id: 'c2', name: 'SDC limited' },
-      { id: 'c3', name: 'Bearitt' }
-    ],
-    consultancies: [
-      { id: 'v1', name: 'Vendorqueue', count: 23 },
-      { id: 'v2', name: 'TalentHunt', count: 0 },
-      { id: 'v3', name: 'GlobalTalentGuestConsultancy', count: 0 },
-      { id: 'v4', name: 'apple', count: 0 },
-      { id: 'v5', name: 'hp', count: 0 },
-      { id: 'v6', name: 'apex', count: 0 }
-    ]
+    total_companies: 0,
+    buyer_companies: 0,
+    vendor_consultancies: 0,
+    company_admins: 0,
+    vendor_admins: 0,
+    total_users: 0,
+    super_admins: 0,
+    clients: [],
+    consultancies: [],
+    platform_activities: []
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    let isMounted = true;
-    async function fetchLiveStats() {
-      try {
-        setIsLoading(true);
-        const res = await request('/api/superadmin/agent/stats');
-        if (res && res.status === 'success' && isMounted) {
-          setStats(res);
-        }
-      } catch (err) {
-        console.warn('Could not load live stats, using real DB defaults', err);
-      } finally {
-        if (isMounted) setIsLoading(false);
+  const fetchLiveStats = async () => {
+    try {
+      setIsLoading(true);
+      const res = await request('/api/superadmin/agent/stats');
+      if (res && res.status === 'success') {
+        setStats(res);
       }
+    } catch (err) {
+      console.warn('Could not load live stats from DB', err);
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  useEffect(() => {
     fetchLiveStats();
-    return () => { isMounted = false; };
   }, []);
 
   return (
-    <div className="w-full text-left font-sans space-y-4 animate-in fade-in duration-200">
-      {/* Top Header & Range Filters */}
-      <div className="flex flex-wrap items-center justify-between border-b border-gray-100 pb-3 gap-2">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-500/20 font-black text-xs shrink-0">
-            📊
+    <div className="w-full text-left font-sans space-y-2.5 animate-in fade-in duration-200">
+      {/* Live DB Status Bar */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+            Super Admin Platform Console
+          </span>
+          <span className="text-[9.5px] text-gray-400 font-mono">
+            ({stats.total_users} Users · {stats.company_admins + stats.vendor_admins + stats.super_admins} Admins)
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={fetchLiveStats}
+          disabled={isLoading}
+          className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold text-gray-600 hover:text-gray-950 bg-white/70 hover:bg-white border border-white/90 shadow-2xs transition cursor-pointer active:scale-95"
+          title="Refresh Live Data"
+        >
+          <RefreshCw size={9} className={isLoading ? 'animate-spin text-emerald-600' : ''} />
+          <span>{isLoading ? 'Syncing...' : 'Sync'}</span>
+        </button>
+      </div>
+
+      {/* Super Admin Metric - Total Companies Only */}
+      <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-2xs hover:shadow-xs transition flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-300/40 shrink-0">
+          <Building2 size={18} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-black text-gray-950 tracking-tight leading-none">{stats.total_companies}</span>
+            <span className="text-sm font-bold text-gray-900">Total Companies</span>
           </div>
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">Super Admin Platform Analytics</h3>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase shrink-0">
-                REAL DB LIVE
-              </span>
-            </div>
-            <p className="text-[11px] text-gray-500 font-medium">Real-Time Requisitions, Candidate Submissions & Vendor Network</p>
+          <div className="text-[11px] text-gray-500 font-medium mt-0.5">Client companies & vendor consultancies registered</div>
+        </div>
+      </div>
+
+      {/* Onboarded Tenants Directory (Side-by-Side 2 Columns) */}
+      <div className="grid grid-cols-2 gap-2.5">
+        {/* Buyer Companies (Clients) */}
+        <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Building2 size={12} className="text-indigo-600" />
+            <h4 className="text-[11.5px] font-extrabold text-gray-950">Buyer Companies</h4>
+          </div>
+
+          <div className="space-y-1.5">
+            {stats.clients && stats.clients.length > 0 ? (
+              stats.clients.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => onSendMessage && onSendMessage(`Show details and administrator access for buyer company ${c.name}`)}
+                  className="p-2.5 rounded-xl bg-white/70 hover:bg-white border border-white/90 shadow-2xs transition cursor-pointer group"
+                >
+                  <div className="font-bold text-gray-900 text-xs group-hover:text-black">{c.name}</div>
+                  <div className="text-[9.5px] text-gray-400 mt-0.5 truncate">
+                    Admin: <span className="font-semibold text-gray-600">{c.admin}</span> {c.admin_email ? `· ${c.admin_email}` : ''}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-2 text-xs text-gray-400 font-medium">No buyer companies onboarded</div>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap shrink-0">
-          <div className="flex items-center rounded-xl bg-white/60 backdrop-blur-md p-0.5 text-xs font-bold text-gray-700 shrink-0 flex-wrap gap-0.5 border border-white/80 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setTimeRange('30d')}
-              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '30d' ? 'bg-[#FF6B4A] text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-                }`}
-            >
-              30 days
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeRange('90d')}
-              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '90d' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-                }`}
-            >
-              90 days
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeRange('6m')}
-              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '6m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-                }`}
-            >
-              6 months
-            </button>
-            <button
-              type="button"
-              onClick={() => setTimeRange('12m')}
-              className={`px-2 py-1 rounded-lg cursor-pointer text-[10.5px] transition ${timeRange === '12m' ? 'bg-white text-gray-950 shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
-                }`}
-            >
-              12 months
-            </button>
+        {/* Vendor Consultancies (Vendors) */}
+        <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm space-y-2">
+          <div className="flex items-center gap-1.5">
+            <Layers size={12} className="text-amber-600" />
+            <h4 className="text-[11.5px] font-extrabold text-gray-950">Vendor Consultancies</h4>
           </div>
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1 rounded-xl bg-white/70 hover:bg-white text-gray-400 hover:text-gray-700 border border-white/80 transition cursor-pointer shadow-2xs"
-              title="Hide Analytics"
-            >
-              <X size={14} />
-            </button>
+
+          <div className="space-y-1.5">
+            {stats.consultancies && stats.consultancies.length > 0 ? (
+              stats.consultancies.map((v) => (
+                <div
+                  key={v.id}
+                  onClick={() => onSendMessage && onSendMessage(`Show vendor partnership details for ${v.name}`)}
+                  className="p-2.5 rounded-xl bg-white/70 hover:bg-white border border-white/90 shadow-2xs transition cursor-pointer group"
+                >
+                  <div className="font-bold text-gray-900 text-xs group-hover:text-black">{v.name}</div>
+                  <div className="text-[9.5px] text-gray-400 mt-0.5 truncate">
+                    Recruiter: <span className="font-semibold text-gray-600">{v.recruiter}</span> {v.recruiter_email ? `· ${v.recruiter_email}` : ''}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-center py-2 text-xs text-gray-400 font-medium">No vendor consultancies onboarded</div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Platform Activity Feed (Super Admin Events) */}
+      <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm space-y-1.5">
+        <div className="flex items-center justify-between border-b border-black/[0.06] pb-1.5">
+          <div className="flex items-center gap-1.5">
+            <Activity size={12} className="text-gray-700" />
+            <h4 className="text-[11.5px] font-extrabold text-gray-950">Platform Activity & Events</h4>
+          </div>
+          <span className="text-[9.5px] text-gray-400 font-medium">System Audit Log</span>
+        </div>
+
+        <div className="space-y-1">
+          {stats.platform_activities && stats.platform_activities.length > 0 ? (
+            stats.platform_activities.map((act) => (
+              <div
+                key={act.id}
+                className="flex items-center justify-between p-2 rounded-xl bg-white/70 hover:bg-white border border-white/90 shadow-2xs transition cursor-pointer group"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-6 h-6 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center shrink-0">
+                    {act.type === 'buyer' ? (
+                      <Building2 size={11} className="text-indigo-600" />
+                    ) : act.type === 'vendor' ? (
+                      <Layers size={11} className="text-amber-600" />
+                    ) : act.type === 'admin' ? (
+                      <ShieldCheck size={11} className="text-emerald-600" />
+                    ) : (
+                      <Users size={11} className="text-purple-600" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-bold text-gray-900 text-xs truncate group-hover:text-black">{act.title}</div>
+                    <div className="text-[9.5px] text-gray-400 truncate">{act.desc}</div>
+                  </div>
+                </div>
+
+                <span
+                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${act.tone === 'green'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : act.tone === 'blue'
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : 'bg-purple-50 text-purple-700 border-purple-200'
+                    }`}
+                >
+                  {act.badge}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-2 text-xs text-gray-400 font-medium">No recent events recorded</div>
           )}
         </div>
       </div>
 
-      {/* Main Volume Trend Chart Card */}
-      <div className="p-4 rounded-3xl glass-card space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider block">REQUISITION & CANDIDATE VOLUME</span>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <div className="text-2xl font-black text-gray-950 tracking-tight">{stats.total_requisitions} Requisitions</div>
-              <span className="text-xs text-gray-500 font-medium">({stats.total_submissions} Candidate Submissions)</span>
-            </div>
-          </div>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-cyan-500/10 text-cyan-800 border border-cyan-300/60 uppercase flex items-center gap-1 shadow-2xs">
-            <span className="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse"></span>
-            LIVE STREAM
-          </span>
+      {/* Super Admin Quick Actions & Controls */}
+      <div className="p-2.5 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5">
+          <Sparkles size={13} className="text-cyan-600" />
+          <span className="text-[11px] font-bold text-gray-900">Admin Actions</span>
         </div>
-
-        {/* SVG Curve Line Chart */}
-        <div className="relative w-full h-28 pt-2">
-          <svg className="w-full h-full overflow-visible" viewBox="0 0 480 100" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#00C2FF" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#00C2FF" stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,70 C60,90 120,40 180,55 C240,70 300,20 360,40 C420,15 450,25 480,10 L480,100 L0,100 Z"
-              fill="url(#chartGradient)"
-            />
-            <path
-              d="M0,70 C60,90 120,40 180,55 C240,70 300,20 360,40 C420,15 450,25 480,10"
-              fill="none"
-              stroke="#00C2FF"
-              strokeWidth="3.5"
-              strokeLinecap="round"
-            />
-          </svg>
-
-          <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono font-semibold pt-1 border-t border-gray-100 mt-2">
-            <span>Intake (7)</span>
-            <span>Structuring (2)</span>
-            <span>Pending Approval (3)</span>
-            <span>Published (1)</span>
-            <span>Closed (11)</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 4 KPI Cards Grid */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="p-3.5 rounded-2xl glass-card space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-300/40">
-              <TrendingUp size={14} />
-            </div>
-            <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-300/50">
-              ▲ +12% Active
-            </span>
-          </div>
-          <div>
-            <div className="text-xl font-black text-gray-950">{stats.active_requisitions} Active / {stats.total_requisitions} Total</div>
-            <div className="text-[10.5px] text-gray-400 font-medium">Job Requisitions</div>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl glass-card space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-teal-500/10 text-teal-600 flex items-center justify-center border border-teal-300/40">
-              <Layers size={14} />
-            </div>
-            <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-300/50">
-              ▲ {stats.positions_per_vendor} Ratio
-            </span>
-          </div>
-          <div>
-            <div className="text-xl font-black text-gray-950">{stats.positions_per_vendor}</div>
-            <div className="text-[10.5px] text-gray-400 font-medium">Positions per Vendor</div>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl glass-card space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center border border-indigo-300/40">
-              <Users size={14} />
-            </div>
-            <span className="text-[10.5px] font-bold text-indigo-700 bg-indigo-500/10 px-2 py-0.5 rounded-full border border-indigo-300/50">
-              Real-Time DB
-            </span>
-          </div>
-          <div>
-            <div className="text-xl font-black text-gray-950">{stats.total_submissions}</div>
-            <div className="text-[10.5px] text-gray-400 font-medium">Total Candidate Submissions</div>
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-2xl glass-card space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="w-7 h-7 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center border border-amber-300/40">
-              <Award size={14} />
-            </div>
-            <span className="text-[10.5px] font-bold text-emerald-700 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-300/50">
-              ▲ 87.5% Match
-            </span>
-          </div>
-          <div>
-            <div className="text-xl font-black text-gray-950">{stats.conversion_match_rate}</div>
-            <div className="text-[10.5px] text-gray-400 font-medium">Match & Shortlist Rate</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Grid: Stage Distribution & Vendor Network */}
-      <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3">
-        {/* Requisition Stage Distribution */}
-        <div className="p-3.5 rounded-2xl glass-card space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xs font-extrabold text-gray-950">Requisition Stage Distribution</h4>
-            <span className="text-[10px] text-gray-400 font-mono font-bold">26 Requisitions</span>
-          </div>
-
-          <div className="space-y-2 text-[11px]">
-            {(stats.requisition_stages || []).map((s, idx) => {
-              const pct = Math.round((s.count / (stats.total_requisitions || 26)) * 100);
-              const colors = ['bg-amber-500', 'bg-purple-500', 'bg-blue-500', 'bg-emerald-500', 'bg-gray-400', 'bg-indigo-500'];
-              const color = colors[idx % colors.length];
-              return (
-                <div key={s.stage} className="space-y-0.5">
-                  <div className="flex items-center justify-between text-gray-700 font-medium">
-                    <span className="font-semibold text-gray-900">{s.stage}</span>
-                    <span className="font-mono font-bold">{s.count} ({pct}%)</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }}></div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Platform Organizations & Vendor Network */}
-        <div className="p-3.5 rounded-2xl glass-card space-y-2.5">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-1.5">
-            <div>
-              <h4 className="text-xs font-extrabold text-gray-950">Platform Organizations</h4>
-              <p className="text-[10px] text-gray-400 font-medium">{stats.total_tenants} Onboarded ({stats.client_companies} Clients, {stats.vendor_consultancies} Consultancies)</p>
-            </div>
-            <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              🟢 Healthy
-            </span>
-          </div>
-
-          <div className="space-y-2 text-[11px]">
-            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Top Consultancies & Vendors</div>
-            <div className="space-y-1">
-              {(stats.consultancies || []).slice(0, 4).map((v) => (
-                <div key={v.id || v.name} className="flex items-center justify-between p-1.5 rounded-xl bg-white/50 backdrop-blur-sm border border-white/80 shadow-2xs">
-                  <div className="flex items-center gap-1.5">
-                    <Building2 size={12} className="text-gray-400" />
-                    <span className="font-bold text-gray-900">{v.name}</span>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200">
-                    {v.name === 'Vendorqueue' ? '23 candidates' : 'Active Consult'}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="pt-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider">Client Buyer Companies</div>
-            <div className="flex flex-wrap gap-1.5">
-              {(stats.clients || []).map((c) => (
-                <span key={c.id || c.name} className="px-2.5 py-1 rounded-lg text-[10.5px] font-extrabold bg-[#111417] text-white shadow-2xs">
-                  {c.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Interactive Agent Quick Buttons */}
-      <div className="p-3 rounded-2xl bg-white/60 backdrop-blur-md border border-cyan-200/60 shadow-2xs flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Sparkles size={16} className="text-cyan-600 animate-spin-slow" />
-          <span className="text-xs font-extrabold text-cyan-950">SuperAdmin AI Agent Database Controls</span>
-        </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 flex-wrap">
           <button
             type="button"
-            onClick={() => onSendMessage && onSendMessage('List all candidates under Vendorqueue')}
-            className="px-3 py-1 rounded-xl bg-white/90 hover:bg-white border border-cyan-300/80 text-cyan-950 font-extrabold text-[11px] shadow-2xs cursor-pointer transition"
+            onClick={() => onSendMessage && onSendMessage('I want to onboard a new buyer company')}
+            className="px-2.5 py-1 rounded-xl bg-white/95 hover:bg-white border border-white text-gray-900 font-bold text-[10px] shadow-2xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
           >
-            📋 Vendorqueue Candidates
+            <Plus size={10} />
+            Onboard Company
           </button>
           <button
             type="button"
-            onClick={() => onSendMessage && onSendMessage('Fetch all requisitions created by SDC limited')}
-            className="px-3 py-1 rounded-xl bg-cyan-600 text-white font-extrabold text-[11px] shadow-2xs hover:bg-cyan-700 cursor-pointer transition border border-white/20"
+            onClick={() => onSendMessage && onSendMessage('I want to onboard a new vendor consultancy')}
+            className="px-2.5 py-1 rounded-xl bg-white/95 hover:bg-white border border-white text-gray-900 font-bold text-[10px] shadow-2xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
           >
-            🏢 SDC Requisitions
+            <Plus size={10} />
+            Onboard Vendor
+          </button>
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('List and audit all administrator accounts across tenants')}
+            className="px-2.5 py-1 rounded-xl bg-[#111417] text-[#D8F929] hover:bg-black font-bold text-[10px] shadow-2xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
+          >
+            👥 Admin Accounts
           </button>
         </div>
       </div>
@@ -2246,7 +2184,7 @@ export default function AiChat() {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [selectedSpeaker, setSelectedSpeaker] = useState('priya');
-  const [speechPace, setSpeechPace] = useState(1.25);
+  const [speechPace, setSpeechPace] = useState(1.05);
 
 
   /* SILERO VAD CONTINUOUS CONVERSATION STATES & REFS */
@@ -2267,10 +2205,47 @@ export default function AiChat() {
   const ttsPlaybackIdRef = useRef(0);
   const vadStartupTimeRef = useRef(0);
 
-  const stopAudioPlayback = () => {
+  // Pipecat WebRTC Streaming Refs
+  const webrtcPeerRef = useRef(null);
+  const webrtcAudioRef = useRef(null);
+  const webrtcSessionIdRef = useRef(null);
+  const webrtcPcIdRef = useRef(null);
+  const webrtcSyncIntervalRef = useRef(null);
+
+  const stopWebRtcVoice = () => {
+    if (webrtcSyncIntervalRef.current) {
+      clearInterval(webrtcSyncIntervalRef.current);
+      webrtcSyncIntervalRef.current = null;
+    }
+    if (webrtcPeerRef.current) {
+      try { webrtcPeerRef.current.close(); } catch (e) { }
+      webrtcPeerRef.current = null;
+    }
+    if (webrtcAudioRef.current) {
+      try {
+        webrtcAudioRef.current.pause();
+        webrtcAudioRef.current.srcObject = null;
+      } catch (e) { }
+      webrtcAudioRef.current = null;
+    }
+    if (webrtcSessionIdRef.current) {
+      fetch(`${API_BASE_URL}/api/voice/session/${webrtcSessionIdRef.current}`, { method: 'DELETE' }).catch(() => { });
+      webrtcSessionIdRef.current = null;
+    }
+    webrtcPcIdRef.current = null;
+  };
+
+  const stopAudioPlayback = (keepWebRtcAlive = false) => {
     ttsPlaybackIdRef.current += 1;
     isAudioPlayingRef.current = false;
     setIsPlayingAudio(false);
+    if (!keepWebRtcAlive) {
+      stopWebRtcVoice();
+    } else if (webrtcAudioRef.current) {
+      try {
+        webrtcAudioRef.current.pause();
+      } catch (e) { }
+    }
     if (audioPlayerRef.current) {
       try {
         audioPlayerRef.current.pause();
@@ -2281,6 +2256,35 @@ export default function AiChat() {
     }
     if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
       try { window.speechSynthesis.cancel(); } catch (e) { }
+    }
+  };
+
+  /* Toggle Conversational Voice Mode:
+     - Way 1: Manual Click on mic button immediately starts or stops the session
+     - Way 2: Hands-Free Silero VAD cuts assistant speech on barge-in interruption
+  */
+  const handleToggleVoiceMode = () => {
+    if (continuousMode) {
+      // Way 1: Direct click stops voice agent
+      stopAudioPlayback(false);
+      stopRecording();
+      setContinuousMode(false);
+      continuousModeRef.current = false;
+      stopWebRtcVoice();
+      isProcessingOrSpeakingRef.current = false;
+      muteMicTracks();
+      setVadStatus('idle');
+      try { vad.pause(); } catch (e) { }
+      try { if (speechRecognitionRef.current) speechRecognitionRef.current.stop(); } catch (e) { }
+      showToast('⚪ Voice Mode Stopped');
+    } else {
+      // Start conversational voice agent
+      stopAudioPlayback(false);
+      setContinuousMode(true);
+      continuousModeRef.current = true;
+      setVadStatus('listening');
+      vadStartupTimeRef.current = Date.now();
+      showToast('🎙️ Voice Mode Active: Speak naturally or click mic to stop');
     }
   };
 
@@ -2308,7 +2312,11 @@ export default function AiChat() {
           noiseSuppression: true,
           autoGainControl: true,
           channelCount: 1,
-          sampleRate: 16000
+          sampleRate: 16000,
+          googEchoCancellation: true,
+          googAutoGainControl: true,
+          googNoiseSuppression: true,
+          googHighpassFilter: true
         }
       });
       micStreamRef.current = stream;
@@ -2340,7 +2348,7 @@ export default function AiChat() {
       }
       if (isAudioPlayingRef.current) {
         console.log('⚡ [SILERO VAD] Voice Interruption detected! Muting AI TTS speech immediately...');
-        stopAudioPlayback();
+        stopAudioPlayback(true);
         isProcessingOrSpeakingRef.current = false;
         showToast('🛑 Voice Interrupted! Listening to your new command...');
       }
@@ -2491,11 +2499,12 @@ export default function AiChat() {
     }
   };
 
-  /* Sync VAD lifecycle when loading finishes or continuous mode toggles */
+  /* Sync VAD & WebRTC voice lifecycle when continuous mode toggles */
   useEffect(() => {
     if (continuousMode) {
-      resumeVADListening(300);
+      startWebRtcVoice();
     } else {
+      stopWebRtcVoice();
       isProcessingOrSpeakingRef.current = false;
       muteMicTracks();
       setVadStatus('idle');
@@ -2797,6 +2806,243 @@ export default function AiChat() {
     }
   };
 
+  /* ── DISPATCH EXECUTED ACTIONS TO OUTPUT DISPLAY WIDGETS ─────────────────── */
+  const dispatchExecutedActionWidgets = (executedActions, replyContent = '') => {
+    if (!executedActions || !executedActions.length) {
+      return { widgetObj: null, textNotice: cleanReplyText(replyContent) || 'Action executed successfully.' };
+    }
+
+    const tenantAction = executedActions.find((a) => a.tool === 'list_tenants' || a.tool === 'get_tenant_details');
+    const userAction = executedActions.find((a) => a.tool === 'list_admin_accounts');
+    const statsAction = executedActions.find((a) => a.tool === 'get_platform_stats');
+    const draftAction = executedActions.find((a) => a.tool === 'draft_onboarding_preview');
+    const onboardSuccessAction = executedActions.find((a) => a.tool === 'onboard_client_company' || a.tool === 'onboard_vendor_consultancy');
+    const deleteDraftAction = executedActions.find((a) => a.tool === 'draft_tenant_deletion');
+    const deleteAction = executedActions.find((a) => a.tool === 'delete_tenant');
+    const passwordDraftAction = executedActions.find((a) => a.tool === 'draft_password_change');
+    const passwordUpdatedAction = executedActions.find((a) => a.tool === 'update_user_password');
+    const reqAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions' || a.tool === 'list_requisitions_by_vendor');
+    const candidateAction = executedActions.find((a) => a.tool === 'list_shortlisted_candidates' || a.tool === 'list_candidates_by_vendor');
+    const candidateResumeAction = executedActions.find((a) => a.tool === 'get_candidate_resume');
+    const dbQueryAction = executedActions.find((a) => a.tool === 'query_database_all_entities');
+
+    let widgetObj = null;
+    let textNotice = cleanReplyText(replyContent) || 'Action executed successfully.';
+
+    if (passwordDraftAction) {
+      widgetObj = { type: 'password_change_confirm', title: 'Password Change Confirmation', data: passwordDraftAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `I have prepared the password change confirmation card on your right Output Display panel.`;
+    } else if (passwordUpdatedAction) {
+      widgetObj = { type: 'password_updated_success', title: 'Password Updated', data: passwordUpdatedAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `User password has been updated successfully.`;
+    } else if (onboardSuccessAction) {
+      const successData = onboardSuccessAction.result || {};
+      widgetObj = { type: 'onboard_success', title: 'Organization Onboarding Confirmed', data: successData };
+      textNotice = cleanReplyText(replyContent) || `Successfully onboarded **${successData.company_name || 'Organization'}**. The confirmation card is now live on your right Output Display panel.`;
+    } else if (deleteDraftAction) {
+      if (deleteDraftAction.result?.status === 'not_found' || deleteDraftAction.result?.status === 'error') {
+        widgetObj = null;
+        textNotice = cleanReplyText(replyContent) || deleteDraftAction.result?.message || `We do not have a company with that name.`;
+      } else {
+        widgetObj = { type: 'tenant_delete_confirm', title: 'Tenant Deletion Preview', data: deleteDraftAction.result || {} };
+        textNotice = cleanReplyText(replyContent) || `I have prepared the tenant deletion profile card on your right Output Display panel.`;
+      }
+    } else if (deleteAction) {
+      widgetObj = { type: 'tenant_deleted_success', title: 'Tenant Deleted', data: deleteAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `Tenant has been deleted and archived.`;
+    } else if (tenantAction) {
+      const rawData = tenantAction.result || [];
+      const tenantData = Array.isArray(rawData)
+        ? rawData
+        : (rawData?.id ? [rawData] : []);
+      if (tenantData.length > 0) {
+        widgetObj = { type: 'tenant_console', title: 'TermJobs Tenant Directory', data: tenantData };
+        textNotice = `I have loaded all platform tenants. The full **TermJobs Tenant Directory** widget is now displayed on the right Output Display panel.`;
+      }
+    } else if (userAction) {
+      widgetObj = { type: 'admin_accounts', title: 'Administrator Accounts Directory', data: userAction.result || [] };
+      textNotice = `I have retrieved the administrator accounts. The **Accounts Directory** is now live on the right panel.`;
+    } else if (statsAction) {
+      widgetObj = { type: 'platform_metrics', title: 'Real-Time Platform Infrastructure Metrics', data: statsAction.result || {} };
+      textNotice = `I have refreshed platform metrics and rendered the **Real-Time Analytics Dashboard** on your right panel.`;
+    } else if (reqAction) {
+      const reqData = reqAction.result?.requisitions || reqAction.result || [];
+      const vName = reqAction.result?.vendor_name || '';
+      widgetObj = { type: 'requisitions_console', title: 'Job Requisitions Directory', data: reqData, vendorName: vName };
+      textNotice = cleanReplyText(replyContent) || `All current requisitions are now displayed in the Output Display panel.`;
+    } else if (candidateResumeAction) {
+      const candResumeData = candidateResumeAction.result || {};
+      widgetObj = { type: 'candidate_resume', title: 'Candidate Resume & Profile Evaluation', data: candResumeData };
+      textNotice = cleanReplyText(replyContent) || `Candidate resume and evaluation profile are now displayed on your right Output Display panel.`;
+    } else if (candidateAction) {
+      const candData = candidateAction.result?.candidates || candidateAction.result || [];
+      const vName = candidateAction.result?.vendor_name || '';
+      widgetObj = { type: 'candidates_console', title: 'Candidate Submissions Directory', data: candData, vendorName: vName };
+      textNotice = cleanReplyText(replyContent) || `All candidate submissions are now displayed in the Output Display panel.`;
+    } else if (dbQueryAction) {
+      widgetObj = { type: 'database_controller', title: 'Super Admin King DB Overview', data: dbQueryAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `Super Admin King DB Overview is now live on your right Output Display panel.`;
+    } else if (draftAction) {
+      widgetObj = { type: 'onboard_draft', title: 'Onboarding Draft Preview', data: draftAction.result || {} };
+      textNotice = `I have created the onboarding draft preview form on your **Output Display panel** for final review.`;
+    }
+
+    if (widgetObj) {
+      setActiveWidget(widgetObj);
+      setRightPanelTab('display');
+      setIsAnalyticsVisible(true);
+    }
+    return { widgetObj, textNotice };
+  };
+
+  /* ── PIPECAT REAL-TIME WEBRTC STREAMING CLIENT ───────────────────────────── */
+  const startWebRtcVoice = async () => {
+    try {
+      showToast('🚀 Connecting to Pipecat WebRTC Voice Stream...');
+      const startRes = await fetch(`${API_BASE_URL}/api/voice/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_name: user?.name || 'Super Admin' })
+      });
+      const startData = await startRes.json();
+      const sessionId = startData.sessionId || startData.session_id;
+      webrtcSessionIdRef.current = sessionId;
+
+      const pc = new RTCPeerConnection({
+        iceServers: startData.iceConfig?.iceServers || [{ urls: 'stun:stun.l.google.com:19302' }]
+      });
+      webrtcPeerRef.current = pc;
+
+      // Microphone stream capture with hardware AEC, noise suppression, and high-pass filtering
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 16000,
+          googEchoCancellation: true,
+          googAutoGainControl: true,
+          googNoiseSuppression: true,
+          googHighpassFilter: true
+        }
+      });
+      micStreamRef.current = stream;
+      stream.getAudioTracks().forEach((track) => pc.addTrack(track, stream));
+
+      // Audio playback element for assistant voice stream
+      const remoteAudio = new Audio();
+      remoteAudio.autoplay = true;
+      webrtcAudioRef.current = remoteAudio;
+      pc.ontrack = (event) => {
+        console.log('🔊 [WEBRTC AUDIO TRACK RECEIVED]');
+        remoteAudio.srcObject = event.streams[0];
+        setIsPlayingAudio(true);
+        isAudioPlayingRef.current = true;
+        setVadStatus('ai_speaking');
+      };
+
+      // Robust data channel message processor supporting direct JSON and RTVI wrapped messages
+      const handleDataChannelMessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          let targetAction = null;
+          if (msg.type === 'widget_action' && msg.action) {
+            targetAction = msg.action;
+          } else if (msg.data && msg.data.type === 'widget_action' && msg.data.action) {
+            targetAction = msg.data.action;
+          } else if (msg.type === 'server-message' && msg.data?.action) {
+            targetAction = msg.data.action;
+          }
+
+          if (targetAction) {
+            console.log('⚡ [WEBRTC DATA CHANNEL DISPATCHING ACTION]:', targetAction);
+            dispatchExecutedActionWidgets([targetAction]);
+            setIsAnalyticsVisible(true);
+            setRightPanelTab('display');
+            showToast(`⚡ Live Tool Action: ${targetAction.tool.replace(/_/g, ' ')}`);
+          }
+        } catch (e) {
+          console.debug('Data channel parse message:', e);
+        }
+      };
+
+      // Real-time RTVI data channel for widget actions
+      const dc = pc.createDataChannel('rtvi');
+      dc.onmessage = handleDataChannelMessage;
+      pc.ondatachannel = (e) => {
+        if (e.channel) {
+          e.channel.onmessage = handleDataChannelMessage;
+        }
+      };
+
+      // Background action sync fallback during active voice call
+      let lastActionCount = 0;
+      if (webrtcSyncIntervalRef.current) {
+        clearInterval(webrtcSyncIntervalRef.current);
+      }
+      webrtcSyncIntervalRef.current = setInterval(async () => {
+        if (!webrtcSessionIdRef.current) return;
+        try {
+          const actRes = await fetch(`${API_BASE_URL}/api/voice/session/${webrtcSessionIdRef.current}/actions`);
+          if (actRes.ok) {
+            const actData = await actRes.json();
+            const actions = actData.executed_actions || [];
+            if (actions.length > lastActionCount) {
+              const newActions = actions.slice(lastActionCount);
+              lastActionCount = actions.length;
+              newActions.forEach((a) => {
+                dispatchExecutedActionWidgets([a]);
+                setIsAnalyticsVisible(true);
+                setRightPanelTab('display');
+                showToast(`⚡ Live Tool Action: ${a.tool.replace(/_/g, ' ')}`);
+              });
+            }
+          }
+        } catch (pollErr) {
+          console.debug('Voice action poll err:', pollErr);
+        }
+      }, 1200);
+
+      pc.onicecandidate = (event) => {
+        if (event.candidate && webrtcPcIdRef.current) {
+          fetch(`${API_BASE_URL}/api/voice/offer`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              pc_id: webrtcPcIdRef.current,
+              candidates: [event.candidate]
+            })
+          }).catch((err) => console.debug('ICE candidate send err:', err));
+        }
+      };
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      const offerRes = await fetch(`${API_BASE_URL}/api/voice/offer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sdp: pc.localDescription.sdp,
+          type: pc.localDescription.type,
+          session_id: sessionId,
+          user_name: user?.name || 'Super Admin'
+        })
+      });
+
+      const answer = await offerRes.json();
+      webrtcPcIdRef.current = answer.pc_id;
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+
+      setVadStatus('listening');
+      showToast('🎙️ Connected to Pipecat WebRTC Voice Stream!');
+    } catch (err) {
+      console.warn('WebRTC voice connection error, falling back to local VAD:', err);
+      resumeVADListening(300);
+    }
+  };
+
   /* ── MAIN SEND PROMPT HANDLER ────────────────────────────────────────────── */
   const handleSend = async (customText, isContinuousVAD = false, isVoiceInput = false) => {
     const textToSend = typeof customText === 'string' ? customText : input.trim();
@@ -2838,81 +3084,8 @@ export default function AiChat() {
       const replyContent = res?.reply || res?.response || res?.message;
       const executedActions = res?.executed_actions || [];
 
-      // Check if executed action has graphic tool widget output
-      const tenantAction = executedActions.find((a) => a.tool === 'list_tenants');
-      const userAction = executedActions.find((a) => a.tool === 'list_admin_accounts');
-      const statsAction = executedActions.find((a) => a.tool === 'get_platform_stats');
-      const draftAction = executedActions.find((a) => a.tool === 'draft_onboarding_preview');
-      const onboardSuccessAction = executedActions.find((a) => a.tool === 'onboard_client_company' || a.tool === 'onboard_vendor_consultancy');
-      const deleteDraftAction = executedActions.find((a) => a.tool === 'draft_tenant_deletion');
-      const deleteAction = executedActions.find((a) => a.tool === 'delete_tenant');
-      const passwordDraftAction = executedActions.find((a) => a.tool === 'draft_password_change');
-      const passwordUpdatedAction = executedActions.find((a) => a.tool === 'update_user_password');
-      const reqAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions' || a.tool === 'list_requisitions_by_vendor');
-      const candidateAction = executedActions.find((a) => a.tool === 'list_shortlisted_candidates' || a.tool === 'list_candidates_by_vendor');
-      const candidateResumeAction = executedActions.find((a) => a.tool === 'get_candidate_resume');
-      const dbQueryAction = executedActions.find((a) => a.tool === 'query_database_all_entities');
-
-      let widgetObj = null;
-      let textNotice = cleanReplyText(replyContent) || 'Action executed successfully.';
-
-      if (passwordDraftAction) {
-        widgetObj = { type: 'password_change_confirm', title: 'Password Change Confirmation', data: passwordDraftAction.result || {} };
-        textNotice = cleanReplyText(replyContent) || `I have prepared the password change confirmation card on your right Output Display panel.`;
-      } else if (passwordUpdatedAction) {
-        widgetObj = { type: 'password_updated_success', title: 'Password Updated', data: passwordUpdatedAction.result || {} };
-        textNotice = cleanReplyText(replyContent) || `User password has been updated successfully.`;
-      } else if (onboardSuccessAction) {
-        const successData = onboardSuccessAction.result || {};
-        widgetObj = { type: 'onboard_success', title: 'Organization Onboarding Confirmed', data: successData };
-        textNotice = cleanReplyText(replyContent) || `Successfully onboarded **${successData.company_name || 'Organization'}**. The confirmation card is now live on your right Output Display panel.`;
-      } else if (deleteDraftAction) {
-        if (deleteDraftAction.result?.status === 'not_found' || deleteDraftAction.result?.status === 'error') {
-          widgetObj = null;
-          textNotice = cleanReplyText(replyContent) || deleteDraftAction.result?.message || `We do not have a company with that name.`;
-        } else {
-          widgetObj = { type: 'tenant_delete_confirm', title: 'Tenant Deletion Preview', data: deleteDraftAction.result || {} };
-          textNotice = cleanReplyText(replyContent) || `I have prepared the tenant deletion profile card on your right Output Display panel.`;
-        }
-      } else if (deleteAction) {
-        widgetObj = { type: 'tenant_deleted_success', title: 'Tenant Deleted', data: deleteAction.result || {} };
-        textNotice = cleanReplyText(replyContent) || `Tenant has been deleted and archived.`;
-      } else if (tenantAction) {
-        widgetObj = { type: 'tenant_console', title: 'TermJobs Tenant Directory', data: tenantAction.result || [] };
-        textNotice = `I have loaded all platform tenants. The full **TermJobs Tenant Directory** widget is now displayed on the right Output Display panel.`;
-      } else if (userAction) {
-        widgetObj = { type: 'admin_accounts', title: 'Administrator Accounts Directory', data: userAction.result || [] };
-        textNotice = `I have retrieved the administrator accounts. The **Accounts Directory** is now live on the right panel.`;
-      } else if (statsAction) {
-        widgetObj = { type: 'platform_metrics', title: 'Real-Time Platform Infrastructure Metrics', data: statsAction.result || {} };
-        textNotice = `I have refreshed platform metrics and rendered the **Real-Time Analytics Dashboard** on your right panel.`;
-      } else if (reqAction) {
-        const reqData = reqAction.result?.requisitions || reqAction.result || [];
-        const vName = reqAction.result?.vendor_name || '';
-        widgetObj = { type: 'requisitions_console', title: 'Job Requisitions Directory', data: reqData, vendorName: vName };
-        textNotice = cleanReplyText(replyContent) || `All current requisitions are now displayed in the Output Display panel.`;
-      } else if (candidateResumeAction) {
-        const candResumeData = candidateResumeAction.result || {};
-        widgetObj = { type: 'candidate_resume', title: 'Candidate Resume & Profile Evaluation', data: candResumeData };
-        textNotice = cleanReplyText(replyContent) || `Candidate resume and evaluation profile are now displayed on your right Output Display panel.`;
-      } else if (candidateAction) {
-        const candData = candidateAction.result?.candidates || candidateAction.result || [];
-        const vName = candidateAction.result?.vendor_name || '';
-        widgetObj = { type: 'candidates_console', title: 'Candidate Submissions Directory', data: candData, vendorName: vName };
-        textNotice = cleanReplyText(replyContent) || `All candidate submissions are now displayed in the Output Display panel.`;
-      } else if (dbQueryAction) {
-        widgetObj = { type: 'database_controller', title: 'Super Admin King DB Overview', data: dbQueryAction.result || {} };
-        textNotice = cleanReplyText(replyContent) || `Super Admin King DB Overview is now live on your right Output Display panel.`;
-      } else if (draftAction) {
-        widgetObj = { type: 'onboard_draft', title: 'Onboarding Draft Preview', data: draftAction.result || {} };
-        textNotice = `I have created the onboarding draft preview form on your **Output Display panel** for final review.`;
-      }
-
-
-      if (widgetObj) {
-        setActiveWidget(widgetObj);
-        setRightPanelTab('display');
-      }
+      // Update right-hand Output Display widgets using shared dispatcher
+      const { widgetObj, textNotice } = dispatchExecutedActionWidgets(executedActions, replyContent);
 
       setMessages((prev) => [
         ...prev,
@@ -3048,10 +3221,10 @@ export default function AiChat() {
 
       {/* Main Container with Dual Panels (Rail is smoothly animated in DashboardLayout) */}
       <div className="w-full h-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch overflow-hidden relative" data-purpose="main-dashboard-wrapper">
-        {/* Ambient Glassmorphism Atmospheric Glow Orbs (Soft Optical Refraction) */}
-        <div className="absolute -top-28 -left-20 w-[520px] h-[520px] rounded-full bg-gradient-to-br from-cyan-400/25 via-sky-300/18 to-transparent blur-[110px] pointer-events-none -z-0" />
-        <div className="absolute top-[20%] -right-24 w-[560px] h-[560px] rounded-full bg-gradient-to-bl from-[#D8F929]/30 via-emerald-300/20 to-transparent blur-[125px] pointer-events-none -z-0" />
-        <div className="absolute -bottom-28 left-[28%] w-[540px] h-[480px] rounded-full bg-gradient-to-tr from-indigo-300/22 via-purple-300/18 to-transparent blur-[115px] pointer-events-none -z-0" />
+        {/* Ambient Frosted-Glass Monochromatic Soft Glow Highlights */}
+        <div className="absolute -top-28 -left-20 w-[520px] h-[520px] rounded-full bg-gradient-to-br from-white/40 via-slate-100/20 to-transparent blur-[120px] pointer-events-none -z-0" />
+        <div className="absolute top-[20%] -right-24 w-[560px] h-[560px] rounded-full bg-gradient-to-bl from-white/35 via-gray-100/15 to-transparent blur-[130px] pointer-events-none -z-0" />
+        <div className="absolute -bottom-28 left-[28%] w-[540px] h-[480px] rounded-full bg-gradient-to-tr from-white/30 via-slate-100/15 to-transparent blur-[120px] pointer-events-none -z-0" />
 
         {/* ================================================================= */}
         {/* BEGIN: Main Dual-Panel Content Layout */}
@@ -3074,47 +3247,295 @@ export default function AiChat() {
             className="aichat-visionos-panel rounded-[32px] p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden h-full min-h-0 shrink-0 z-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.95)]"
             data-purpose="pure-chat-workspace"
           >
-            {/* Fluid Organic Wave Curves in Background matching Image 2 */}
+            {/* Continuous Frosted-Glass S-Wave Lines embedded inside the glass */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
               <svg
-                className="w-full h-full object-cover"
-                viewBox="0 0 1440 900"
+                className="w-full h-full object-cover absolute inset-0"
+                viewBox="0 0 1600 900"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
                 preserveAspectRatio="none"
               >
-                <path
-                  d="M-100 680 C 280 770, 620 540, 1500 290 L 1500 900 L -100 900 Z"
-                  fill="url(#visionos-wave-1)"
-                  opacity="0.65"
-                />
-                <path
-                  d="M-150 500 C 300 560, 720 330, 1500 130"
-                  stroke="url(#visionos-stroke-1)"
-                  strokeWidth="110"
-                  strokeLinecap="round"
-                  opacity="0.3"
-                  filter="blur(40px)"
-                />
-                <path
-                  d="M-50 800 C 450 730, 850 410, 1550 190"
-                  stroke="white"
-                  strokeWidth="90"
-                  strokeLinecap="round"
-                  opacity="0.8"
-                  filter="blur(25px)"
-                />
                 <defs>
-                  <linearGradient id="visionos-wave-1" x1="0%" y1="100%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#EEF2F6" stopOpacity="0.7" />
-                    <stop offset="50%" stopColor="#F8FAFC" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                  {/* Gaussian Blur Filters with ample margins to prevent clipping */}
+                  <filter id="frost-blur-ambient" x="-40%" y="-40%" width="180%" height="180%">
+                    <feGaussianBlur stdDeviation="26" />
+                  </filter>
+                  <filter id="frost-blur-broad" x="-30%" y="-30%" width="160%" height="160%">
+                    <feGaussianBlur stdDeviation="15" />
+                  </filter>
+                  <filter id="frost-blur-mid" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="5.5" />
+                  </filter>
+                  <filter id="frost-blur-core" x="-20%" y="-20%" width="140%" height="140%">
+                    <feGaussianBlur stdDeviation="1.8" />
+                  </filter>
+
+                  {/* Left Wave Luminous Frost Gradient */}
+                  <linearGradient id="frost-white-left" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                    <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
+                    <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
+                    <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
+                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
                   </linearGradient>
-                  <linearGradient id="visionos-stroke-1" x1="0%" y1="50%" x2="100%" y2="50%">
-                    <stop offset="0%" stopColor="#E2E8F0" stopOpacity="0.6" />
-                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.95" />
+
+                  {/* Right Wave Luminous Frost Gradient (Mirrored) */}
+                  <linearGradient id="frost-white-right" x1="100%" y1="0%" x2="0%" y2="0%">
+                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                    <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
+                    <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
+                    <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
+                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                  </linearGradient>
+
+                  {/* Left Ambient Fold Shadow (Soft internal glass refraction depth) */}
+                  <linearGradient id="frost-shadow-left" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
+                    <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
+                    <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
+                    <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
+                    <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                  </linearGradient>
+
+                  {/* Right Ambient Fold Shadow (Mirrored) */}
+                  <linearGradient id="frost-shadow-right" x1="100%" y1="0%" x2="0%" y2="0%">
+                    <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
+                    <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
+                    <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
+                    <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
+                    <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                  </linearGradient>
+
+                  {/* Translucent Feathered Veil Body Gradients */}
+                  <linearGradient id="frost-veil-left" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
+                    <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
+                    <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
+                    <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
+                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                  </linearGradient>
+
+                  <linearGradient id="frost-veil-right" x1="100%" y1="0%" x2="0%" y2="0%">
+                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
+                    <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
+                    <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
+                    <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
+                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
                   </linearGradient>
                 </defs>
+
+                {/* ============================================================== */}
+                {/* 1. TRANSLUCENT FEATHERED VEILS (Tactile Frosted Glass Volume)  */}
+                {/* ============================================================== */}
+                <path
+                  d="M -30,-30 L 160,-30 C 320,120 400,260 400,440 C 400,620 300,780 140,930 L -30,930 Z"
+                  fill="url(#frost-veil-left)"
+                  filter="url(#frost-blur-ambient)"
+                />
+                <path
+                  d="M 1630,-30 L 1440,-30 C 1280,120 1200,260 1200,440 C 1200,620 1300,780 1460,930 L 1630,930 Z"
+                  fill="url(#frost-veil-right)"
+                  filter="url(#frost-blur-ambient)"
+                />
+
+                {/* ============================================================== */}
+                {/* 2. LEFT FLANK: FLOWING CONTINUOUS S-WAVE LINES                 */}
+                {/* ============================================================== */}
+
+                {/* --- Wave 1: Primary Sweeping S-Curve --- */}
+                {/* Ambient under-ridge shadow */}
+                <path
+                  d="M -30,120 C 140,195 280,265 365,365 C 435,455 385,595 275,715 C 185,815 85,885 -30,935"
+                  stroke="url(#frost-shadow-left)"
+                  strokeWidth="48"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-ambient)"
+                />
+                {/* Broad glowing frosted dispersion */}
+                <path
+                  d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="42"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-broad)"
+                />
+                {/* Mid frosted ribbon */}
+                <path
+                  d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-mid)"
+                />
+                {/* Soft feathered specular core spine */}
+                <path
+                  d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-core)"
+                />
+
+                {/* --- Wave 2: Upper Secondary Flowing Wave --- */}
+                <path
+                  d="M -30,-5 C 120,75 230,155 295,255 C 345,345 315,445 215,535 C 125,615 35,655 -30,685"
+                  stroke="url(#frost-shadow-left)"
+                  strokeWidth="36"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-ambient)"
+                />
+                <path
+                  d="M -30,-10 C 120,70 230,150 290,250 C 340,340 310,440 210,530 C 120,610 30,650 -30,680"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="32"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-broad)"
+                />
+                <path
+                  d="M -30,-10 C 120,70 230,150 290,250 C 340,340 310,440 210,530 C 120,610 30,650 -30,680"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="11"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-mid)"
+                />
+                <path
+                  d="M -30,-10 C 120,70 230,150 290,250 C 340,340 310,440 210,530 C 120,610 30,650 -30,680"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-core)"
+                />
+
+                {/* --- Wave 3: Lower Counter-Wave --- */}
+                <path
+                  d="M -30,465 C 130,515 250,575 315,665 C 365,745 325,835 185,895 C 105,925 25,935 -30,935"
+                  stroke="url(#frost-shadow-left)"
+                  strokeWidth="34"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-ambient)"
+                />
+                <path
+                  d="M -30,460 C 130,510 250,570 310,660 C 360,740 320,830 180,890 C 100,920 20,930 -30,930"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="30"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-broad)"
+                />
+                <path
+                  d="M -30,460 C 130,510 250,570 310,660 C 360,740 320,830 180,890 C 100,920 20,930 -30,930"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-mid)"
+                />
+                <path
+                  d="M -30,460 C 130,510 250,570 310,660 C 360,740 320,830 180,890 C 100,920 20,930 -30,930"
+                  stroke="url(#frost-white-left)"
+                  strokeWidth="2.8"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-core)"
+                />
+
+                {/* ============================================================== */}
+                {/* 3. RIGHT FLANK: MIRRORED CONTINUOUS S-WAVE LINES               */}
+                {/* ============================================================== */}
+
+                {/* --- Wave 1: Primary Sweeping S-Curve (Mirrored) --- */}
+                <path
+                  d="M 1630,120 C 1460,195 1320,265 1235,365 C 1165,455 1215,595 1325,715 C 1415,815 1515,885 1630,935"
+                  stroke="url(#frost-shadow-right)"
+                  strokeWidth="48"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-ambient)"
+                />
+                <path
+                  d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="42"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-broad)"
+                />
+                <path
+                  d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="14"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-mid)"
+                />
+                <path
+                  d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="3.5"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-core)"
+                />
+
+                {/* --- Wave 2: Upper Secondary Flowing Wave (Mirrored) --- */}
+                <path
+                  d="M 1630,-5 C 1480,75 1370,155 1305,255 C 1255,345 1285,445 1385,535 C 1475,615 1565,655 1630,685"
+                  stroke="url(#frost-shadow-right)"
+                  strokeWidth="36"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-ambient)"
+                />
+                <path
+                  d="M 1630,-10 C 1480,70 1370,150 1310,250 C 1260,340 1290,440 1390,530 C 1480,610 1570,650 1630,680"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="32"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-broad)"
+                />
+                <path
+                  d="M 1630,-10 C 1480,70 1370,150 1310,250 C 1260,340 1290,440 1390,530 C 1480,610 1570,650 1630,680"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="11"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-mid)"
+                />
+                <path
+                  d="M 1630,-10 C 1480,70 1370,150 1310,250 C 1260,340 1290,440 1390,530 C 1480,610 1570,650 1630,680"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-core)"
+                />
+
+                {/* --- Wave 3: Lower Counter-Wave (Mirrored) --- */}
+                <path
+                  d="M 1630,465 C 1470,515 1350,575 1285,665 C 1235,745 1275,835 1415,895 C 1495,925 1575,935 1630,935"
+                  stroke="url(#frost-shadow-right)"
+                  strokeWidth="34"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-ambient)"
+                />
+                <path
+                  d="M 1630,460 C 1470,510 1350,570 1290,660 C 1240,740 1280,830 1420,890 C 1500,920 1580,930 1630,930"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="30"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-broad)"
+                />
+                <path
+                  d="M 1630,460 C 1470,510 1350,570 1290,660 C 1240,740 1280,830 1420,890 C 1500,920 1580,930 1630,930"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="10"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-mid)"
+                />
+                <path
+                  d="M 1630,460 C 1470,510 1350,570 1290,660 C 1240,740 1280,830 1420,890 C 1500,920 1580,930 1630,930"
+                  stroke="url(#frost-white-right)"
+                  strokeWidth="2.8"
+                  strokeLinecap="round"
+                  filter="url(#frost-blur-core)"
+                />
               </svg>
             </div>
 
@@ -3147,9 +3568,8 @@ export default function AiChat() {
                           handleLoadQ3Review();
                           setIsSessionDropdownOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${
-                          activeTab === 'review' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
-                        }`}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${activeTab === 'review' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
+                          }`}
                       >
                         <div className="flex items-center gap-2">
                           <span className={activeTab === 'review' ? 'text-[#D8F929]' : 'text-gray-500'}>✦</span>
@@ -3164,9 +3584,8 @@ export default function AiChat() {
                           handleNewChat();
                           setIsSessionDropdownOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${
-                          activeTab === 'new' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
-                        }`}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${activeTab === 'new' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
+                          }`}
                       >
                         <div className="flex items-center gap-2">
                           <Plus size={14} />
@@ -3185,9 +3604,8 @@ export default function AiChat() {
                     <button
                       type="button"
                       onClick={() => setIsSettingsOpen((prev) => !prev)}
-                      className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${
-                        isSettingsOpen ? 'bg-white shadow-sm text-gray-950 ring-2 ring-black/5' : 'text-gray-700'
-                      }`}
+                      className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${isSettingsOpen ? 'bg-white shadow-sm text-gray-950 ring-2 ring-black/5' : 'text-gray-700'
+                        }`}
                       title="Voice & AI Settings"
                     >
                       <SlidersHorizontal size={15} />
@@ -3225,11 +3643,10 @@ export default function AiChat() {
                               onClick={() => {
                                 setIsAnalyticsVisible((prev) => !prev);
                               }}
-                              className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${
-                                isAnalyticsVisible
-                                  ? 'bg-[#111417] text-[#D8F929]'
-                                  : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
-                              }`}
+                              className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${isAnalyticsVisible
+                                ? 'bg-[#111417] text-[#D8F929]'
+                                : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
+                                }`}
                             >
                               {isAnalyticsVisible ? 'Visible' : 'Hidden'}
                             </button>
@@ -3360,9 +3777,8 @@ export default function AiChat() {
                       setVoiceEnabled(nextState);
                       showToast(nextState ? 'Audio Output Enabled' : 'Audio Output Muted');
                     }}
-                    className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${
-                      voiceEnabled ? 'text-gray-900 bg-white/95' : 'text-gray-400'
-                    }`}
+                    className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${voiceEnabled ? 'text-gray-900 bg-white/95' : 'text-gray-400'
+                      }`}
                     title={voiceEnabled ? 'Mute AI Audio Speech' : 'Enable AI Audio Speech'}
                   >
                     <AudioLines size={16} className={isPlayingAudio ? 'animate-pulse text-emerald-600' : ''} />
@@ -3425,62 +3841,68 @@ export default function AiChat() {
               ) : (
                 <div
                   ref={chatContainerRef}
-                  className="flex-1 overflow-y-auto min-h-0 py-2 pr-1 space-y-3.5 scrollbar-thin overscroll-contain"
+                  className="flex-1 overflow-y-auto min-h-0 pt-8 pb-4 pr-1 space-y-4 scrollbar-thin overscroll-contain"
                 >
-                  {messages.map((msg) => {
-                    if (msg.role === 'user') {
+                  {messages
+                    .filter((msg) => !msg.isWelcome && msg.id !== 'welcome-init')
+                    .map((msg) => {
+                      if (msg.role === 'user') {
+                        return (
+                          <div key={msg.id} className="flex justify-end items-start py-1 px-1 my-1 mt-2 animate-in fade-in duration-300">
+                            {/* User Chat Text with high background removed */}
+                            <div className="text-gray-950 font-semibold text-[14px] sm:text-[15px] leading-relaxed max-w-[85%] px-2 py-1">
+                              {msg.content}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
+
                       return (
-                        <div key={msg.id} className="flex justify-end">
-                          <div className="glass-bubble-user text-white px-4 py-2.5 rounded-2xl rounded-tr-xs max-w-[85%] text-xs font-semibold leading-relaxed">
-                            {msg.content}
+                        <div key={msg.id} className="flex items-start gap-3 py-2 px-1 my-1 animate-in fade-in duration-300">
+                          {/* AI Profile Photo matching /ai-copilot-avatar.jpg */}
+                          <div className="relative shrink-0 mt-0.5" title="Enterprise AI Copilot">
+                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-white/90 shadow-sm relative flex items-center justify-center bg-black select-none ring-1 ring-black/5">
+                              <img
+                                src="/ai-copilot-avatar.jpg"
+                                alt="Enterprise AI Copilot"
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white/40"></span>
+                            </div>
+                          </div>
+
+                          {/* Clean, unboxed response text with compact typography */}
+                          <div className="flex-1 min-w-0 text-gray-900 text-[13px] sm:text-[13.5px] leading-relaxed font-normal space-y-1">
+                            {msg.heading && (
+                              <div className="font-extrabold text-gray-950 text-[13.5px] sm:text-[14px] tracking-tight">
+                                {msg.heading}
+                              </div>
+                            )}
+
+                            {rawText && (
+                              <div
+                                className="prose prose-sm max-w-none text-gray-900 font-sans text-[13px] sm:text-[13.5px] leading-relaxed"
+                                dangerouslySetInnerHTML={{
+                                  __html: marked.parse(rawText)
+                                }}
+                              />
+                            )}
                           </div>
                         </div>
                       );
-                    }
-
-                    const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
-
-                    return (
-                      <div key={msg.id} className="flex items-start gap-3 py-2 px-1 my-1 animate-in fade-in duration-300">
-                        {/* Compact SuperAdmin Profile Photo matching sidebar */}
-                        <div className="relative shrink-0 mt-0.5">
-                          <div className="w-8 h-8 rounded-xl overflow-hidden border border-white/80 shadow-2xs relative flex items-center justify-center bg-[#0A0A0A] text-white font-bold select-none">
-                            {userAvatar ? (
-                              <img alt="SuperAdmin AI" className="w-full h-full object-cover" src={userAvatar} />
-                            ) : (
-                              <span className="text-[11px] font-black tracking-tight text-white">
-                                {userInitials || 'SA'}
-                              </span>
-                            )}
-                            <span className="absolute bottom-0 right-0 w-2 h-2 bg-[#D8F929] rounded-tl border border-white/20"></span>
-                          </div>
-                        </div>
-
-                        {/* Clean, unboxed response text with compact typography */}
-                        <div className="flex-1 min-w-0 text-gray-900 text-[13px] sm:text-[13.5px] leading-relaxed font-normal space-y-1">
-                          {msg.heading && (
-                            <div className="font-extrabold text-gray-950 text-[13.5px] sm:text-[14px] tracking-tight">
-                              {msg.heading}
-                            </div>
-                          )}
-
-                          {rawText && (
-                            <div
-                              className="prose prose-sm max-w-none text-gray-900 font-sans text-[13px] sm:text-[13.5px] leading-relaxed"
-                              dangerouslySetInnerHTML={{
-                                __html: marked.parse(rawText)
-                              }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                    })}
 
                   {loading && (
                     <div className="flex items-center gap-3 py-2 px-1 text-xs font-semibold text-gray-700 animate-pulse">
-                      <div className="w-7 h-7 rounded-lg overflow-hidden bg-[#0A0A0A] text-white flex items-center justify-center shrink-0 text-[9px] font-black">
-                        {userInitials || 'SA'}
+                      <div className="w-9 h-9 rounded-xl overflow-hidden border border-white/90 shadow-2xs relative flex items-center justify-center bg-black shrink-0">
+                        <img
+                          src="/ai-copilot-avatar.jpg"
+                          alt="AI Copilot"
+                          className="w-full h-full object-cover opacity-85"
+                        />
+                        <span className="absolute bottom-0 right-0 w-2 h-2 bg-[#D8F929] rounded-tl border border-white/40"></span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="w-1.5 h-1.5 rounded-full bg-[#899c08] animate-ping"></span>
@@ -3495,142 +3917,64 @@ export default function AiChat() {
 
             {/* Bottom Floating Glass Capsule Input Dock matching Image 2 */}
             <div className="flex-shrink-0 w-full max-w-2xl mx-auto px-2 sm:px-4 pb-2 pt-2 relative z-20 mt-auto">
-              {/* Voice Agent Visualizer Card (if Continuous Mode active) */}
-              {continuousMode && (
-                <div className="mb-3 p-4 rounded-3xl bg-gradient-to-br from-gray-950 via-black to-gray-900 text-white border border-gray-800 shadow-xl space-y-3 animate-in fade-in zoom-in-95 duration-200">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-2xl bg-[#D8F929]/15 border border-[#D8F929]/40 flex items-center justify-center text-[#D8F929]">
-                        <Radio size={16} className={vadStatus === 'user_speaking' || vadStatus === 'listening' ? 'animate-pulse' : ''} />
-                      </div>
-                      <div>
-                        <h4 className="text-xs font-black tracking-tight text-white flex items-center gap-1.5">
-                          <span>Conversational Voice Agent</span>
-                          <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#D8F929] text-black uppercase">
-                            Silero VAD + Sarvam AI
-                          </span>
-                        </h4>
-                        <p className="text-[10.5px] text-gray-400 font-medium">Hands-Free Natural Voice Dialogue Active</p>
-                      </div>
-                    </div>
+              {/* Sleek Floating Status Pill when Voice Mode or STT is active */}
+              {continuousMode ? (
+                <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold bg-gray-950/90 text-white border border-gray-800/80 shadow-lg backdrop-blur-md">
+                    {vadStatus === 'listening' && (
+                      <>
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-emerald-400 font-bold text-[11px]">Listening naturally...</span>
+                        <span className="text-gray-400 text-[10px] hidden sm:inline">(Speak anytime or click mic to stop)</span>
+                      </>
+                    )}
+                    {vadStatus === 'user_speaking' && (
+                      <>
+                        <span className="relative flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
+                        </span>
+                        <span className="text-blue-300 font-bold text-[11px]">Hearing your voice...</span>
+                        <span className="text-gray-400 text-[10px] hidden sm:inline">(Silero VAD active)</span>
+                      </>
+                    )}
+                    {vadStatus === 'transcribing' && (
+                      <>
+                        <RefreshCw size={11} className="animate-spin text-amber-400" />
+                        <span className="text-amber-300 font-bold text-[11px]">Processing speech...</span>
+                      </>
+                    )}
+                    {vadStatus === 'ai_speaking' && (
+                      <>
+                        <Volume2 size={12} className="animate-bounce text-purple-400" />
+                        <span className="text-purple-300 font-bold text-[11px]">Assistant speaking...</span>
+                        <span className="text-gray-400 text-[10px] hidden sm:inline">(Speak to interrupt)</span>
+                      </>
+                    )}
+                    {vadStatus === 'idle' && (
+                      <span className="text-gray-400 text-[11px]">Voice standby</span>
+                    )}
 
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextVal = false;
-                          setContinuousMode(nextVal);
-                          continuousModeRef.current = nextVal;
-                          setVadStatus('idle');
-                          try { vad.pause(); } catch (e) { }
-                          showToast('⚪ Conversational Voice Agent Paused');
-                        }}
-                        className="px-2.5 py-1 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-[10.5px] font-extrabold transition cursor-pointer"
-                      >
-                        Exit Voice Mode
-                      </button>
-                    </div>
-                  </div>
+                    {lastSttText && vadStatus !== 'transcribing' && (
+                      <span className="text-gray-400 text-[10px] italic truncate max-w-[140px] sm:max-w-[200px] border-l border-gray-700 pl-2">
+                        "{lastSttText}"
+                      </span>
+                    )}
 
-                  {/* Voice Wave Visualizer Orb */}
-                  <div className="py-2.5 px-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-10 h-10 flex items-center justify-center">
-                        {vadStatus === 'listening' && (
-                          <>
-                            <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping"></div>
-                            <div className="w-7 h-7 rounded-full bg-emerald-500 flex items-center justify-center text-black font-black text-xs shadow-md">
-                              🎙️
-                            </div>
-                          </>
-                        )}
-                        {vadStatus === 'user_speaking' && (
-                          <>
-                            <div className="absolute inset-0 rounded-full bg-blue-500/30 animate-pulse scale-110"></div>
-                            <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center text-white font-black text-xs shadow-md animate-bounce">
-                              🗣️
-                            </div>
-                          </>
-                        )}
-                        {vadStatus === 'transcribing' && (
-                          <>
-                            <div className="absolute inset-0 rounded-full bg-amber-500/20 animate-spin border-2 border-dashed border-amber-400"></div>
-                            <div className="w-7 h-7 rounded-full bg-amber-500 flex items-center justify-center text-black font-black text-xs shadow-md">
-                              ⚡
-                            </div>
-                          </>
-                        )}
-                        {vadStatus === 'ai_speaking' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              stopAudioPlayback();
-                              showToast('🛑 Voice Interrupted! Speak your new prompt now.');
-                              resumeVADListening(200);
-                            }}
-                            className="relative flex items-center justify-center cursor-pointer border-none bg-transparent group"
-                            title="Click to Mute / Interrupt AI Speech immediately"
-                          >
-                            <div className="absolute inset-0 rounded-full bg-purple-500/30 animate-ping"></div>
-                            <div className="w-7 h-7 rounded-full bg-purple-600 group-hover:bg-red-600 transition-colors flex items-center justify-center text-white font-black text-xs shadow-md">
-                              🔊
-                            </div>
-                          </button>
-                        )}
-                        {vadStatus === 'idle' && (
-                          <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center text-gray-300 font-bold text-xs">
-                            ⏸️
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="text-xs font-semibold">
-                        {vadStatus === 'listening' && (
-                          <span className="text-emerald-400 font-extrabold animate-pulse">
-                            Listening naturally... Speak your prompt anytime.
-                          </span>
-                        )}
-                        {vadStatus === 'user_speaking' && (
-                          <span className="text-blue-300 font-extrabold">
-                            Hearing your voice... Silero VAD tracking speech.
-                          </span>
-                        )}
-                        {vadStatus === 'transcribing' && (
-                          <span className="text-amber-300 font-extrabold flex items-center gap-1">
-                            <RefreshCw size={12} className="animate-spin" />
-                            <span>Transcribing via Sarvam STT (saaras:v3)...</span>
-                          </span>
-                        )}
-                        {vadStatus === 'ai_speaking' && (
-                          <span className="text-purple-300 font-extrabold flex items-center gap-1">
-                            <Volume2 size={12} className="animate-bounce" />
-                            <span>AI Speaking back (Sarvam TTS)... Click 🔊 orb to interrupt.</span>
-                          </span>
-                        )}
-                        {vadStatus === 'idle' && (
-                          <span className="text-gray-400">Voice agent standby.</span>
-                        )}
-
-                        {lastSttText && (
-                          <div className="mt-1 text-[11px] text-emerald-300 font-normal flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-black text-[9px] uppercase">
-                              Last STT
-                            </span>
-                            <span className="italic truncate max-w-[320px]">"{lastSttText}"</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <span className="text-[10px] font-mono text-gray-400 bg-white/10 px-2 py-0.5 rounded-lg border border-white/10 hidden sm:inline">
-                      Full Duplex VAD
-                    </span>
+                    <button
+                      type="button"
+                      onClick={handleToggleVoiceMode}
+                      className="ml-1 p-0.5 rounded-full hover:bg-white/20 text-gray-400 hover:text-white transition cursor-pointer"
+                      title="Stop Voice Mode"
+                    >
+                      <X size={12} />
+                    </button>
                   </div>
                 </div>
-              )}
-
-              {/* Status pill when recording or transcribing outside continuous mode */}
-              {!continuousMode && (lastSttText || isRecording || isTranscribing) && (
+              ) : (lastSttText || isRecording || isTranscribing) && (
                 <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in duration-150">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold bg-[#0D0E12] text-white shadow-md">
                     {isRecording && (
@@ -3674,23 +4018,65 @@ export default function AiChat() {
                     }
                   }}
                   placeholder={
-                    isRecording
-                      ? "🔴 Recording active... Speak now!"
-                      : isTranscribing
-                        ? "⚡ Transcribing spoken audio..."
-                        : "Ask SuperAdmin AI..."
+                    continuousMode
+                      ? vadStatus === 'listening'
+                        ? "🎙️ Conversational voice active (Speak naturally or click mic to stop)..."
+                        : vadStatus === 'user_speaking'
+                          ? "🗣️ Hearing you speak..."
+                          : vadStatus === 'ai_speaking'
+                            ? "🔊 Assistant speaking (Speak to interrupt)..."
+                            : vadStatus === 'transcribing'
+                              ? "⚡ Transcribing spoken audio..."
+                              : "Voice agent active..."
+                      : isRecording
+                        ? "🔴 Recording active... Speak now!"
+                        : isTranscribing
+                          ? "⚡ Transcribing spoken audio..."
+                          : "Ask SuperAdmin AI..."
                   }
                   className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 placeholder:font-normal font-normal focus:outline-none py-1"
                 />
 
                 {/* Right Controls: Mic + Send */}
                 <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
-                  {/* Mic Button */}
-                  {isRecording ? (
+                  {/* Mic Button: Conversational Full-Duplex Voice Mode Toggle */}
+                  {continuousMode ? (
+                    <button
+                      type="button"
+                      onClick={handleToggleVoiceMode}
+                      className={`relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition shadow-md cursor-pointer hover:scale-105 active:scale-95 group ${vadStatus === 'ai_speaking'
+                          ? 'bg-purple-600 hover:bg-rose-600 text-white'
+                          : vadStatus === 'user_speaking'
+                            ? 'bg-blue-600 hover:bg-rose-600 text-white'
+                            : 'bg-emerald-600 hover:bg-rose-600 text-white'
+                        }`}
+                      title={
+                        vadStatus === 'ai_speaking'
+                          ? "AI Speaking — Click to stop voice or speak to interrupt"
+                          : "Voice Active — Click to stop conversation"
+                      }
+                    >
+                      {/* Pulsing ring indicator */}
+                      <span className={`absolute inset-0 rounded-full animate-ping opacity-35 ${vadStatus === 'ai_speaking' ? 'bg-purple-400' : vadStatus === 'user_speaking' ? 'bg-blue-400' : 'bg-emerald-400'
+                        }`}></span>
+
+                      {vadStatus === 'ai_speaking' ? (
+                        <>
+                          <Volume2 size={16} className="animate-bounce relative z-10 block group-hover:hidden" />
+                          <MicOff size={15} className="relative z-10 hidden group-hover:block" />
+                        </>
+                      ) : (
+                        <>
+                          <Radio size={15} className="relative z-10 block group-hover:hidden animate-pulse" />
+                          <MicOff size={15} className="relative z-10 hidden group-hover:block" />
+                        </>
+                      )}
+                    </button>
+                  ) : isRecording ? (
                     <button
                       type="button"
                       onClick={stopRecording}
-                      className="w-8 h-8 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm animate-pulse flex items-center justify-center cursor-pointer"
+                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm animate-pulse flex items-center justify-center cursor-pointer"
                       title="Click to stop recording"
                     >
                       <MicOff size={15} />
@@ -3699,7 +4085,7 @@ export default function AiChat() {
                     <button
                       type="button"
                       disabled
-                      className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-sm"
+                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-sm"
                       title="Transcribing speech..."
                     >
                       <RefreshCw size={14} className="animate-spin" />
@@ -3707,9 +4093,9 @@ export default function AiChat() {
                   ) : (
                     <button
                       type="button"
-                      onClick={startRecording}
-                      className="w-8 h-8 rounded-full text-gray-600 hover:text-black transition flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
-                      title="Voice prompt"
+                      onClick={handleToggleVoiceMode}
+                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full text-gray-600 hover:text-black hover:bg-black/5 transition flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                      title="Start Conversational Voice Agent (Click to speak naturally)"
                     >
                       <Mic size={18} />
                     </button>
@@ -3761,22 +4147,122 @@ export default function AiChat() {
                   ease: [0.22, 1, 0.36, 1],
                 }}
                 style={{ originX: 1, originY: 0.5 }}
-                className="flex-1 min-w-0 glass-panel rounded-[32px] p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden h-full min-h-0 z-10"
+                className="flex-1 min-w-0 aichat-visionos-panel rounded-[32px] p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden h-full min-h-0 z-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.95)]"
                 data-purpose="interactive-output-display"
               >
-                <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Continuous Frosted-Glass S-Wave Lines embedded inside the glass */}
+                <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
+                  <svg
+                    className="w-full h-full object-cover absolute inset-0"
+                    viewBox="0 0 1600 900"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    preserveAspectRatio="none"
+                  >
+                    <defs>
+                      <filter id="frost-blur-ambient-rp" x="-40%" y="-40%" width="180%" height="180%">
+                        <feGaussianBlur stdDeviation="26" />
+                      </filter>
+                      <filter id="frost-blur-broad-rp" x="-30%" y="-30%" width="160%" height="160%">
+                        <feGaussianBlur stdDeviation="15" />
+                      </filter>
+                      <filter id="frost-blur-mid-rp" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="5.5" />
+                      </filter>
+                      <filter id="frost-blur-core-rp" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="1.8" />
+                      </filter>
+
+                      <linearGradient id="frost-white-left-rp" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                        <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
+                        <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
+                        <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
+                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                      </linearGradient>
+
+                      <linearGradient id="frost-white-right-rp" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
+                        <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
+                        <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
+                        <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
+                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                      </linearGradient>
+
+                      <linearGradient id="frost-shadow-left-rp" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
+                        <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
+                        <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
+                        <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
+                        <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                        <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                      </linearGradient>
+
+                      <linearGradient id="frost-shadow-right-rp" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
+                        <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
+                        <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
+                        <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
+                        <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                        <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
+                      </linearGradient>
+
+                      <linearGradient id="frost-veil-left-rp" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
+                        <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
+                        <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
+                        <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
+                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                      </linearGradient>
+
+                      <linearGradient id="frost-veil-right-rp" x1="100%" y1="0%" x2="0%" y2="0%">
+                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
+                        <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
+                        <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
+                        <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
+                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Veils */}
+                    <path d="M -30,-30 L 160,-30 C 320,120 400,260 400,440 C 400,620 300,780 140,930 L -30,930 Z" fill="url(#frost-veil-left-rp)" filter="url(#frost-blur-ambient-rp)" />
+                    <path d="M 1630,-30 L 1440,-30 C 1280,120 1200,260 1200,440 C 1200,620 1300,780 1460,930 L 1630,930 Z" fill="url(#frost-veil-right-rp)" filter="url(#frost-blur-ambient-rp)" />
+
+                    {/* Left S-Wave */}
+                    <path d="M -30,120 C 140,195 280,265 365,365 C 435,455 385,595 275,715 C 185,815 85,885 -30,935" stroke="url(#frost-shadow-left-rp)" strokeWidth="48" strokeLinecap="round" filter="url(#frost-blur-ambient-rp)" />
+                    <path d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930" stroke="url(#frost-white-left-rp)" strokeWidth="42" strokeLinecap="round" filter="url(#frost-blur-broad-rp)" />
+                    <path d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930" stroke="url(#frost-white-left-rp)" strokeWidth="14" strokeLinecap="round" filter="url(#frost-blur-mid-rp)" />
+                    <path d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930" stroke="url(#frost-white-left-rp)" strokeWidth="3.5" strokeLinecap="round" filter="url(#frost-blur-core-rp)" />
+
+                    {/* Right S-Wave */}
+                    <path d="M 1630,120 C 1460,195 1320,265 1235,365 C 1165,455 1215,595 1325,715 C 1415,815 1515,885 1630,935" stroke="url(#frost-shadow-right-rp)" strokeWidth="48" strokeLinecap="round" filter="url(#frost-blur-ambient-rp)" />
+                    <path d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930" stroke="url(#frost-white-right-rp)" strokeWidth="42" strokeLinecap="round" filter="url(#frost-blur-broad-rp)" />
+                    <path d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930" stroke="url(#frost-white-right-rp)" strokeWidth="14" strokeLinecap="round" filter="url(#frost-blur-mid-rp)" />
+                    <path d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930" stroke="url(#frost-white-right-rp)" strokeWidth="3.5" strokeLinecap="round" filter="url(#frost-blur-core-rp)" />
+                  </svg>
+                </div>
+
+                <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
                   {/* DYNAMIC CANVAS CONTENT */}
                   <div className="flex-1 overflow-y-auto min-h-0 pr-1 py-1 scrollbar-thin">
                     {activeWidget ? (
                       <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-gray-100">
-                          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">AI Interactive Display</span>
+                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-black/[0.06]">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
+                            <span className="text-[11px] font-extrabold text-gray-800 tracking-wide uppercase">AI Interactive Display</span>
+                          </div>
                           <button
                             type="button"
                             onClick={() => setActiveWidget(null)}
-                            className="text-xs font-bold text-gray-600 hover:text-black flex items-center gap-1 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg transition cursor-pointer"
+                            className="w-7 h-7 rounded-full bg-white/80 hover:bg-white border border-white/90 shadow-2xs flex items-center justify-center transition cursor-pointer text-gray-500 hover:text-black active:scale-95"
+                            title="Close Display"
                           >
-                            ✕ Close
+                            <X size={12} />
                           </button>
                         </div>
                         {activeWidget.type === 'password_change_confirm' && (
