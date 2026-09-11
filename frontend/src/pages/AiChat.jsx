@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { request, API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
 import { useMicVAD, utils } from '@ricky0123/vad-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 import {
   Sparkles,

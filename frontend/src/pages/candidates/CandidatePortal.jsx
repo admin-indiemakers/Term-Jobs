@@ -815,6 +815,109 @@ export default function CandidatePortal() {
     </div>
   );
 
+  // Participant Rail Card: Who's Involved
+  const renderWhosInvolvedCard = () => {
+    const candidateName = cand.name || user.name || 'Arjun M';
+    const candParts = candidateName.trim().split(/\s+/);
+    const candidateInitials = candParts.length >= 2 
+      ? (candParts[0][0] + candParts[1][0]).toUpperCase()
+      : candidateName.slice(0, 2).toUpperCase();
+
+    const vendorName = wo.vendor_name || cand.vendor || 'Acme Systems';
+    const vendParts = vendorName.trim().split(/\s+/);
+    const vendorInitials = vendParts.length >= 2
+      ? (vendParts[0][0] + vendParts[1][0]).toUpperCase()
+      : vendorName.slice(0, 2).toUpperCase();
+
+    const managerName = wo.reporting_manager || 'Rohith';
+    const mgrParts = managerName.trim().split(/\s+/);
+    const managerInitials = mgrParts.length >= 2
+      ? (mgrParts[0][0] + mgrParts[1][0]).toUpperCase()
+      : managerName.slice(0, 2).toUpperCase();
+
+    const procurementName = wo.procurement_name || 'ADITI';
+    const procParts = procurementName.trim().split(/\s+/);
+    const procurementInitials = procParts.length >= 2
+      ? (procParts[0][0] + procParts[1][0]).toUpperCase()
+      : procurementName.slice(0, 2).toUpperCase();
+
+    return (
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 22,
+          border: '1px solid #E2E2DC',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        }}
+        className="p-5 space-y-3.5 bento-card-hover"
+      >
+        <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+          WHO'S INVOLVED
+        </div>
+
+        <div className="space-y-2">
+          {/* Procurement */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
+            <div className="w-8 h-8 rounded-full bg-blue-900 text-white font-bold text-[11px] flex items-center justify-center shrink-0 shadow-xs">
+              {procurementInitials || 'AD'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{procurementName.toUpperCase()}</div>
+              <div className="text-[10px] text-gray-500">Procurement</div>
+            </div>
+            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+          </div>
+
+          {/* Recruiter / Vendor */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              {vendorInitials || 'AC'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{vendorName}</div>
+              <div className="text-[10px] text-gray-500 truncate">{vendorName}</div>
+            </div>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">EXT</span>
+          </div>
+
+          {/* Candidate / Contract Worker */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              {candidateInitials || 'AR'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{candidateName.toUpperCase()}</div>
+              <div className="text-[10px] text-gray-500">Contract worker</div>
+            </div>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">EXT</span>
+          </div>
+
+          {/* Hiring Manager */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              {managerInitials || 'RO'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{managerName.toUpperCase()}</div>
+              <div className="text-[10px] text-gray-500">Hiring manager</div>
+            </div>
+          </div>
+
+          {/* Finance / AP */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              FA
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">Finance / AP</div>
+              <div className="text-[10px] text-gray-500">Commercial Sign-Off</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div
       style={{
@@ -1776,8 +1879,11 @@ export default function CandidatePortal() {
                 </div>
               </div>
 
-              {/* Right Column (ASSIGNMENT SNAPSHOT ONLY) */}
+              {/* Right Column (WHO'S INVOLVED & ASSIGNMENT SNAPSHOT) */}
               <div className="lg:col-span-4 space-y-4">
+                {/* WHO'S INVOLVED */}
+                {renderWhosInvolvedCard()}
+
                 <div
                   style={{
                     backgroundColor: '#FFFFFF',
@@ -2452,123 +2558,132 @@ export default function CandidatePortal() {
               </div>
             </div>
 
-            {/* Main Assignment Bento Card */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 22,
-                border: '1px solid #E2E2DC',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
-              }}
-              className="p-6 md:p-8 space-y-6 bento-card-hover"
-            >
-              {/* Header Title & Work Order */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-[#F2F2EE]">
-                <div>
-                  <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">
-                    CONTRACT SPECIFICATION
-                  </div>
-                  <h2 className="text-[1.5rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                    {wo.requisition_title || 'DevOps Engineer'}
-                  </h2>
-                  <div className="text-[13px] text-[#737373] font-medium mt-0.5">
-                    {wo.company_name || 'Bearitt'} · {wo.vendor_name || 'Bridgeon'}
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              {/* Main Assignment Bento Card (8 cols) */}
+              <div className="lg:col-span-8 space-y-4">
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 22,
+                    border: '1px solid #E2E2DC',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+                  }}
+                  className="p-6 md:p-8 space-y-6 bento-card-hover"
+                >
+                  {/* Header Title & Work Order */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-[#F2F2EE]">
+                    <div>
+                      <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">
+                        CONTRACT SPECIFICATION
+                      </div>
+                      <h2 className="text-[1.5rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                        {wo.requisition_title || 'DevOps Engineer'}
+                      </h2>
+                      <div className="text-[13px] text-[#737373] font-medium mt-0.5">
+                        {wo.company_name || 'Bearitt'} · {wo.vendor_name || 'Bridgeon'}
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-2 bg-[#F9F9F7] px-3.5 py-2 rounded-xl border border-[#E5E5E0] self-start sm:self-auto">
-                  <FileText size={15} className="text-[#8A8A85]" />
-                  <span className="text-[12px] font-mono font-bold text-[#0A0A0A]">{wo.work_order_number}</span>
+                    <div className="flex items-center gap-2 bg-[#F9F9F7] px-3.5 py-2 rounded-xl border border-[#E5E5E0] self-start sm:self-auto">
+                      <FileText size={15} className="text-[#8A8A85]" />
+                      <span className="text-[12px] font-mono font-bold text-[#0A0A0A]">{wo.work_order_number}</span>
+                    </div>
+                  </div>
+
+                  {/* Assignment Timeline Bar */}
+                  <div className="bg-[#FBFBFA] p-5 rounded-2xl border border-[#E5E5E0] space-y-3">
+                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8A8A85]">
+                      <span>Timeline</span>
+                      <span>Active Contract Duration</span>
+                    </div>
+
+                    {/* Timeline visual bar */}
+                    <div className="relative pt-2 pb-1">
+                      <div className="w-full h-2.5 bg-[#E5E5E0] rounded-full overflow-hidden flex">
+                        <div className="h-full bg-[#0A0A0A] rounded-full transition-all duration-700" style={{ width: '15%' }} />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[12px] pt-1">
+                      <div>
+                        <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
+                        <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
+                        <span className="font-bold text-[#0A0A0A] px-2 py-0.5 bg-[#FFFFFF] border border-[#E2E2DC] rounded-md text-[11px]">Active</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
+                        <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bento Grid: 8 Parameters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Building size={12} /> Client Company
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.company_name}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <UserCheck2 size={12} /> Staffing Vendor
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.vendor_name}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Compass size={12} /> Work Arrangement
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.work_arrangement}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <User size={12} /> Reporting Manager
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.reporting_manager}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Clock size={12} /> Weekly Expectation
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.weekly_hours}h / week</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Shield size={12} /> Overtime Policy
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.overtime_policy}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Briefcase size={12} /> Engagement Type
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.engagement_type}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <MapPin size={12} /> Location
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.location}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Assignment Timeline Bar */}
-              <div className="bg-[#FBFBFA] p-5 rounded-2xl border border-[#E5E5E0] space-y-3">
-                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8A8A85]">
-                  <span>Timeline</span>
-                  <span>Active Contract Duration</span>
-                </div>
-
-                {/* Timeline visual bar */}
-                <div className="relative pt-2 pb-1">
-                  <div className="w-full h-2.5 bg-[#E5E5E0] rounded-full overflow-hidden flex">
-                    <div className="h-full bg-[#0A0A0A] rounded-full transition-all duration-700" style={{ width: '15%' }} />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[12px] pt-1">
-                  <div>
-                    <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
-                    <span className="font-bold text-[#0A0A0A] px-2 py-0.5 bg-[#FFFFFF] border border-[#E2E2DC] rounded-md text-[11px]">Active</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bento Grid: 8 Parameters */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Building size={12} /> Client Company
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.company_name}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <UserCheck2 size={12} /> Staffing Vendor
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.vendor_name}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Compass size={12} /> Work Arrangement
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.work_arrangement}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <User size={12} /> Reporting Manager
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.reporting_manager}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Clock size={12} /> Weekly Expectation
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.weekly_hours}h / week</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Shield size={12} /> Overtime Policy
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.overtime_policy}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Briefcase size={12} /> Engagement Type
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.engagement_type}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <MapPin size={12} /> Location
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.location}</div>
-                </div>
+              {/* Right Rail: 4 cols */}
+              <div className="lg:col-span-4 space-y-4">
+                {renderWhosInvolvedCard()}
               </div>
             </div>
           </div>
