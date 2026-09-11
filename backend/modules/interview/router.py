@@ -2,7 +2,9 @@
 Interview Scheduling REST router for Company Admins, Hiring Managers, and Vendors.
 """
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
+import uuid
 
 from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
@@ -13,6 +15,12 @@ from modules.interview.domain.models import (
     ScheduleInterviewRequest,
     VendorConfirmRequest,
     CompleteInterviewRequest,
+    CreateInterviewRoundRequest,
+    CandidateLoginRequest,
+    SubmitEvaluationRequest,
+    UpdateRoundStatusRequest,
+    LiveKitTokenRequest,
+    SendChatMessageRequest,
 )
 from modules.interview.services.interview_service import (
     create_interview_proposal,
@@ -21,6 +29,18 @@ from modules.interview.services.interview_service import (
     complete_interview,
     generate_calendar_links,
     generate_ics_content,
+    create_interview_round,
+    get_hiring_manager_rounds,
+    get_candidate_rounds_by_token,
+    get_interviewer_rounds_by_token,
+    authenticate_candidate_login,
+    get_round_by_id,
+    update_round_status,
+    submit_round_evaluation,
+    generate_livekit_token,
+    save_chat_message,
+    get_chat_history,
+    get_hiring_manager_summary,
 )
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
@@ -109,6 +129,229 @@ def get_vendor_interviews(
                 results.append(doc)
                 
         return results
+
+
+# -------------------------------------------------------------
+# MULTI-ROUND INTERVIEW WORKFLOW ENDPOINTS
+# -------------------------------------------------------------
+
+@router.post("/rounds")
+def create_round_endpoint(
+    body: CreateInterviewRoundRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Hiring Manager / HR creates an interview round for a candidate.
+    Enforces duplicate prevention and generates candidate/staff access credentials.
+    """
+    try:
+        data = body.model_dump()
+        result = create_interview_round(
+            data=data,
+            tenant_id=current_user.tenant_id,
+            created_by=str(current_user.id),
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create interview round: {str(e)}")
+
+
+@router.get("/rounds")
+def list_rounds_endpoint(
+    requisition_id: Optional[str] = Query(default=None),
+    candidate_id: Optional[str] = Query(default=None),
+    current_user: User = Depends(get_current_user),
+):
+    """List interview rounds for the authenticated Hiring Manager / HR tenant."""
+    return get_hiring_manager_rounds(
+        tenant_id=current_user.tenant_id,
+        requisition_id=requisition_id,
+        candidate_id=candidate_id,
+    )
+
+
+@router.get("/summary")
+def get_interview_summary_endpoint(
+    current_user: User = Depends(get_current_user),
+):
+    """Get aggregated interview progression per candidate for Hiring Manager."""
+    return get_hiring_manager_summary(tenant_id=current_user.tenant_id)
+
+
+@router.post("/candidate/login")
+def candidate_login_endpoint(body: CandidateLoginRequest):
+    """Candidate login via email + passcode or token."""
+    try:
+        session_info = authenticate_candidate_login(
+            email=body.email,
+            passcode=body.passcode,
+            token=body.token,
+        )
+        return session_info
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+
+@router.get("/candidate/portal")
+def candidate_portal_endpoint(
+    token: Optional[str] = Query(default=None),
+    email: Optional[str] = Query(default=None),
+):
+    """Candidate portal data: lists only the candidate's own interview rounds."""
+    ident = token or email
+    if not ident:
+        raise HTTPException(status_code=400, detail="Candidate token or email is required")
+    rounds = get_candidate_rounds_by_token(ident)
+    return {"rounds": rounds}
+
+
+@router.get("/staff/portal")
+def staff_portal_endpoint(
+    token: Optional[str] = Query(default=None),
+    email: Optional[str] = Query(default=None),
+):
+    """Staff portal data: lists only candidates & rounds assigned to this interviewer."""
+    ident = token or email
+    if not ident:
+        raise HTTPException(status_code=400, detail="Interviewer token or email is required")
+    rounds = get_interviewer_rounds_by_token(ident)
+    return {"rounds": rounds}
+
+
+@router.get("/rounds/{round_id}")
+def get_round_detail_endpoint(round_id: str):
+    """Get specific interview round details."""
+    round_doc = get_round_by_id(round_id)
+    if not round_doc:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return round_doc
+
+
+@router.post("/rounds/{round_id}/status")
+def update_round_status_endpoint(
+    round_id: str,
+    body: UpdateRoundStatusRequest,
+):
+    """Update round status (e.g. In Progress, Completed, Cancelled)."""
+    updated = update_round_status(round_id, body.status)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return updated
+
+
+@router.post("/rounds/{round_id}/evaluation")
+def submit_evaluation_endpoint(
+    round_id: str,
+    body: SubmitEvaluationRequest,
+):
+    """Interviewer submits evaluation feedback and status for the completed interview round."""
+    updated = submit_round_evaluation(
+        round_id=round_id,
+        eval_data=body.model_dump(),
+        evaluator_identity=body.evaluator_name or body.evaluator_email or "Interviewer",
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return updated
+
+
+@router.post("/livekit/token")
+def livekit_token_endpoint(body: LiveKitTokenRequest):
+    """Generate LiveKit video/audio access token for in-house meeting room."""
+    round_doc = get_round_by_id(body.round_id)
+    room_name = round_doc.get("room_id") if round_doc else f"room_{body.round_id}"
+    ident = body.participant_identity or f"{body.role}_{uuid.uuid4().hex[:6]}"
+    
+    token_payload = generate_livekit_token(
+        room_name=room_name,
+        identity=ident,
+        name=body.participant_name,
+        role=body.role,
+    )
+    return token_payload
+
+
+# In-memory WebSocket manager for real-time signaling & chat
+_room_websockets: Dict[str, set] = {}
+
+
+@router.get("/rounds/{round_id}/chat")
+def get_chat_history_endpoint(round_id: str):
+    """Retrieve chat history for this interview round."""
+    return {"messages": get_chat_history(round_id)}
+
+
+@router.post("/rounds/{round_id}/chat")
+async def send_chat_message_endpoint(round_id: str, body: SendChatMessageRequest):
+    """Post chat message to meeting room."""
+    round_doc = get_round_by_id(round_id)
+    room_id = round_doc.get("room_id") if round_doc else f"room_{round_id}"
+    msg = save_chat_message(
+        round_id=round_id,
+        room_id=room_id,
+        sender_name=body.sender_name,
+        sender_role=body.sender_role,
+        message=body.message,
+        sender_identity=body.sender_identity or "",
+        message_id=body.message_id or "",
+    )
+    # Broadcast to all connected WebSockets in this room using jsonable_encoder
+    payload = jsonable_encoder({"type": "chat", "message": msg})
+    disconnected = []
+    for ws in list(_room_websockets.get(round_id, set())):
+        try:
+            await ws.send_json(payload)
+        except Exception as e:
+            print(f"Error sending chat ws broadcast: {e}")
+            disconnected.append(ws)
+    for ws in disconnected:
+        _room_websockets.get(round_id, set()).discard(ws)
+    return msg
+
+
+@router.websocket("/rounds/{round_id}/ws")
+async def room_websocket_endpoint(websocket: WebSocket, round_id: str):
+    """WebSocket connection for real-time in-room messaging and signaling."""
+    await websocket.accept()
+    if round_id not in _room_websockets:
+        _room_websockets[round_id] = set()
+    _room_websockets[round_id].add(websocket)
+    try:
+        while True:
+            data = await websocket.receive_json()
+            msg_type = data.get("type", "chat")
+            if msg_type == "chat":
+                round_doc = get_round_by_id(round_id)
+                room_id = round_doc.get("room_id") if round_doc else f"room_{round_id}"
+                saved = save_chat_message(
+                    round_id=round_id,
+                    room_id=room_id,
+                    sender_name=data.get("sender_name", "Participant"),
+                    sender_role=data.get("sender_role", "candidate"),
+                    message=data.get("message", ""),
+                    sender_identity=data.get("sender_identity", ""),
+                    message_id=data.get("id") or data.get("message_id") or "",
+                )
+                payload = jsonable_encoder({"type": "chat", "message": saved})
+            else:
+                payload = jsonable_encoder(data)
+
+            # Broadcast to all participants in this room
+            disconnected = []
+            for ws in list(_room_websockets.get(round_id, set())):
+                try:
+                    await ws.send_json(payload)
+                except Exception as e:
+                    print(f"Error broadcasting ws message: {e}")
+                    disconnected.append(ws)
+            for ws in disconnected:
+                _room_websockets[round_id].discard(ws)
+    except WebSocketDisconnect:
+        _room_websockets.get(round_id, set()).discard(websocket)
+    except Exception:
+        _room_websockets.get(round_id, set()).discard(websocket)
 
 
 @router.get("/{interview_id}")

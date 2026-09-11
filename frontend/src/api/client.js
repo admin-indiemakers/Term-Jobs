@@ -5,6 +5,8 @@ const getApiBaseUrl = () => {
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`;
     }
+    // When accessing via ngrok or external public URL, use the current origin so requests route through Vite proxy
+    return window.location.origin;
   }
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
