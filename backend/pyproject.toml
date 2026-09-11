@@ -21,6 +21,13 @@ dependencies = [
     "bcrypt>=4.1.0",
     "pyjwt>=2.8.0",
     "groq>=1.6.0",
+    "pipecat-ai>=1.9.0",
+    "pipecat-ai-small-webrtc-prebuilt>=2.5.0",
+    "aiortc>=1.15.0",
+    "av>=17.1.0",
+    "loguru>=0.7.3",
+    "sarvamai>=0.1.33",
+    "aic-sdk>=3.2.0",
 ]
 
 [dependency-groups]
