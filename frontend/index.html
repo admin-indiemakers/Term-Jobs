@@ -2,15 +2,195 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+    <!-- Primary Page Metadata -->
+    <title>Term Jobs | Flexible Workforce & Contract Hiring Platform</title>
+    <meta name="description" content="Term Jobs connects enterprise teams with verified contract professionals, trusted staffing vendors, automated timesheet tracking, and transparent billing in one unified platform." />
+    <meta name="keywords" content="contract jobs, contract hiring platform, flexible workforce, vendor management system, VMS, contract tech talent, hiring marketplace, staffing agencies, IT contractors" />
+    <meta name="author" content="Term Jobs" />
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+    <link rel="canonical" href="https://termjobs.vercel.app/" />
+
+    <!-- Favicons & Web App Manifest -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Term Jobs" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Term Jobs" />
+    <meta property="og:title" content="Term Jobs | Flexible Workforce & Contract Hiring Platform" />
+    <meta property="og:description" content="Discover verified contract roles and top talent. Term Jobs unifies contract hiring, onboarding, timesheets, and payments across teams and staffing vendors." />
+    <meta property="og:url" content="https://termjobs.vercel.app/" />
+    <meta property="og:image" content="https://termjobs.vercel.app/logo.png" />
+    <meta property="og:image:alt" content="Term Jobs Platform Logo" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter / X Cards -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Term Jobs | Flexible Workforce & Contract Hiring Platform" />
+    <meta name="twitter:description" content="Discover verified contract roles and top talent. Term Jobs unifies contract hiring, onboarding, timesheets, and payments in one place." />
+    <meta name="twitter:image" content="https://termjobs.vercel.app/logo.png" />
+    <meta name="twitter:image:alt" content="Term Jobs Platform Logo" />
+
+    <!-- Fonts Preconnect -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" />
-    <link rel="icon" type="image/png" href="/logo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Term Jobs</title>
+
+    <!-- Structured Data: Organization & WebSite Schemas -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://termjobs.vercel.app/#organization",
+          "name": "Term Jobs",
+          "url": "https://termjobs.vercel.app/",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://termjobs.vercel.app/logo.png",
+            "caption": "Term Jobs"
+          },
+          "email": "Termjobsofficial@gmail.com",
+          "description": "Term Jobs is an enterprise vendor management system (VMS) and marketplace for flexible, contract-based hiring.",
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "email": "Termjobsofficial@gmail.com",
+            "contactType": "Customer Support"
+          }
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://termjobs.vercel.app/#website",
+          "url": "https://termjobs.vercel.app/",
+          "name": "Term Jobs",
+          "publisher": {
+            "@id": "https://termjobs.vercel.app/#organization"
+          },
+          "description": "Flexible workforce and contract talent platform."
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://termjobs.vercel.app/#software",
+          "name": "Term Jobs Workforce Platform",
+          "operatingSystem": "All modern web browsers",
+          "applicationCategory": "BusinessApplication",
+          "description": "One platform for project-based teams. Verified talent, transparent billing, and full visibility from first interview to final invoice.",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          }
+        },
+        {
+          "@type": "BreadcrumbList",
+          "@id": "https://termjobs.vercel.app/#breadcrumb",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://termjobs.vercel.app/"
+            },
+            {
+              "@type": "ListItem",
+              "position": 2,
+              "name": "Sign In",
+              "item": "https://termjobs.vercel.app/login"
+            },
+            {
+              "@type": "ListItem",
+              "position": 3,
+              "name": "Candidate Portal",
+              "item": "https://termjobs.vercel.app/candidate/login"
+            }
+          ]
+        },
+        {
+          "@type": "FAQPage",
+          "@id": "https://termjobs.vercel.app/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "What is Term Jobs?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Term Jobs is a flexible workforce platform that brings verified contract roles, vetted candidates, staffing vendor management, and automated timesheet billing into one place."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does Term Jobs help companies hire contractors?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Companies can post requisitions once to reach vetted professionals and staffing partners simultaneously, track live engagements, and handle compliance and billing seamlessly."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How can candidates join Term Jobs?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Candidates can submit their resume to the Term Jobs Talent Network for priority access to contract opportunities matching their skill set."
+              }
+            }
+          ]
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Pre-rendered semantic HTML for instant search engine indexing (replaced automatically when React mounts) -->
+    <div id="root">
+      <header style="padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eaeaea;">
+        <div style="font-weight: 800; font-size: 20px; letter-spacing: -0.02em; color: #0a0a0a;">TERM JOBS</div>
+        <nav style="display: flex; gap: 16px; font-size: 14px;">
+          <a href="#features" style="color: #666; text-decoration: none;">Features</a>
+          <a href="#contact" style="color: #666; text-decoration: none;">Contact Us</a>
+          <a href="/login" style="color: #0a0a0a; text-decoration: none; font-weight: 600;">Sign In</a>
+        </nav>
+      </header>
+      <main style="max-width: 1000px; margin: 0 auto; padding: 60px 24px; text-align: center;">
+        <p style="font-size: 12px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase; color: #666; margin-bottom: 16px;">Flexible Workforce & Contract Hiring Platform</p>
+        <h1 style="font-size: clamp(36px, 6vw, 72px); font-weight: 800; line-height: 1.05; color: #0a0a0a; margin-bottom: 24px;">
+          The future of work isn't permanent. <span style="color: #666;">It's flexible.</span>
+        </h1>
+        <p style="font-size: 18px; line-height: 1.6; color: #666; max-width: 600px; margin: 0 auto 40px;">
+          Term Jobs brings verified contract roles, trusted employers, and everything in between — hiring, tracking, and payments — into one unified platform.
+        </p>
+        <section style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; text-align: left; margin-top: 60px;">
+          <article style="border: 1px solid #eaeaea; border-radius: 20px; padding: 28px; background: #fff;">
+            <h2 style="font-size: 20px; font-weight: 700; color: #0a0a0a; margin-bottom: 10px;">Hire with confidence</h2>
+            <p style="font-size: 14.5px; color: #666; line-height: 1.6;">Post a role once and reach verified contract professionals and trusted staffing vendors in a single search.</p>
+          </article>
+          <article style="border: 1px solid #eaeaea; border-radius: 20px; padding: 28px; background: #fff;">
+            <h2 style="font-size: 20px; font-weight: 700; color: #0a0a0a; margin-bottom: 10px;">Manage every engagement</h2>
+            <p style="font-size: 14.5px; color: #666; line-height: 1.6;">Track performance, hours, and compliance in one dashboard — no more spreadsheets across five vendors.</p>
+          </article>
+          <article style="border: 1px solid #eaeaea; border-radius: 20px; padding: 28px; background: #fff;">
+            <h2 style="font-size: 20px; font-weight: 700; color: #0a0a0a; margin-bottom: 10px;">Pay without the paperwork</h2>
+            <p style="font-size: 14.5px; color: #666; line-height: 1.6;">Approve timesheets and release payments automatically, with full cost visibility across every project.</p>
+          </article>
+        </section>
+        <footer style="margin-top: 80px; padding-top: 30px; border-top: 1px solid #eaeaea; font-size: 13px; color: #888;">
+          <p>Contact: <a href="mailto:Termjobsofficial@gmail.com" style="color: #0a0a0a;">Termjobsofficial@gmail.com</a> | &copy; 2026 Term Jobs. All rights reserved.</p>
+        </footer>
+      </main>
+    </div>
+    <noscript>
+      <div style="padding: 20px; text-align: center; font-family: sans-serif;">
+        <p>Please enable JavaScript to access all interactive features of the Term Jobs platform.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

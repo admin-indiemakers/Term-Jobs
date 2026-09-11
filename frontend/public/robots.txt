@@ -1,0 +1,30 @@
+# Term Jobs Robots.txt
+# https://termjobs.vercel.app
+
+User-agent: *
+Allow: /
+Allow: /login
+Allow: /candidate/login
+Allow: /director/login
+Allow: /admin/login
+Allow: /join/
+
+# Restrict authenticated application routes and internal dashboards
+Disallow: /dashboard/
+Disallow: /superadmin/
+Disallow: /recruiter/
+Disallow: /admin/
+Disallow: /director/work-orders
+Disallow: /director/agreements
+Disallow: /procurement/
+Disallow: /finance/
+Disallow: /candidate/portal
+Disallow: /candidate/onboarding
+Disallow: /candidate/dashboard
+Disallow: /candidate/assignment
+Disallow: /candidate/timesheet
+Disallow: /candidate/attendance
+Disallow: /api/
+
+# Sitemap location
+Sitemap: https://termjobs.vercel.app/sitemap.xml

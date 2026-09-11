@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import SEOHead from '../components/SEOHead';
 
 /* ============ GOOGLE SHEET & EMAIL INTEGRATION ============ */
 const WAITLIST_SHEET_URL = "https://script.google.com/macros/s/AKfycbwes1glJQAnCMds8Pdp_2kRWe-Om2oAdwrMHVlbpzhjn5_x5SLPh0LhlLkqjxxNgyiY/exec";
@@ -24,7 +25,7 @@ async function sendFormToGoogleSheet(data, customUrl = null) {
 }
 
 /* ============ LOGO ============ */
-const LogoIcon = ({ className = '', alt = '' }) => (
+const LogoIcon = ({ className = '', alt = 'Term Jobs Platform Logo' }) => (
   <img src="/logo.png" alt={alt} className={`${className} object-contain block`} />
 );
 
@@ -143,16 +144,16 @@ const DataCollectionModal = ({ isOpen, onClose }) => {
             <p className="text-sm text-grey mb-6">Submit your details to get early access to exclusive roles.</p>
             <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-1.5 text-left">Full Name</label>
-                <input name="name" required type="text" placeholder="Arjun Patel" disabled={isSubmitting} className="w-full px-4 py-3 rounded-xl border border-hair bg-white font-inter text-sm text-ink outline-none focus:border-ink transition-colors shadow-sm disabled:opacity-60" />
+                <label htmlFor="talent-name" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-1.5 text-left">Full Name</label>
+                <input id="talent-name" name="name" required type="text" placeholder="Arjun Patel" disabled={isSubmitting} className="w-full px-4 py-3 rounded-xl border border-hair bg-white font-inter text-sm text-ink outline-none focus:border-ink transition-colors shadow-sm disabled:opacity-60" />
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-1.5 text-left">Email Address</label>
-                <input name="email" required type="email" placeholder="you@email.com" disabled={isSubmitting} className="w-full px-4 py-3 rounded-xl border border-hair bg-white font-inter text-sm text-ink outline-none focus:border-ink transition-colors shadow-sm disabled:opacity-60" />
+                <label htmlFor="talent-email" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-1.5 text-left">Email Address</label>
+                <input id="talent-email" name="email" required type="email" placeholder="you@email.com" disabled={isSubmitting} className="w-full px-4 py-3 rounded-xl border border-hair bg-white font-inter text-sm text-ink outline-none focus:border-ink transition-colors shadow-sm disabled:opacity-60" />
               </div>
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-1.5 text-left">Resume (PDF)</label>
-                <input name="resume" required type="file" accept=".pdf,.doc,.docx" disabled={isSubmitting} className="w-full px-4 py-3 rounded-xl border border-hair bg-white font-inter text-sm text-grey outline-none focus:border-ink transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-mist file:text-ink hover:file:bg-hair cursor-pointer shadow-sm disabled:opacity-60" />
+                <label htmlFor="talent-resume" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-1.5 text-left">Resume (PDF)</label>
+                <input id="talent-resume" name="resume" required type="file" accept=".pdf,.doc,.docx" disabled={isSubmitting} className="w-full px-4 py-3 rounded-xl border border-hair bg-white font-inter text-sm text-grey outline-none focus:border-ink transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-mist file:text-ink hover:file:bg-hair cursor-pointer shadow-sm disabled:opacity-60" />
               </div>
               <button type="submit" disabled={isSubmitting} className="mt-4 w-full py-3.5 bg-ink text-white font-inter font-semibold text-sm rounded-xl transition-opacity hover:opacity-85 shadow-sm cursor-pointer border-none disabled:opacity-60">
                 {isSubmitting ? 'Submitting...' : 'Submit Profile'}
@@ -292,11 +293,12 @@ const Hero = ({ onOpenModal }) => {
             onSubmit={handleSubmit}
           >
             <input
+              id="hero-waitlist-email"
               type="email"
               name="email"
               placeholder="you@email.com"
               required
-              aria-label="Email address"
+              aria-label="Your work or personal email address for the Term Jobs waitlist"
               disabled={joined}
               className="flex-1 min-w-0 px-[18px] py-3.5 rounded-[100px] border border-hair bg-paper font-inter text-[14.5px] text-ink outline-none transition-colors duration-200 focus:border-ink focus-visible:outline-2 focus-visible:outline-ink focus-visible:outline-offset-2 disabled:opacity-60 shadow-sm"
             />
@@ -797,10 +799,11 @@ const ContactPage = ({ setRoute }) => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
+                  <label htmlFor="contact-name" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
                     Your Name
                   </label>
                   <input
+                    id="contact-name"
                     type="text"
                     name="name"
                     required
@@ -809,10 +812,11 @@ const ContactPage = ({ setRoute }) => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
+                  <label htmlFor="contact-email" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
                     Email Address
                   </label>
                   <input
+                    id="contact-email"
                     type="email"
                     name="email"
                     required
@@ -823,10 +827,11 @@ const ContactPage = ({ setRoute }) => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
+                <label htmlFor="contact-topic" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
                   Topic / Inquiry Type
                 </label>
                 <select
+                  id="contact-topic"
                   name="topic"
                   required
                   className="w-full px-4 py-3.5 rounded-xl border border-hair bg-white font-inter text-sm text-ink outline-none focus:border-ink transition-colors duration-200"
@@ -840,10 +845,11 @@ const ContactPage = ({ setRoute }) => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
+                <label htmlFor="contact-message" className="block text-xs font-semibold uppercase tracking-wider text-grey mb-2">
                   Message
                 </label>
                 <textarea
+                  id="contact-message"
                   name="message"
                   required
                   rows="5"
@@ -892,6 +898,23 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-paper text-ink-soft font-inter antialiased">
+      <SEOHead
+        title={
+          route === '#contact'
+            ? 'Contact Us | Term Jobs - Flexible Workforce & Contract Talent'
+            : 'Term Jobs | Flexible Workforce & Contract Hiring Platform'
+        }
+        description={
+          route === '#contact'
+            ? 'Get in touch with Term Jobs for enterprise contractor hiring, waitlist priority, vendor partnerships, or flexible talent support.'
+            : 'Term Jobs connects enterprise teams with verified contract professionals, trusted staffing vendors, automated timesheet tracking, and transparent billing.'
+        }
+        canonicalUrl={
+          route === '#contact'
+            ? 'https://termjobs.vercel.app/#contact'
+            : 'https://termjobs.vercel.app/'
+        }
+      />
       <Nav currentRoute={route} setRoute={setRoute} onOpenModal={() => setIsModalOpen(true)} />
       <main>
         {route === '#contact' ? (

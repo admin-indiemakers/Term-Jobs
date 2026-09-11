@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
+import SEOHead from '../components/SEOHead';
 
 function Mark() {
   return (
@@ -51,6 +52,11 @@ export default function AuthPage() {
 
   return (
     <div className="clp">
+      <SEOHead
+        title="Sign In | Term Jobs Workforce Portal"
+        description="Sign in to your Term Jobs portal to manage contractor requisitions, talent screening, and automated workforce billing."
+        canonicalUrl="https://termjobs.vercel.app/login"
+      />
       <div className="clp-aurora" />
       <div className="clp-grid" />
 

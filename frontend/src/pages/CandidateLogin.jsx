@@ -3,6 +3,7 @@ import { Navigate, Link } from 'react-router-dom';
 import { Lock, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
+import SEOHead from '../components/SEOHead';
 
 export default function CandidateLogin() {
   const { user, loginWithCandidateId } = useAuth();
@@ -34,6 +35,11 @@ export default function CandidateLogin() {
       style={{ fontFamily: "'Inter', sans-serif" }}
       className="min-h-screen w-full flex bg-[#F7F7F5]"
     >
+      <SEOHead
+        title="Candidate Portal Login | Term Jobs"
+        description="Candidate login for Term Jobs. Access your contract assignments, onboarding documents, and timesheets."
+        canonicalUrl="https://termjobs.vercel.app/candidate/login"
+      />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         html, body, #root { height: 100%; margin: 0; }
