@@ -70,58 +70,70 @@ def dedupe_lines(base_lines: List[str], ocr_lines: List[str]) -> List[str]:
 def extract_pdf(file_path: str) -> str:
     """
     Full PDF extraction pipeline:
-    1. PyMuPDF per-page
-    2. pdfplumber for tables
-    3. Tesseract OCR for image pages
+    1. pypdf (lightweight pure-python)
+    2. PyMuPDF / pdfplumber fallback if installed
     """
-    import fitz  # PyMuPDF
-    import pdfplumber
-
-    all_pages_text: List[str] = []
+    try:
+        import pypdf
+        reader = pypdf.PdfReader(file_path)
+        pages_text = [page.extract_text() for page in reader.pages if page.extract_text()]
+        if pages_text:
+            return "\n".join(pages_text)
+    except Exception as err:
+        logger.info(f"pypdf extraction skipped: {err}")
 
     try:
-        doc = fitz.open(file_path)
-    except Exception as e:
-        raise RuntimeError(f"Failed to open PDF: {e}")
+        import fitz
+        try:
+            import pdfplumber
+        except ImportError:
+            pdfplumber = None
 
-    try:
-        plumber_doc = pdfplumber.open(file_path)
-    except Exception:
-        plumber_doc = None
+        all_pages_text: List[str] = []
 
-    for page_idx in range(len(doc)):
-        page = doc[page_idx]
-        page_text = page.get_text("text")
+        try:
+            doc = fitz.open(file_path)
+        except Exception as e:
+            raise RuntimeError(f"Failed to open PDF: {e}")
 
-        if is_image_page(page_text):
-            # â”€â”€ OCR fallback â”€â”€
-            logger.info(f"Page {page_idx + 1}: image-only, using OCR")
-            ocr_text = _ocr_page(page)
-            if plumber_doc:
-                table_text = _extract_tables_plumber(plumber_doc, page_idx)
-                combined = dedupe_lines(table_text.splitlines(), ocr_text.splitlines())
-                all_pages_text.append("\n".join(combined))
+        try:
+            plumber_doc = pdfplumber.open(file_path) if pdfplumber else None
+        except Exception:
+            plumber_doc = None
+
+        for page_idx in range(len(doc)):
+            page = doc[page_idx]
+            page_text = page.get_text("text")
+
+            if is_image_page(page_text):
+                ocr_text = _ocr_page(page)
+                if plumber_doc:
+                    table_text = _extract_tables_plumber(plumber_doc, page_idx)
+                    combined = dedupe_lines(table_text.splitlines(), ocr_text.splitlines())
+                    all_pages_text.append("\n".join(combined))
+                else:
+                    all_pages_text.append(ocr_text)
             else:
-                all_pages_text.append(ocr_text)
-        else:
-            # â”€â”€ Native text + optional table extraction â”€â”€
-            base_lines = page_text.splitlines()
-            if plumber_doc:
-                table_text = _extract_tables_plumber(plumber_doc, page_idx)
-                if table_text.strip():
-                    merged = dedupe_lines(base_lines, table_text.splitlines())
-                    all_pages_text.append("\n".join(merged))
+                base_lines = page_text.splitlines()
+                if plumber_doc:
+                    table_text = _extract_tables_plumber(plumber_doc, page_idx)
+                    if table_text.strip():
+                        merged = dedupe_lines(base_lines, table_text.splitlines())
+                        all_pages_text.append("\n".join(merged))
+                    else:
+                        all_pages_text.append(page_text)
                 else:
                     all_pages_text.append(page_text)
-            else:
-                all_pages_text.append(page_text)
 
-    doc.close()
-    if plumber_doc:
-        plumber_doc.close()
+        doc.close()
+        if plumber_doc:
+            plumber_doc.close()
 
-    raw = "\n\n".join(all_pages_text)
-    return normalize_text(raw)
+        raw = "\n\n".join(all_pages_text)
+        return normalize_text(raw)
+    except Exception as e:
+        raise RuntimeError(f"PDF extraction failed: {e}")
+
 
 
 def _extract_tables_plumber(plumber_doc, page_idx: int) -> str:

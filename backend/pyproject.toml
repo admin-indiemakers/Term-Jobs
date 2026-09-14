@@ -15,19 +15,13 @@ dependencies = [
     "python-multipart>=0.0.9",
     "uvicorn>=0.52.1",
     "pymongo>=4.8.0",
-    "PyMuPDF>=1.28.0",
-    "pdfplumber>=0.11.0",
+    "pypdf>=4.2.0",
     "python-docx>=1.1.0",
     "bcrypt>=4.1.0",
     "pyjwt>=2.8.0",
     "groq>=1.6.0",
-    "pipecat-ai>=1.9.0",
-    "pipecat-ai-small-webrtc-prebuilt>=2.5.0",
-    "aiortc>=1.15.0",
-    "av>=17.1.0",
     "loguru>=0.7.3",
-    "sarvamai>=0.1.33",
-    "aic-sdk>=3.2.0",
+    "certifi>=2024.2.2",
 ]
 
 [dependency-groups]

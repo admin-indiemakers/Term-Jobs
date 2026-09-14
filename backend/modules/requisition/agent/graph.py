@@ -34,9 +34,12 @@ def make_checkpointer():
 
     Persists graph checkpoints in Mongo so interrupted flows (intake questions,
     approval checkpoints) survive server restarts. Falls back to an in-memory
-    checkpointer when running against a mock/offline DB (tests).
+    checkpointer when running in serverless environments or offline tests.
     """
     try:
+        import os
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            return MemorySaver()
         return MongoDBSaver(
             _mongo_client_fn(),
             db_name=settings.mongo_db_name,
@@ -45,6 +48,7 @@ def make_checkpointer():
         )
     except Exception:  # noqa: BLE001 - tests run without a live Mongo client
         return MemorySaver()
+
 
 
 class AgentState(TypedDict, total=False):

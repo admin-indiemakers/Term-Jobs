@@ -13,19 +13,30 @@ import httpx
 from fastapi import APIRouter, File, UploadFile, Form, HTTPException, Request, Response, BackgroundTasks
 from pydantic import BaseModel, Field
 
-from pipecat.transports.smallwebrtc.request_handler import (
-    IceCandidate,
-    SmallWebRTCPatchRequest,
-    SmallWebRTCRequest,
-)
-
-from .voice_pipeline import (
-    small_webrtc_handler,
-    run_superadmin_webrtc_bot,
-    clean_tts_text,
-    active_voice_sessions,
-    session_executed_actions,
-)
+try:
+    from pipecat.transports.smallwebrtc.request_handler import (
+        IceCandidate,
+        SmallWebRTCPatchRequest,
+        SmallWebRTCRequest,
+    )
+    from .voice_pipeline import (
+        small_webrtc_handler,
+        run_superadmin_webrtc_bot,
+        clean_tts_text,
+        active_voice_sessions,
+        session_executed_actions,
+    )
+    PIPECAT_AVAILABLE = True
+except (ImportError, Exception):
+    PIPECAT_AVAILABLE = False
+    small_webrtc_handler = None
+    run_superadmin_webrtc_bot = None
+    clean_tts_text = lambda x: x
+    active_voice_sessions = {}
+    session_executed_actions = {}
+    IceCandidate = None
+    SmallWebRTCPatchRequest = None
+    SmallWebRTCRequest = None
 
 logger = logging.getLogger(__name__)
 
@@ -255,6 +266,12 @@ async def webrtc_offer(
     session_id: str | None = None
 ):
     """Process incoming WebRTC SDP offer and launch the SuperAdmin Pipecat voice pipeline."""
+    if not PIPECAT_AVAILABLE or small_webrtc_handler is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Real-time WebRTC audio streaming requires a persistent server environment with Pipecat installed."
+        )
+
     request_data = await request.json()
     resolved_session_id = session_id or request_data.get("session_id") or request_data.get("sessionId") or f"voice-{uuid.uuid4().hex[:8]}"
 
@@ -283,6 +300,9 @@ async def webrtc_offer(
 @router.patch("/connect")
 async def webrtc_ice_candidate(request: Request):
     """Handle incoming ICE candidates from the web browser."""
+    if not PIPECAT_AVAILABLE or small_webrtc_handler is None:
+        return {"status": "skipped", "detail": "Pipecat WebRTC not active"}
+
     request_data = await request.json()
     candidates = [
         IceCandidate(

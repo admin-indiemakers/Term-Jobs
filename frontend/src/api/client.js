@@ -1,17 +1,29 @@
 const getApiBaseUrl = () => {
-  const envUrl = import.meta.env?.VITE_API_URL || import.meta.env?.VITE_API_BASE_URL;
-  if (envUrl) {
-    return envUrl;
+  // 1. If explicit backend URL is provided via environment variables (e.g. Vercel backend URL), prioritize it
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    const trimmed = envUrl.trim().replace(/\/+$/, '');
+    // If running on a remote public domain, do not accidentally use localhost
+    if (typeof window !== 'undefined') {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!isLocal && (trimmed.includes('localhost') || trimmed.includes('127.0.0.1'))) {
+        return window.location.origin;
+      }
+    }
+    return trimmed;
   }
+
+  // 2. Browser runtime checks
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     // Always route to local backend when running on localhost
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`;
     }
-    // When accessing via ngrok or external public URL, use the current origin so requests route through Vite proxy
+    // When accessing via ngrok or Vercel rewrite proxy
     return window.location.origin;
   }
+
   return 'http://localhost:8000';
 };
 
