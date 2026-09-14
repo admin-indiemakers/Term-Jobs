@@ -3,6 +3,7 @@ import { Navigate, Link } from 'react-router-dom';
 import { Lock, ShieldCheck, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
+import SEOHead from '../components/SEOHead';
 
 export default function CandidateLogin() {
   const { user, loginWithCandidateId } = useAuth();
@@ -42,6 +43,11 @@ export default function CandidateLogin() {
       style={{ fontFamily: "'Inter', sans-serif" }}
       className="min-h-screen w-full flex bg-[#F7F7F5]"
     >
+      <SEOHead
+        title="Candidate Portal Login | Term Jobs"
+        description="Candidate login for Term Jobs. Access your contract assignments, onboarding documents, and timesheets."
+        canonicalUrl="https://termjobs.vercel.app/candidate/login"
+      />
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         html, body, #root { height: 100%; margin: 0; }
@@ -89,7 +95,7 @@ export default function CandidateLogin() {
 
         <div className="px-6 py-5 border-t border-[#EDECE7]">
           <p className="text-[12px] text-[#A6A59F] leading-relaxed">
-            Sign in with your official email address and password to access your portal.
+            Sign in with your Work Order ID and password to access your portal.
           </p>
         </div>
       </aside>
@@ -148,7 +154,7 @@ export default function CandidateLogin() {
               <form onSubmit={handleSubmit}>
                 <label className="block mb-5">
                   <span className="flex items-center gap-2 text-[11px] tracking-[0.1em] uppercase text-[#6B6B67] mb-2 font-medium">
-                    Official Email Address
+                    Work Order ID
                   </span>
                   <div className={`field rounded-xl px-4 py-3 ${focused === 'email' ? 'is-focused' : ''}`}>
                     <input
@@ -157,7 +163,7 @@ export default function CandidateLogin() {
                       onChange={(e) => setEmail(e.target.value)}
                       onFocus={() => setFocused('email')}
                       onBlur={() => setFocused(null)}
-                      placeholder="e.g. candidate@company.com"
+                      placeholder="e.g. WO-2026-XXXX"
                       required
                       disabled={loading}
                       className="w-full bg-transparent outline-none text-[14.5px] text-[#0A0A0A] placeholder:text-[#B5B4AE]"

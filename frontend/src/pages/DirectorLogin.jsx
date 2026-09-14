@@ -48,10 +48,8 @@ export default function DirectorLogin() {
       <main className="director-login-card">
         <header className="director-login-header">
           <div className="director-login-brand">
-            <div className="director-login-logo">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 3l7 4v5c0 4.5-3 8.2-7 9-4-.8-7-4.5-7-9V7z" />
-              </svg>
+            <div className="director-login-logo bg-white p-1 rounded-xl shadow-xs">
+              <img src="/logo.png" alt="TermJobs Logo" className="h-8 w-8 object-contain" />
             </div>
             <div>
               <span className="director-login-name">TERMJOBS</span>

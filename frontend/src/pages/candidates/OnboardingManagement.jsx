@@ -71,7 +71,7 @@ export default function OnboardingManagement() {
         request('/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/workforce/work-orders', { token }).catch(() => []),
+        request('/api/work-orders', { token }).catch(() => request('/api/workforce/work-orders', { token })).catch(() => []),
       ]);
 
       const candList = Array.isArray(candData) ? candData : candData?.candidates || [];
@@ -81,16 +81,34 @@ export default function OnboardingManagement() {
 
       const obMap = {};
       obList.forEach((item) => {
-        const id = item.candidate_id || item.id;
-        if (id) obMap[id] = item;
+        const id = item.candidate_id || item.id || item.workorder_id;
+        if (id) {
+          obMap[id] = item;
+          const clean = String(id).replace('SDC-', '').replace('SDC -', '').replace('BEAR-', '').replace('BEAR -', '').trim();
+          obMap[clean] = item;
+          obMap[`SDC-${clean}`] = item;
+          obMap[`SDC -${clean}`] = item;
+          obMap[`BEAR-${clean}`] = item;
+        }
+        if (item.candidate_name) {
+          obMap[item.candidate_name.trim().toLowerCase()] = item;
+        }
       });
 
       // Build work order map from actual work orders and onboarding activation status
       const woMap = {};
       woList.forEach((wo) => {
-        const id = wo.candidate_id;
+        const id = wo.candidate_id || wo.workorder_id || wo.id;
         if (id) {
           woMap[id] = wo;
+          const clean = String(id).replace('SDC-', '').replace('SDC -', '').replace('BEAR-', '').replace('BEAR -', '').trim();
+          woMap[clean] = wo;
+          woMap[`SDC-${clean}`] = wo;
+          woMap[`SDC -${clean}`] = wo;
+          woMap[`BEAR-${clean}`] = wo;
+        }
+        if (wo.candidate_name) {
+          woMap[wo.candidate_name.trim().toLowerCase()] = wo;
         }
       });
 
@@ -115,7 +133,7 @@ export default function OnboardingManagement() {
     const totalAccepted = candidates.length;
     const obValues = Object.values(onboardingDocs);
     const inProgress = obValues.filter((o) => o.status === 'in_progress').length;
-    const completed = obValues.filter((o) => o.status === 'completed').length;
+    const completed = obValues.filter((o) => o.status === 'completed' || o.setup_status === 'completed').length;
     const openIssues = issues.filter((i) => i.status === 'open').length;
 
     return {
@@ -179,11 +197,12 @@ export default function OnboardingManagement() {
   // Open gates modal for a candidate
   const handleViewGates = (cand) => {
     const id = cand.candidate_id || cand.id;
-    const obDoc = onboardingDocs[id];
+    const candName = cand.candidate_name || cand.full_name || cand.name || '';
+    const obDoc = onboardingDocs[id] || onboardingDocs[candName.trim().toLowerCase()];
     const gates = obDoc?.activation_gates || [];
     setShowGatesModal({
       candidate_id: id,
-      candidate_name: cand.candidate_name || cand.name || '',
+      candidate_name: candName,
       requisition_title: cand.requisition_title || '',
       activation_gates: gates,
     });
@@ -197,7 +216,8 @@ export default function OnboardingManagement() {
   // Open Onboarding Setup Modal
   const handleOpenSetup = (cand) => {
     const id = cand.id || cand.candidate_id;
-    const existing = onboardingDocs[id];
+    const candName = cand.candidate_name || cand.full_name || cand.name || '';
+    const existing = onboardingDocs[id] || onboardingDocs[candName.trim().toLowerCase()];
 
     setEditingCandidate(cand);
     if (existing?.software?.length) {
@@ -219,11 +239,12 @@ export default function OnboardingManagement() {
     setSavingSetup(true);
     setError('');
     const id = editingCandidate.id || editingCandidate.candidate_id;
+    const candName = editingCandidate.candidate_name || editingCandidate.name || 'candidate';
 
     try {
       const payload = {
         candidate_id: id,
-        candidate_name: editingCandidate.candidate_name || editingCandidate.name,
+        candidate_name: candName,
         company_name: editingCandidate.company_name || '',
         requisition_id: editingCandidate.requisition_id || '',
         vendor_name: editingCandidate.vendor_name || '',
@@ -231,7 +252,8 @@ export default function OnboardingManagement() {
         requisition_title: editingCandidate.requisition_title || '',
         software: setupSoftware,
         training: setupTraining,
-        status: setupSoftware.some((s) => s.enabled) || setupTraining.some((t) => t.enabled) ? 'completed' : 'in_progress',
+        status: 'completed',
+        setup_status: 'completed',
       };
 
       await request(`/api/onboarding/${id}`, {
@@ -246,9 +268,21 @@ export default function OnboardingManagement() {
         });
       });
 
-      setSuccessInfo(`Onboarding setup saved for ${editingCandidate.candidate_name || 'candidate'}.`);
+      // Update local state immediately so button turns to 'Edit Setup' without waiting
+      const updatedDoc = {
+        ...payload,
+        status: 'completed',
+        setup_status: 'completed',
+      };
+      setOnboardingDocs((prev) => ({
+        ...prev,
+        [id]: { ...(prev[id] || {}), ...updatedDoc },
+        [candName.trim().toLowerCase()]: { ...(prev[candName.trim().toLowerCase()] || {}), ...updatedDoc },
+      }));
+
+      setSuccessInfo(`Onboarding setup saved for ${candName}.`);
       setEditingCandidate(null);
-      loadData();
+      await loadData();
     } catch (err) {
       console.error('Failed to save onboarding checklist:', err);
       setError(err.message || 'Failed to save onboarding checklist.');
@@ -552,13 +586,34 @@ export default function OnboardingManagement() {
                   const reqTitle = cand.requisition_title || '';
 
                   const score = cand.match_score != null ? Math.round(cand.match_score) : null;
-                  const obDoc = onboardingDocs[id];
-                  const isCompleted = cand.forceStatus === 'completed' || obDoc?.status === 'completed';
-                  const isInProgress = cand.forceStatus === 'in_progress' || obDoc?.status === 'in_progress';
-                  const woDoc = workOrders[id];
-                  const hasWO = Boolean(woDoc && woDoc.status);
-                  const woStatus = woDoc?.status?.toUpperCase() || '';
-                  const woActivated = woStatus === 'ACTIVE' || woStatus === 'ACTIVATED';
+                  const obDoc = onboardingDocs[id] || onboardingDocs[rawId] || onboardingDocs[candName.trim().toLowerCase()];
+                  const isCompleted = cand.forceStatus === 'completed' || obDoc?.status === 'completed' || obDoc?.setup_status === 'completed';
+                  const isInProgress = cand.forceStatus === 'in_progress' || obDoc?.status === 'in_progress' || obDoc?.setup_status === 'in_progress';
+
+                  // Comprehensive work order lookup
+                  const woDoc =
+                    workOrders[id] ||
+                    workOrders[rawId] ||
+                    (obDoc?.workorder_id && workOrders[obDoc.workorder_id]) ||
+                    (cand.workorder_id && workOrders[cand.workorder_id]) ||
+                    workOrders[candName.trim().toLowerCase()];
+
+                  const hasWO = Boolean(woDoc && (woDoc.status || woDoc.work_order_number)) || Boolean(obDoc?.workorder_id) || Boolean(cand.workorder_id);
+                  const woStatus = (woDoc?.status || woDoc?.agreement_status || obDoc?.activation_status || '').toUpperCase();
+                  const woActivated =
+                    woStatus === 'ACTIVE' ||
+                    woStatus === 'ACTIVATED' ||
+                    woStatus === 'APPROVED' ||
+                    obDoc?.activation_status === 'activated';
+
+                  const rawWoId = woDoc?.workorder_id || woDoc?.candidate_id || obDoc?.workorder_id || cand.workorder_id || id;
+                  const cleanWoCode = String(rawWoId).replace('SDC-', '').replace('SDC -', '').replace('BEAR-', '').replace('BEAR -', '').trim();
+                  const woNumber =
+                    woDoc?.work_order_number ||
+                    obDoc?.work_order_number ||
+                    (rawWoId && String(rawWoId).startsWith('WO-')
+                      ? rawWoId
+                      : `WO-2026-${cleanWoCode.slice(0, 4).toUpperCase()}`);
 
                   return (
                     <tr
@@ -626,32 +681,47 @@ export default function OnboardingManagement() {
                       {/* 6. WORK ORDER */}
                       <td className="py-3.5 px-3 align-middle text-center">
                         {woActivated ? (
-                          <span
-                            onClick={() => handleViewGates(cand)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534] cursor-pointer hover:opacity-85 transition"
-                            title="Click to view activation gates"
-                          >
-                            <FileText size={11} />
-                            Active
-                          </span>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <span
+                              onClick={() => handleViewGates(cand)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534] cursor-pointer hover:opacity-85 transition"
+                              title="Click to view activation gates"
+                            >
+                              <FileText size={11} />
+                              Active
+                            </span>
+                            {woNumber && (
+                              <span
+                                onClick={() => handleViewGates(cand)}
+                                className="text-[11px] font-mono text-[#4b5563] font-semibold bg-[#f3f4f6] px-2 py-0.5 rounded-md border border-[#e5e7eb] cursor-pointer hover:bg-[#e5e7eb] transition"
+                                title="Work Order ID — Click to view details"
+                              >
+                                {woNumber}
+                              </span>
+                            )}
+                          </div>
                         ) : hasWO ? (
-                          <span
-                            onClick={() => handleViewGates(cand)}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#FEF3C7] text-[#92400E] cursor-pointer hover:opacity-85 transition"
-                            title="Click to view activation gates"
-                          >
-                            <FileText size={11} />
-                            Pending
-                          </span>
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                            <span
+                              onClick={() => handleViewGates(cand)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#FEF3C7] text-[#92400E] cursor-pointer hover:opacity-85 transition"
+                              title="Click to view activation gates"
+                            >
+                              <FileText size={11} />
+                              Pending
+                            </span>
+                            {woNumber && (
+                              <span
+                                onClick={() => handleViewGates(cand)}
+                                className="text-[11px] font-mono text-[#78350f] font-semibold bg-[#fef3c7] px-2 py-0.5 rounded-md border border-[#fde68a] cursor-pointer hover:opacity-85 transition"
+                                title="Work Order ID — Click to view details"
+                              >
+                                {woNumber}
+                              </span>
+                            )}
+                          </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleViewGates(cand)}
-                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#0A0A0A] text-white text-[11px] font-bold hover:bg-[#262626] transition-colors cursor-pointer"
-                          >
-                            <Shield size={11} />
-                            Verification & WO
-                          </button>
+                          <span className="text-[12px] font-semibold text-[#8A8A85]">—</span>
                         )}
                       </td>
 

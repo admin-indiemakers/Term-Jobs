@@ -12,7 +12,7 @@ Quick test (company -> requisition -> approve -> publish):
          -d '{"name":"Acme","location":"Bangalore","tech_stack":["Python","Django","Postgres"]}'
     # then POST /requisitions with the returned profile id
 """
-from __future__ import annotations
+
 
 import json
 import os
@@ -38,24 +38,47 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
-from modules.shared.db import get_session, init_db
+from modules.requisition.domain.state import StateMachine
+from modules.shared.db import get_session, init_db, _utcnow
 from modules.shared.cache import cache as _cache
 from modules.resume_screener.router import router as resume_screener_router
 from modules.interview.router import router as interview_router
 from modules.onboarding.router import router as onboarding_router
 from modules.candidate_portal.router import router as candidate_portal_router
 from modules.workforce.router import router as workforce_router
+from modules.workorder.router import router as workorder_router
+from modules.superadmin_agent.router import router as superadmin_agent_router
+from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
+from modules.billing.router import router as vendor_billing_router
+from modules.superadmin_agent.voice_router import router as voice_router
 
 
 app = FastAPI(
     title="TermJobs Requisition API",
     description="Intake and structure job requisitions using AI agents.",
+    
     version="1.0.0",
 )
 
+
+@app.exception_handler(404)
+async def custom_404_handler(request: Request, exc):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "error": "Route Not Found",
+            "requested_url": str(request.url),
+            "scope_path": request.scope.get("path"),
+            "scope_root_path": request.scope.get("root_path"),
+            "scope_raw_path": str(request.scope.get("raw_path")),
+            "query_params": dict(request.query_params),
+            "headers": dict(request.headers),
+        }
+    )
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=r"https://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -63,25 +86,110 @@ app.add_middleware(
 
 @app.middleware("http")
 async def vercel_routing_middleware(request: Request, call_next):
-    # Support Vercel serverless rewritten paths via query param or headers
     target = request.query_params.get("__vercel_path")
-    if not target:
-        for header_key in ("x-matched-path", "x-forwarded-uri", "x-invoke-path"):
-            val = request.headers.get(header_key)
-            if val and val not in ("/api", "/api/", "/api/index", "/api/index.py"):
-                target = val
-                break
-
     if target:
         if target.startswith("//"):
             target = "/" + target.lstrip("/")
         if "?" in target:
             target = target.split("?")[0]
         request.scope["path"] = target
+        request.scope["root_path"] = ""
 
-    return await call_next(request)
+    origin = request.headers.get("origin")
+    req_headers = request.headers.get("access-control-request-headers", "*")
+
+    print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | RequestedHeaders: {req_headers}")
+
+    # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
+    if request.method == "OPTIONS":
+        from fastapi.responses import Response
+        print(f" [CORS PREFLIGHT OK] Returning 200 for OPTIONS preflight from Origin: {origin}")
+        return Response(
+            status_code=200,
+            headers={
+                "Access-Control-Allow-Origin": origin or "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": req_headers,
+                "Access-Control-Allow-Credentials": "true",
+            },
+        )
+
+    response = await call_next(request)
+
+    # Ensure CORS headers on all HTTP responses for any origin (including Vercel branch previews)
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+
+    return response
+
+# --- Global Exception Handlers with CORS Preservation & Debug Logging ---
+import traceback
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    error_msg = f" [UNHANDLED BACKEND SERVER ERROR] {request.method} {request.url.path}: {exc}"
+    print(error_msg, file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    
+    origin = request.headers.get("origin") or "*"
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal Server Error: {str(exc)}",
+            "type": type(exc).__name__,
+            "path": request.url.path,
+        },
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    print(f" [HTTP EXCEPTION {exc.status_code}] {request.method} {request.url.path}: {exc.detail}", file=sys.stderr)
+    origin = request.headers.get("origin") or "*"
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint providing MongoDB connectivity and server diagnostics."""
+    db_status = "unknown"
+    db_error = None
+    try:
+        from modules.shared.db import db as mongo_db
+        mongo_db.command("ping")
+        db_status = "connected"
+    except Exception as err:
+        db_status = "error"
+        db_error = str(err)
+        print(f" [HEALTH CHECK MONGO ERROR]: {err}", file=sys.stderr)
+
+    return {
+        "status": "ok" if db_status == "connected" else "degraded",
+        "database": db_status,
+        "database_error": db_error,
+        "environment": os.getenv("VERCEL_ENV", "local"),
+    }
 
 app.include_router(identity_router, prefix="/api/auth")
+app.include_router(identity_router, prefix="/auth")
 app.include_router(candidate_router)
 app.include_router(candidate_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api", tags=["Calendar"])
@@ -92,8 +200,14 @@ app.include_router(notifications_router)
 app.include_router(onboarding_router)
 app.include_router(candidate_portal_router)
 app.include_router(workforce_router, prefix="/api", tags=["Workforce"])
+app.include_router(workforce_router, tags=["Workforce"])
+app.include_router(workorder_router)
+app.include_router(superadmin_agent_router)
+app.include_router(hiring_manager_agent_router)
+app.include_router(vendor_billing_router)
+app.include_router(voice_router)
 
-
+# Reload trigger for interview module updates
 
 # --- LLM provider selection -------------------------------------------------
 def _build_service():
@@ -167,6 +281,7 @@ class ApproveIn(BaseModel):
 
 class RejectIn(BaseModel):
     reviewer: str | None = None
+    reason: str | None = None
 
 
 class ApproveByIn(BaseModel):
@@ -200,6 +315,15 @@ INTERNAL_ROLE_KEYS = {
 }
 
 
+def _num(val: Any) -> int | None:
+    if val in (None, ""):
+        return None
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return None
+
+
 def _strip_internal_role(role: Any) -> Any:
     """Remove internal-only commercial fields before a vendor sees a role.
 
@@ -221,7 +345,19 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             prof = session.get(models.CompanyProfile, req.company_profile_id)
             if prof:
                 company = _company_dict(prof)
-        sr = req.structured_role or {}
+        sr = dict(req.structured_role or {})
+        v_limit = (
+            _num((req.intake_meta or {}).get("prefill", {}).get("vendor_candidate_limit"))
+            or _num((req.intake_meta or {}).get("prefill", {}).get("candidate_limit"))
+            or _num(sr.get("vendor_candidate_limit"))
+            or _num(req.vendor_candidate_limit)
+            or _num(sr.get("headcount"))
+            or 1
+        )
+        if sr:
+            sr["vendor_candidate_limit"] = v_limit
+        if for_vendor:
+            sr = _strip_internal_role(sr)
 
         # Get engaged vendor consultancies receiving this published requisition
         published_vendors = []
@@ -259,14 +395,20 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
-            "structured_role": req.structured_role,
-            "vendor_candidate_limit": req.vendor_candidate_limit if req.vendor_candidate_limit is not None else (sr.get("vendor_candidate_limit") or sr.get("headcount") or 1),
+            "structured_role": sr,
+            "vendor_candidate_limit": v_limit,
             "published_vendors": published_vendors,
             "hiring_manager_name": sr.get("hiring_manager") or "",
             "generated_jd_markdown": req.generated_jd_markdown,
             "coverage_result": req.coverage_result,
             "refinement_log": req.refinement_log or [],
             "intake_meta": req.intake_meta or {},
+            "director_approved": bool(getattr(req, "director_approved", False)),
+            "director_approved_by": getattr(req, "director_approved_by", None),
+            "director_approved_at": req.director_approved_at.isoformat() if getattr(req, "director_approved_at", None) else None,
+            "rejection_reason": getattr(req, "rejection_reason", None),
+            "rejected_by": getattr(req, "rejected_by", None),
+            "rejected_at": req.rejected_at.isoformat() if getattr(req, "rejected_at", None) else None,
             "approved_by": req.approved_by,
             "approved_at": req.approved_at.isoformat() if req.approved_at else None,
             "created_at": req.created_at.isoformat() if req.created_at else None,
@@ -302,7 +444,7 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
         return req
     if req.tenant_id == current_user.tenant_id:
         # Hiring Manager can only access requisitions they created
-        if current_user.role == "Hiring Manager" and req.created_by != current_user.id:
+        if current_user.role == "Hiring Manager" and req.created_by and req.created_by != current_user.id:
             raise HTTPException(
                 status_code=403,
                 detail="You do not have access to this requisition",
@@ -462,7 +604,7 @@ async def upload_template(
             tpl = models.RoleTemplate(
                 tenant_id=current_user.tenant_id,
                 created_by=current_user.id,
-                name=name or f"Template â€” {title}",
+                name=name or f"Template  {title}",
                 description=description or "",
                 structured_role=role,
             )
@@ -704,7 +846,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
             pass
         elif current_user.role == "Recruiter":
             # Vendors only see requisitions from companies that engaged them,
-            # and only published requisitions — never drafts or in-progress ones.
+            # and only published requisitions  never drafts or in-progress ones.
             engaged_company_ids = {
                 e.tenant_id
                 for e in session.query(VendorEngagement)
@@ -796,6 +938,7 @@ def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: Use
 
 
 @app.post("/requisitions/{requisition_id}/approve")
+@app.post("/api/requisitions/{requisition_id}/approve")
 def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
@@ -807,26 +950,109 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
             raise HTTPException(status_code=422, detail=f"invalid edited_role: {exc}")
 
     reviewer = body.reviewer if body else None
-    state, interrupt = service.approve(requisition_id, reviewer=reviewer, edited_role=edited)
-    return _interrupt_payload(state, interrupt)
+    try:
+        service.approve(requisition_id, reviewer=reviewer, edited_role=edited)
+    except Exception:
+        pass
+
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.status = schemas.RequisitionStatus.PENDING_APPROVAL.value
+            db_req.rejection_reason = None
+            db_req.rejected_by = None
+            db_req.rejected_at = None
+            if edited:
+                db_req.structured_role = edited.model_dump()
+            if current_user.role in ("Director", "Admin", "Super Admin"):
+                db_req.director_approved = True
+                db_req.director_approved_by = current_user.name or current_user.email or "Director"
+                db_req.director_approved_at = _utcnow()
+            else:
+                db_req.director_approved = False
+                db_req.director_approved_by = None
+                db_req.director_approved_at = None
+            session.commit()
+
+    return _requisition_dict(requisition_id)
+
+
+@app.post("/requisitions/{requisition_id}/director-approve")
+@app.post("/api/requisitions/{requisition_id}/director-approve")
+def director_approve_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+    if current_user.role not in ("Director", "Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only Directors or Admins can approve requisitions.",
+        )
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.director_approved = True
+            db_req.director_approved_by = current_user.name or current_user.email or "Director"
+            db_req.director_approved_at = _utcnow()
+            db_req.rejection_reason = None
+            db_req.rejected_by = None
+            db_req.rejected_at = None
+            session.commit()
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/reject")
+@app.post("/api/requisitions/{requisition_id}/reject")
 def reject_requisition(requisition_id: str, body: RejectIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
-    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
 
-    reviewer = body.reviewer if body else None
-    state, interrupt = service.reject(requisition_id, reviewer=reviewer)
-    return _interrupt_payload(state, interrupt)
+    reviewer = (body.reviewer if body else None) or current_user.name or current_user.email or "Director"
+    reason = (body.reason if body and body.reason else None) or "Revision requested by Director"
+
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.status = schemas.RequisitionStatus.STRUCTURING.value
+            db_req.director_approved = False
+            db_req.director_approved_by = None
+            db_req.director_approved_at = None
+            db_req.rejection_reason = reason
+            db_req.rejected_by = reviewer
+            db_req.rejected_at = _utcnow()
+            session.commit()
+
+    try:
+        service.reject(requisition_id, reviewer=reviewer)
+    except Exception:
+        pass
+
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/publish")
+@app.post("/api/requisitions/{requisition_id}/publish")
 def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
-    _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
 
-    by = body.by if body else None
+    db_req = _get_requisition(requisition_id)
+    is_director_or_admin = current_user.role in ("Director", "Admin", "Super Admin")
+
+    if not getattr(db_req, "director_approved", False) and not is_director_or_admin:
+        raise HTTPException(
+            status_code=400,
+            detail="Requisition requires Director approval before it can be published to vendors.",
+        )
+
+    if is_director_or_admin and not getattr(db_req, "director_approved", False):
+        with get_session() as session:
+            s_req = session.get(models.Requisition, requisition_id)
+            if s_req:
+                s_req.director_approved = True
+                s_req.director_approved_by = current_user.name or current_user.email or "Director"
+                s_req.director_approved_at = _utcnow()
+                session.commit()
+
+    by = body.by if body else (current_user.name or current_user.email)
     try:
         req = service.publish(requisition_id, by=by)
     except ValueError as exc:
@@ -985,11 +1211,10 @@ def _extract_structured_fields(text: str) -> dict:
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes."""
     try:
-        import fitz
-        extracted_text = ""
-        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            for page in doc:
-                extracted_text += page.get_text("text")
+        from pypdf import PdfReader
+        import io
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        extracted_text = "\n".join(page.extract_text() or "" for page in reader.pages)
         return extracted_text
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
@@ -1008,13 +1233,13 @@ def _extract_docx_text(docx_bytes: bytes) -> str:
 
 # --- static UI / health ------------------------------------------------------
 @app.get("/", include_in_schema=False)
-@app.get("/api", include_in_schema=False)
 def index(request: Request) -> Any:
-    # If the requested path or query was for health/docs
     p = str(request.url)
     if "/health" in p:
         return health()
-    return FileResponse(Path(__file__).parent / "index.html")
+    if (Path(__file__).parent / "index.html").exists():
+        return FileResponse(Path(__file__).parent / "index.html")
+    return {"status": "online"}
 
 
 @app.get("/health")

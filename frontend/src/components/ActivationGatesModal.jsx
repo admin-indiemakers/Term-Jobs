@@ -98,12 +98,18 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
       });
 
       // Step 2: Activate Work Order after gates are cleared
-      await request(`/api/onboarding/${encodeURIComponent(candidateId)}/activate-work-order`, {
+      const activateRes = await request(`/api/onboarding/${encodeURIComponent(candidateId)}/activate-work-order`, {
         method: 'POST',
         token,
       });
 
-      if (onSuccess) onSuccess();
+      const woNum =
+        activateRes?.work_order_number ||
+        onboardingData?.work_order_number ||
+        candidate.work_order_number ||
+        `WO-2026-${candidateId.replace('SDC-', '').replace('SDC -', '').slice(0, 4).toUpperCase()}`;
+
+      if (onSuccess) onSuccess({ ...activateRes, work_order_number: woNum, candidate_id: candidateId });
       onClose();
     } catch (err) {
       console.error('Failed to activate work order:', err);
@@ -117,7 +123,12 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
   const blockingGates = gates.filter((g) => g.type === 'blocking');
   const blockingUncleared = blockingGates.filter((g) => g.status !== 'cleared');
   const blockingOpenCount = blockingUncleared.length;
-  const isReadyToActivate = blockingOpenCount === 0 && gates.length > 0;
+  const isReadyToActivate = blockingOpenCount === 0;
+  const isActivated = onboardingData?.activation_status === 'activated' || candidate?.work_order_status === 'ACTIVE';
+  const effectiveWoNumber =
+    onboardingData?.work_order_number ||
+    candidate?.work_order_number ||
+    `WO-2026-${candidateId.replace('SDC-', '').replace('SDC -', '').slice(0, 4).toUpperCase()}`;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4" onClick={onClose}>
@@ -130,13 +141,17 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h2 className="text-[1.3rem] font-bold text-[#1a1a1a]">Activation gates</h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-[#fef3c7] text-[#d97706]">
-                Pending onboarding
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
+                  isActivated ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#fef3c7] text-[#d97706]'
+                }`}
+              >
+                {isActivated ? 'Work Order Activated' : 'Pending onboarding'}
               </span>
             </div>
-            <div className="text-[0.82rem] font-medium text-[#70706b] flex items-center gap-1.5 flex-wrap">
-              <span className="font-mono font-semibold text-[#1a1a1a]">
-                {onboardingData?.work_order_number || `WO-${candidateId.slice(0, 6).toUpperCase()}`}
+            <div className="text-[0.82rem] font-medium text-[#70706b] flex items-center gap-2 flex-wrap">
+              <span className="font-mono font-bold text-[#166534] bg-[#dcfce7] px-2 py-0.5 rounded-md border border-[#bbf7d0]">
+                Work Order: {effectiveWoNumber}
               </span>
               <span>•</span>
               <span>{candidateName}</span>

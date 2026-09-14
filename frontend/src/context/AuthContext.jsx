@@ -24,9 +24,11 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(
     async (email, password) => {
+      const cleanEmail = email ? String(email).trim() : '';
+      const cleanPassword = password ? String(password).trim() : '';
       const data = await request('/api/auth/login', { 
         method: 'POST', 
-        body: { email, password } 
+        body: { email: cleanEmail, username: cleanEmail, password: cleanPassword } 
       });
       applySession(data.access_token, data.user);
       return data.user;
@@ -52,7 +54,11 @@ export function AuthProvider({ children }) {
       return;
     }
     let cancelled = false;
-    request('/api/auth/me', { token })
+    const maxTimer = setTimeout(() => {
+      if (!cancelled) setInitializing(false);
+    }, 3500);
+
+    request('/api/auth/me', { token, timeout: 5000 })
       .then((data) => {
         if (!cancelled) setUser(data);
       })
@@ -60,10 +66,13 @@ export function AuthProvider({ children }) {
         if (!cancelled) logout();
       })
       .finally(() => {
+        clearTimeout(maxTimer);
         if (!cancelled) setInitializing(false);
       });
+
     return () => {
       cancelled = true;
+      clearTimeout(maxTimer);
     };
   }, [token, logout]);
 

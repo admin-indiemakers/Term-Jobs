@@ -2,12 +2,15 @@ import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
+import SEOHead from '../components/SEOHead';
 
 function Mark() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-      <path d="M12 3l7 4v5c0 4.5-3 8.2-7 9-4-.8-7-4.5-7-9V7z" />
-    </svg>
+    <img
+      src="/logo.png"
+      alt="TermJobs Logo"
+      className="h-8 w-8 object-contain rounded-md"
+    />
   );
 }
 
@@ -25,7 +28,7 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/" replace />;
+  if (user) return <Navigate to="/dashboard" replace />;
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -39,9 +42,9 @@ export default function AuthPage() {
 
     try {
       await login(formData.email, formData.password);
-      navigate('/');
+      navigate('/dashboard');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
+      setError(err?.message || 'Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -49,6 +52,11 @@ export default function AuthPage() {
 
   return (
     <div className="clp">
+      <SEOHead
+        title="Sign In | Term Jobs Workforce Portal"
+        description="Sign in to your Term Jobs portal to manage contractor requisitions, talent screening, and automated workforce billing."
+        canonicalUrl="https://termjobs.vercel.app/login"
+      />
       <div className="clp-aurora" />
       <div className="clp-grid" />
 

@@ -34,9 +34,12 @@ def make_checkpointer():
 
     Persists graph checkpoints in Mongo so interrupted flows (intake questions,
     approval checkpoints) survive server restarts. Falls back to an in-memory
-    checkpointer when running against a mock/offline DB (tests).
+    checkpointer when running in serverless environments or offline tests.
     """
     try:
+        import os
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            return MemorySaver()
         return MongoDBSaver(
             _mongo_client_fn(),
             db_name=settings.mongo_db_name,
@@ -45,6 +48,7 @@ def make_checkpointer():
         )
     except Exception:  # noqa: BLE001 - tests run without a live Mongo client
         return MemorySaver()
+
 
 
 class AgentState(TypedDict, total=False):
@@ -370,6 +374,18 @@ def build_graph(llm: LLMClient, session_factory, checkpointer=None):
             data["experience"] = prefill["experience"]
         if not data.get("headcount") and prefill.get("headcount"):
             data["headcount"] = prefill["headcount"]
+        v_limit = (
+            prefill.get("vendor_candidate_limit")
+            or prefill.get("candidate_limit")
+            or data.get("vendor_candidate_limit")
+            or data.get("headcount")
+            or prefill.get("headcount")
+            or 1
+        )
+        try:
+            data["vendor_candidate_limit"] = int(v_limit)
+        except (ValueError, TypeError):
+            data["vendor_candidate_limit"] = 1
         if not data.get("certifications") and prefill.get("certifications"):
             data["certifications"] = prefill["certifications"]
 

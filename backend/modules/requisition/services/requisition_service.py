@@ -351,7 +351,25 @@ class RequisitionService:
                     "missing_skills": state.get("missing_skills") or [],
                 }
             if state.get("structured_role"):
-                req.structured_role = state["structured_role"]
+                sr = dict(state["structured_role"])
+                prefill = dict((req.intake_meta or {}).get("prefill") or {})
+                v_lim = (
+                    _num(prefill.get("vendor_candidate_limit"))
+                    or _num(prefill.get("candidate_limit"))
+                    or _num(prefill.get("max_candidates_per_vendor"))
+                    or _num(sr.get("vendor_candidate_limit"))
+                    or _num(req.vendor_candidate_limit)
+                    or _num(sr.get("headcount"))
+                    or 1
+                )
+                try:
+                    v_lim_int = int(v_lim)
+                except (ValueError, TypeError):
+                    v_lim_int = 1
+                sr["vendor_candidate_limit"] = v_lim_int
+                state["structured_role"] = sr
+                req.structured_role = sr
+                req.vendor_candidate_limit = v_lim_int
             if state.get("jd_markdown"):
                 req.generated_jd_markdown = state["jd_markdown"]
             session.commit()

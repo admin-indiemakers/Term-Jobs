@@ -8,7 +8,6 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [candidateLimit, setCandidateLimit] = useState(3);
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -21,7 +20,6 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
       setName(userAccount.name || '');
       setEmail(userAccount.email || '');
       setPassword('');
-      setCandidateLimit(userAccount.candidate_limit ?? 3);
       setError('');
       setSuccess('');
     }
@@ -49,14 +47,6 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
           throw new Error('Password must be at least 4 characters');
         }
         payload.password = password.trim();
-      }
-
-      if (isVendor) {
-        const limitNum = parseInt(candidateLimit, 10);
-        if (isNaN(limitNum) || limitNum < 1) {
-          throw new Error('Candidate submission limit must be at least 1');
-        }
-        payload.candidate_limit = limitNum;
       }
 
       await request(`/api/auth/users/${userAccount.id}`, {
@@ -189,27 +179,6 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
               Only fill this in if you want to update the user's login password.
             </p>
           </div>
-
-          {/* Candidate Limit (Vendor Only) */}
-          {isVendor && (
-            <div>
-              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                Candidate Submission Limit *
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                required
-                value={candidateLimit}
-                onChange={(e) => setCandidateLimit(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-              />
-              <p className="text-[10px] text-gray-400 mt-1">
-                Maximum candidates this vendor recruiter can submit per requisition.
-              </p>
-            </div>
-          )}
 
           {/* Footer Actions */}
           <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">

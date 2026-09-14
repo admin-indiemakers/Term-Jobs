@@ -213,7 +213,7 @@ export default function CandidateOnboarding() {
   };
 
   if (!user) return <Navigate to="/candidate/login" replace />;
-  if (user.role !== 'Candidate') return <Navigate to="/" replace />;
+  if (user.role !== 'Candidate') return <Navigate to="/dashboard" replace />;
 
   const categoryLabels = {
     equipment: { label: 'Equipment', icon: Laptop },

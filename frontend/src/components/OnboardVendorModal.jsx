@@ -13,7 +13,6 @@ const EMPTY_FORM = {
   name: '',
   email: '',
   password: '',
-  candidate_limit: 3,
 };
 
 export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
@@ -47,10 +46,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
       if (!value) errs[name] = 'Password is required';
       else if (value.length < 4) errs[name] = 'Password must be at least 4 characters';
     }
-    if (name === 'candidate_limit') {
-      const num = parseInt(value, 10);
-      if (isNaN(num) || num < 1) errs[name] = 'Limit must be at least 1';
-    }
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -72,10 +67,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
       errs.password = 'Password is required';
     } else if (form.password.length < 4) {
       errs.password = 'Password must be at least 4 characters';
-    }
-    const limitNum = parseInt(form.candidate_limit, 10);
-    if (isNaN(limitNum) || limitNum < 1) {
-      errs.candidate_limit = 'Limit must be at least 1';
     }
     if (nameStatus === 'taken') {
       errs.vendor_name = 'This vendor name already exists';
@@ -171,7 +162,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
           password: form.password,
           role: 'Recruiter',
           tenant_id: tenant.id,
-          candidate_limit: parseInt(form.candidate_limit, 10) || 3,
         },
       });
 
@@ -469,29 +459,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
                 </div>
                 {fieldErrors.password && (
                   <p className="text-[11px] text-red-500 mt-1">{fieldErrors.password}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Submission Limit
-                </label>
-                <input
-                  type="number"
-                  name="candidate_limit"
-                  min={1}
-                  value={form.candidate_limit}
-                  onChange={handleInput}
-                  placeholder="3"
-                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all ${
-                    fieldErrors.candidate_limit ? 'border-red-400 bg-red-50/20' : 'border-gray-200'
-                  }`}
-                />
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Max candidates per requisition (default 3).
-                </p>
-                {fieldErrors.candidate_limit && (
-                  <p className="text-[11px] text-red-500 mt-1">{fieldErrors.candidate_limit}</p>
                 )}
               </div>
             </div>

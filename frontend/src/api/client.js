@@ -1,14 +1,29 @@
 const getApiBaseUrl = () => {
+  // 1. If explicit backend URL is provided via environment variables (e.g. Vercel backend URL), prioritize it
+  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+    const trimmed = envUrl.trim().replace(/\/+$/, '');
+    // If running on a remote public domain, do not accidentally use localhost
+    if (typeof window !== 'undefined') {
+      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!isLocal && (trimmed.includes('localhost') || trimmed.includes('127.0.0.1'))) {
+        return window.location.origin;
+      }
+    }
+    return trimmed;
+  }
+
+  // 2. Browser runtime checks
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     // Always route to local backend when running on localhost
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`;
     }
+    // When accessing via ngrok or Vercel rewrite proxy
+    return window.location.origin;
   }
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
-  }
+
   return 'http://localhost:8000';
 };
 
@@ -22,47 +37,90 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, { method = 'GET', body, token, timeout = 180000 } = {}) {
+export async function request(path, { method = 'GET', body, data: requestData, token, timeout = 180000 } = {}) {
+  const payloadBody = body !== undefined ? body : requestData;
+  const fullUrl = `${API_BASE_URL}${path}`;
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
+
   const headers = { 'Content-Type': 'application/json' };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+
+  console.log(`🚀 [API REQUEST] ${method} ${fullUrl}`, {
+    origin: currentOrigin,
+    apiBaseUrl: API_BASE_URL,
+    path,
+    method,
+    headers,
+    body: payloadBody !== undefined ? payloadBody : null,
+  });
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
 
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(fullUrl, {
       method,
       headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: payloadBody !== undefined ? JSON.stringify(payloadBody) : undefined,
       signal: controller.signal,
     });
   } catch (err) {
+    console.error(`❌ [API NETWORK / CORS ERROR] ${method} ${fullUrl}`, {
+      origin: currentOrigin,
+      apiBaseUrl: API_BASE_URL,
+      path,
+      errorMessage: err?.message || err,
+      errorName: err?.name,
+      hint: 'If status shows net::ERR_FAILED / CORS blocked, check origin headers and preflight handling.',
+    });
+
     if (err && err.name === 'AbortError') {
       throw new ApiError('Request timed out. Please try again.', 0);
     }
-    throw new ApiError('Unable to reach the server. Is the backend running?', 0);
+    throw new ApiError('Unable to reach the server. Is the backend running or is CORS blocking the request?', 0);
   } finally {
     clearTimeout(timer);
   }
 
   if (response.status === 204) {
+    console.log(`✅ [API RESPONSE 204 No Content] ${method} ${fullUrl}`);
     return null;
   }
 
-  let data = null;
+  let resData = null;
   try {
-    data = await response.json();
-  } catch {
-    data = null;
+    resData = await response.json();
+  } catch (parseErr) {
+    console.warn(`⚠️ [API JSON PARSE WARNING] Unable to parse response as JSON for ${fullUrl}:`, parseErr);
+    resData = null;
   }
 
   if (!response.ok) {
-    const detail = data && typeof data.detail === 'string' ? data.detail : `Request failed (${response.status})`;
+    let detail = `Request failed (${response.status})`;
+    if (resData) {
+      if (typeof resData.detail === 'string') {
+        detail = resData.detail;
+      } else if (Array.isArray(resData.detail) && resData.detail.length > 0) {
+        detail = resData.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join(', ');
+      } else if (typeof resData.message === 'string') {
+        detail = resData.message;
+      } else if (typeof resData.error === 'string') {
+        detail = resData.error;
+      }
+    }
+
+    console.error(`🚨 [API ERROR RESPONSE ${response.status}] ${method} ${fullUrl}`, {
+      status: response.status,
+      detail,
+      responseBody: resData,
+    });
+
     throw new ApiError(detail, response.status);
   }
 
-  return data;
+  console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${method} ${fullUrl}`, resData);
+  return resData;
 }

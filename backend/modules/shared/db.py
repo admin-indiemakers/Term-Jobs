@@ -35,16 +35,34 @@ _client: "MongoClient | None" = None
 def _get_client() -> "MongoClient":
     global _client
     if _client is None:
-        _client = MongoClient(
-            settings.mongodb_url,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=10000,
-            maxPoolSize=50,
-            minPoolSize=10,
-            retryWrites=True,
-            retryReads=True,
-            tls=True,
-        )
+        import os
+        url = settings.mongodb_url
+        kwargs = {
+            "serverSelectionTimeoutMS": 5000,
+            "connectTimeoutMS": 10000,
+            "retryWrites": True,
+            "retryReads": True,
+        }
+        # In serverless environment like Vercel, use minPoolSize=0
+        if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
+            kwargs["maxPoolSize"] = 10
+            kwargs["minPoolSize"] = 0
+        else:
+            kwargs["maxPoolSize"] = 50
+            kwargs["minPoolSize"] = 10
+
+        # Enable TLS only for cloud/SRV connections
+        if "mongodb+srv://" in url or "tls=true" in url.lower() or "ssl=true" in url.lower():
+            kwargs["tls"] = True
+            try:
+                import certifi
+                kwargs["tlsCAFile"] = certifi.where()
+            except ImportError:
+                pass
+
+        masked_url = url.split("@")[-1] if "@" in url else url
+        print(f"[MONGO CLIENT INIT] Connecting to MongoDB: {masked_url} (TLS={kwargs.get('tls', False)})")
+        _client = MongoClient(url, **kwargs)
     return _client
 
 
@@ -63,14 +81,45 @@ db = _LazyDB()
 
 
 class Criterion:
-    """A filter expression produced by ``Model.column == value``."""
+    """A filter expression produced by ``Model.column == value`` or composite expressions."""
 
-    __slots__ = ("name", "op", "value")
+    __slots__ = ("name", "op", "value", "clauses")
 
-    def __init__(self, name: str, op: str, value) -> None:
+    def __init__(self, name: str = "", op: str = "$eq", value=None, clauses: list | None = None) -> None:
         self.name = name
         self.op = op
         self.value = value
+        self.clauses = clauses or []
+
+    def __or__(self, other: "Criterion") -> "Criterion":
+        if not isinstance(other, Criterion):
+            return NotImplemented
+        left_clauses = self.clauses if self.op == "$or" else [self]
+        right_clauses = other.clauses if other.op == "$or" else [other]
+        return Criterion(op="$or", clauses=left_clauses + right_clauses)
+
+    def __and__(self, other: "Criterion") -> "Criterion":
+        if not isinstance(other, Criterion):
+            return NotImplemented
+        left_clauses = self.clauses if self.op == "$and" else [self]
+        right_clauses = other.clauses if other.op == "$and" else [other]
+        return Criterion(op="$and", clauses=left_clauses + right_clauses)
+
+    def to_mongo(self) -> dict:
+        if self.op == "$or":
+            return {"$or": [c.to_mongo() for c in self.clauses]}
+        elif self.op == "$and":
+            return {"$and": [c.to_mongo() for c in self.clauses]}
+        elif self.op == "$ne":
+            return {self.name: {"$ne": self.value}}
+        elif self.op == "$in":
+            return {self.name: {"$in": self.value if self.value else [""]}}
+        elif self.op == "$regex":
+            return {self.name: {"$regex": self.value, "$options": "i"}}
+        elif self.op == "$eq":
+            return {self.name: self.value}
+        else:
+            return {self.name: self.value}
 
 
 class Sort:
@@ -116,6 +165,14 @@ class Column:
 
     def in_(self, values) -> Criterion:
         return Criterion(self.name, "$in", list(values))
+
+    def ilike(self, pattern: str) -> Criterion:
+        regex_pattern = pattern.replace("%", ".*")
+        return Criterion(self.name, "$regex", regex_pattern)
+
+    def like(self, pattern: str) -> Criterion:
+        regex_pattern = pattern.replace("%", ".*")
+        return Criterion(self.name, "$regex", regex_pattern)
 
     def asc(self) -> Sort:
         return Sort(self.name, ASCENDING)
@@ -163,12 +220,19 @@ class Query:
     def filter(self, *criteria, **kwargs) -> "Query":
         for c in criteria:
             if isinstance(c, Criterion):
-                if c.op == "$ne":
-                    self._filters[c.name] = {"$ne": c.value}
-                elif c.op == "$in":
-                    self._filters[c.name] = {"$in": c.value if c.value else [""]}
+                mongo_cond = c.to_mongo()
+                if "$or" in mongo_cond:
+                    if "$or" in self._filters:
+                        self._filters["$or"].extend(mongo_cond["$or"])
+                    else:
+                        self._filters["$or"] = mongo_cond["$or"]
+                elif "$and" in mongo_cond:
+                    if "$and" in self._filters:
+                        self._filters["$and"].extend(mongo_cond["$and"])
+                    else:
+                        self._filters["$and"] = mongo_cond["$and"]
                 else:
-                    self._filters[c.name] = c.value
+                    self._filters.update(mongo_cond)
             elif isinstance(c, dict):
                 self._filters.update(c)
         for name, value in kwargs.items():
@@ -311,6 +375,7 @@ def init_db() -> None:
     db["notifications"].create_index("user_id")
     db["notifications"].create_index("created_at")
     db["onboarding_checklists"].create_index("candidate_id")
+    db["onboarding_checklists"].create_index("workorder_id")
 
     # Candidate submissions compound indexes for high-throughput queries
     try:
@@ -319,6 +384,7 @@ def init_db() -> None:
         db["candidate_submissions"].create_index([("vendor_name", 1), ("status", 1)])
         db["candidate_submissions"].create_index("status")
         db["candidate_submissions"].create_index("id", unique=True)
+        db["candidate_submissions"].create_index("workorder_id")
         db["candidates"].create_index([("tenant_id", 1), ("created_at", -1)])
         db["candidates"].create_index("id")
     except Exception as e:
@@ -332,12 +398,16 @@ def init_db() -> None:
         print(f"Index creation warning for screening_cache: {e}")
     try:
         db["work_orders"].create_index("candidate_id")
+        db["work_orders"].create_index("workorder_id")
         db["work_orders"].create_index("work_order_number")
         db["work_orders"].create_index("status")
         db["timesheets"].create_index([("candidate_id", 1), ("week_start_date", -1)])
+        db["timesheets"].create_index([("workorder_id", 1), ("week_start_date", -1)])
         db["timesheets"].create_index("work_order_id")
         db["timesheets"].create_index("status")
         db["attendance_sheets"].create_index([("candidate_id", 1), ("month_year", -1)])
+        db["attendance_sheets"].create_index([("workorder_id", 1), ("month_year", -1)])
+        db["users"].create_index("workorder_id")
     except Exception as e:
         print(f"Index creation warning for candidate_portal collections: {e}")
 

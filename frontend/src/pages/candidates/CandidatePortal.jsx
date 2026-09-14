@@ -247,7 +247,7 @@ export default function CandidatePortal() {
   }, [showNotifications]);
 
   if (!user) return <Navigate to="/candidate/login" replace />;
-  if (user.role !== 'Candidate') return <Navigate to="/" replace />;
+  if (user.role !== 'Candidate') return <Navigate to="/dashboard" replace />;
 
   const candidateId = user.candidate_id || '';
 
@@ -679,39 +679,82 @@ export default function CandidatePortal() {
     }
   };
 
+  // Work order and pending approval flags
+  const woRaw = data?.work_order;
+  const isPendingApproval = Boolean(
+    woRaw?.status === 'Pending Director Approval' ||
+    woRaw?.status === 'Pending Approval' ||
+    woRaw?.agreement_status === 'Pending Director Approval' ||
+    woRaw?.agreement_status === 'Pending Approval' ||
+    woRaw?.status === 'Revision Requested' ||
+    woRaw?.status === 'Rejected' ||
+    woRaw?.status === 'DRAFT' ||
+    woRaw?.is_active === false
+  );
+
+  // Determine if work order is active / approved by director
+  const isWorkOrderActive = Boolean(
+    data?.has_assignment &&
+    woRaw &&
+    !isPendingApproval &&
+    (
+      woRaw.status === 'ACTIVE' ||
+      woRaw.status === 'ACTIVATED' ||
+      woRaw.status === 'Approved' ||
+      woRaw.agreement_status === 'Approved' ||
+      woRaw.status === 'ACCEPTED'
+    )
+  );
+
   // Dynamic candidate & work order fallback
   const cand = data?.candidate || {
-    name: user.name || 'Sreehari P S',
-    first_name: (user.name || 'Sreehari').split(' ')[0],
-    id: candidateId || 'BEAR-c7a70f8a',
-    company: 'Bearitt',
-    vendor: 'Bridgeon',
-    requisition_title: 'DevOps Engineer',
-    status: 'ACTIVE',
-    active_badge: 'Active candidate',
+    name: user.name || 'Candidate',
+    first_name: (user.name || 'Candidate').split(' ')[0],
+    id: candidateId || '',
+    company: 'Company',
+    vendor: 'Vendor',
+    requisition_title: 'Contractor Role',
+    status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING_APPROVAL' : 'PENDING_ACTIVATION',
+    active_badge: isWorkOrderActive ? 'Active candidate' : isPendingApproval ? 'Pending Approval' : 'Pending Activation',
   };
 
   const wo = data?.work_order || {
-    work_order_number: 'WO-2026-00124',
-    requisition_title: cand.requisition_title || 'DevOps Engineer',
-    company_name: cand.company || 'Bearitt',
-    vendor_name: cand.vendor || 'Bridgeon',
-    start_date: '25 Aug 2026',
-    end_date: '25 Feb 2027',
+    work_order_number: isPendingApproval ? (woRaw?.work_order_number || 'Pending Approval') : 'Pending Activation',
+    requisition_title: cand.requisition_title || 'Contractor Role',
+    company_name: cand.company || 'Company',
+    vendor_name: cand.vendor || 'Vendor',
+    start_date: isWorkOrderActive ? (woRaw?.start_date || '25 Aug 2026') : 'Awaiting Approval',
+    end_date: isWorkOrderActive ? (woRaw?.end_date || '25 Feb 2027') : '—',
     weekly_hours: 40,
     location: 'Bangalore',
     work_arrangement: 'Hybrid',
-    reporting_manager: 'Arun Deshpande',
-    overtime_policy: 'Allowed',
+    reporting_manager: 'Hiring Manager',
+    overtime_policy: 'Standard Cap',
     engagement_type: 'Contractor',
-    status: 'ACTIVE',
+    status: isWorkOrderActive ? 'ACTIVE' : isPendingApproval ? 'PENDING APPROVAL' : 'PENDING',
   };
 
-  const kpis = data?.kpi_stats || {
-    assignment: { label: 'ASSIGNMENT', value: 'ACTIVE', subtext: wo.work_order_number || 'WO-2026-00124' },
-    this_week: { label: 'THIS WEEK', value: `${calculatedMetrics.totalHours}h`, subtext: 'of 40 expected' },
-    timesheet: { label: 'TIMESHEET', value: '1', subtext: 'action required' },
-    expenses: { label: 'EXPENSES', value: `₹${expenseTotalThisMonth.toLocaleString()}`, subtext: 'this month' },
+  const kpis = {
+    assignment: {
+      label: 'ASSIGNMENT',
+      value: isWorkOrderActive ? (wo.status || 'ACTIVE') : isPendingApproval ? 'PENDING APPROVAL' : 'PENDING ACTIVATION',
+      subtext: wo.work_order_number || (isPendingApproval ? 'Awaiting Director approval' : 'Awaiting activation'),
+    },
+    this_week: {
+      label: 'THIS WEEK',
+      value: isWorkOrderActive ? `${calculatedMetrics.totalHours}h` : '0h',
+      subtext: isWorkOrderActive ? 'of 40 expected' : isPendingApproval ? 'Locked until approval' : 'Locked until activation',
+    },
+    timesheet: {
+      label: 'TIMESHEET',
+      value: isWorkOrderActive ? (data?.kpi_stats?.timesheet?.value || '1') : '0',
+      subtext: isWorkOrderActive ? 'action required' : isPendingApproval ? 'Locked until approval' : 'Locked until activation',
+    },
+    expenses: {
+      label: 'EXPENSES',
+      value: isWorkOrderActive ? `₹${expenseTotalThisMonth.toLocaleString()}` : '₹0',
+      subtext: isWorkOrderActive ? 'this month' : isPendingApproval ? 'Locked until approval' : 'Locked until activation',
+    },
   };
 
   const timeCap = data?.time_capture || {
@@ -739,9 +782,141 @@ export default function CandidatePortal() {
     ai_desc: 'Use your work pattern and previous entries to prepare your timesheet. You only confirm the final hours.',
   };
 
-  const radius = 32;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (timeCap.progress_pct / 100) * circumference;
+  const renderLockedFeatureCard = (featureTitle, featureDesc) => (
+    <div
+      style={{
+        backgroundColor: '#FFFFFF',
+        borderRadius: 22,
+        border: '1px solid #E2E2DC',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+      }}
+      className="p-10 md:p-14 text-center space-y-4 max-w-xl mx-auto my-8 animate-in fade-in duration-200"
+    >
+      <div className="w-16 h-16 rounded-2xl bg-[#FEF3C7] text-[#D97706] flex items-center justify-center mx-auto shadow-xs border border-[#FDE68A]">
+        <Lock size={28} />
+      </div>
+      <div className="space-y-2">
+        <h3 className="text-[1.3rem] font-extrabold text-[#0A0A0A] tracking-tight">
+          {featureTitle} Feature Locked
+        </h3>
+        <p className="text-[13px] text-[#737373] font-medium leading-relaxed max-w-md mx-auto">
+          {featureDesc ||
+            'Your Work Order is awaiting activation by your Hiring Manager. Once all verification gates are cleared and the Work Order is activated, this section will unlock automatically.'}
+        </p>
+      </div>
+      <div className="pt-2">
+        <button
+          onClick={() => setActiveTab('dashboard')}
+          className="px-5 py-2.5 bg-[#0A0A0A] text-white text-[12px] font-bold rounded-xl hover:bg-[#262626] transition shadow-xs cursor-pointer"
+        >
+          Return to Dashboard Overview
+        </button>
+      </div>
+    </div>
+  );
+
+  // Participant Rail Card: Who's Involved
+  const renderWhosInvolvedCard = () => {
+    const candidateName = cand.name || user.name || 'Arjun M';
+    const candParts = candidateName.trim().split(/\s+/);
+    const candidateInitials = candParts.length >= 2 
+      ? (candParts[0][0] + candParts[1][0]).toUpperCase()
+      : candidateName.slice(0, 2).toUpperCase();
+
+    const vendorName = wo.vendor_name || cand.vendor || 'Acme Systems';
+    const vendParts = vendorName.trim().split(/\s+/);
+    const vendorInitials = vendParts.length >= 2
+      ? (vendParts[0][0] + vendParts[1][0]).toUpperCase()
+      : vendorName.slice(0, 2).toUpperCase();
+
+    const managerName = wo.reporting_manager || 'Rohith';
+    const mgrParts = managerName.trim().split(/\s+/);
+    const managerInitials = mgrParts.length >= 2
+      ? (mgrParts[0][0] + mgrParts[1][0]).toUpperCase()
+      : managerName.slice(0, 2).toUpperCase();
+
+    const procurementName = wo.procurement_name || 'ADITI';
+    const procParts = procurementName.trim().split(/\s+/);
+    const procurementInitials = procParts.length >= 2
+      ? (procParts[0][0] + procParts[1][0]).toUpperCase()
+      : procurementName.slice(0, 2).toUpperCase();
+
+    return (
+      <div
+        style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 22,
+          border: '1px solid #E2E2DC',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+        }}
+        className="p-5 space-y-3.5 bento-card-hover"
+      >
+        <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+          WHO'S INVOLVED
+        </div>
+
+        <div className="space-y-2">
+          {/* Procurement */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl bg-gray-50/80 border border-gray-100">
+            <div className="w-8 h-8 rounded-full bg-blue-900 text-white font-bold text-[11px] flex items-center justify-center shrink-0 shadow-xs">
+              {procurementInitials || 'AD'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{procurementName.toUpperCase()}</div>
+              <div className="text-[10px] text-gray-500">Procurement</div>
+            </div>
+            <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
+          </div>
+
+          {/* Recruiter / Vendor */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              {vendorInitials || 'AC'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{vendorName}</div>
+              <div className="text-[10px] text-gray-500 truncate">{vendorName}</div>
+            </div>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">EXT</span>
+          </div>
+
+          {/* Candidate / Contract Worker */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              {candidateInitials || 'AR'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{candidateName.toUpperCase()}</div>
+              <div className="text-[10px] text-gray-500">Contract worker</div>
+            </div>
+            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800">EXT</span>
+          </div>
+
+          {/* Hiring Manager */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              {managerInitials || 'RO'}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">{managerName.toUpperCase()}</div>
+              <div className="text-[10px] text-gray-500">Hiring manager</div>
+            </div>
+          </div>
+
+          {/* Finance / AP */}
+          <div className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-gray-100 text-gray-700 font-bold text-[11px] flex items-center justify-center shrink-0">
+              FA
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-bold text-xs text-gray-900 truncate">Finance / AP</div>
+              <div className="text-[10px] text-gray-500">Commercial Sign-Off</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -1279,25 +1454,117 @@ export default function CandidatePortal() {
 
               <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="max-w-2xl">
-                  <div className="text-[10.5px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1.5">
-                    Term Jobs · Active Assignment
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="text-[10.5px] font-bold tracking-[0.14em] uppercase text-[#8A8A85]">
+                      Term Jobs · Candidate Portal
+                    </span>
+                    <span
+                      className={`px-2.5 py-0.5 rounded-full text-[10.5px] font-bold ${
+                        isWorkOrderActive 
+                          ? 'bg-[#ECFDF5] text-[#059669]' 
+                          : 'bg-[#FEF3C7] text-[#D97706]'
+                      }`}
+                    >
+                      {isWorkOrderActive 
+                        ? 'Active Work Order' 
+                        : isPendingApproval 
+                          ? 'Work Order Pending Director Approval' 
+                          : 'Work Order Pending Activation'}
+                    </span>
                   </div>
                   <h1 className="text-[1.75rem] md:text-[2rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
                     {greeting}, {cand.first_name || cand.name}.
                   </h1>
                   <p className="text-[13px] md:text-[13.5px] text-[#5A5A57] mt-2 font-normal leading-relaxed max-w-xl">
-                    Your onboarding is complete. Your assignment start date is {wo.start_date || '25 Aug 2026'}, and your workspace is ready.
+                    {isWorkOrderActive
+                      ? `Your onboarding is complete. Your assignment start date is ${wo.start_date || '25 Aug 2026'}, and your workspace is ready.`
+                      : isPendingApproval
+                        ? `Your Master Service Agreement has been submitted to Company Director for approval. Timesheets, attendance, and expense submissions will unlock automatically once approved.`
+                        : 'Your candidate account is set up. Timesheets, attendance, and expense submissions will unlock automatically once your Hiring Manager activates your Work Order.'}
                   </p>
                 </div>
 
                 <div className="text-left md:text-right shrink-0">
-                  <div className="text-[1.45rem] md:text-[1.6rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                    {wo.start_date || '25 Aug 2026'}
+                  <div className="text-[1.4rem] md:text-[1.55rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                    {isWorkOrderActive ? (wo.start_date || '25 Aug 2026') : (wo.work_order_number || 'Pending')}
                   </div>
-                  <div className="text-[12px] text-[#737373] font-medium mt-0.5">Assignment starts</div>
+                  <div className="text-[12px] text-[#737373] font-medium mt-0.5">
+                    {isWorkOrderActive ? 'Assignment starts' : 'Work Order Status'}
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* PENDING ACTIVATION / APPROVAL STEPPER CARD */}
+            {!isWorkOrderActive && (
+              <div
+                style={{
+                  backgroundColor: '#FEF3C7',
+                  borderRadius: 22,
+                  border: '1px solid #FDE68A',
+                  boxShadow: '0 2px 10px rgba(217, 119, 6, 0.05)',
+                }}
+                className="p-6 md:p-7 space-y-4 animate-in fade-in duration-200"
+              >
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-2xl bg-[#D97706] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Lock size={20} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-[1.1rem] font-extrabold text-[#92400E] tracking-tight">
+                          {isPendingApproval ? 'Work Order Pending Director Approval' : 'Work Order Awaiting Activation'}
+                        </h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#D97706] text-white uppercase tracking-wider">
+                          {isPendingApproval ? 'Awaiting Director Sign-off' : 'Awaiting Manager Clearance'}
+                        </span>
+                      </div>
+                      <p className="text-[12.5px] text-[#B45309] mt-1 font-medium leading-relaxed max-w-2xl">
+                        {isPendingApproval
+                          ? `The Master Service Agreement for Work Order ${wo?.work_order_number || ''} was submitted to the Company Director for executive approval. Tracking features and timesheets will unlock immediately once approved.`
+                          : `Your onboarding verification checklist is being finalized. Dashboard tracking features will activate as soon as your Hiring Manager verifies clearance and activates Work Order ${wo?.work_order_number || ''}.`}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Progress Stepper */}
+                <div className="pt-3 border-t border-[#FDE68A]/60 grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#10B981] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">1. Candidate Account</div>
+                      <div className="text-[11px] text-[#059669] font-semibold">Setup Complete</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#10B981] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">2. Verification Gates</div>
+                      <div className="text-[11px] text-[#059669] font-semibold">Cleared & Verified</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white/80 rounded-xl p-3.5 border border-[#FDE68A] flex items-center gap-3">
+                    <div className="w-7 h-7 rounded-full bg-[#F59E0B] text-white flex items-center justify-center text-[12px] font-bold shrink-0">
+                      3
+                    </div>
+                    <div>
+                      <div className="text-[12px] font-bold text-[#0A0A0A]">3. Director Approval</div>
+                      <div className="text-[11px] text-[#D97706] font-semibold">
+                        {isPendingApproval ? 'Pending Executive Approval' : 'Pending Manager Sign-off'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 2. FOUR KPI STAT CARDS (WITH LEFT-TO-RIGHT EXPANDING UNDERLINE HOVER EFFECT) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
@@ -1612,8 +1879,11 @@ export default function CandidatePortal() {
                 </div>
               </div>
 
-              {/* Right Column (ASSIGNMENT SNAPSHOT ONLY) */}
+              {/* Right Column (WHO'S INVOLVED & ASSIGNMENT SNAPSHOT) */}
               <div className="lg:col-span-4 space-y-4">
+                {/* WHO'S INVOLVED */}
+                {renderWhosInvolvedCard()}
+
                 <div
                   style={{
                     backgroundColor: '#FFFFFF',
@@ -1691,6 +1961,14 @@ export default function CandidatePortal() {
             VIEW 2: TIMESHEET (MONOCHROME TIME FLOW ARCHITECTURE)
            ======================================================== */}
         {activeTab === 'timesheet' && (
+          !isWorkOrderActive ? (
+            renderLockedFeatureCard(
+              'Timesheet',
+              isPendingApproval
+                ? `Timesheet logging and hour submissions will unlock automatically once Company Director approves Master Service Agreement for Work Order ${wo?.work_order_number || ''}.`
+                : `Timesheet logging and hour submissions are locked until your Hiring Manager clears verification gates and activates Work Order ${wo?.work_order_number || ''}.`
+            )
+          ) : (
           <div className="space-y-4 pb-6">
             {/* Page Header */}
             <div className="flex items-center justify-between pt-1">
@@ -2253,7 +2531,7 @@ export default function CandidatePortal() {
               </div>
             )}
           </div>
-        )}
+        ))}
 
         {/* ========================================================
             VIEW 3: MY ASSIGNMENT (TIMELINE & BENTO BLOCKS)
@@ -2280,123 +2558,132 @@ export default function CandidatePortal() {
               </div>
             </div>
 
-            {/* Main Assignment Bento Card */}
-            <div
-              style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 22,
-                border: '1px solid #E2E2DC',
-                boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
-              }}
-              className="p-6 md:p-8 space-y-6 bento-card-hover"
-            >
-              {/* Header Title & Work Order */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-[#F2F2EE]">
-                <div>
-                  <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">
-                    CONTRACT SPECIFICATION
-                  </div>
-                  <h2 className="text-[1.5rem] font-extrabold text-[#0A0A0A] tracking-tight">
-                    {wo.requisition_title || 'DevOps Engineer'}
-                  </h2>
-                  <div className="text-[13px] text-[#737373] font-medium mt-0.5">
-                    {wo.company_name || 'Bearitt'} · {wo.vendor_name || 'Bridgeon'}
-                  </div>
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              {/* Main Assignment Bento Card (8 cols) */}
+              <div className="lg:col-span-8 space-y-4">
+                <div
+                  style={{
+                    backgroundColor: '#FFFFFF',
+                    borderRadius: 22,
+                    border: '1px solid #E2E2DC',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+                  }}
+                  className="p-6 md:p-8 space-y-6 bento-card-hover"
+                >
+                  {/* Header Title & Work Order */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-5 border-b border-[#F2F2EE]">
+                    <div>
+                      <div className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#8A8A85] mb-1">
+                        CONTRACT SPECIFICATION
+                      </div>
+                      <h2 className="text-[1.5rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                        {wo.requisition_title || 'DevOps Engineer'}
+                      </h2>
+                      <div className="text-[13px] text-[#737373] font-medium mt-0.5">
+                        {wo.company_name || 'Bearitt'} · {wo.vendor_name || 'Bridgeon'}
+                      </div>
+                    </div>
 
-                <div className="flex items-center gap-2 bg-[#F9F9F7] px-3.5 py-2 rounded-xl border border-[#E5E5E0] self-start sm:self-auto">
-                  <FileText size={15} className="text-[#8A8A85]" />
-                  <span className="text-[12px] font-mono font-bold text-[#0A0A0A]">{wo.work_order_number}</span>
+                    <div className="flex items-center gap-2 bg-[#F9F9F7] px-3.5 py-2 rounded-xl border border-[#E5E5E0] self-start sm:self-auto">
+                      <FileText size={15} className="text-[#8A8A85]" />
+                      <span className="text-[12px] font-mono font-bold text-[#0A0A0A]">{wo.work_order_number}</span>
+                    </div>
+                  </div>
+
+                  {/* Assignment Timeline Bar */}
+                  <div className="bg-[#FBFBFA] p-5 rounded-2xl border border-[#E5E5E0] space-y-3">
+                    <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8A8A85]">
+                      <span>Timeline</span>
+                      <span>Active Contract Duration</span>
+                    </div>
+
+                    {/* Timeline visual bar */}
+                    <div className="relative pt-2 pb-1">
+                      <div className="w-full h-2.5 bg-[#E5E5E0] rounded-full overflow-hidden flex">
+                        <div className="h-full bg-[#0A0A0A] rounded-full transition-all duration-700" style={{ width: '15%' }} />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between text-[12px] pt-1">
+                      <div>
+                        <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
+                        <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
+                      </div>
+                      <div className="text-center">
+                        <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
+                        <span className="font-bold text-[#0A0A0A] px-2 py-0.5 bg-[#FFFFFF] border border-[#E2E2DC] rounded-md text-[11px]">Active</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
+                        <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bento Grid: 8 Parameters */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Building size={12} /> Client Company
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.company_name}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <UserCheck2 size={12} /> Staffing Vendor
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.vendor_name}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Compass size={12} /> Work Arrangement
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.work_arrangement}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <User size={12} /> Reporting Manager
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.reporting_manager}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Clock size={12} /> Weekly Expectation
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.weekly_hours}h / week</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Shield size={12} /> Overtime Policy
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.overtime_policy}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <Briefcase size={12} /> Engagement Type
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.engagement_type}</div>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                        <MapPin size={12} /> Location
+                      </div>
+                      <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.location}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Assignment Timeline Bar */}
-              <div className="bg-[#FBFBFA] p-5 rounded-2xl border border-[#E5E5E0] space-y-3">
-                <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wider text-[#8A8A85]">
-                  <span>Timeline</span>
-                  <span>Active Contract Duration</span>
-                </div>
-
-                {/* Timeline visual bar */}
-                <div className="relative pt-2 pb-1">
-                  <div className="w-full h-2.5 bg-[#E5E5E0] rounded-full overflow-hidden flex">
-                    <div className="h-full bg-[#0A0A0A] rounded-full transition-all duration-700" style={{ width: '15%' }} />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between text-[12px] pt-1">
-                  <div>
-                    <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Start Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.start_date || '25 Aug 2026'}</span>
-                  </div>
-                  <div className="text-center">
-                    <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">Current State</span>
-                    <span className="font-bold text-[#0A0A0A] px-2 py-0.5 bg-[#FFFFFF] border border-[#E2E2DC] rounded-md text-[11px]">Active</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[#8A8A85] block text-[10px] uppercase font-bold">End Date</span>
-                    <span className="font-bold text-[#0A0A0A]">{wo.end_date || '25 Feb 2027'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bento Grid: 8 Parameters */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Building size={12} /> Client Company
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.company_name}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <UserCheck2 size={12} /> Staffing Vendor
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.vendor_name}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Compass size={12} /> Work Arrangement
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.work_arrangement}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <User size={12} /> Reporting Manager
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.reporting_manager}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Clock size={12} /> Weekly Expectation
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.weekly_hours}h / week</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Shield size={12} /> Overtime Policy
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.overtime_policy}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <Briefcase size={12} /> Engagement Type
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.engagement_type}</div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-[#FFFFFF] border border-[#E5E5E0] space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
-                    <MapPin size={12} /> Location
-                  </div>
-                  <div className="text-[13.5px] font-bold text-[#0A0A0A]">{wo.location}</div>
-                </div>
+              {/* Right Rail: 4 cols */}
+              <div className="lg:col-span-4 space-y-4">
+                {renderWhosInvolvedCard()}
               </div>
             </div>
           </div>
@@ -2406,6 +2693,14 @@ export default function CandidatePortal() {
             VIEW 4: ATTENDANCE (MONOCHROME BENTO & CALENDAR DATA)
            ======================================================== */}
         {activeTab === 'attendance' && (
+          !isWorkOrderActive ? (
+            renderLockedFeatureCard(
+              'Attendance',
+              isPendingApproval
+                ? 'Attendance tracking and monthly payable day records will unlock once your Work Order is approved by the Company Director.'
+                : 'Attendance tracking and monthly payable day records are locked until your Work Order is activated.'
+            )
+          ) : (
           <div className="space-y-4 pb-6">
             {/* Page Header */}
             <div className="flex items-center justify-between pt-1">
@@ -2597,12 +2892,20 @@ export default function CandidatePortal() {
               </div>
             </div>
           </div>
-        )}
+        ))}
 
         {/* ========================================================
             VIEW 5: EXPENSES (MONOCHROME BENTO FORM & SUMMARY)
            ======================================================== */}
         {activeTab === 'expenses' && (
+          !isWorkOrderActive ? (
+            renderLockedFeatureCard(
+              'Expenses',
+              isPendingApproval
+                ? 'Expense submissions will unlock as soon as your Work Order is approved by the Company Director.'
+                : 'Expense submissions are locked until your Work Order is activated by your Hiring Manager.'
+            )
+          ) : (
           <div className="space-y-4 pb-6">
             {/* Page Header with + New Expense button */}
             <div className="flex items-center justify-between pt-1">
@@ -2915,7 +3218,7 @@ export default function CandidatePortal() {
               </div>
             </div>
           </div>
-        )}
+        ))}
       </main>
 
       {/* ========================================================

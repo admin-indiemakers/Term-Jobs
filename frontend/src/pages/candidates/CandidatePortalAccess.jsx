@@ -1,23 +1,21 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
-import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key, FileText, ExternalLink, ClipboardCheck, Lock } from 'lucide-react';
-import ActivationGatesModal from '../../components/ActivationGatesModal';
+import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key, Edit3, Lock, X } from 'lucide-react';
 
 export default function CandidatePortalAccess() {
   const { token, user } = useAuth();
-  const navigate = useNavigate();
 
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [creatingId, setCreatingId] = useState(null);
-  const [creatingWOId, setCreatingWOId] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(null);
-  const [selectedGatesCandidate, setSelectedGatesCandidate] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(null);
   const [createForm, setCreateForm] = useState({ email: '', name: '', password: '1234' });
+  const [editForm, setEditForm] = useState({ email: '', name: '', password: '', is_active: true });
   const [successMsg, setSuccessMsg] = useState('');
 
   const loadCandidates = async () => {
@@ -53,7 +51,7 @@ export default function CandidatePortalAccess() {
 
   const handleCreateAccess = (cand) => {
     setCreateForm({
-      email: cand.candidate_email || '',
+      email: cand.candidate_email || cand.portal_user_email || '',
       name: cand.candidate_name || '',
       password: '1234',
     });
@@ -62,6 +60,7 @@ export default function CandidatePortalAccess() {
 
   const handleSaveAccess = async () => {
     if (!showCreateModal) return;
+<<<<<<< HEAD
     setError('');
     const emailVal = (createForm.email || '').trim();
     if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
@@ -69,21 +68,33 @@ export default function CandidatePortalAccess() {
       return;
     }
     setCreatingId(showCreateModal.candidate_id);
+=======
+    const cid = showCreateModal.candidate_id || showCreateModal.workorder_id;
+    setCreatingId(cid);
+>>>>>>> 0f29a3773f43ff81d3644ed167fc5186e65dd00b
     setSuccessMsg('');
+    setError('');
     try {
       await request('/api/auth/portal-users', {
         method: 'POST',
         token,
         body: {
+<<<<<<< HEAD
           candidate_id: showCreateModal.candidate_id,
           email: emailVal,
           name: createForm.name,
+=======
+          candidate_id: cid,
+          workorder_id: cid,
+          email: createForm.email.trim().toLowerCase(),
+          name: createForm.name.trim(),
+>>>>>>> 0f29a3773f43ff81d3644ed167fc5186e65dd00b
           password: createForm.password,
         },
       });
       setSuccessMsg(`Portal access created for ${createForm.name}. Candidate can now login with ${emailVal}`);
       setShowCreateModal(null);
-      loadCandidates();
+      await loadCandidates();
     } catch (err) {
       console.error('Failed to create portal access:', err);
       setError(err.message || 'Failed to create portal access');
@@ -92,28 +103,57 @@ export default function CandidatePortalAccess() {
     }
   };
 
-  const handleCreateWorkOrder = async (cand) => {
-    setCreatingWOId(cand.candidate_id);
-    setError('');
+  const handleEditAccess = (cand) => {
+    setEditForm({
+      email: cand.candidate_email || cand.portal_user_email || '',
+      name: cand.candidate_name || '',
+      password: '',
+      is_active: cand.has_portal_access !== false,
+    });
+    setShowEditModal(cand);
+  };
+
+  const handleUpdateAccess = async () => {
+    if (!showEditModal) return;
+    const cid = showEditModal.candidate_id || showEditModal.workorder_id;
+    setUpdatingId(cid);
     setSuccessMsg('');
+    setError('');
     try {
-      const res = await request('/api/workforce/work-orders', {
-        method: 'POST',
-        token,
-        body: {
-          candidate_id: cand.candidate_id,
-          candidate_name: cand.candidate_name,
-          requisition_title: cand.requisition_title,
-          vendor_name: cand.vendor_name,
-        },
-      });
-      setSuccessMsg(res.message || `Work order created for ${cand.candidate_name}`);
+      if (showEditModal.portal_user_id) {
+        const body = {
+          name: editForm.name.trim(),
+          email: editForm.email.trim().toLowerCase(),
+          is_active: editForm.is_active,
+          candidate_id: cid,
+        };
+        if (editForm.password) body.password = editForm.password;
+        await request(`/api/auth/portal-users/${showEditModal.portal_user_id}`, {
+          method: 'PUT',
+          token,
+          body,
+        });
+      } else {
+        await request('/api/auth/portal-users', {
+          method: 'POST',
+          token,
+          body: {
+            candidate_id: cid,
+            workorder_id: cid,
+            email: editForm.email.trim().toLowerCase(),
+            name: editForm.name.trim(),
+            password: editForm.password || '1234',
+          },
+        });
+      }
+      setSuccessMsg(`Portal credentials updated for ${editForm.name}.`);
+      setShowEditModal(null);
       await loadCandidates();
     } catch (err) {
-      console.error('Failed to create work order:', err);
-      setError(err.message || 'Failed to create work order');
+      console.error('Failed to update portal access:', err);
+      setError(err.message || 'Failed to update portal access');
     } finally {
-      setCreatingWOId(null);
+      setUpdatingId(null);
     }
   };
 
@@ -220,10 +260,9 @@ export default function CandidatePortalAccess() {
               <thead>
                 <tr className="text-[0.68rem] tracking-[0.14em] text-[#8a8a85] uppercase font-semibold">
                   <th className="px-5 py-3 font-semibold">Candidate</th>
-                  <th className="px-5 py-3 font-semibold">Candidate ID</th>
+                  <th className="px-5 py-3 font-semibold">Work Order ID</th>
                   <th className="px-5 py-3 font-semibold">Requisition & Role</th>
                   <th className="px-5 py-3 font-semibold">Portal Status</th>
-                  <th className="px-5 py-3 font-semibold">Work Order</th>
                   <th className="px-5 py-3 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
@@ -236,14 +275,13 @@ export default function CandidatePortalAccess() {
                         <td className="px-5 py-3"><div className="h-4 w-32 bg-gray-200 rounded" /></td>
                         <td className="px-5 py-3"><div className="h-4 w-40 bg-gray-200 rounded" /></td>
                         <td className="px-5 py-3"><div className="h-5 w-20 bg-gray-200 rounded-full" /></td>
-                        <td className="px-5 py-3"><div className="h-5 w-24 bg-gray-200 rounded-full" /></td>
                         <td className="px-5 py-3"><div className="h-8 w-28 bg-gray-200 rounded-lg ml-auto" /></td>
                       </tr>
                     ))}
                   </>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-12 text-center">
+                    <td colSpan={5} className="px-5 py-12 text-center">
                       <AlertCircle size={28} className="mx-auto mb-2 text-[#d1d5cc]" />
                       <div className="text-[0.92rem] text-[#8a8a85] font-medium">
                         {candidates.length === 0 ? 'No accepted candidates found' : 'No candidates match your search'}
@@ -252,7 +290,7 @@ export default function CandidatePortalAccess() {
                   </tr>
                 ) : (
                   filtered.map((cand) => (
-                    <tr key={cand.candidate_id} className="border-t border-[#f0f0ec] hover:bg-[#fafaf8] transition">
+                    <tr key={cand.workorder_id || cand.candidate_id} className="border-t border-[#f0f0ec] hover:bg-[#fafaf8] transition">
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center text-[0.72rem] font-bold">
@@ -265,80 +303,33 @@ export default function CandidatePortalAccess() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="text-[0.78rem] font-mono text-[#8a8a85]">{cand.candidate_id}</span>
+                        <span className="text-[0.78rem] font-mono text-[#8a8a85]">{cand.workorder_id || cand.candidate_id}</span>
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="text-[0.85rem] font-medium text-[#1a1a1a]">{cand.requisition_title || '—'}</div>
                         <div className="text-[0.72rem] text-[#8a8a85]">{cand.vendor_name || '—'}</div>
                       </td>
                       <td className="px-5 py-3.5">{statusBadge(cand.has_portal_access)}</td>
-                      <td className="px-5 py-3.5">
-                        {cand.has_work_order ? (
-                          <div className="flex items-center gap-2">
-                            <span
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide cursor-pointer hover:opacity-85 transition"
-                              style={{
-                                backgroundColor: cand.work_order_status === 'ACTIVE' ? '#dcfce7' : '#fef3c7',
-                                color: cand.work_order_status === 'ACTIVE' ? '#166534' : '#92400e',
-                              }}
-                              onClick={() => setSelectedGatesCandidate(cand)}
-                              title="Click to view activation gates & verification checklist"
-                            >
-                              <FileText size={11} />
-                              {cand.work_order_status || 'Created'}
-                            </span>
-                            {cand.work_order_number && (
-                              <span className="text-[11px] font-mono text-[#8a8a85] font-semibold">{cand.work_order_number}</span>
-                            )}
-                          </div>
-                        ) : cand.has_portal_access ? (
-                          <button
-                            onClick={() => setSelectedGatesCandidate(cand)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-medium hover:bg-[#262626] transition shadow-2xs"
-                          >
-                            <ClipboardCheck size={13} />
-                            Verification & Work Order
-                          </button>
-                        ) : (
-                          <span
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#f3f4f6] text-[#9ca3af] text-[0.78rem] font-medium border border-[#e5e7eb] cursor-not-allowed"
-                            title="Create candidate portal login account first to unlock Work Order generation"
-                          >
-                            <Lock size={12} />
-                            Portal Access Required
-                          </span>
-                        )}
-                      </td>
                       <td className="px-5 py-3.5 text-right">
                         {!cand.has_portal_access ? (
                           <button
                             onClick={() => handleCreateAccess(cand)}
-                            disabled={creatingId === cand.candidate_id}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-medium hover:bg-[#262626] transition disabled:opacity-50 shadow-2xs"
+                            disabled={creatingId === (cand.candidate_id || cand.workorder_id)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-bold hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer shadow-2xs"
                           >
                             <UserPlus size={13} />
-                            {creatingId === cand.candidate_id ? 'Creating...' : 'Create Access'}
+                            {creatingId === (cand.candidate_id || cand.workorder_id) ? 'Creating...' : 'Create Access'}
                           </button>
                         ) : (
                           <div className="flex items-center justify-end gap-2">
-                            <span className="text-[12px] text-[#8a8a85]">Active ✓</span>
-                            {!cand.has_work_order ? (
-                              <button
-                                onClick={() => setSelectedGatesCandidate(cand)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[11px] font-medium hover:bg-[#262626] transition"
-                              >
-                                <FileText size={11} />
-                                + Assign Work Order
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => setSelectedGatesCandidate(cand)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#f7f7f5] border border-[#eaeae6] text-[11px] font-medium text-[#1a1a1a] hover:bg-[#efefec] transition"
-                              >
-                                <ExternalLink size={11} />
-                                Gates & Onboarding
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleEditAccess(cand)}
+                              disabled={updatingId === (cand.candidate_id || cand.workorder_id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#eaeae6] text-[#1a1a1a] text-[0.78rem] font-bold hover:bg-[#f7f7f5] hover:border-[#1a1a1a] transition cursor-pointer shadow-2xs disabled:opacity-50"
+                            >
+                              <Edit3 size={13} />
+                              Edit Access
+                            </button>
                           </div>
                         )}
                       </td>
@@ -351,15 +342,20 @@ export default function CandidatePortalAccess() {
         </div>
       </div>
 
-      {/* Create Access Modal */}
+      {/* 1. Create Access Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowCreateModal(null)}>
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
-            <div>
-              <h2 className="text-[1.1rem] font-bold text-[#1a1a1a]">Create Portal Access</h2>
-              <p className="text-[0.82rem] text-[#8a8a85] mt-1">
-                Create login credentials for <strong>{showCreateModal.candidate_name}</strong>
-              </p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-[1.1rem] font-bold text-[#1a1a1a]">Create Portal Access</h2>
+                <p className="text-[0.82rem] text-[#8a8a85] mt-0.5">
+                  Create login credentials for <strong>{showCreateModal.candidate_name}</strong>
+                </p>
+              </div>
+              <button onClick={() => setShowCreateModal(null)} className="text-[#8a8a85] hover:text-[#1a1a1a] p-1">
+                <X size={16} />
+              </button>
             </div>
 
             <div className="space-y-3">
@@ -389,37 +385,106 @@ export default function CandidatePortalAccess() {
                   onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
                   className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
                 />
-                <p className="text-[0.72rem] text-[#8a8a85] mt-1">Candidate will use this to login to the portal</p>
+                <p className="text-[0.72rem] text-[#8a8a85] mt-1">Candidate will use this password to log in to the portal</p>
               </div>
             </div>
 
             <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setShowCreateModal(null)}
-                className="flex-1 px-4 py-2.5 text-[0.82rem] font-medium text-[#8a8a85] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg hover:bg-[#efefec] transition"
+                className="flex-1 px-4 py-2.5 text-[0.82rem] font-medium text-[#8a8a85] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg hover:bg-[#efefec] transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveAccess}
-                disabled={!createForm.email || !createForm.name || !createForm.password || creatingId === showCreateModal.candidate_id}
-                className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50"
+                disabled={!createForm.email || !createForm.name || !createForm.password || creatingId === (showCreateModal.candidate_id || showCreateModal.workorder_id)}
+                className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer"
               >
-                {creatingId === showCreateModal.candidate_id ? 'Creating...' : 'Create Access'}
+                {creatingId === (showCreateModal.candidate_id || showCreateModal.workorder_id) ? 'Creating...' : 'Create Access'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Activation Gates Verification Checklist Modal */}
-      {selectedGatesCandidate && (
-        <ActivationGatesModal
-          candidate={selectedGatesCandidate}
-          token={token}
-          onClose={() => setSelectedGatesCandidate(null)}
-          onSuccess={loadCandidates}
-        />
+      {/* 2. Edit Access Modal */}
+      {showEditModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowEditModal(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-[1.1rem] font-bold text-[#1a1a1a]">Edit Portal Access</h2>
+                <p className="text-[0.82rem] text-[#8a8a85] mt-0.5">
+                  Update credentials for <strong>{showEditModal.candidate_name}</strong>
+                </p>
+              </div>
+              <button onClick={() => setShowEditModal(null)} className="text-[#8a8a85] hover:text-[#1a1a1a] p-1">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Email</label>
+                <input
+                  type="email"
+                  value={editForm.email}
+                  onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                />
+              </div>
+              <div>
+                <label className="block text-[0.75rem] font-semibold text-[#8a8a85] uppercase tracking-wide mb-1">Reset Password (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="Enter new password to reset"
+                  value={editForm.password}
+                  onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
+                  className="w-full px-3 py-2 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a]"
+                />
+                <p className="text-[0.72rem] text-[#8a8a85] mt-1">Leave blank to keep existing password unchanged</p>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-[0.82rem] font-medium text-[#1a1a1a]">Account Status</span>
+                <button
+                  type="button"
+                  onClick={() => setEditForm(f => ({ ...f, is_active: !f.is_active }))}
+                  className={`px-3 py-1 text-[0.75rem] font-bold rounded-full transition cursor-pointer ${
+                    editForm.is_active ? 'bg-[#dcfce7] text-[#166534]' : 'bg-[#fee2e2] text-[#991b1b]'
+                  }`}
+                >
+                  {editForm.is_active ? 'Active' : 'Suspended'}
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setShowEditModal(null)}
+                className="flex-1 px-4 py-2.5 text-[0.82rem] font-medium text-[#8a8a85] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg hover:bg-[#efefec] transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateAccess}
+                disabled={!editForm.email || !editForm.name || updatingId === (showEditModal.candidate_id || showEditModal.workorder_id)}
+                className="flex-1 px-4 py-2.5 text-[0.82rem] font-bold text-white bg-[#1a1a1a] rounded-lg hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer"
+              >
+                {updatingId === (showEditModal.candidate_id || showEditModal.workorder_id) ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

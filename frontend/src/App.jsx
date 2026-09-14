@@ -1,9 +1,13 @@
 import InterviewRequests from './pages/recruiter/InterviewRequests';
+import VendorAgreements from './pages/recruiter/VendorAgreements';
+import VendorBilling from './pages/recruiter/VendorBilling';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import AuthPage from './pages/AuthPage';
 import JoinHiringManager from './pages/JoinHiringManager';
 import JoinDirector from './pages/JoinDirector';
+import JoinProcurement from './pages/JoinProcurement';
+import JoinFinance from './pages/JoinFinance';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
 import CandidateLogin from './pages/CandidateLogin';
@@ -13,9 +17,17 @@ import HiringManagerDashboard from './pages/HiringManagerDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import ManageDirectors from './pages/ManageDirectors';
 import ManageHiringManagers from './pages/ManageHiringManagers';
+import ManageProcurement from './pages/ManageProcurement';
+import ManageFinance from './pages/ManageFinance';
 import ManagePartnerVendors from './pages/ManagePartnerVendors';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
+import AiChat from './pages/AiChat';
+import HiringManagerChat from './pages/HiringManagerChat';
 import DirectorDashboard from './pages/DirectorDashboard';
+import DirectorAgreements from './pages/DirectorAgreements';
+import DirectorWorkOrders from './pages/DirectorWorkOrders';
+import ProcurementDashboard from './pages/ProcurementDashboard';
+import FinanceDashboard from './pages/FinanceDashboard';
 import OnboardCompany from './pages/OnboardCompany';
 import OnboardVendor from './pages/OnboardVendor';
 import ConfigureCompanyAccounts from './pages/ConfigureCompanyAccounts';
@@ -36,9 +48,15 @@ import ReportedIssues from './pages/candidates/ReportedIssues';
 import TeamOverview from './pages/workforce/TeamOverview';
 import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
+import Workers from './pages/workforce/Workers';
+import LandingPage from './pages/LandingPage';
 import Archives from './pages/Archives';
 import AdminAccounts from './pages/AdminAccounts';
-
+import { CandidateInterviewLogin } from './interview/pages/CandidateInterviewLogin';
+import { CandidateInterviewPortal } from './interview/pages/CandidateInterviewPortal';
+import { InterviewerStaffPortal } from './interview/pages/InterviewerStaffPortal';
+import { InterviewMeetingRoomPage } from './interview/pages/InterviewMeetingRoomPage';
+import { HiringManagerInterviews } from './interview/pages/HiringManagerInterviews';
 
 function FullScreenLoader() {
   return (
@@ -62,6 +80,8 @@ function HomeRedirect() {
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
+  if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
+  if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
   if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
@@ -73,6 +93,8 @@ function DashboardIndex() {
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
+  if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
+  if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
   if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
@@ -87,10 +109,19 @@ export default function App() {
         <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
         <Route path="/join/director" element={<JoinDirector />} />
         <Route path="/invite/director" element={<JoinDirector />} />
+        <Route path="/join/procurement" element={<JoinProcurement />} />
+        <Route path="/invite/procurement" element={<JoinProcurement />} />
+        <Route path="/join/finance" element={<JoinFinance />} />
+        <Route path="/invite/finance" element={<JoinFinance />} />
         <Route path="/candidate/login" element={<CandidateLogin />} />
+        <Route path="/interview/login" element={<CandidateInterviewLogin />} />
+        <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
+        <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
+        <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
+        <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
-        <Route path="/" element={<HomeRedirect />} />
+        <Route path="/" element={<LandingPage />} />
         <Route
           path="/dashboard"
           element={
@@ -100,7 +131,9 @@ export default function App() {
           }
         >
           <Route index element={<DashboardIndex />} />
+          <Route path="interviews" element={<HiringManagerInterviews />} />
           <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+          <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
           <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
@@ -118,20 +151,33 @@ export default function App() {
           <Route path="workforce/team" element={<TeamOverview />} />
           <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
           <Route path="workforce/expenses" element={<ExpenseApprovals />} />
+          <Route path="workforce/workers" element={<Workers />} />
+          <Route path="recruiter/workers" element={<Workers />} />
           <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
           <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
           <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
           <Route path="recruiter/shortlisted" element={<RecruiterDashboard view="shortlisted" />} />
           <Route path="recruiter/interviews" element={<InterviewRequests />} />
+          <Route path="recruiter/agreements" element={<VendorAgreements />} />
           <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
           <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
+          <Route path="recruiter/billing" element={<VendorBilling />} />
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/directors" element={<ManageDirectors />} />
           <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
+          <Route path="admin/procurement" element={<ManageProcurement />} />
+          <Route path="admin/finance" element={<ManageFinance />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="admin/vendors" element={<ManagePartnerVendors />} />
           <Route path="director" element={<DirectorDashboard />} />
+          <Route path="director/work-orders" element={<DirectorWorkOrders />} />
+          <Route path="director/agreements" element={<DirectorAgreements />} />
+          <Route path="procurement" element={<ProcurementDashboard />} />
+          <Route path="procurement/sow" element={<ProcurementDashboard />} />
+          <Route path="finance" element={<FinanceDashboard />} />
+          <Route path="finance/work-orders" element={<FinanceDashboard />} />
           <Route path="superadmin" element={<SuperAdminDashboard />} />
+          <Route path="superadmin/chat" element={<AiChat />} />
           <Route path="superadmin/onboard" element={<OnboardCompany />} />
           <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
           <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
