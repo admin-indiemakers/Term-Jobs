@@ -265,6 +265,20 @@ export default function ShortlistedCandidates() {
         >
           Onboarding
         </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/interviews')}
+          style={{
+            backgroundColor: '#FFFFFF',
+            color: '#0A0A0A',
+            borderRadius: 9999,
+            border: '1px solid #E2E2DC',
+          }}
+          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
+        >
+          Interviews
+        </button>
       </div>
 
       {/* ========================================================

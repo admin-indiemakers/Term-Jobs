@@ -282,6 +282,7 @@ export default function DashboardLayout() {
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
+        { to: '/dashboard/interviews', label: 'Interviews', end: false, section: 'CANDIDATES', icon: Icons.Interviews },
         { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
         { to: '/dashboard/candidates/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATES', icon: Icons.PortalAccess },
         { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
@@ -632,6 +633,13 @@ export default function DashboardLayout() {
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
                 Partner Vendors
+              </NavLink>
+              <NavLink
+                to="/dashboard/interviews"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Interviews
               </NavLink>
             </>
           ) : (

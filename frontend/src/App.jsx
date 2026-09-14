@@ -52,6 +52,11 @@ import Workers from './pages/workforce/Workers';
 import LandingPage from './pages/LandingPage';
 import Archives from './pages/Archives';
 import AdminAccounts from './pages/AdminAccounts';
+import { CandidateInterviewLogin } from './interview/pages/CandidateInterviewLogin';
+import { CandidateInterviewPortal } from './interview/pages/CandidateInterviewPortal';
+import { InterviewerStaffPortal } from './interview/pages/InterviewerStaffPortal';
+import { InterviewMeetingRoomPage } from './interview/pages/InterviewMeetingRoomPage';
+import { HiringManagerInterviews } from './interview/pages/HiringManagerInterviews';
 
 function FullScreenLoader() {
   return (
@@ -109,6 +114,11 @@ export default function App() {
         <Route path="/join/finance" element={<JoinFinance />} />
         <Route path="/invite/finance" element={<JoinFinance />} />
         <Route path="/candidate/login" element={<CandidateLogin />} />
+        <Route path="/interview/login" element={<CandidateInterviewLogin />} />
+        <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
+        <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
+        <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
+        <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
         <Route path="/" element={<LandingPage />} />
@@ -121,6 +131,7 @@ export default function App() {
           }
         >
           <Route index element={<DashboardIndex />} />
+          <Route path="interviews" element={<HiringManagerInterviews />} />
           <Route path="hiring-manager" element={<HiringManagerDashboard />} />
           <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
           <Route path="requisitions" element={<RequisitionOverview />} />

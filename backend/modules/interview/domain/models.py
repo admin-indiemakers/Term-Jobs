@@ -118,3 +118,144 @@ class VendorConfirmRequest(BaseModel):
 class CompleteInterviewRequest(BaseModel):
     final_remark: str = ""
     decision: str = "Accepted"  # "Accepted" | "Rejected"
+
+
+class InterviewRound(Model):
+    __tablename__ = "interview_rounds"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "tenant_id": "",
+        "requisition_id": "",
+        "requisition_title": "",
+        "candidate_submission_id": "",
+        "candidate_name": "",
+        "candidate_email": "",
+        "round_number": 1,
+        "round_name": "Technical Round 1",
+        "round_type": "Technical",
+        "scheduled_date": "",
+        "scheduled_time": "",
+        "duration_minutes": 45,
+        "interviewer_name": "",
+        "interviewer_email": "",
+        "interviewer_role": "Interviewer",
+        "instructions": "",
+        "internal_notes": "",
+        "candidate_passcode": "",
+        "candidate_token": _uuid,
+        "interviewer_token": _uuid,
+        "room_id": "",
+        "status": "Scheduled",
+        "evaluation": dict,
+        "created_by": "",
+        "created_at": _utcnow,
+        "updated_at": _utcnow,
+    }
+
+    id = Column("id")
+    tenant_id = Column("tenant_id")
+    requisition_id = Column("requisition_id")
+    requisition_title = Column("requisition_title")
+    candidate_submission_id = Column("candidate_submission_id")
+    candidate_name = Column("candidate_name")
+    candidate_email = Column("candidate_email")
+    round_number = Column("round_number")
+    round_name = Column("round_name")
+    round_type = Column("round_type")
+    scheduled_date = Column("scheduled_date")
+    scheduled_time = Column("scheduled_time")
+    duration_minutes = Column("duration_minutes")
+    interviewer_name = Column("interviewer_name")
+    interviewer_email = Column("interviewer_email")
+    interviewer_role = Column("interviewer_role")
+    instructions = Column("instructions")
+    internal_notes = Column("internal_notes")
+    candidate_passcode = Column("candidate_passcode")
+    candidate_token = Column("candidate_token")
+    interviewer_token = Column("interviewer_token")
+    room_id = Column("room_id")
+    status = Column("status")
+    evaluation = Column("evaluation")
+    created_by = Column("created_by")
+    created_at = Column("created_at")
+    updated_at = Column("updated_at")
+
+
+class InterviewChatMessage(Model):
+    __tablename__ = "interview_messages"
+
+    _fields: ClassVar[dict[str, object]] = {
+        "id": _uuid,
+        "round_id": "",
+        "room_id": "",
+        "sender_name": "",
+        "sender_role": "candidate",
+        "sender_identity": "",
+        "message": "",
+        "created_at": _utcnow,
+    }
+
+    id = Column("id")
+    round_id = Column("round_id")
+    room_id = Column("room_id")
+    sender_name = Column("sender_name")
+    sender_role = Column("sender_role")
+    sender_identity = Column("sender_identity")
+    message = Column("message")
+    created_at = Column("created_at")
+
+
+class CreateInterviewRoundRequest(BaseModel):
+    requisition_id: str
+    requisition_title: Optional[str] = ""
+    candidate_submission_id: str
+    candidate_name: str
+    candidate_email: str
+    round_number: Optional[int] = None
+    round_name: str = "Technical Round 1"
+    round_type: Optional[str] = "Technical"
+    scheduled_date: str
+    scheduled_time: str
+    duration_minutes: Optional[int] = 45
+    interviewer_name: str
+    interviewer_email: str
+    interviewer_role: Optional[str] = "Interviewer"
+    instructions: Optional[str] = ""
+    internal_notes: Optional[str] = ""
+
+
+class CandidateLoginRequest(BaseModel):
+    email: str
+    passcode: Optional[str] = None
+    token: Optional[str] = None
+
+
+class SubmitEvaluationRequest(BaseModel):
+    result: str = "Yes"  # "Completed" | "Strong Yes" | "Yes" | "Maybe" | "No" | "No Show"
+    scores: Optional[Dict[str, Any]] = None  # { technical: 4, communication: 5, problem_solving: 4, culture: 4 }
+    strengths: Optional[str] = ""
+    weaknesses: Optional[str] = ""
+    notes: Optional[str] = ""
+    evaluator_name: Optional[str] = ""
+    evaluator_email: Optional[str] = ""
+
+
+class UpdateRoundStatusRequest(BaseModel):
+    status: str  # "Scheduled" | "In Progress" | "Completed" | "Cancelled" | "No Show"
+
+
+class LiveKitTokenRequest(BaseModel):
+    round_id: str
+    participant_name: str
+    participant_identity: Optional[str] = None
+    role: str = "candidate"  # "candidate" | "interviewer"
+
+
+class SendChatMessageRequest(BaseModel):
+    sender_name: str
+    sender_role: str = "candidate"
+    sender_identity: Optional[str] = None
+    message: str
+    message_id: Optional[str] = None
+
