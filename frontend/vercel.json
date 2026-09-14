@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://term-jobs-j8ja-seven.vercel.app/api/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
