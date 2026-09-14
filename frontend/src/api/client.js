@@ -1,4 +1,8 @@
 const getApiBaseUrl = () => {
+  const envUrl = import.meta.env?.VITE_API_URL || import.meta.env?.VITE_API_BASE_URL;
+  if (envUrl) {
+    return envUrl;
+  }
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     // Always route to local backend when running on localhost
@@ -7,9 +11,6 @@ const getApiBaseUrl = () => {
     }
     // When accessing via ngrok or external public URL, use the current origin so requests route through Vite proxy
     return window.location.origin;
-  }
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL;
   }
   return 'http://localhost:8000';
 };
