@@ -15,4 +15,4 @@ rapidfuzz>=3.9.0
 langgraph>=0.2.30
 langgraph-checkpoint-mongodb>=0.4.0
 certifi>=2024.2.2
-
+loguru>=0.7.3

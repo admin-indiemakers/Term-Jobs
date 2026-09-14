@@ -1211,11 +1211,10 @@ def _extract_structured_fields(text: str) -> dict:
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
     """Extract text from PDF bytes."""
     try:
-        import fitz
-        extracted_text = ""
-        with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-            for page in doc:
-                extracted_text += page.get_text("text")
+        from pypdf import PdfReader
+        import io
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        extracted_text = "\n".join(page.extract_text() or "" for page in reader.pages)
         return extracted_text
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
