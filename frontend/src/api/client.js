@@ -20,7 +20,11 @@ const getApiBaseUrl = () => {
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`;
     }
-    // When accessing via ngrok or Vercel rewrite proxy
+    // If running on a Vercel deployment and no custom env is set, connect directly to production backend
+    if (hostname.endsWith('.vercel.app') && !hostname.includes('term-jobs-j8ja-seven')) {
+      return 'https://term-jobs-j8ja-seven.vercel.app';
+    }
+    // When accessing via ngrok or rewrite proxy
     return window.location.origin;
   }
 
