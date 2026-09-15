@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
   Flag, Check, ArrowRight, AlertCircle, Laptop, BookOpen, CheckCircle2, RefreshCw,
-  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X
+  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X, LogOut, Clock
 } from 'lucide-react';
 import ActivationGatesModal from '../../components/ActivationGatesModal';
 
@@ -50,6 +50,13 @@ export default function OnboardingManagement() {
   // Activation Gates Modal State
   const [showGatesModal, setShowGatesModal] = useState(null);
   const [clearingGate, setClearingGate] = useState('');
+
+  // Offboarding Modal State
+  const [offboardingCandidate, setOffboardingCandidate] = useState(null);
+  const [offboardingData, setOffboardingData] = useState(null);
+  const [loadingOffboarding, setLoadingOffboarding] = useState(false);
+  const [savingOffboarding, setSavingOffboarding] = useState(false);
+  const [offboardingDocs, setOffboardingDocs] = useState({});
 
   // Time-aware greeting
   const greetingText = useMemo(() => {
@@ -288,6 +295,81 @@ export default function OnboardingManagement() {
       setError(err.message || 'Failed to save onboarding checklist.');
     } finally {
       setSavingSetup(false);
+    }
+  };
+
+  // Open Offboarding Modal (prepopulates from onboarding)
+  const handleOpenOffboarding = async (cand) => {
+    const id = cand.id || cand.candidate_id;
+    const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
+    setOffboardingCandidate(cand);
+    setLoadingOffboarding(true);
+    setError('');
+    try {
+      const res = await request(`/api/offboarding/${id}`, { token });
+      setOffboardingData(res);
+    } catch (err) {
+      console.warn('Offboarding fetch fallback:', err);
+      const existing = onboardingDocs[id] || onboardingDocs[candName.trim().toLowerCase()];
+      setOffboardingData({
+        candidate_id: id,
+        candidate_name: candName,
+        laptop_return_required: Boolean(existing?.laptop_required),
+        laptop_spec: existing?.laptop_spec || 'Standard build',
+        badge_return_required: Boolean(existing?.badge_required),
+        software_items: (existing?.software || DEFAULT_SOFTWARE).map((s) => ({
+          id: s.id,
+          label: `Revoke / Handover: ${s.label || s.name}`,
+          enabled: Boolean(s.enabled),
+        })),
+        handover_items: (existing?.training || DEFAULT_TRAINING).map((t) => ({
+          id: t.id,
+          label: `Knowledge Transfer: ${t.label || t.name}`,
+          enabled: true,
+        })),
+        custom_items: [
+          { id: 'ci_nda', label: 'Sign Final NDA & Exit Clearance Agreement', enabled: true },
+          { id: 'ci_files', label: 'Handover all code, documents, & credentials to team', enabled: true },
+        ],
+        notes: '',
+        status: 'not_started',
+      });
+    } finally {
+      setLoadingOffboarding(false);
+    }
+  };
+
+  // Initiate Offboarding & Send to Candidate
+  const handleInitiateOffboarding = async () => {
+    if (!offboardingCandidate || !offboardingData) return;
+    setSavingOffboarding(true);
+    const id = offboardingCandidate.id || offboardingCandidate.candidate_id;
+    try {
+      const payload = {
+        laptop_return_required: Boolean(offboardingData.laptop_return_required),
+        laptop_spec: offboardingData.laptop_spec || 'Standard build',
+        badge_return_required: Boolean(offboardingData.badge_return_required),
+        software_items: offboardingData.software_items || [],
+        handover_items: offboardingData.handover_items || [],
+        custom_items: offboardingData.custom_items || [],
+        notes: offboardingData.notes || '',
+      };
+      await request(`/api/offboarding/${id}/initiate`, {
+        method: 'POST',
+        token,
+        body: payload,
+      });
+      setSuccessInfo(`Offboarding initiated for ${offboardingCandidate.candidate_name || 'Candidate'}. Clearance checklist sent to candidate portal.`);
+      setOffboardingDocs((prev) => ({
+        ...prev,
+        [id]: { ...(prev[id] || {}), status: 'in_progress' },
+      }));
+      setOffboardingCandidate(null);
+      await loadData();
+    } catch (err) {
+      setError(err.message || 'Failed to initiate offboarding.');
+    } finally {
+      setSavingOffboarding(false);
     }
   };
 
@@ -752,6 +834,21 @@ export default function OnboardingManagement() {
                           <span>Generate Work Order</span>
                           <ArrowRight size={12} />
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenOffboarding(cand)}
+                          style={{
+                            backgroundColor: '#FEF2F2',
+                            color: '#DC2626',
+                            border: '1px solid #FECACA',
+                            borderRadius: 10,
+                          }}
+                          className="px-3 py-1 text-[11.5px] font-bold hover:bg-[#FEE2E2] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                          title="Initiate candidate offboarding & exit clearance"
+                        >
+                          <LogOut size={11} />
+                          <span>Offboard</span>
+                        </button>
                       </td>
                     </tr>
                   );
@@ -1003,6 +1100,248 @@ export default function OnboardingManagement() {
           onClose={() => setShowGatesModal(null)}
           onSuccess={loadData}
         />
+      )}
+
+      {/* ========================================================
+          8. OFFBOARDING SETUP & CLEARANCE MODAL
+         ======================================================== */}
+      {offboardingCandidate && offboardingData && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div
+            style={{
+              backgroundColor: '#FFFFFF',
+              borderRadius: 22,
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.18)',
+              maxWidth: 620,
+              width: '100%',
+            }}
+            className="p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]"
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-[#F2F2EE] pb-3.5 shrink-0">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 bg-[#FEF2F2] text-[#DC2626] text-[10.5px] font-extrabold rounded-md uppercase tracking-wider">
+                    Exit Clearance
+                  </span>
+                  <h3 className="text-[1.2rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                    Candidate Offboarding Setup
+                  </h3>
+                </div>
+                <p className="text-[12px] text-[#737373] font-medium mt-1">
+                  {offboardingCandidate.candidate_name || offboardingCandidate.name} • {offboardingCandidate.requisition_title || 'Contract Role'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOffboardingCandidate(null)}
+                className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Explanatory banner */}
+            <div className="p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl text-[12px] text-[#991B1B] font-medium flex items-start gap-2.5 shrink-0">
+              <Clock size={16} className="shrink-0 mt-0.5 text-[#DC2626]" />
+              <div>
+                <span className="font-bold">Workflow Guarantee: </span>
+                All onboarding fields are mirrored here for handover. When the candidate checks off all clearance items in their portal, their <strong>timesheet freezes immediately</strong>, followed by a <strong>48-hour access grace period</strong> before permanent deactivation and releasing the email.
+              </div>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="flex-1 space-y-4 overflow-y-auto custom-cand-scroll pr-1">
+              {/* 1. Equipment Return */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                  <Laptop size={13} />
+                  <span>1. HARDWARE & BADGE RETURN</span>
+                </div>
+                <div className="space-y-2">
+                  <label className="flex items-center justify-between p-3 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={offboardingData.laptop_return_required}
+                        onChange={(e) =>
+                          setOffboardingData({ ...offboardingData, laptop_return_required: e.target.checked })
+                        }
+                        className="rounded text-[#DC2626] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-[12.5px] font-semibold text-[#0A0A0A]">
+                        Laptop Return ({offboardingData.laptop_spec || 'Standard build'})
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-[#8A8A85] font-medium">Physical asset</span>
+                  </label>
+
+                  <label className="flex items-center justify-between p-3 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        checked={offboardingData.badge_return_required}
+                        onChange={(e) =>
+                          setOffboardingData({ ...offboardingData, badge_return_required: e.target.checked })
+                        }
+                        className="rounded text-[#DC2626] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-[12.5px] font-semibold text-[#0A0A0A]">
+                        Access Badge & Keycard Return
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-[#8A8A85] font-medium">Facility access</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 2. IT & Software Access Revocation */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                  <Shield size={13} />
+                  <span>2. SOFTWARE & SYSTEM ACCESS REVOCATION</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {(offboardingData.software_items || []).map((item, idx) => (
+                    <label
+                      key={item.id}
+                      className="flex items-center gap-2.5 p-2.5 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.enabled}
+                        onChange={(e) => {
+                          const updated = [...(offboardingData.software_items || [])];
+                          updated[idx] = { ...item, enabled: e.target.checked };
+                          setOffboardingData({ ...offboardingData, software_items: updated });
+                        }}
+                        className="rounded text-[#DC2626] focus:ring-0 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="text-[12px] font-semibold text-[#0A0A0A]">
+                        {item.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 3. Knowledge Transfer & Handover */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                  <BookOpen size={13} />
+                  <span>3. KNOWLEDGE TRANSFER & HANDOVER</span>
+                </div>
+                <div className="space-y-2">
+                  {(offboardingData.handover_items || []).map((item, idx) => (
+                    <label
+                      key={item.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={item.enabled}
+                          onChange={(e) => {
+                            const updated = [...(offboardingData.handover_items || [])];
+                            updated[idx] = { ...item, enabled: e.target.checked };
+                            setOffboardingData({ ...offboardingData, handover_items: updated });
+                          }}
+                          className="rounded text-[#DC2626] focus:ring-0 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-[12.5px] font-semibold text-[#0A0A0A]">
+                          {item.label}
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 bg-[#F1F5F9] text-[#475569] text-[10px] font-bold rounded">
+                        Handover
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 4. Custom Exit Criteria */}
+              <div className="space-y-2">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85] flex items-center gap-1.5">
+                  <CheckCircle2 size={13} />
+                  <span>4. EXIT CLEARANCE TASKS</span>
+                </div>
+                <div className="space-y-2">
+                  {(offboardingData.custom_items || []).map((item, idx) => (
+                    <label
+                      key={item.id}
+                      className="flex items-center justify-between p-2.5 rounded-xl border border-[#EAEAE6] hover:bg-[#F8F8F6] cursor-pointer transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={item.enabled}
+                          onChange={(e) => {
+                            const updated = [...(offboardingData.custom_items || [])];
+                            updated[idx] = { ...item, enabled: e.target.checked };
+                            setOffboardingData({ ...offboardingData, custom_items: updated });
+                          }}
+                          className="rounded text-[#DC2626] focus:ring-0 w-4 h-4 cursor-pointer"
+                        />
+                        <span className="text-[12.5px] font-semibold text-[#0A0A0A]">
+                          {item.label}
+                        </span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* 5. Exit Notes / Instructions */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
+                  EXIT INSTRUCTIONS & NOTES (SENT TO CANDIDATE)
+                </label>
+                <textarea
+                  rows={2}
+                  value={offboardingData.notes || ''}
+                  onChange={(e) => setOffboardingData({ ...offboardingData, notes: e.target.value })}
+                  placeholder="e.g. Please handover building pass to reception and ensure final commits are pushed to main branch before Friday."
+                  className="w-full text-[12.5px] p-3 rounded-xl border border-[#EAEAE6] focus:outline-none focus:border-[#0A0A0A] bg-[#FAFAFA]"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-[#F2F2EE] shrink-0">
+              <span className="text-[11.5px] text-[#8A8A85]">
+                Initiating sends checklist to candidate portal
+              </span>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setOffboardingCandidate(null)}
+                  style={{
+                    borderRadius: 12,
+                    border: '1px solid #E2E2DC',
+                    backgroundColor: '#FFFFFF',
+                  }}
+                  className="px-4 py-2 text-[12px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={savingOffboarding}
+                  onClick={handleInitiateOffboarding}
+                  style={{
+                    borderRadius: 12,
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                  }}
+                  className="px-5 py-2 text-[12px] font-bold hover:bg-[#B91C1C] cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                >
+                  {savingOffboarding ? 'Initiating...' : 'Initiate Offboarding'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

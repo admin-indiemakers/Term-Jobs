@@ -435,10 +435,31 @@ def get_candidate_dashboard(current_user: User = Depends(get_current_user)):
         "$or": [{"workorder_id": cand_id}, {"candidate_id": cand_id}]
     })) if is_wo_active else []
     exp_sum = sum(float(e.get("amount", 0)) for e in user_expenses if e.get("status") in ["Submitted", "Pending", "Approved"])
-    exp_formatted = f"₹{exp_sum/1000:.1f}K" if exp_sum >= 1000 else f"₹{int(exp_sum)}"
+    exp_formatted = f"₹{int(exp_sum):,}" if exp_sum.is_integer() else f"₹{exp_sum:,.2f}"
+    clean_cid = str(cand_id).replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+    off_doc = db["offboarding_checklists"].find_one({
+        "$or": [
+            {"candidate_id": cand_id},
+            {"workorder_id": cand_id},
+            {"candidate_id": clean_cid},
+            {"workorder_id": clean_cid},
+            {"candidate_id": f"BEAR-{clean_cid}"},
+            {"workorder_id": f"BEAR-{clean_cid}"},
+        ]
+    }) or {}
+    offboarding_status = off_doc.get("status") or "not_started"
+    timesheet_frozen = bool(off_doc.get("timesheet_frozen") or offboarding_status == "completed")
+    access_expires_at = off_doc.get("access_expires_at")
 
     return {
         "has_assignment": has_assignment,
+        "offboarding": {
+            "status": offboarding_status,
+            "timesheet_frozen": timesheet_frozen,
+            "offboarding_completed_at": off_doc.get("offboarding_completed_at"),
+            "access_expires_at": access_expires_at,
+            "initiated_at": off_doc.get("initiated_at"),
+        },
         "candidate": {
             "id": cand_id or "",
             "workorder_id": cand_id or "",
@@ -629,6 +650,18 @@ def save_timesheet_draft(
     if not raw_wo:
         raise HTTPException(status_code=400, detail="No active work order. Cannot save timesheet without an assignment.")
 
+    # Check if timesheets are frozen due to offboarding
+    clean_cid = str(cand_id).replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+    off_doc = db["offboarding_checklists"].find_one({
+        "$or": [
+            {"candidate_id": cand_id}, {"workorder_id": cand_id},
+            {"candidate_id": clean_cid}, {"workorder_id": clean_cid},
+            {"candidate_id": f"BEAR-{clean_cid}"}, {"workorder_id": f"BEAR-{clean_cid}"}
+        ]
+    })
+    if (off_doc and (off_doc.get("timesheet_frozen") or off_doc.get("status") == "completed")) or getattr(current_user, "timesheet_frozen", False):
+        raise HTTPException(status_code=400, detail="Timesheet submission is frozen due to completed offboarding.")
+
     today_str = datetime.now(timezone.utc).date().isoformat()
 
     for entry in payload.daily_entries:
@@ -695,6 +728,18 @@ def submit_timesheet(
 
     if not raw_wo:
         raise HTTPException(status_code=400, detail="No active work order. Cannot save timesheet without an assignment.")
+
+    # Check if timesheets are frozen due to offboarding
+    clean_cid = str(cand_id).replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").strip()
+    off_doc = db["offboarding_checklists"].find_one({
+        "$or": [
+            {"candidate_id": cand_id}, {"workorder_id": cand_id},
+            {"candidate_id": clean_cid}, {"workorder_id": clean_cid},
+            {"candidate_id": f"BEAR-{clean_cid}"}, {"workorder_id": f"BEAR-{clean_cid}"}
+        ]
+    })
+    if (off_doc and (off_doc.get("timesheet_frozen") or off_doc.get("status") == "completed")) or getattr(current_user, "timesheet_frozen", False):
+        raise HTTPException(status_code=400, detail="Timesheet submission is frozen due to completed offboarding.")
 
     today_str = datetime.now(timezone.utc).date().isoformat()
 

@@ -212,7 +212,7 @@ export default function CandidateOnboarding() {
     }
   };
 
-  if (!user) return <Navigate to="/candidate/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'Candidate') return <Navigate to="/dashboard" replace />;
 
   const categoryLabels = {

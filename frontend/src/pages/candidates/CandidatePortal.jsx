@@ -121,6 +121,92 @@ export default function CandidatePortal() {
   const [activeNoteDay, setActiveNoteDay] = useState(null);
   const [tempNoteText, setTempNoteText] = useState('');
 
+  // Offboarding Clearance Modal State
+  const [showOffboardingModal, setShowOffboardingModal] = useState(false);
+  const [offboardingDoc, setOffboardingDoc] = useState(null);
+  const [loadingOffboarding, setLoadingOffboarding] = useState(false);
+  const [completingOffboarding, setCompletingOffboarding] = useState(false);
+  const [countdownText, setCountdownText] = useState('');
+
+  const isTimesheetFrozen = Boolean(data?.offboarding?.timesheet_frozen);
+  const isOffboardingCompleted = Boolean(data?.offboarding?.status === 'completed');
+  const isOffboardingInProgress = Boolean(data?.offboarding?.status === 'in_progress');
+
+  useEffect(() => {
+    if (!data?.offboarding?.access_expires_at) return;
+    function updateCountdown() {
+      const exp = new Date(data.offboarding.access_expires_at);
+      const diffMs = exp - new Date();
+      if (diffMs <= 0) {
+        setCountdownText('Access Expired');
+        return;
+      }
+      const totalHours = Math.floor(diffMs / (1000 * 60 * 60));
+      const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+      setCountdownText(`${totalHours}h ${mins}m`);
+    }
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 30000);
+    return () => clearInterval(interval);
+  }, [data?.offboarding?.access_expires_at]);
+
+  const handleOpenOffboardingModal = async () => {
+    const candId = user?.candidate_id || user?.workorder_id || '';
+    setShowOffboardingModal(true);
+    setLoadingOffboarding(true);
+    try {
+      const res = await request(`/api/offboarding/${candId}`, { token });
+      setOffboardingDoc(res);
+    } catch (err) {
+      console.error('Failed to load offboarding checklist:', err);
+    } finally {
+      setLoadingOffboarding(false);
+    }
+  };
+
+  const handleToggleOffboardingItem = async (itemId) => {
+    if (!offboardingDoc) return;
+    const candId = user?.candidate_id || user?.workorder_id || '';
+    const currentCompleted = { ...(offboardingDoc.completed_items || {}) };
+    if (currentCompleted[itemId]) {
+      delete currentCompleted[itemId];
+    } else {
+      currentCompleted[itemId] = true;
+    }
+    setOffboardingDoc({ ...offboardingDoc, completed_items: currentCompleted });
+    try {
+      await request(`/api/offboarding/${candId}/candidate-progress`, {
+        method: 'PUT',
+        token,
+        body: { completed_items: currentCompleted },
+      });
+    } catch (err) {
+      console.error('Failed to save progress:', err);
+    }
+  };
+
+  const handleCompleteAllOffboarding = async () => {
+    if (!offboardingDoc) return;
+    const candId = user?.candidate_id || user?.workorder_id || '';
+    setCompletingOffboarding(true);
+    try {
+      await request(`/api/offboarding/${candId}/complete`, {
+        method: 'POST',
+        token,
+      });
+      setTimesheetMsg({
+        type: 'success',
+        text: 'Offboarding completed! Your timesheets are now frozen and your account has 48 hours remaining.',
+      });
+      setShowOffboardingModal(false);
+      await loadDashboardData();
+    } catch (err) {
+      setTimesheetMsg({ type: 'error', text: err.message || 'Failed to complete offboarding.' });
+    } finally {
+      setCompletingOffboarding(false);
+    }
+  };
+
   // Daily entries initialized with real hours respecting start date
   const [dailyEntries, setDailyEntries] = useState(generateInitialSevenDays);
 
@@ -246,7 +332,7 @@ export default function CandidatePortal() {
     };
   }, [showNotifications]);
 
-  if (!user) return <Navigate to="/candidate/login" replace />;
+  if (!user) return <Navigate to="/login" replace />;
   if (user.role !== 'Candidate') return <Navigate to="/dashboard" replace />;
 
   const candidateId = user.candidate_id || '';
@@ -630,6 +716,10 @@ export default function CandidatePortal() {
 
   // Save Draft
   const handleSaveDraft = async () => {
+    if (isTimesheetFrozen) {
+      setTimesheetMsg({ type: 'error', text: 'Timesheets are permanently frozen following completion of offboarding.' });
+      return;
+    }
     setSavingDraft(true);
     setTimesheetMsg({ type: '', text: '' });
     try {
@@ -655,6 +745,10 @@ export default function CandidatePortal() {
 
   // Submit timesheet
   const handleConfirmSubmit = async () => {
+    if (isTimesheetFrozen) {
+      setTimesheetMsg({ type: 'error', text: 'Timesheets are permanently frozen following completion of offboarding.' });
+      return;
+    }
     setSubmittingTs(true);
     setTimesheetMsg({ type: '', text: '' });
     try {
@@ -1395,6 +1489,55 @@ export default function CandidatePortal() {
           </div>
         </div>
 
+        {/* Offboarding Global Banner */}
+        {isOffboardingInProgress && (
+          <div className="p-4 rounded-2xl bg-[#FFFBEB] border border-[#FDE68A] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 bg-[#FEF3C7] text-[#D97706] rounded-xl flex items-center justify-center shrink-0">
+                <Clock size={20} strokeWidth={2.4} />
+              </span>
+              <div>
+                <div className="text-[13.5px] font-extrabold text-[#92400E]">
+                  Action Required: Exit Clearance & Offboarding Handover
+                </div>
+                <div className="text-[12px] text-[#B45309] font-medium">
+                  Your hiring manager has initiated your exit clearance. Please review and check off your equipment and handover tasks.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenOffboardingModal}
+              className="px-4 py-2 bg-[#D97706] hover:bg-[#B45309] text-white text-[12px] font-bold rounded-xl transition-colors cursor-pointer shadow-2xs shrink-0 self-start sm:self-auto"
+            >
+              Open Clearance Checklist
+            </button>
+          </div>
+        )}
+
+        {isOffboardingCompleted && (
+          <div className="p-4 rounded-2xl bg-[#FEF2F2] border border-[#FECACA] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+            <div className="flex items-center gap-3">
+              <span className="p-2.5 bg-[#FEE2E2] text-[#DC2626] rounded-xl flex items-center justify-center shrink-0">
+                <Lock size={20} strokeWidth={2.4} />
+              </span>
+              <div>
+                <div className="text-[13.5px] font-extrabold text-[#991B1B]">
+                  Offboarding Completed — Timesheets Frozen
+                </div>
+                <div className="text-[12px] text-[#B91C1C] font-medium">
+                  All exit clearance items have been completed. Your portal is in read-only mode for <strong className="underline">{countdownText || 'the next 48 hours'}</strong> before permanent deactivation.
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="px-3 py-1.5 bg-[#FFFFFF] border border-[#FECACA] text-[#DC2626] text-[12px] font-mono font-bold rounded-xl shadow-2xs">
+                ⏱ {countdownText || '48h remaining'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Global Feedback Banner */}
         {timesheetMsg.text && (
           <div
@@ -1989,6 +2132,24 @@ export default function CandidatePortal() {
                 {currentTimesheet?.status || 'DRAFT'} · {calculatedMetrics.totalHours}h
               </div>
             </div>
+
+            {/* Timesheet Frozen Alert Banner */}
+            {isTimesheetFrozen && (
+              <div className="p-4 bg-[#FEF2F2] border border-[#FECACA] rounded-2xl flex items-center justify-between gap-3 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <span className="p-2 bg-[#FEE2E2] text-[#DC2626] rounded-xl flex items-center justify-center">
+                    <Lock size={18} strokeWidth={2.4} />
+                  </span>
+                  <div>
+                    <div className="text-[13px] font-extrabold text-[#991B1B]">Timesheets Permanently Frozen</div>
+                    <div className="text-[12px] text-[#B91C1C] font-medium">All timesheet editing and submissions have been locked following completion of offboarding.</div>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-white text-[#DC2626] text-[11.5px] font-bold rounded-lg border border-[#FECACA]">
+                  Read Only
+                </span>
+              </div>
+            )}
 
             {/* Main Interactive Timesheet Card */}
             <div
@@ -3649,6 +3810,279 @@ export default function CandidatePortal() {
           token={token}
         />
       )}
+
+      {/* ========================================================
+          CANDIDATE OFFBOARDING CLEARANCE MODAL
+         ======================================================== */}
+      {showOffboardingModal && (
+        <CandidateOffboardingModal
+          onClose={() => setShowOffboardingModal(false)}
+          offboardingDoc={offboardingDoc}
+          loading={loadingOffboarding}
+          onToggleItem={handleToggleOffboardingItem}
+          onCompleteAll={handleCompleteAllOffboarding}
+          completing={completingOffboarding}
+        />
+      )}
+    </div>
+  );
+}
+
+function CandidateOffboardingModal({
+  onClose,
+  offboardingDoc,
+  loading,
+  onToggleItem,
+  onCompleteAll,
+  completing,
+}) {
+  const [confirmStep, setConfirmStep] = useState(false);
+
+  // Extract all items required for exit clearance
+  const items = useMemo(() => {
+    if (!offboardingDoc) return [];
+    const list = [];
+    if (offboardingDoc.laptop_return_required) {
+      list.push({
+        id: 'laptop',
+        label: `Return Laptop (${offboardingDoc.laptop_spec || 'Standard build'})`,
+        category: 'Hardware & Assets',
+      });
+    }
+    if (offboardingDoc.badge_return_required) {
+      list.push({
+        id: 'badge',
+        label: 'Return Access Badge & Office Keycard',
+        category: 'Hardware & Assets',
+      });
+    }
+    (offboardingDoc.software_items || []).forEach((s) => {
+      if (s.enabled) {
+        list.push({
+          id: s.id,
+          label: s.label || 'De-provision software access',
+          category: 'Software & Accounts',
+        });
+      }
+    });
+    (offboardingDoc.handover_items || []).forEach((h) => {
+      if (h.enabled) {
+        list.push({
+          id: h.id,
+          label: h.label || 'Handover & Knowledge Transfer',
+          category: 'Handover & Documentation',
+        });
+      }
+    });
+    (offboardingDoc.custom_items || []).forEach((c) => {
+      if (c.enabled) {
+        list.push({
+          id: c.id,
+          label: c.label || 'Exit Clearance Task',
+          category: 'Exit Tasks',
+        });
+      }
+    });
+    return list;
+  }, [offboardingDoc]);
+
+  const completedMap = offboardingDoc?.completed_items || {};
+  const totalCount = items.length;
+  const doneCount = items.filter((it) => completedMap[it.id]).length;
+  const progressPct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  const allChecked = totalCount > 0 && doneCount >= totalCount;
+  const isCompleted = offboardingDoc?.status === 'completed';
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 10000,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: 'rgba(0,0,0,0.5)',
+        backdropFilter: 'blur(5px)',
+        padding: 16,
+      }}
+    >
+      <div
+        style={{
+          background: '#FFFFFF',
+          borderRadius: 24,
+          width: '100%',
+          maxWidth: 580,
+          boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+        }}
+        className="flex flex-col max-h-[88vh] overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+      >
+        {/* Header */}
+        <div className="p-6 pb-4 border-b border-[#F2F2EE] flex items-start justify-between shrink-0">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-[#FEF2F2] text-[#DC2626] text-[10.5px] font-extrabold rounded-md uppercase tracking-wider">
+                Exit Clearance
+              </span>
+              <h3 className="text-[1.2rem] font-extrabold text-[#0A0A0A] tracking-tight">
+                Offboarding Handover Checklist
+              </h3>
+            </div>
+            <p className="text-[12.5px] text-[#737373] font-medium mt-1">
+              Please review and tick off each clearance requirement.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-[#8A8A85] hover:text-[#0A0A0A] p-1 text-lg font-bold cursor-pointer"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Progress Bar & Warning Banner */}
+        <div className="px-6 pt-3 pb-2 shrink-0 space-y-2.5">
+          <div className="flex items-center justify-between text-[12px] font-bold text-[#0A0A0A]">
+            <span>Clearance Progress</span>
+            <span className="font-mono text-[#DC2626]">{doneCount} of {totalCount} completed ({progressPct}%)</span>
+          </div>
+          <div className="w-full h-2 bg-[#F2F2EE] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#DC2626] transition-all duration-300 rounded-full"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+
+          <div className="p-3 bg-[#FFFBEB] border border-[#FDE68A] rounded-xl text-[11.5px] text-[#92400E] flex items-start gap-2">
+            <Clock size={14} className="shrink-0 mt-0.5 text-[#D97706]" />
+            <div>
+              <strong>Final Handover Guarantee:</strong> Completing all clearance items will <strong>freeze your timesheets immediately</strong>. You will retain <strong>48 hours of read-only access</strong> to view past work orders, timesheets, and payslips before permanent deactivation.
+            </div>
+          </div>
+        </div>
+
+        {/* Scrollable Items List */}
+        <div className="p-6 pt-2 flex-1 overflow-y-auto space-y-2.5 custom-cand-scroll">
+          {loading ? (
+            <div className="py-12 text-center text-[13px] text-[#8A8A85]">
+              Loading exit clearance checklist...
+            </div>
+          ) : items.length === 0 ? (
+            <div className="py-12 text-center text-[13px] text-[#8A8A85]">
+              No clearance items assigned.
+            </div>
+          ) : (
+            items.map((item) => {
+              const isChecked = Boolean(completedMap[item.id]);
+              return (
+                <label
+                  key={item.id}
+                  className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer ${
+                    isChecked
+                      ? 'bg-[#F0FDF4] border-[#BBF7D0]'
+                      : 'bg-[#FAFAFA] border-[#EAEAE6] hover:bg-[#F5F5F2]'
+                  } ${isCompleted ? 'pointer-events-none opacity-80' : ''}`}
+                >
+                  <div className="flex items-center gap-3 pr-2">
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      disabled={isCompleted}
+                      onChange={() => onToggleItem(item.id)}
+                      className="rounded text-[#0A0A0A] focus:ring-0 w-4 h-4 cursor-pointer"
+                    />
+                    <div>
+                      <span className={`text-[13px] font-semibold ${isChecked ? 'line-through text-[#64748B]' : 'text-[#0A0A0A]'}`}>
+                        {item.label}
+                      </span>
+                      <div className="text-[11px] text-[#8A8A85] font-medium">
+                        {item.category}
+                      </div>
+                    </div>
+                  </div>
+                  {isChecked ? (
+                    <span className="shrink-0 px-2 py-0.5 bg-[#DCFCE7] text-[#166534] text-[10px] font-extrabold rounded-md flex items-center gap-1">
+                      <Check size={10} strokeWidth={3} />
+                      Done
+                    </span>
+                  ) : (
+                    <span className="shrink-0 px-2 py-0.5 bg-[#F1F5F9] text-[#64748B] text-[10px] font-bold rounded-md">
+                      Pending
+                    </span>
+                  )}
+                </label>
+              );
+            })
+          )}
+
+          {offboardingDoc?.notes && (
+            <div className="p-3 bg-[#F8F8F6] border border-[#EAEAE6] rounded-xl text-[12px] text-[#52524E]">
+              <span className="font-bold text-[#0A0A0A]">Manager Instructions: </span>
+              {offboardingDoc.notes}
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="p-5 border-t border-[#F2F2EE] flex items-center justify-between shrink-0 bg-[#FAFAFA]">
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              borderRadius: 12,
+              border: '1px solid #E2E2DC',
+              backgroundColor: '#FFFFFF',
+            }}
+            className="px-4 py-2 text-[12px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] cursor-pointer"
+          >
+            Close
+          </button>
+
+          {!isCompleted && (
+            confirmStep ? (
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmStep(false)}
+                  className="px-3 py-2 text-[12px] font-semibold text-[#8A8A85] hover:text-[#0A0A0A] cursor-pointer"
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  disabled={completing}
+                  onClick={onCompleteAll}
+                  style={{
+                    borderRadius: 12,
+                    backgroundColor: '#DC2626',
+                    color: '#FFFFFF',
+                  }}
+                  className="px-5 py-2 text-[12px] font-bold hover:bg-[#B91C1C] cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-2xs"
+                >
+                  <Lock size={13} />
+                  <span>{completing ? 'Freezing Account...' : 'Confirm & Freeze Timesheet'}</span>
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                disabled={!allChecked}
+                onClick={() => setConfirmStep(true)}
+                style={{
+                  borderRadius: 12,
+                  backgroundColor: allChecked ? '#0A0A0A' : '#E2E2DC',
+                  color: allChecked ? '#FFFFFF' : '#8A8A85',
+                }}
+                className="px-5 py-2 text-[12px] font-bold hover:bg-[#262626] cursor-pointer disabled:cursor-not-allowed flex items-center gap-1.5 shadow-2xs"
+              >
+                <span>Complete Offboarding</span>
+                <ArrowRight size={13} />
+              </button>
+            )
+          )}
+        </div>
+      </div>
     </div>
   );
 }

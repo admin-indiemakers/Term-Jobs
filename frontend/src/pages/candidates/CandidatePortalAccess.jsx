@@ -60,35 +60,24 @@ export default function CandidatePortalAccess() {
 
   const handleSaveAccess = async () => {
     if (!showCreateModal) return;
-<<<<<<< HEAD
     setError('');
     const emailVal = (createForm.email || '').trim();
     if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
       setError('Please enter a valid official email address (e.g. candidate@company.com).');
       return;
     }
-    setCreatingId(showCreateModal.candidate_id);
-=======
     const cid = showCreateModal.candidate_id || showCreateModal.workorder_id;
     setCreatingId(cid);
->>>>>>> 0f29a3773f43ff81d3644ed167fc5186e65dd00b
     setSuccessMsg('');
-    setError('');
     try {
       await request('/api/auth/portal-users', {
         method: 'POST',
         token,
         body: {
-<<<<<<< HEAD
-          candidate_id: showCreateModal.candidate_id,
-          email: emailVal,
-          name: createForm.name,
-=======
-          candidate_id: cid,
+          candidate_id: showCreateModal.candidate_id || cid,
           workorder_id: cid,
-          email: createForm.email.trim().toLowerCase(),
+          email: emailVal.toLowerCase(),
           name: createForm.name.trim(),
->>>>>>> 0f29a3773f43ff81d3644ed167fc5186e65dd00b
           password: createForm.password,
         },
       });
