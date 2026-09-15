@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, X, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 const EMPTY_FORM = {
   vendor_name: '',
@@ -22,7 +22,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [nameStatus, setNameStatus] = useState(''); // '' | 'checking' | 'ok' | 'taken'
-  const [aiLoading, setAiLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const nameCheckTimer = useRef(null);
@@ -99,33 +98,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
     }
   };
 
-  const handleAiDescribe = async () => {
-    if (!form.vendor_name.trim()) {
-      setError('Enter a vendor name first before using AI autofill.');
-      return;
-    }
-    setAiLoading(true);
-    setError('');
-    try {
-      const res = await request('/api/auth/tenants/ai-describe', {
-        method: 'POST',
-        token,
-        body: { name: form.vendor_name.trim() },
-      });
-      setForm((prev) => ({
-        ...prev,
-        industry: res.industry || prev.industry || 'Staffing / Tech Recruiting',
-        size: res.size || prev.size || '10-50',
-        location: res.location || prev.location || 'Bangalore / Remote',
-        specializations: res.tech_stack || prev.specializations || 'Backend, Frontend, Fullstack, Cloud',
-        notes: res.notes || prev.notes || `${form.vendor_name} is a technical recruiting partner specializing in engineering roles.`,
-      }));
-    } catch (err) {
-      setError('AI autofill failed: ' + (err.message || 'Please try again.'));
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -227,42 +199,6 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* AI Auto-fill Banner */}
-          <div className="bg-[#FAFAFA] border border-gray-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Sparkles size={16} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-gray-900">AI Auto-fill</div>
-                <div className="text-[11px] text-gray-500 truncate">
-                  Enter the vendor name, then let AI suggest sourcing strengths and details.
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAiDescribe}
-              disabled={aiLoading || !form.vendor_name.trim()}
-              className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                aiLoading || !form.vendor_name.trim()
-                  ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
-                  : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100 hover:border-gray-400 shadow-2xs'
-              }`}
-            >
-              {aiLoading ? (
-                <>
-                  <Loader2 size={12} className="animate-spin text-gray-600" />
-                  <span>Researching...</span>
-                </>
-              ) : (
-                <>
-                  <span>+ Auto-fill with AI</span>
-                </>
-              )}
-            </button>
-          </div>
 
           <form id="onboard-vendor-modal-form" onSubmit={handleSubmit} className="space-y-3.5">
             {/* Vendor Name */}

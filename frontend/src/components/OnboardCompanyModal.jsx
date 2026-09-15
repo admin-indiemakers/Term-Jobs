@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { Sparkles, X, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { X, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
 
 const EMPTY_FORM = {
   company_name: '',
@@ -22,7 +22,6 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [nameStatus, setNameStatus] = useState(''); // '' | 'checking' | 'ok' | 'taken'
-  const [aiLoading, setAiLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
   const nameCheckTimer = useRef(null);
@@ -99,33 +98,6 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
     }
   };
 
-  const handleAiDescribe = async () => {
-    if (!form.company_name.trim()) {
-      setError('Enter a company name first before using AI autofill.');
-      return;
-    }
-    setAiLoading(true);
-    setError('');
-    try {
-      const res = await request('/api/auth/tenants/ai-describe', {
-        method: 'POST',
-        token,
-        body: { name: form.company_name.trim() },
-      });
-      setForm((prev) => ({
-        ...prev,
-        industry: res.industry || prev.industry || 'Technology / Software',
-        size: res.size || prev.size || '50-200',
-        location: res.location || prev.location || 'Bangalore / Remote',
-        tech_stack: res.tech_stack || prev.tech_stack || 'React, Node.js, PostgreSQL, AWS',
-        notes: res.notes || prev.notes || `${form.company_name} is a technology-focused organization with a modern digital product environment.`,
-      }));
-    } catch (err) {
-      setError('AI autofill failed: ' + (err.message || 'Please try again.'));
-    } finally {
-      setAiLoading(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -227,42 +199,6 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
             </div>
           )}
 
-          {/* AI Auto-fill Banner */}
-          <div className="bg-[#FAFAFA] border border-gray-200 rounded-xl p-3.5 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Sparkles size={16} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-bold text-gray-900">AI Auto-fill</div>
-                <div className="text-[11px] text-gray-500 truncate">
-                  Enter the company name, then let AI suggest the remaining details.
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={handleAiDescribe}
-              disabled={aiLoading || !form.company_name.trim()}
-              className={`shrink-0 px-3 py-1.5 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                aiLoading || !form.company_name.trim()
-                  ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
-                  : 'bg-white text-gray-800 border-gray-300 hover:bg-gray-100 hover:border-gray-400 shadow-2xs'
-              }`}
-            >
-              {aiLoading ? (
-                <>
-                  <Loader2 size={12} className="animate-spin text-gray-600" />
-                  <span>Researching...</span>
-                </>
-              ) : (
-                <>
-                  <span>+ Auto-fill with AI</span>
-                </>
-              )}
-            </button>
-          </div>
 
           <form id="onboard-company-modal-form" onSubmit={handleSubmit} className="space-y-3.5">
             {/* Company Name */}
@@ -368,7 +304,7 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
                 className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
               />
               <p className="text-[10px] text-gray-400 mt-1">
-                Used to help AI understand the company's technical environment.
+                Company's primary technology stack and technical environment.
               </p>
             </div>
 
