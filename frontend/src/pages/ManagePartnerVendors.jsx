@@ -17,7 +17,6 @@ import {
   Plus,
   Briefcase,
   ShieldCheck,
-  Sparkles,
   HelpCircle,
   UserPlus
 } from 'lucide-react';
@@ -53,7 +52,6 @@ export default function ManagePartnerVendors() {
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [guestForm, setGuestForm] = useState(EMPTY_GUEST_FORM);
   const [guestSubmitting, setGuestSubmitting] = useState(false);
-  const [guestAiLoading, setGuestAiLoading] = useState(false);
   const [guestShowPassword, setGuestShowPassword] = useState(false);
   const [guestNameStatus, setGuestNameStatus] = useState(''); // '' | 'checking' | 'ok' | 'taken'
   const [guestFieldErrors, setGuestFieldErrors] = useState({});
@@ -111,33 +109,6 @@ export default function ManagePartnerVendors() {
     }, 400);
   };
 
-  // AI Auto-Fill with Groq LLM
-  const handleAiAutoFill = async () => {
-    const vName = guestForm.vendor_name.trim();
-    if (!vName) {
-      setGuestFieldErrors((prev) => ({ ...prev, vendor_name: 'Enter vendor name first' }));
-      return;
-    }
-    setGuestAiLoading(true);
-    try {
-      const res = await request('/api/auth/tenants/ai-describe', {
-        method: 'POST',
-        token,
-        body: { name: vName },
-      });
-      setGuestForm((prev) => ({
-        ...prev,
-        industry: res.industry || prev.industry,
-        location: res.location || prev.location,
-        specializations: res.tech_stack || prev.specializations,
-        notes: res.notes || prev.notes,
-      }));
-    } catch {
-      // silent fallback
-    } finally {
-      setGuestAiLoading(false);
-    }
-  };
 
   const handleCreateGuestVendor = async (e) => {
     e.preventDefault();
@@ -734,22 +705,10 @@ export default function ManagePartnerVendors() {
             </div>
 
             <form onSubmit={handleCreateGuestVendor} className="space-y-4">
-              {/* Vendor Name & AI Describe */}
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-bold text-gray-900">
-                    Vendor Consultancy Name <span className="text-red-500">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handleAiAutoFill}
-                    disabled={guestAiLoading || !guestForm.vendor_name.trim()}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-800 text-[11px] font-bold transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    {guestAiLoading ? <Loader2 size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                    <span>Auto-fill with AI</span>
-                  </button>
-                </div>
+                <label className="block text-xs font-bold text-gray-900 mb-1.5">
+                  Vendor Consultancy Name <span className="text-red-500">*</span>
+                </label>
                 <div className="relative">
                   <input
                     type="text"
