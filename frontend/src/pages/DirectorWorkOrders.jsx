@@ -112,7 +112,7 @@ export default function DirectorWorkOrders() {
 
   const sowData = activeWo?.sow_data || {};
   const rawStatus = (activeWo?.status || sowData?.status || 'Pending Director Approval').trim();
-  const isDirectorApproved = rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE';
+  const isDirectorApproved = rawStatus === 'Approved by Director' || rawStatus === 'Approved' || rawStatus === 'ACTIVE' || activeWo?.director_approved === true || sowData?.director_approved === true;
   const isPendingDirector = !isDirectorApproved && (rawStatus === 'Pending Director Approval' || rawStatus.toLowerCase().includes('approved by procurement') || activeWo?.procurement_authorized === true);
   const isRevision = rawStatus.toLowerCase().includes('revision');
   const isRejected = rawStatus.toLowerCase().includes('reject');
@@ -127,7 +127,7 @@ export default function DirectorWorkOrders() {
     workOrders.forEach((w) => {
       const st = (w.status || w.sow_data?.status || '').trim();
       const d = w.sow_data || {};
-      const isApp = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE';
+      const isApp = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
       const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
 
       if (isPend) pendingCount++;
@@ -151,7 +151,7 @@ export default function DirectorWorkOrders() {
     return workOrders.filter((w) => {
       const d = w.sow_data || {};
       const st = (w.status || d.status || '').trim();
-      const isApp = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE';
+      const isApp = st === 'Approved by Director' || st === 'Approved' || st === 'ACTIVE' || w.director_approved === true || d.director_approved === true;
       const isPend = !isApp && (st === 'Pending Director Approval' || st.toLowerCase().includes('approved by procurement') || w.procurement_authorized);
       const isRev = st.toLowerCase().includes('revision');
       const isRej = st.toLowerCase().includes('reject');
@@ -183,11 +183,37 @@ export default function DirectorWorkOrders() {
     setActionLoading(true);
     setError('');
     try {
-      await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/director-approve`, {
+      const res = await request(`/api/workforce/procurement/sow/${encodeURIComponent(candidateId)}/director-approve`, {
         method: 'POST',
         token,
       });
       setSuccessMsg(`👑 Work Order formally signed & approved by Company Director for ${safeString(sowData.deployed_personnel, 'Candidate')}!`);
+      const approverName = res?.approved_by || `${user?.name || 'Director'} (Director)`;
+      const approvedAtTime = res?.approved_at || new Date().toISOString();
+
+      setWorkOrders((prev) =>
+        (Array.isArray(prev) ? prev : []).map((w) => {
+          const wId = w.candidate_id || w.workorder_id || w._id;
+          if (wId === candidateId) {
+            return {
+              ...w,
+              status: 'Approved by Director',
+              sow_status: 'Approved by Director',
+              agreement_status: 'Approved',
+              director_approved: true,
+              director_approved_by: approverName,
+              director_approved_at: approvedAtTime,
+              sow_data: {
+                ...(w.sow_data || {}),
+                status: 'Approved by Director',
+                director_approved_by: approverName,
+                director_approved_at: approvedAtTime,
+              },
+            };
+          }
+          return w;
+        })
+      );
       loadWorkOrders();
     } catch (err) {
       setError(err.message || 'Failed to approve Work Order as Director.');
@@ -232,6 +258,24 @@ export default function DirectorWorkOrders() {
       setSuccessMsg('Work Order rejected.');
       setShowRejectModal(false);
       setRejectNotes('');
+      setWorkOrders((prev) =>
+        (Array.isArray(prev) ? prev : []).map((w) => {
+          const wId = w.candidate_id || w.workorder_id || w._id;
+          if (wId === candidateId) {
+            return {
+              ...w,
+              status: 'Rejected by Director',
+              sow_status: 'Rejected by Director',
+              director_approved: false,
+              sow_data: {
+                ...(w.sow_data || {}),
+                status: 'Rejected by Director',
+              },
+            };
+          }
+          return w;
+        })
+      );
       loadWorkOrders();
     } catch (err) {
       setError(err.message || 'Failed to reject Work Order.');

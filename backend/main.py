@@ -893,6 +893,14 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 "hiring_manager_name": (r.structured_role or {}).get("hiring_manager") or "",
                 "intent": r.intent,
                 "created_at": r.created_at.isoformat() if r.created_at else None,
+                "director_approved": bool(getattr(r, "director_approved", False)),
+                "director_approved_by": getattr(r, "director_approved_by", None),
+                "director_approved_at": r.director_approved_at.isoformat() if getattr(r, "director_approved_at", None) else None,
+                "rejection_reason": getattr(r, "rejection_reason", None),
+                "rejected_by": getattr(r, "rejected_by", None),
+                "rejected_at": r.rejected_at.isoformat() if getattr(r, "rejected_at", None) else None,
+                "approved_by": getattr(r, "approved_by", None),
+                "approved_at": r.approved_at.isoformat() if getattr(r, "approved_at", None) else None,
             }
             for r in rows
         ]
@@ -1000,6 +1008,27 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
             db_req.rejected_by = None
             db_req.rejected_at = None
             session.commit()
+
+    # Sync to MongoDB and clear cache
+    try:
+        from modules.shared.db import db
+        now_iso = _utcnow().isoformat()
+        db["requisitions"].update_one(
+            {"id": requisition_id},
+            {"$set": {
+                "director_approved": True,
+                "director_approved_by": current_user.name or current_user.email or "Director",
+                "director_approved_at": now_iso,
+                "rejection_reason": None,
+                "rejected_by": None,
+                "rejected_at": None,
+                "updated_at": now_iso,
+            }}
+        )
+    except Exception:
+        pass
+
+    _cache.clear()
     return _requisition_dict(requisition_id)
 
 
@@ -1028,6 +1057,27 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
     except Exception:
         pass
 
+    # Sync to MongoDB and clear cache
+    try:
+        from modules.shared.db import db
+        now_iso = _utcnow().isoformat()
+        db["requisitions"].update_one(
+            {"id": requisition_id},
+            {"$set": {
+                "status": schemas.RequisitionStatus.STRUCTURING.value,
+                "director_approved": False,
+                "director_approved_by": None,
+                "director_approved_at": None,
+                "rejection_reason": reason,
+                "rejected_by": reviewer,
+                "rejected_at": now_iso,
+                "updated_at": now_iso,
+            }}
+        )
+    except Exception:
+        pass
+
+    _cache.clear()
     return _requisition_dict(requisition_id)
 
 
@@ -1063,7 +1113,8 @@ def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, cu
         notify_requisition_published(requisition_id)
     except Exception:  # noqa: BLE001
         pass
-    return _requisition_dict(req.id)
+    _cache.clear()
+    return _requisition_dict(requisition_id)
 
 
 @app.post("/requisitions/{requisition_id}/close")

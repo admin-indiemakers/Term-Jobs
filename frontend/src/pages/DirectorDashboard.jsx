@@ -134,11 +134,25 @@ export default function DirectorDashboard({ view = 'overview' }) {
     setError('');
     setTemplateMsg('');
     try {
-      await request(`/requisitions/${reqId}/director-approve`, {
+      const updatedReq = await request(`/requisitions/${reqId}/director-approve`, {
         method: 'POST',
         token,
       });
       setTemplateMsg('Requisition approved successfully!');
+      const approverName = updatedReq?.director_approved_by || user?.name || user?.email || 'Director';
+      const approvedAt = updatedReq?.director_approved_at || new Date().toISOString();
+      setRequisitions((prev) =>
+        (Array.isArray(prev) ? prev : []).map((r) =>
+          r.id === reqId
+            ? {
+                ...r,
+                director_approved: true,
+                director_approved_by: approverName,
+                director_approved_at: approvedAt,
+              }
+            : r
+        )
+      );
       loadAll();
     } catch (err) {
       setError(err.message || 'Failed to approve requisition');
@@ -161,11 +175,12 @@ export default function DirectorDashboard({ view = 'overview' }) {
       setError('Please provide a reason for rejecting this requisition.');
       return;
     }
-    setApprovingId(rejectModalReq.id);
+    const reqId = rejectModalReq.id;
+    setApprovingId(reqId);
     setError('');
     setTemplateMsg('');
     try {
-      await request(`/requisitions/${rejectModalReq.id}/reject`, {
+      await request(`/requisitions/${reqId}/reject`, {
         method: 'POST',
         body: {
           reviewer: user?.name || user?.email,
@@ -176,6 +191,18 @@ export default function DirectorDashboard({ view = 'overview' }) {
       setTemplateMsg('Requisition rejected and sent back to Hiring Manager with rejection feedback.');
       setRejectModalReq(null);
       setRejectReason('');
+      setRequisitions((prev) =>
+        (Array.isArray(prev) ? prev : []).map((r) =>
+          r.id === reqId
+            ? {
+                ...r,
+                status: 'Structuring',
+                director_approved: false,
+                rejection_reason: rejectReason.trim(),
+              }
+            : r
+        )
+      );
       loadAll();
     } catch (err) {
       setError(err.message || 'Failed to reject requisition');
@@ -193,7 +220,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const approvedList = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
-    return list.filter((r) => r.director_approved);
+    return list.filter((r) => Boolean(r.director_approved) || r.status === 'Published');
   }, [requisitions]);
 
   const publishedCount = (Array.isArray(requisitions) ? requisitions : []).filter((r) => r.status === 'Published').length;
@@ -223,7 +250,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
         return (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved;
       }
       if (statusFilter === 'APPROVED') {
-        return r.director_approved;
+        return Boolean(r.director_approved) || r.status === 'Published';
       }
       if (statusFilter === 'PUBLISHED') {
         return r.status === 'Published';
@@ -663,7 +690,14 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         <div className="text-[10px] text-gray-400 font-normal">REQ #{r.id.slice(0, 8)}</div>
                       </td>
                       <td className="py-3.5">
-                        <StatusBadge status={r.status} />
+                        {r.director_approved && r.status !== 'Published' && r.status !== 'Closed' ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                            <CheckCircle2 size={12} className="text-emerald-600" />
+                            <span>Approved</span>
+                          </span>
+                        ) : (
+                          <StatusBadge status={r.status} />
+                        )}
                       </td>
                       <td className="py-3.5">
                         {r.director_approved ? (

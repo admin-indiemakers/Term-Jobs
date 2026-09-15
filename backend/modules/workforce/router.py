@@ -2083,14 +2083,18 @@ def director_approve_procurement_sow(
 
     doc = sow_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"workorder_id": candidate_id}]})
     if not doc:
-        raise HTTPException(status_code=404, detail="Work Order document not found")
+        doc = wo_coll.find_one({"$or": [{"candidate_id": candidate_id}, {"workorder_id": candidate_id}, {"id": candidate_id}]})
+        if not doc:
+            raise HTTPException(status_code=404, detail="Work Order document not found")
 
-    cid = doc.get("candidate_id") or candidate_id
+    cid = doc.get("candidate_id") or doc.get("workorder_id") or candidate_id
     director_info = f"{current_user.name} (Director)"
 
     sow_coll.update_one(
-        {"candidate_id": cid},
+        {"$or": [{"candidate_id": cid}, {"workorder_id": cid}]},
         {"$set": {
+            "candidate_id": cid,
+            "workorder_id": cid,
             "status": "Approved by Director",
             "director_approved": True,
             "director_approved_by": director_info,
@@ -2099,7 +2103,8 @@ def director_approve_procurement_sow(
             "sow_data.status": "Approved by Director",
             "sow_data.director_approved_by": director_info,
             "sow_data.director_approved_at": now_iso
-        }}
+        }},
+        upsert=True
     )
 
     # Activate work order in MongoDB
@@ -2130,22 +2135,26 @@ def director_approve_procurement_sow(
     )
 
     # Notification to Candidate & Recruiter
-    notif_coll.insert_one({
-        "id": f"notif_{_uuid.uuid4().hex[:10]}",
-        "candidate_id": cid,
-        "type": "work_order_fully_approved",
-        "title": "Work Order Fully Approved by Company Director!",
-        "message": f"Director {current_user.name} has granted final executive approval for Work Order {cid}. Candidate Portal and billing are fully active.",
-        "is_read": False,
-        "target_tab": "timesheet",
-        "created_at": now_iso,
-    })
+    try:
+        notif_coll.insert_one({
+            "id": f"notif_{_uuid.uuid4().hex[:10]}",
+            "candidate_id": cid,
+            "type": "work_order_fully_approved",
+            "title": "Work Order Fully Approved by Company Director!",
+            "message": f"Director {current_user.name} has granted final executive approval for Work Order {cid}. Candidate Portal and billing are fully active.",
+            "is_read": False,
+            "target_tab": "timesheet",
+            "created_at": now_iso,
+        })
+    except Exception:
+        pass
 
     return {
         "status": "success",
-        "message": "Work Order fully approved by Company Director.",
+        "message": f"Work Order formally signed and approved by Company Director for {cid}.",
         "approved_by": director_info,
-        "approved_at": now_iso
+        "approved_at": now_iso,
+        "director_approved": True,
     }
 
 def reject_procurement_sow(
