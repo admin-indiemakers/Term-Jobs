@@ -51,6 +51,7 @@ from modules.superadmin_agent.router import router as superadmin_agent_router
 from modules.hiring_manager_agent.router import router as hiring_manager_agent_router
 from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
+from modules.onboarding.offboarding_router import router as offboarding_router
 
 
 app = FastAPI(
@@ -206,6 +207,7 @@ app.include_router(superadmin_agent_router)
 app.include_router(hiring_manager_agent_router)
 app.include_router(vendor_billing_router)
 app.include_router(voice_router)
+app.include_router(offboarding_router, tags=["Offboarding"])
 
 # Reload trigger for interview module updates
 

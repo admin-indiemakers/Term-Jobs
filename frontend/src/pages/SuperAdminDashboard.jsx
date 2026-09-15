@@ -10,7 +10,6 @@ import {
   Layers,
   Plus,
   Edit3,
-  Archive,
   ArrowRight
 } from 'lucide-react';
 
@@ -91,16 +90,6 @@ export default function SuperAdminDashboard() {
         badgeTone: 'gray',
       });
     }
-
-    list.push({
-      id: 'archive-status',
-      icon: Archive,
-      title: 'Archive reviewed',
-      desc: 'No archived records currently need action',
-      date: '28 Aug',
-      badge: 'Review',
-      badgeTone: 'gray',
-    });
 
     return list.slice(0, 4);
   }, [tenants, adminAccounts]);
@@ -333,24 +322,6 @@ export default function SuperAdminDashboard() {
                   className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 text-xs font-bold shadow-2xs transition-colors shrink-0"
                 >
                   Open
-                </Link>
-              </div>
-
-              <div className="p-3 bg-gray-50/70 border border-gray-200/80 rounded-xl flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
-                    <Archive size={15} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-gray-900">Archives</div>
-                    <div className="text-[11px] text-gray-500 truncate">Review deleted records</div>
-                  </div>
-                </div>
-                <Link
-                  to="/dashboard/superadmin/archives"
-                  className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 text-xs font-bold shadow-2xs transition-colors shrink-0"
-                >
-                  Review
                 </Link>
               </div>
             </div>

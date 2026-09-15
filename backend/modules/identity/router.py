@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Header, HTTPException, status
+from sqlalchemy import func, or_
 
 from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
@@ -63,6 +64,42 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
     if getattr(user, 'is_deleted', False):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
+    # Check candidate offboarding access expiration
+    if getattr(user, "role", "") == "Candidate":
+        from modules.shared.db import db as mongo_db
+        from datetime import datetime, timezone
+        m_user = mongo_db["users"].find_one({"$or": [{"id": user.id}, {"email": user.email}]}) or {}
+        access_expires_at_str = m_user.get("access_expires_at") or getattr(user, "access_expires_at", None)
+        if not access_expires_at_str:
+            off_doc = mongo_db["offboarding_checklists"].find_one({
+                "$or": [
+                    {"candidate_id": getattr(user, "candidate_id", "")},
+                    {"workorder_id": getattr(user, "workorder_id", "")},
+                ]
+            }) or {}
+            access_expires_at_str = off_doc.get("access_expires_at")
+
+        if access_expires_at_str:
+            try:
+                exp_dt = datetime.fromisoformat(access_expires_at_str)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) >= exp_dt:
+                    user.is_active = False
+                    db.commit()
+                    mongo_db["users"].update_many(
+                        {"$or": [{"id": user.id}, {"email": user.email}]},
+                        {"$set": {"is_active": False, "is_disabled": True, "offboarding_expired": True}}
+                    )
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Your candidate portal access has permanently expired following completion of offboarding.",
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                pass
+
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -106,11 +143,48 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
                         user = u
                         break
 
-            # 3. Candidate / Work order ID fallback
-            if not user and hasattr(User, "candidate_id"):
-                user = db.query(User).filter(User.candidate_id == lookup).first()
-            if not user and hasattr(User, "workorder_id"):
-                user = db.query(User).filter(User.workorder_id == lookup).first()
+            # 3. Candidate / Work order ID fallback (with normalization and Mongo work_orders cross-reference)
+            if not user and (hasattr(User, "candidate_id") or hasattr(User, "workorder_id")):
+                cid_clean = lookup.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("sdc-", "").replace("bear-", "").strip()
+                variants = list({lookup, lookup.lower(), lookup.upper(), cid_clean, f"SDC-{cid_clean}", f"BEAR-{cid_clean}"})
+                
+                # Check directly on User model
+                user = db.query(User).filter(
+                    User.role == "Candidate",
+                    (User.candidate_id.in_(variants) | (User.workorder_id.in_(variants) if hasattr(User, "workorder_id") else False))
+                ).first()
+
+                if not user:
+                    # Look up in Mongo work_orders / onboarding_checklists if work_order_number was provided
+                    try:
+                        from modules.shared.db import db as mongo_db
+                        import re
+                        reg = re.escape(lookup)
+                        wo_doc = mongo_db["work_orders"].find_one({
+                            "$or": [
+                                {"work_order_number": {"$regex": f"^{reg}$", "$options": "i"}},
+                                {"id": lookup},
+                                {"candidate_id": {"$in": variants}},
+                                {"workorder_id": {"$in": variants}},
+                            ]
+                        })
+                        if not wo_doc:
+                            wo_doc = mongo_db["onboarding_checklists"].find_one({
+                                "$or": [
+                                    {"work_order_number": {"$regex": f"^{reg}$", "$options": "i"}},
+                                    {"candidate_id": {"$in": variants}},
+                                    {"workorder_id": {"$in": variants}},
+                                ]
+                            })
+                        if wo_doc:
+                            wo_cid = wo_doc.get("candidate_id") or wo_doc.get("workorder_id")
+                            wo_email = (wo_doc.get("candidate_email") or "").strip().lower()
+                            user = db.query(User).filter(
+                                User.role == "Candidate",
+                                (User.candidate_id == wo_cid) | (User.workorder_id == wo_cid) | (User.email == wo_email)
+                            ).first()
+                    except Exception as m_err:
+                        print(f"⚠️ [AUTH] Mongo lookup fallback error: {m_err}")
     except Exception as db_err:
         import sys, traceback
         print(f"🔥 [AUTH DB ERROR] Failed querying user during login: {db_err}", file=sys.stderr)
@@ -145,6 +219,43 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
     if getattr(user, 'is_deleted', False):
         print(f"❌ [AUTH FAILED] User '{user.email}' is marked deleted")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    # Check candidate offboarding access expiration
+    if getattr(user, "role", "") == "Candidate":
+        from modules.shared.db import db as mongo_db
+        from datetime import datetime, timezone
+        m_user = mongo_db["users"].find_one({"$or": [{"id": user.id}, {"email": user.email}]}) or {}
+        access_expires_at_str = m_user.get("access_expires_at") or getattr(user, "access_expires_at", None)
+        if not access_expires_at_str:
+            off_doc = mongo_db["offboarding_checklists"].find_one({
+                "$or": [
+                    {"candidate_id": getattr(user, "candidate_id", "")},
+                    {"workorder_id": getattr(user, "workorder_id", "")},
+                ]
+            }) or {}
+            access_expires_at_str = off_doc.get("access_expires_at")
+
+        if access_expires_at_str:
+            try:
+                exp_dt = datetime.fromisoformat(access_expires_at_str)
+                if exp_dt.tzinfo is None:
+                    exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) >= exp_dt:
+                    user.is_active = False
+                    db.commit()
+                    mongo_db["users"].update_many(
+                        {"$or": [{"id": user.id}, {"email": user.email}]},
+                        {"$set": {"is_active": False, "is_disabled": True, "offboarding_expired": True}}
+                    )
+                    print(f"❌ [AUTH FAILED] Candidate '{user.email}' access expired at {access_expires_at_str}")
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Your candidate portal access has permanently expired following completion of offboarding.",
+                    )
+            except HTTPException:
+                raise
+            except Exception as e:
+                pass
 
     if not user.is_active:
         print(f"⚠️ [AUTH BLOCKED] User '{user.email}' account is inactive/pending approval")
@@ -384,10 +495,13 @@ def list_users(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list users",
         )
-    
-    users = [u for u in users if not getattr(u, 'is_deleted', False)]
     all_tenants = db.query(Tenant).all()
-    tenant_map = {t.id: t for t in all_tenants}
+    tenant_map = {t.id: t for t in all_tenants if not getattr(t, 'is_deleted', False) and getattr(t, 'is_active', True) is not False and t.name not in ("Acme Systems Client", "Bearitt Client")}
+    users = [
+        u for u in users 
+        if not getattr(u, 'is_deleted', False) 
+        and (not u.tenant_id or u.tenant_id in tenant_map or u.role == "Super Admin")
+    ]
 
     def _safe_iso(dt_val):
         """Safely convert a datetime to ISO string, handling string values."""
@@ -628,7 +742,12 @@ def list_tenants(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list tenants",
         )
-    tenants = [t for t in tenants if not getattr(t, 'is_deleted', False)]
+    tenants = [
+        t for t in tenants 
+        if not getattr(t, 'is_deleted', False) 
+        and getattr(t, 'is_active', True) is not False 
+        and t.name not in ("Acme Systems Client", "Bearitt Client")
+    ]
     result = [
         TenantResponse(
             id=t.id,
@@ -1010,6 +1129,7 @@ def list_portal_users(
 
     # Enrich accepted subs with portal user status + requisition title + work order
     results = []
+    seen_keys = set()
     for sub in accepted_subs:
         cid = (sub.get("candidate_id") or "").strip()
         cemail = (sub.get("candidate_email") or sub.get("email") or "").lower().strip()
@@ -1151,10 +1271,46 @@ def create_or_update_portal_user(
     if email_owner:
         is_same_account = existing_user is not None and email_owner.id == existing_user.id
         if not is_same_account:
+            # If the email belongs to an offboarded/disabled candidate, archive the old email so it's freed up
+            is_offboarded_expired = False
             if email_owner.role == "Candidate":
+                if not email_owner.is_active or getattr(email_owner, 'is_disabled', False) or getattr(email_owner, 'offboarding_expired', False):
+                    is_offboarded_expired = True
+                else:
+                    m_user = mongo_db["users"].find_one({"$or": [{"id": email_owner.id}, {"email": email_owner.email}]}) or {}
+                    exp_str = m_user.get("access_expires_at") or getattr(email_owner, "access_expires_at", None)
+                    if not exp_str:
+                        off_doc = mongo_db["offboarding_checklists"].find_one({
+                            "$or": [
+                                {"candidate_id": getattr(email_owner, "candidate_id", "")},
+                                {"workorder_id": getattr(email_owner, "workorder_id", "")},
+                            ]
+                        }) or {}
+                        exp_str = off_doc.get("access_expires_at")
+                    if exp_str:
+                        try:
+                            exp_dt = datetime.fromisoformat(exp_str)
+                            if exp_dt.tzinfo is None:
+                                exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                            if datetime.now(timezone.utc) >= exp_dt:
+                                is_offboarded_expired = True
+                        except Exception:
+                            pass
+
+            if is_offboarded_expired:
+                import time
+                archive_suffix = f"offboarded_{int(time.time())}_{email_owner.id[:6]}"
+                email_owner.email = f"{archive_suffix}_{email_owner.email}"
+                email_owner.is_active = False
+                db.commit()
+                mongo_db["users"].update_many(
+                    {"id": email_owner.id},
+                    {"$set": {"email": email_owner.email, "original_email": email, "is_active": False, "is_disabled": True, "offboarding_expired": True}}
+                )
+            elif email_owner.role == "Candidate":
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"The email '{email}' is already in use by another candidate portal account.",
+                    detail=f"The email '{email}' is already in use by an active candidate portal account.",
                 )
             else:
                 raise HTTPException(
@@ -1176,10 +1332,39 @@ def create_or_update_portal_user(
             is_same_account = True
 
         if not is_same_account:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"The email '{email}' is already in use by another candidate portal account.",
-            )
+            m_expired = mongo_email_owner.get("is_disabled") or mongo_email_owner.get("offboarding_expired") or mongo_email_owner.get("is_active") is False
+            if not m_expired:
+                m_exp_str = mongo_email_owner.get("access_expires_at")
+                if not m_exp_str:
+                    off_doc = mongo_db["offboarding_checklists"].find_one({
+                        "$or": [
+                            {"candidate_id": mongo_email_owner.get("candidate_id", "")},
+                            {"workorder_id": mongo_email_owner.get("workorder_id", "")},
+                        ]
+                    }) or {}
+                    m_exp_str = off_doc.get("access_expires_at")
+                if m_exp_str:
+                    try:
+                        exp_dt = datetime.fromisoformat(m_exp_str)
+                        if exp_dt.tzinfo is None:
+                            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+                        if datetime.now(timezone.utc) >= exp_dt:
+                            m_expired = True
+                    except Exception:
+                        pass
+
+            if m_expired:
+                import time
+                archive_suffix = f"offboarded_{int(time.time())}_{m_id[:6]}"
+                mongo_db["users"].update_many(
+                    {"_id": mongo_email_owner["_id"]},
+                    {"$set": {"email": f"{archive_suffix}_{email}", "original_email": email, "is_active": False, "is_disabled": True, "offboarding_expired": True}}
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"The email '{email}' is already in use by another active candidate account.",
+                )
 
     if existing_user:
         # Update existing candidate user credentials & ensure active

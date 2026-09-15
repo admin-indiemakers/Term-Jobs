@@ -10,7 +10,6 @@ import JoinProcurement from './pages/JoinProcurement';
 import JoinFinance from './pages/JoinFinance';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
-import CandidateLogin from './pages/CandidateLogin';
 import DashboardLayout from './pages/DashboardLayout';
 import RecruiterDashboard from './pages/RecruiterDashboard';
 import HiringManagerDashboard from './pages/HiringManagerDashboard';
@@ -50,7 +49,6 @@ import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Workers from './pages/workforce/Workers';
 import LandingPage from './pages/LandingPage';
-import Archives from './pages/Archives';
 import AdminAccounts from './pages/AdminAccounts';
 import { CandidateInterviewLogin } from './interview/pages/CandidateInterviewLogin';
 import { CandidateInterviewPortal } from './interview/pages/CandidateInterviewPortal';
@@ -83,7 +81,7 @@ function HomeRedirect() {
   if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
   if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
-  if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -96,7 +94,7 @@ function DashboardIndex() {
   if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
   if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
   if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
-  if (user.role === 'Candidate') return <Navigate to="/candidate/onboarding" replace />;
+  if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
@@ -113,7 +111,7 @@ export default function App() {
         <Route path="/invite/procurement" element={<JoinProcurement />} />
         <Route path="/join/finance" element={<JoinFinance />} />
         <Route path="/invite/finance" element={<JoinFinance />} />
-        <Route path="/candidate/login" element={<CandidateLogin />} />
+        <Route path="/candidate/login" element={<Navigate to="/login" replace />} />
         <Route path="/interview/login" element={<CandidateInterviewLogin />} />
         <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
         <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
@@ -184,7 +182,7 @@ export default function App() {
           <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
           <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
           <Route path="superadmin/admins" element={<AdminAccounts />} />
-          <Route path="superadmin/archives" element={<Archives />} />
+          <Route path="superadmin/archives" element={<Navigate to="/dashboard/superadmin" replace />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>
         <Route

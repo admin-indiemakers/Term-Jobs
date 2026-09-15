@@ -22,9 +22,11 @@ from modules.candidate_portal.router import (
 def setup_candidate_test_data():
     init_db()
     with get_session() as session:
-        tenant = Tenant(name="Bearitt Client")
-        session.add(tenant)
-        session.commit()
+        tenant = session.query(Tenant).filter(Tenant.tenant_type == "client", Tenant.is_deleted == False).first()
+        if not tenant:
+            tenant = Tenant(name="Bearitt", tenant_type="client")
+            session.add(tenant)
+            session.commit()
 
         cand_user = User(
             email=f"candidate_test_{datetime.now().timestamp()}@example.com",
@@ -57,7 +59,39 @@ def setup_candidate_test_data():
             "status": "completed"
         })
 
-        return {"user": cand_user, "tenant": tenant, "sub": sub}
+        # Seed active work order for candidate
+        wo_data = {
+            "id": f"wo_{uuid.uuid4().hex[:8]}",
+            "work_order_number": f"WO-2026-{uuid.uuid4().hex[:4].upper()}",
+            "candidate_id": cand_user.candidate_id,
+            "workorder_id": cand_user.candidate_id,
+            "candidate_name": cand_user.name,
+            "candidate_email": cand_user.email,
+            "company_name": "Bearitt",
+            "vendor_name": "bridgeon",
+            "requisition_title": "DevOps Engineer",
+            "weekly_hours": 40.0,
+            "status": "ACTIVE",
+            "agreement_status": "Approved",
+            "is_active": True,
+            "director_approved": True,
+        }
+        db["work_orders"].insert_one(wo_data)
+
+        yield {"user": cand_user, "tenant": tenant, "sub": sub, "work_order": wo_data}
+
+        # Cleanup test records
+        try:
+            db["onboarding_checklists"].delete_many({"candidate_id": cand_user.candidate_id})
+            db["work_orders"].delete_many({"candidate_id": cand_user.candidate_id})
+            db["candidate_expenses"].delete_many({"candidate_id": cand_user.candidate_id})
+            db["candidate_notifications"].delete_many({"candidate_id": cand_user.candidate_id})
+            db["users"].delete_many({"$or": [{"id": cand_user.id}, {"candidate_id": cand_user.candidate_id}]})
+            session.delete(sub)
+            session.delete(cand_user)
+            session.commit()
+        except Exception:
+            pass
 
 
 def test_candidate_portal_dashboard_and_assignment(setup_candidate_test_data):
@@ -270,3 +304,36 @@ def test_candidate_notifications_flow(setup_candidate_test_data):
     # 4. Check unread count is 0
     res2 = list_candidate_notifications(current_user=user)
     assert res2["unread_count"] == 0
+
+
+def test_candidate_login_via_main_auth(setup_candidate_test_data):
+    from modules.identity.router import login_user, UserLogin, hash_password
+    data = setup_candidate_test_data
+    cand_user = data["user"]
+    cand_id = cand_user.candidate_id
+    cand_email = cand_user.email
+    wo_num = data["work_order"]["work_order_number"]
+
+    # Set password for candidate user
+    with get_session() as session:
+        db_user = session.query(User).filter(User.id == cand_user.id).first()
+        db_user.password_hash = hash_password("CandidateSecret123!")
+        session.commit()
+
+    with get_session() as session:
+        # 1. Login with candidate email
+        res_email = login_user(UserLogin(email=cand_email, password="CandidateSecret123!"), db=session)
+        assert res_email.access_token is not None
+        assert res_email.user.role == "Candidate"
+        assert res_email.user.email == cand_email
+
+        # 2. Login with candidate_id
+        res_cid = login_user(UserLogin(username=cand_id, password="CandidateSecret123!"), db=session)
+        assert res_cid.access_token is not None
+        assert res_cid.user.role == "Candidate"
+
+        # 3. Login with work_order_number
+        res_wo = login_user(UserLogin(username=wo_num, password="CandidateSecret123!"), db=session)
+        assert res_wo.access_token is not None
+        assert res_wo.user.role == "Candidate"
+

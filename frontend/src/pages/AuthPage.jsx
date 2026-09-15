@@ -28,7 +28,12 @@ export default function AuthPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) {
+    if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
+    if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
+    if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -41,8 +46,16 @@ export default function AuthPage() {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
-      navigate('/dashboard');
+      const loggedUser = await login(formData.email, formData.password);
+      if (loggedUser?.role === 'Candidate') {
+        navigate('/dashboard/candidate');
+      } else if (loggedUser?.role === 'Director') {
+        navigate('/dashboard/director');
+      } else if (loggedUser?.role === 'Super Admin') {
+        navigate('/dashboard/superadmin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err?.message || 'Invalid credentials. Please try again.');
     } finally {
@@ -53,8 +66,8 @@ export default function AuthPage() {
   return (
     <div className="clp">
       <SEOHead
-        title="Sign In | Term Jobs Workforce Portal"
-        description="Sign in to your Term Jobs portal to manage contractor requisitions, talent screening, and automated workforce billing."
+        title="Sign In | Term Jobs Portal"
+        description="Sign in to your Term Jobs portal to manage contractor requisitions, talent onboarding, timesheets, and automated workforce billing."
         canonicalUrl="https://termjobs.vercel.app/login"
       />
       <div className="clp-aurora" />
@@ -115,7 +128,7 @@ export default function AuthPage() {
             <div className="clp-form-head">
               <p className="clp-eyebrow">Welcome back</p>
               <h2 className="clp-form-title">Sign in to your workspace</h2>
-              <p className="clp-form-sub">Access your role, requisitions and teams.</p>
+              <p className="clp-form-sub">Access your role, assignments, and portal.</p>
             </div>
 
             <form onSubmit={handleSubmit} className="clp-form" noValidate>
@@ -131,7 +144,7 @@ export default function AuthPage() {
               )}
 
               <label className="clp-field">
-                <span className="clp-label">Email or username</span>
+                <span className="clp-label">Email, username, or Work Order ID</span>
                 <div className="clp-input">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="5" width="18" height="14" rx="2.5" />
@@ -141,10 +154,9 @@ export default function AuthPage() {
                     type="text"
                     name="email"
                     autoComplete="username"
-                    inputMode="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    placeholder="name@company.com"
+                    placeholder="name@company.com or Work Order ID"
                     required
                     disabled={loading}
                   />
@@ -188,13 +200,6 @@ export default function AuthPage() {
                 </svg>
                 Encrypted session
               </span>
-              <button
-                type="button"
-                className="clp-switch candidate-portal-link"
-                onClick={() => navigate('/candidate/login')}
-              >
-                Candidate login
-              </button>
             </div>
           </div>
         </section>

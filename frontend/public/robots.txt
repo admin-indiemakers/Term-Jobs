@@ -4,7 +4,6 @@
 User-agent: *
 Allow: /
 Allow: /login
-Allow: /candidate/login
 Allow: /director/login
 Allow: /admin/login
 Allow: /join/
