@@ -1597,15 +1597,28 @@ def restore_archive(
     item_type = archive.get("item_type", "")
 
     if item_type == "tenant":
-        # Restore tenant
-        tenant = Tenant(id=original.get("id", ""), name=original.get("name", ""), tenant_type=original.get("tenant_type", "client"))
+        tenant_id = original.get("id") or original.get("_id")
+        tenant_name = (original.get("name") or "").strip()
+        if not tenant_id or not tenant_name:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot restore tenant: missing valid tenant ID or name in archived record",
+            )
+        tenant = Tenant(id=str(tenant_id), name=tenant_name, tenant_type=original.get("tenant_type", "client"))
         db.add(tenant)
         db.commit()
+        _cache.invalidate_prefix("tenants:")
     elif item_type == "user":
-        # Restore user
+        user_id = original.get("id") or original.get("_id")
+        user_email = (original.get("email") or "").strip()
+        if not user_id or not user_email:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot restore user: missing valid user ID or email in archived record",
+            )
         user = User(
-            id=original.get("id", ""),
-            email=original.get("email", ""),
+            id=str(user_id),
+            email=user_email,
             name=original.get("name", ""),
             role=original.get("role", ""),
             tenant_id=original.get("tenant_id", ""),
@@ -1614,6 +1627,7 @@ def restore_archive(
         )
         db.add(user)
         db.commit()
+        _cache.invalidate_prefix("users:")
 
     # Remove from archives
     _archives().delete_one({"id": archive_id})

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
 import SEOHead from '../components/SEOHead';
@@ -27,6 +28,7 @@ export default function AuthPage() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (user) {
     if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
@@ -171,7 +173,7 @@ export default function AuthPage() {
                     <path d="M8 10V7a4 4 0 0 1 8 0v3" />
                   </svg>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     name="password"
                     autoComplete="current-password"
                     value={formData.password}
@@ -180,6 +182,16 @@ export default function AuthPage() {
                     required
                     disabled={loading}
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="clp-password-toggle"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    title={showPassword ? 'Hide password' : 'Show password'}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
               </label>
 

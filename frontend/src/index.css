@@ -4369,6 +4369,30 @@ nav.hide {
   cursor: not-allowed;
 }
 
+.director-password-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #94a3b8 !important;
+  border-radius: 6px;
+  transition: color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.director-password-toggle:hover {
+  color: #f8fafc !important;
+}
+
+.director-password-toggle svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: inherit !important;
+}
+
 .director-login-submit {
   display: flex;
   align-items: center;
@@ -4823,6 +4847,32 @@ nav.hide {
 .clp-input input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.clp-password-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 6px;
+  margin-right: -4px;
+  cursor: pointer;
+  color: #8a8a8a !important;
+  border-radius: 8px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.clp-password-toggle:hover {
+  color: #0a0a0a !important;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.clp-password-toggle svg {
+  width: 18px !important;
+  height: 18px !important;
+  color: inherit !important;
 }
 
 .clp-submit {

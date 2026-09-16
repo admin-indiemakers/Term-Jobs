@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
 
@@ -10,6 +11,7 @@ export default function SuperAdminLogin() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (user) return <Navigate to="/dashboard" replace />;
 
@@ -115,7 +117,7 @@ export default function SuperAdminLogin() {
                   <path d="M8 10V7a4 4 0 0 1 8 0v3" />
                 </svg>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   name="password"
                   required
                   autoComplete="current-password"
@@ -124,6 +126,16 @@ export default function SuperAdminLogin() {
                   placeholder="Enter passphrase"
                   className="flex-1 bg-transparent text-[0.95rem] text-slate-100 outline-none placeholder:text-slate-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="flex items-center justify-center p-1 text-slate-400 hover:text-slate-100 transition-colors focus:outline-none"
+                  aria-label={showPassword ? 'Hide passphrase' : 'Show passphrase'}
+                  title={showPassword ? 'Hide passphrase' : 'Show passphrase'}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
               </div>
             </label>
 
