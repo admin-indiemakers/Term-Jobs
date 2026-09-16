@@ -1,11 +1,13 @@
 from pydantic import BaseModel, Field
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status, File, UploadFile
 from sqlalchemy import func, or_
 
 from modules.identity.domain.models import Tenant, User, VendorEngagement
 from modules.identity.domain.schemas import (
     PROVISION_MATRIX,
     ROLES,
+    CompanyProfileDetailResponse,
+    CompanyProfileUpdate,
     PasswordChange,
     TenantCreate,
     TenantResponse,
@@ -291,7 +293,9 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
 @router.get("/me", response_model=UserResponse)
 def get_user_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     comp = _get_company_profile(current_user.tenant_id, db)
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
     effective_wo_id = getattr(current_user, 'workorder_id', '') or getattr(current_user, 'candidate_id', '') or ''
+    logo_url = getattr(comp, "logo_url", "") or getattr(tenant, "logo_url", "") or ""
 
     return UserResponse(
         id=current_user.id,
@@ -306,6 +310,7 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
         location=comp.location if comp else "",
         tech_stack=(comp.tech_stack if comp and comp.tech_stack else []),
         notes=comp.notes if comp else "",
+        logo_url=logo_url,
         department=current_user.department or "",
         created_by=current_user.created_by,
         is_active=current_user.is_active,
@@ -320,16 +325,242 @@ def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Self-service password change: verifies the current password before updating."""
+    """Self-service password change: verifies current password before updating."""
     if not verify_password(body.current_password, current_user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect",
         )
+    if len(body.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters long",
+        )
     user = db.query(User).filter(User.id == current_user.id).first()
     user.password_hash = hash_password(body.new_password)
     db.commit()
+    _log_admin_action(
+        current_user,
+        'PASSWORD_CHANGE',
+        'User',
+        current_user.email,
+        f"Password changed successfully for account '{current_user.email}'"
+    )
     return {"status": "ok", "message": "Password updated successfully"}
+
+
+@router.get("/company/profile", response_model=CompanyProfileDetailResponse)
+def get_company_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get company profile, branding, and admin account details for the authenticated user's tenant."""
+    if current_user.role not in ("Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Company Admins can access company profile details",
+        )
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+    comp = _get_company_profile(current_user.tenant_id, db)
+    logo_url = getattr(comp, "logo_url", "") or getattr(tenant, "logo_url", "") or ""
+
+    return CompanyProfileDetailResponse(
+        tenant_id=tenant.id,
+        name=tenant.name,
+        tenant_type=tenant.tenant_type,
+        industry=comp.industry if comp else "",
+        size=comp.size if comp else "",
+        location=comp.location if comp else "",
+        tech_stack=comp.tech_stack if comp and comp.tech_stack else [],
+        notes=comp.notes if comp else "",
+        logo_url=logo_url,
+        admin_id=current_user.id,
+        admin_name=current_user.name,
+        admin_email=current_user.email,
+        admin_phone=getattr(current_user, "phone", "") or "",
+        admin_role=current_user.role,
+    )
+
+
+@router.put("/company/profile", response_model=CompanyProfileDetailResponse)
+def update_company_profile(
+    body: CompanyProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update company details, branding, and admin personal info."""
+    if current_user.role not in ("Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only Company Admins can update company profile details",
+        )
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if not tenant:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Tenant not found",
+        )
+
+    # 1. Update company name if provided
+    if body.name is not None and body.name.strip():
+        new_name = body.name.strip()
+        existing = db.query(Tenant).filter(
+            func.lower(Tenant.name) == new_name.lower(),
+            Tenant.id != tenant.id,
+            Tenant.is_deleted == False
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"A company named '{new_name}' already exists",
+            )
+        tenant.name = new_name
+
+    # 2. Update company logo if provided
+    if body.logo_url is not None:
+        tenant.logo_url = body.logo_url
+
+    # 3. Update CompanyProfile record
+    comp = _get_company_profile(current_user.tenant_id, db)
+    if not comp:
+        comp = CompanyProfile(
+            tenant_id=current_user.tenant_id,
+            name=tenant.name,
+            industry=body.industry or "",
+            size=body.size or "",
+            location=body.location or "",
+            tech_stack=body.tech_stack or [],
+            notes=body.notes or "",
+            logo_url=body.logo_url or "",
+        )
+        db.add(comp)
+    else:
+        if body.name is not None:
+            comp.name = tenant.name
+        if body.industry is not None:
+            comp.industry = body.industry.strip()
+        if body.size is not None:
+            comp.size = body.size.strip()
+        if body.location is not None:
+            comp.location = body.location.strip()
+        if body.tech_stack is not None:
+            comp.tech_stack = body.tech_stack
+        if body.notes is not None:
+            comp.notes = body.notes.strip()
+        if body.logo_url is not None:
+            comp.logo_url = body.logo_url
+
+    # 4. Update Admin User details if provided
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if body.admin_name is not None and body.admin_name.strip():
+        user.name = body.admin_name.strip()
+    if body.admin_phone is not None:
+        user.phone = body.admin_phone.strip()
+    if body.admin_email is not None and body.admin_email.strip():
+        new_email = body.admin_email.strip().lower()
+        if new_email != user.email.lower():
+            existing_user = db.query(User).filter(
+                func.lower(User.email) == new_email,
+                User.id != user.id,
+                User.is_deleted == False
+            ).first()
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Email '{new_email}' is already registered by another account",
+                )
+            user.email = new_email
+
+    db.commit()
+    _cache.invalidate_prefix("tenants:")
+    _cache.invalidate_prefix("users:")
+
+    _log_admin_action(
+        current_user,
+        'UPDATE_COMPANY_PROFILE',
+        'Company',
+        tenant.name,
+        f"Updated company details and profile for '{tenant.name}'"
+    )
+
+    logo_url = getattr(comp, "logo_url", "") or getattr(tenant, "logo_url", "") or ""
+    return CompanyProfileDetailResponse(
+        tenant_id=tenant.id,
+        name=tenant.name,
+        tenant_type=tenant.tenant_type,
+        industry=comp.industry if comp else "",
+        size=comp.size if comp else "",
+        location=comp.location if comp else "",
+        tech_stack=comp.tech_stack if comp and comp.tech_stack else [],
+        notes=comp.notes if comp else "",
+        logo_url=logo_url,
+        admin_id=user.id,
+        admin_name=user.name,
+        admin_email=user.email,
+        admin_phone=getattr(user, "phone", "") or "",
+        admin_role=user.role,
+    )
+
+
+@router.post("/company/logo")
+async def upload_company_logo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Upload a company logo file (PNG, JPEG, WEBP, SVG), max 3MB."""
+    if current_user.role not in ("Admin", "Super Admin"):
+        raise HTTPException(status_code=403, detail="Only Company Admins can upload company logos")
+
+    ALLOWED_MIME_TYPES = {
+        "image/png": "png",
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/webp": "webp",
+        "image/svg+xml": "svg",
+    }
+    content_type = file.content_type.lower() if file.content_type else ""
+    if content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid image format. Allowed formats: PNG, JPEG, WEBP, SVG.",
+        )
+
+    content = await file.read()
+    if len(content) > 3 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image size exceeds the maximum limit of 3MB.",
+        )
+
+    import base64
+    b64_str = base64.b64encode(content).decode("utf-8")
+    logo_data_uri = f"data:{content_type};base64,{b64_str}"
+
+    tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
+    if tenant:
+        tenant.logo_url = logo_data_uri
+
+    comp = _get_company_profile(current_user.tenant_id, db)
+    if comp:
+        comp.logo_url = logo_data_uri
+    else:
+        comp = CompanyProfile(
+            tenant_id=current_user.tenant_id,
+            name=tenant.name if tenant else "",
+            logo_url=logo_data_uri,
+        )
+        db.add(comp)
+
+    db.commit()
+    _cache.invalidate_prefix("tenants:")
+
+    return {"logo_url": logo_data_uri, "message": "Company logo uploaded successfully"}
 
 
 # --- Admin/HR provisioning (MVP v2: no self-registration) --------------------

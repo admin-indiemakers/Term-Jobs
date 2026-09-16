@@ -15,6 +15,7 @@ class Tenant(Model):
         "created_by_tenant_id": "",
         "is_deleted": False,
         "deleted_at": None,
+        "logo_url": "",
         "created_at": _utcnow,
     }
 
@@ -25,6 +26,7 @@ class Tenant(Model):
     created_by_tenant_id = Column("created_by_tenant_id")
     is_deleted = Column("is_deleted")
     deleted_at = Column("deleted_at")
+    logo_url = Column("logo_url")
     created_at = Column("created_at")
 
 

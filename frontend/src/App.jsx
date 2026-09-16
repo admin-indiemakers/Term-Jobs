@@ -19,6 +19,7 @@ import ManageHiringManagers from './pages/ManageHiringManagers';
 import ManageProcurement from './pages/ManageProcurement';
 import ManageFinance from './pages/ManageFinance';
 import ManagePartnerVendors from './pages/ManagePartnerVendors';
+import CompanyAdminProfile from './pages/CompanyAdminProfile';
 import SuperAdminDashboard from './pages/SuperAdminDashboard';
 import AiChat from './pages/AiChat';
 import HiringManagerChat from './pages/HiringManagerChat';
@@ -167,6 +168,7 @@ export default function App() {
           <Route path="admin/finance" element={<ManageFinance />} />
           <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
           <Route path="admin/vendors" element={<ManagePartnerVendors />} />
+          <Route path="admin/profile" element={<CompanyAdminProfile />} />
           <Route path="director" element={<DirectorDashboard />} />
           <Route path="director/work-orders" element={<DirectorWorkOrders />} />
           <Route path="director/agreements" element={<DirectorAgreements />} />

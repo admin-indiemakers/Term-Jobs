@@ -76,8 +76,19 @@ export function AuthProvider({ children }) {
     };
   }, [token, logout]);
 
+  const refreshUser = useCallback(async () => {
+    if (!token) return;
+    try {
+      const data = await request('/api/auth/me', { token });
+      setUser(data);
+      return data;
+    } catch {
+      // ignore
+    }
+  }, [token]);
+
   return (
-    <AuthContext.Provider value={{ user, token, initializing, login, loginWithCandidateId, loginCandidate: loginWithCandidateId, logout }}>
+    <AuthContext.Provider value={{ user, token, initializing, login, loginWithCandidateId, loginCandidate: loginWithCandidateId, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

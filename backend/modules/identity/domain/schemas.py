@@ -93,11 +93,40 @@ class UserResponse(BaseModel):
     location: str = ""
     tech_stack: list[str] = Field(default_factory=list)
     notes: str = ""
+    logo_url: str = ""
     department: str = ""
     created_by: str = ""
     is_active: bool = True
     candidate_limit: int | None = None
     candidate_id: str = ""
+
+class CompanyProfileUpdate(BaseModel):
+    name: str | None = Field(None, min_length=2, max_length=255)
+    industry: str | None = Field(None, max_length=255)
+    size: str | None = Field(None, max_length=100)
+    location: str | None = Field(None, max_length=255)
+    tech_stack: list[str] | None = None
+    notes: str | None = None
+    logo_url: str | None = None
+    admin_name: str | None = Field(None, min_length=1, max_length=255)
+    admin_email: str | None = Field(None, min_length=3, max_length=255)
+    admin_phone: str | None = None
+
+class CompanyProfileDetailResponse(BaseModel):
+    tenant_id: str
+    name: str
+    tenant_type: str
+    industry: str = ""
+    size: str = ""
+    location: str = ""
+    tech_stack: list[str] = Field(default_factory=list)
+    notes: str = ""
+    logo_url: str = ""
+    admin_id: str = ""
+    admin_name: str = ""
+    admin_email: str = ""
+    admin_phone: str = ""
+    admin_role: str = ""
 
 class UserListResponse(BaseModel):
     id: str

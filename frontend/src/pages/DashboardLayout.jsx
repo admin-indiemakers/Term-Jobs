@@ -626,6 +626,14 @@ export default function DashboardLayout() {
               >
                 Interviews
               </NavLink>
+              <div className="nav-section-label">Organization</div>
+              <NavLink
+                to="/dashboard/admin/profile"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
+              >
+                Company Profile
+              </NavLink>
             </>
           ) : (
             <>
@@ -671,7 +679,11 @@ export default function DashboardLayout() {
       {/* Sidebar Footer */}
       <div className="sidebar-footer pt-4 border-t border-[#EAEAE6] mt-4">
         <div className="flex items-center justify-between px-0.5">
-          <div className="flex items-center gap-3 min-w-0">
+          <div
+            onClick={() => userRole === 'Admin' && navigate('/dashboard/admin/profile')}
+            className={`flex items-center gap-3 min-w-0 ${userRole === 'Admin' ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
+            title={userRole === 'Admin' ? 'View Company Profile' : undefined}
+          >
             <div
               style={{
                 width: 38,
@@ -680,9 +692,13 @@ export default function DashboardLayout() {
                 backgroundColor: '#0A0A0A',
                 color: '#FFFFFF',
               }}
-              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs"
+              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden"
             >
-              {initials(user?.name)}
+              {user?.logo_url ? (
+                <img src={user.logo_url} alt="Logo" className="w-full h-full object-cover" />
+              ) : (
+                initials(user?.name)
+              )}
             </div>
             <div className="leading-tight min-w-0">
               <div className="text-[13.5px] font-extrabold text-[#0A0A0A] tracking-tight truncate">

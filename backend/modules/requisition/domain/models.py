@@ -16,6 +16,7 @@ class CompanyProfile(Model):
         "location": "",
         "tech_stack": list,
         "notes": "",
+        "logo_url": "",
         "created_at": _utcnow,
     }
 
@@ -27,6 +28,7 @@ class CompanyProfile(Model):
     location = Column("location")
     tech_stack = Column("tech_stack")
     notes = Column("notes")
+    logo_url = Column("logo_url")
     created_at = Column("created_at")
 
 
