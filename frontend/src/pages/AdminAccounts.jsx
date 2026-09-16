@@ -83,12 +83,20 @@ export default function AdminAccounts() {
   const loadData = () => {
     setLoading(true);
     Promise.all([
-      request('/api/auth/users', { token }).catch(() => []),
+      request('/api/auth/superadmins', { token }).catch(() => null),
       request('/api/auth/admin-logs', { token }).catch(() => []),
     ])
-      .then(([userData, logData]) => {
-        const allUsers = Array.isArray(userData) ? userData : [];
-        setAdmins(allUsers.filter((u) => u.role === 'Super Admin'));
+      .then(async ([superAdminData, logData]) => {
+        let adminList = Array.isArray(superAdminData) ? superAdminData : null;
+        if (!adminList) {
+          try {
+            const fallbackUsers = await request('/api/auth/users', { token });
+            adminList = (Array.isArray(fallbackUsers) ? fallbackUsers : []).filter((u) => u.role === 'Super Admin');
+          } catch {
+            adminList = [];
+          }
+        }
+        setAdmins(adminList);
         setLogs(Array.isArray(logData) ? logData : []);
         setError('');
       })

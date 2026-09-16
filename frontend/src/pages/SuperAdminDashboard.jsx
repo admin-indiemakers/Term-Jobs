@@ -15,8 +15,8 @@ import {
 
 export default function SuperAdminDashboard() {
   const { token } = useAuth();
-  const [users, setUsers] = useState([]);
   const [tenants, setTenants] = useState([]);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -26,12 +26,14 @@ export default function SuperAdminDashboard() {
   const load = () => {
     setLoading(true);
     Promise.all([
-      request('/api/auth/users', { token }),
       request('/api/auth/tenants', { token }),
+      request('/api/superadmin/agent/stats', { token }).catch(() => null),
     ])
-      .then(([usersRes, tenantsRes]) => {
-        setUsers(usersRes || []);
+      .then(([tenantsRes, statsRes]) => {
         setTenants(tenantsRes || []);
+        if (statsRes) {
+          setStats(statsRes);
+        }
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -57,42 +59,43 @@ export default function SuperAdminDashboard() {
 
   const clientTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'client'), [tenants]);
   const consultancyTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'consultancy'), [tenants]);
-  const adminAccounts = useMemo(() => users.filter((u) => u.role === 'Admin' || u.role === 'Recruiter'), [users]);
-  const companyAdmins = useMemo(() => users.filter((u) => u.role === 'Admin'), [users]);
-  const vendorAdmins = useMemo(() => users.filter((u) => u.role === 'Recruiter'), [users]);
+  const totalAdmins = useMemo(() => {
+    if (stats?.company_admins !== undefined && stats?.vendor_admins !== undefined) {
+      return stats.company_admins + stats.vendor_admins;
+    }
+    return clientTenants.length + consultancyTenants.length;
+  }, [stats, clientTenants, consultancyTenants]);
 
   // Generate dynamic platform activity events based on actual DB records
   const platformActivities = useMemo(() => {
+    if (stats?.platform_activities && stats.platform_activities.length > 0) {
+      return stats.platform_activities.map((act) => ({
+        id: act.id,
+        icon: act.type === 'buyer' ? Building2 : act.type === 'vendor' ? Layers : Edit3,
+        title: act.title,
+        desc: act.desc,
+        date: 'Recent',
+        badge: act.badge || 'Active',
+        badgeTone: act.tone === 'green' ? 'green' : 'gray',
+      }));
+    }
+
     const list = [];
-    tenants.slice(-2).reverse().forEach((t, idx) => {
+    tenants.slice(-3).reverse().forEach((t, idx) => {
       const isClient = t.tenant_type === 'client';
       list.push({
         id: `tenant-${t.id}`,
-        icon: Plus,
+        icon: isClient ? Building2 : Layers,
         title: isClient ? 'Buyer company onboarded' : 'Vendor consultancy onboarded',
-        desc: `${t.name} • ${isClient ? 'Tenant and admin created' : 'Recruiter access provisioned'}`,
+        desc: `${t.name} • ${isClient ? 'Tenant and admin provisioned' : 'Recruiter access provisioned'}`,
         date: idx === 0 ? 'Today' : 'Yesterday',
         badge: isClient ? 'Completed' : 'Active',
         badgeTone: 'green',
       });
     });
 
-    if (adminAccounts.length > 0) {
-      const recentAdmin = adminAccounts[0];
-      const adminTenant = tenants.find((t) => t.id === recentAdmin.tenant_id);
-      list.push({
-        id: `user-${recentAdmin.id}`,
-        icon: Edit3,
-        title: 'Company admin updated',
-        desc: `${adminTenant?.name || recentAdmin.name || 'Account'} • Administrator account active`,
-        date: '29 Aug',
-        badge: 'Updated',
-        badgeTone: 'gray',
-      });
-    }
-
     return list.slice(0, 4);
-  }, [tenants, adminAccounts]);
+  }, [stats, tenants]);
 
   return (
     <div className="w-full min-w-0 pb-12 space-y-5 text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
@@ -114,10 +117,13 @@ export default function SuperAdminDashboard() {
               ● Super Admin
             </span>
             <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {tenants.length} companies
+              {clientTenants.length} Buyer {clientTenants.length === 1 ? 'Company' : 'Companies'}
             </span>
             <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {adminAccounts.length} admin accounts
+              {consultancyTenants.length} Vendor {consultancyTenants.length === 1 ? 'Partner' : 'Partners'}
+            </span>
+            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
+              {totalAdmins} Admin Accounts
             </span>
           </div>
         </div>
@@ -126,80 +132,101 @@ export default function SuperAdminDashboard() {
           <button
             type="button"
             onClick={() => setShowOnboardVendorModal(true)}
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors"
+            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
           >
             + Onboard Vendor
           </button>
           <button
             type="button"
             onClick={() => setShowOnboardModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5"
+            className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             + Onboard Buyer Company
           </button>
         </div>
       </div>
 
-      {/* 5 Stat Metric Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            COMPANIES
+      {/* 3 Core Platform Metric Cards: Buyers, Vendors, Admin Accounts */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Card 1: Buyer Companies */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                BUYER CLIENTS
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center">
+                <Building2 size={16} />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
+              {clientTenants.length}
+            </div>
+            <div className="text-xs text-gray-500 font-medium">
+              Active enterprise client tenants
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {tenants.length}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Buyer & vendor tenants
-          </div>
+          <Link
+            to="/dashboard/superadmin/accounts?tab=buyers"
+            className="inline-flex items-center gap-1 text-xs font-bold text-gray-900 hover:text-black mt-4 pt-3 border-t border-gray-100 transition-colors"
+          >
+            <span>Manage buyer accounts</span>
+            <ArrowRight size={13} />
+          </Link>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            BUYER COMPANIES
+        {/* Card 2: Vendor Consultancies */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                VENDOR PARTNERS
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center">
+                <Layers size={16} />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
+              {consultancyTenants.length}
+            </div>
+            <div className="text-xs text-gray-500 font-medium">
+              Approved staffing & sourcing agencies
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {clientTenants.length}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Client tenants
-          </div>
+          <Link
+            to="/dashboard/superadmin/vendor-accounts?tab=vendors"
+            className="inline-flex items-center gap-1 text-xs font-bold text-gray-900 hover:text-black mt-4 pt-3 border-t border-gray-100 transition-colors"
+          >
+            <span>Manage vendor agencies</span>
+            <ArrowRight size={13} />
+          </Link>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            VENDOR CONSULTANCIES
+        {/* Card 3: Admin Accounts */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                ADMIN ACCOUNTS
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center">
+                <Users size={16} />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
+              {totalAdmins}
+            </div>
+            <div className="text-xs text-gray-500 font-medium">
+              Configured buyer & recruiter administrators
+            </div>
           </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {consultancyTenants.length}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Sourcing partners
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            VENDOR ADMINS
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {vendorAdmins.length}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Recruiter accounts
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            COMPANY ADMINS
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {companyAdmins.length}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Buyer administrators
-          </div>
+          <Link
+            to="/dashboard/superadmin/admin-accounts"
+            className="inline-flex items-center gap-1 text-xs font-bold text-gray-900 hover:text-black mt-4 pt-3 border-t border-gray-100 transition-colors"
+          >
+            <span>Manage admin credentials</span>
+            <ArrowRight size={13} />
+          </Link>
         </div>
       </div>
 
@@ -244,11 +271,10 @@ export default function SuperAdminDashboard() {
                     <div className="flex items-center gap-2.5 shrink-0">
                       <span className="text-[11px] text-gray-400 font-medium">{act.date}</span>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          act.badgeTone === 'green'
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${act.badgeTone === 'green'
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                             : 'bg-gray-100 text-gray-700 border border-gray-200'
-                        }`}
+                          }`}
                       >
                         {act.badge}
                       </span>

@@ -111,8 +111,10 @@ def _get_company_profile(tenant_id: str, db: Session) -> CompanyProfile | None:
     return db.query(CompanyProfile).filter(CompanyProfile.tenant_id == tenant_id).first()
 
 def _tenant_name(tenant_id: str, db: Session) -> str:
+    if not tenant_id:
+        return "Platform"
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    return tenant.name if tenant else "Unknown Tenant"
+    return tenant.name if tenant else "Platform"
 
 def _tenant_type(tenant_id: str, db: Session) -> str:
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
@@ -2119,6 +2121,39 @@ def create_superadmin(
         is_active=user.is_active,
         phone=user.phone or "",
     )
+
+
+@router.get("/superadmins", response_model=list[UserResponse])
+def list_superadmins(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List Super Admin accounts only. Super Admin only."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Only Super Admins can list Super Admin accounts")
+
+    users = (
+        db.query(User)
+        .filter(User.role == "Super Admin")
+        .all()
+    )
+    return [
+        UserResponse(
+            id=u.id,
+            email=u.email,
+            name=u.name,
+            role=u.role,
+            tenant_id=u.tenant_id or "system",
+            tenant_name="Platform Administration",
+            tenant_type="system",
+            department="Platform Admin",
+            created_by=u.created_by,
+            is_active=u.is_active,
+            phone=u.phone or "",
+        )
+        for u in users
+        if not getattr(u, "is_deleted", False)
+    ]
 
 
 @router.get("/admin-logs")

@@ -1181,11 +1181,16 @@ export default function DashboardLayout() {
                 </button>
 
                 <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
-                  {user?.tenant_name || (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
+                  {userRole === 'Super Admin'
+                    ? 'Platform'
+                    : (user?.tenant_name && user.tenant_name !== 'Unknown Tenant')
+                    ? user.tenant_name
+                    : (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
                 </span>
                 <span className="text-[#8A8A85] font-normal">/</span>
                 <span className="text-[#0A0A0A] font-semibold truncate">
-                  {location.pathname.includes('/requisitions') ? 'Requisitions'
+                  {userRole === 'Super Admin' && location.pathname === '/dashboard/superadmin' ? 'Console'
+                    : location.pathname.includes('/requisitions') ? 'Requisitions'
                     : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
                     : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
                     : location.pathname.includes('/interviews') ? 'Interview Requests'
