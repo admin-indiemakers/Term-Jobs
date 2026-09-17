@@ -901,8 +901,8 @@ export default function LandingPage() {
       <SEOHead
         title={
           route === '#contact'
-            ? 'Contact Us | Term Jobs - Flexible Workforce & Contract Talent'
-            : 'Term Jobs | Flexible Workforce & Contract Hiring Platform'
+            ? 'Contact Us | TermJobs'
+            : 'TermJobs'
         }
         description={
           route === '#contact'

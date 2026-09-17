@@ -5,7 +5,7 @@ import { useEffect } from 'react';
  * meta description, canonical URL, and indexing instructions during client-side transitions.
  */
 export default function SEOHead({
-  title = 'Term Jobs | Flexible Workforce & Contract Hiring Platform',
+  title = 'TermJobs',
   description = 'Term Jobs connects enterprise teams with verified contract professionals, trusted staffing vendors, automated timesheet tracking, and transparent billing in one unified platform.',
   canonicalUrl = 'https://termjobs.vercel.app/',
   noindex = false,

@@ -71,6 +71,12 @@ def get_superadmin_stats():
         tenants = session.query(Tenant).all()
         clients = [t for t in tenants if t.tenant_type == 'client']
         consultancies = [t for t in tenants if t.tenant_type == 'consultancy']
+        guest_clients = [
+            t for t in tenants 
+            if getattr(t, 'is_guest', False) 
+            or getattr(t, 'vendor_type', '') == 'guest' 
+            or getattr(t, 'client_type', '') == 'guest'
+        ]
 
         users = session.query(User).all()
         company_admins = [u for u in users if u.role == 'Admin']
@@ -150,6 +156,7 @@ def get_superadmin_stats():
             "total_companies": len(tenants),
             "buyer_companies": len(clients),
             "vendor_consultancies": len(consultancies),
+            "guest_clients": len(guest_clients),
             "company_admins": len(company_admins),
             "vendor_admins": len(vendor_admins),
             "total_users": len(users),

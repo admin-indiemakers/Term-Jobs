@@ -12,6 +12,8 @@ class Tenant(Model):
         "name": "",
         "tenant_type": "client",  # client or consultancy
         "vendor_type": "standard",  # standard or guest
+        "client_type": "standard",  # standard or guest
+        "is_guest": False,
         "created_by_tenant_id": "",
         "is_deleted": False,
         "deleted_at": None,
@@ -23,6 +25,8 @@ class Tenant(Model):
     name = Column("name")
     tenant_type = Column("tenant_type")
     vendor_type = Column("vendor_type")
+    client_type = Column("client_type")
+    is_guest = Column("is_guest")
     created_by_tenant_id = Column("created_by_tenant_id")
     is_deleted = Column("is_deleted")
     deleted_at = Column("deleted_at")

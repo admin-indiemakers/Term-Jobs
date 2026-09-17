@@ -1031,7 +1031,8 @@ def list_tenants(
             name=t.name,
             tenant_type=t.tenant_type,
             vendor_type=getattr(t, 'vendor_type', 'standard') or 'standard',
-            is_guest=(getattr(t, 'vendor_type', '') == 'guest' or getattr(t, 'is_guest', False))
+            client_type=getattr(t, 'client_type', 'standard') or ('guest' if getattr(t, 'is_guest', False) else 'standard'),
+            is_guest=(getattr(t, 'vendor_type', '') == 'guest' or getattr(t, 'client_type', '') == 'guest' or getattr(t, 'is_guest', False))
         )
         for t in sorted(tenants, key=lambda t: (t.tenant_type, t.name))
     ]

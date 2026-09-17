@@ -10,7 +10,8 @@ import {
   Layers,
   Plus,
   Edit3,
-  ArrowRight
+  ArrowRight,
+  UserCheck
 } from 'lucide-react';
 
 export default function SuperAdminDashboard() {
@@ -59,6 +60,19 @@ export default function SuperAdminDashboard() {
 
   const clientTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'client'), [tenants]);
   const consultancyTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'consultancy'), [tenants]);
+  const guestClients = useMemo(() => {
+    return tenants.filter(
+      (t) =>
+        t.is_guest ||
+        t.vendor_type === 'guest' ||
+        t.client_type === 'guest' ||
+        (t.tenant_type === 'client' && t.is_guest)
+    );
+  }, [tenants]);
+  const guestClientsCount = useMemo(() => {
+    if (stats?.guest_clients !== undefined) return stats.guest_clients;
+    return guestClients.length;
+  }, [stats, guestClients]);
   const totalAdmins = useMemo(() => {
     if (stats?.company_admins !== undefined && stats?.vendor_admins !== undefined) {
       return stats.company_admins + stats.vendor_admins;
@@ -116,15 +130,6 @@ export default function SuperAdminDashboard() {
             <span className="px-3 py-1 rounded-full bg-black text-white text-xs font-bold shadow-2xs">
               ● Super Admin
             </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {clientTenants.length} Buyer {clientTenants.length === 1 ? 'Company' : 'Companies'}
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {consultancyTenants.length} Vendor {consultancyTenants.length === 1 ? 'Partner' : 'Partners'}
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {totalAdmins} Admin Accounts
-            </span>
           </div>
         </div>
 
@@ -146,8 +151,8 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* 3 Core Platform Metric Cards: Buyers, Vendors, Admin Accounts */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* 4 Core Platform Metric Cards: Buyers, Guest Clients, Vendors, Admin Accounts */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Buyer Companies */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
           <div>
@@ -166,16 +171,29 @@ export default function SuperAdminDashboard() {
               Active enterprise client tenants
             </div>
           </div>
-          <Link
-            to="/dashboard/superadmin/accounts?tab=buyers"
-            className="inline-flex items-center gap-1 text-xs font-bold text-gray-900 hover:text-black mt-4 pt-3 border-t border-gray-100 transition-colors"
-          >
-            <span>Manage buyer accounts</span>
-            <ArrowRight size={13} />
-          </Link>
         </div>
 
-        {/* Card 2: Vendor Consultancies */}
+        {/* Card 2: Guest Clients */}
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+                GUEST CLIENTS
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center">
+                <UserCheck size={16} />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
+              {guestClientsCount}
+            </div>
+            <div className="text-xs text-gray-500 font-medium">
+              External & guest partner accounts
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Vendor Consultancies */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
@@ -193,16 +211,9 @@ export default function SuperAdminDashboard() {
               Approved staffing & sourcing agencies
             </div>
           </div>
-          <Link
-            to="/dashboard/superadmin/vendor-accounts?tab=vendors"
-            className="inline-flex items-center gap-1 text-xs font-bold text-gray-900 hover:text-black mt-4 pt-3 border-t border-gray-100 transition-colors"
-          >
-            <span>Manage vendor agencies</span>
-            <ArrowRight size={13} />
-          </Link>
         </div>
 
-        {/* Card 3: Admin Accounts */}
+        {/* Card 4: Admin Accounts */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
@@ -220,13 +231,6 @@ export default function SuperAdminDashboard() {
               Configured buyer & recruiter administrators
             </div>
           </div>
-          <Link
-            to="/dashboard/superadmin/admin-accounts"
-            className="inline-flex items-center gap-1 text-xs font-bold text-gray-900 hover:text-black mt-4 pt-3 border-t border-gray-100 transition-colors"
-          >
-            <span>Manage admin credentials</span>
-            <ArrowRight size={13} />
-          </Link>
         </div>
       </div>
 

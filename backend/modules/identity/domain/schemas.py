@@ -25,6 +25,7 @@ class TenantResponse(BaseModel):
     name: str
     tenant_type: str
     vendor_type: str = 'standard'
+    client_type: str = 'standard'
     is_guest: bool = False
 
 class VendorResponse(BaseModel):

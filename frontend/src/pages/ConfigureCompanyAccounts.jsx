@@ -92,11 +92,22 @@ export default function ConfigureAccounts({ defaultTab }) {
 
   const buyerAdmins = useMemo(() => users.filter((u) => u.role === 'Admin'), [users]);
   const vendorRecruiters = useMemo(() => users.filter((u) => u.role === 'Recruiter'), [users]);
+  const guestUsers = useMemo(() => {
+    return users.filter((u) => {
+      const tenantObj = tenants.find((t) => t.id === u.tenant_id);
+      return tenantObj?.is_guest || tenantObj?.vendor_type === 'guest' || tenantObj?.client_type === 'guest' || u.is_guest;
+    });
+  }, [users, tenants]);
 
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
       if (activeTab === 'buyers' && u.role !== 'Admin') return false;
       if (activeTab === 'vendors' && u.role !== 'Recruiter') return false;
+      if (activeTab === 'guest') {
+        const tenantObj = tenants.find((t) => t.id === u.tenant_id);
+        const isGuest = tenantObj?.is_guest || tenantObj?.vendor_type === 'guest' || tenantObj?.client_type === 'guest' || u.is_guest;
+        if (!isGuest) return false;
+      }
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase();
@@ -222,6 +233,16 @@ export default function ConfigureAccounts({ defaultTab }) {
                 }`}
             >
               Vendor Recruiters ({vendorRecruiters.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('guest')}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${activeTab === 'guest'
+                ? 'bg-black text-white shadow-2xs'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+            >
+              Guest Accounts ({guestUsers.length})
             </button>
           </div>
 
