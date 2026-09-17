@@ -230,6 +230,12 @@ def _build_service():
 service = _build_service()
 try:
     init_db()
+    try:
+        from scripts.seed_super_admin import seed_super_admin
+        seed_super_admin()
+    except Exception as s_exc:
+        import logging
+        logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
 except Exception as exc:  # noqa: BLE001
     # Do not hard-crash at startup if MongoDB is unreachable (e.g. Atlas
     # paused / IP allowlist changed). The server boots and reports degraded

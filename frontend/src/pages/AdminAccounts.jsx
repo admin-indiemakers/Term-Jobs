@@ -163,6 +163,11 @@ export default function AdminAccounts() {
   };
 
   const handleDeleteAdmin = async (adminUser) => {
+    if (adminUser.email?.toUpperCase() === 'ADMIN') {
+      setError('The root Super Admin account ("ADMIN") is permanent and cannot be deleted.');
+      setConfirmDelete(null);
+      return;
+    }
     setDeleting(true);
     setError('');
     setSuccess('');
@@ -485,7 +490,7 @@ export default function AdminAccounts() {
                         <td className="py-3.5 px-3">
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-black text-white shadow-2xs">
                             <ShieldCheck size={11} />
-                            <span>Super Admin</span>
+                            <span>{u.email?.toUpperCase() === 'ADMIN' ? 'Root Super Admin' : 'Super Admin'}</span>
                           </span>
                         </td>
 
@@ -515,13 +520,19 @@ export default function AdminAccounts() {
                         {/* Actions */}
                         <td className="py-3.5 px-3 text-right">
                           <div className="inline-flex items-center gap-3">
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDelete(u)}
-                              className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                            >
-                              Remove
-                            </button>
+                            {u.email?.toUpperCase() === 'ADMIN' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-lg select-none">
+                                Non-Deletable
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDelete(u)}
+                                className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

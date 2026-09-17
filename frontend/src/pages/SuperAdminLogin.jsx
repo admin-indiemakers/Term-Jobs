@@ -13,7 +13,10 @@ export default function SuperAdminLogin() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) {
+    if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -26,8 +29,12 @@ export default function SuperAdminLogin() {
     setLoading(true);
 
     try {
-      await login(formData.email, formData.password);
-      navigate('/dashboard');
+      const loggedUser = await login(formData.email, formData.password);
+      if (loggedUser?.role === 'Super Admin') {
+        navigate('/dashboard/superadmin');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.');
     } finally {
@@ -103,7 +110,7 @@ export default function SuperAdminLogin() {
                   inputMode="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  placeholder="Enter admin username"
+                  placeholder="ADMIN"
                   className="flex-1 bg-transparent text-[0.95rem] text-slate-100 outline-none placeholder:text-slate-500"
                 />
               </div>
