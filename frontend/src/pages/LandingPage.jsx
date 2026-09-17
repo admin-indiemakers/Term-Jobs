@@ -874,9 +874,20 @@ const ContactPage = ({ setRoute }) => {
 
 /* ============ FOOTER ============ */
 const Footer = () => (
-  <footer className="border-t border-hair px-6 py-9 flex items-center justify-between text-[12.5px] text-grey flex-wrap gap-3 max-[480px]:flex-col max-[480px]:text-center bg-paper">
+  <footer className="border-t border-hair px-6 py-9 flex items-center justify-between text-[12.5px] text-grey flex-wrap gap-4 max-[480px]:flex-col max-[480px]:text-center bg-paper">
     <div className="flex items-center gap-3 font-semibold text-ink-soft">
       Term Jobs
+    </div>
+    <div className="flex items-center gap-1.5 flex-wrap justify-center text-grey">
+      <span>Developed by</span>
+      <a
+        href="https://www.indiemakers.in/"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-medium text-ink hover:text-black underline underline-offset-4 decoration-grey/40 hover:decoration-black transition-colors"
+      >
+        Indie Maker Ventures Studio
+      </a>
     </div>
     <div>&copy; 2026 Term Jobs. All rights reserved.</div>
   </footer>
