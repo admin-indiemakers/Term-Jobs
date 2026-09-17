@@ -49,7 +49,7 @@ export default function DirectorLogin() {
 
       <main className="director-login-card">
         <header className="director-login-header">
-          <div className="director-login-brand">
+          <Link to="/" className="director-login-brand" title="Return to Home" style={{ textDecoration: 'none' }}>
             <div className="director-login-logo bg-white p-1 rounded-xl shadow-xs">
               <img src="/logo.png" alt="TermJobs Logo" className="h-8 w-8 object-contain" />
             </div>
@@ -57,7 +57,7 @@ export default function DirectorLogin() {
               <span className="director-login-name">TERMJOBS</span>
               <span className="director-login-badge">DIRECTOR</span>
             </div>
-          </div>
+          </Link>
           <p className="director-login-subtitle">Executive Gateway — Read-only oversight of hiring activity</p>
         </header>
 

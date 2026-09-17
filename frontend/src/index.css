@@ -4239,6 +4239,13 @@ nav.hide {
   justify-content: center;
   gap: 0.75rem;
   margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.director-login-brand:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .director-login-logo {
@@ -4574,6 +4581,15 @@ nav.hide {
   align-items: center;
   gap: 0.8rem;
   animation: sa-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  text-decoration: none;
+  cursor: pointer;
+  width: fit-content;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.clp-lockup:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .clp-mark {
@@ -4728,6 +4744,25 @@ nav.hide {
   align-items: center;
   gap: 0.8rem;
   margin-bottom: 2.5rem;
+  text-decoration: none;
+  cursor: pointer;
+  width: fit-content;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.clp-mobile-lockup:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.clp-mobile-lockup .clp-wordmark {
+  color: #0a0a0a;
+}
+
+.clp-mobile-lockup .clp-edition {
+  color: #0a0a0a;
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.15);
 }
 
 .clp-form-head .clp-eyebrow {

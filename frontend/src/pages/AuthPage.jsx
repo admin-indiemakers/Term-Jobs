@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { ApiError } from '../api/client';
@@ -81,11 +81,11 @@ export default function AuthPage() {
           <div className="clp-brand-glow" />
 
           <div className="clp-brand-inner">
-            <div className="clp-lockup">
+            <Link to="/" className="clp-lockup" title="Return to Home">
               <span className="clp-mark"><Mark /></span>
               <span className="clp-wordmark">TERMJOBS</span>
               <span className="clp-edition">WORKFORCE</span>
-            </div>
+            </Link>
 
             <div className="clp-hero">
               <p className="clp-eyebrow">Enterprise workforce automation</p>
@@ -121,11 +121,11 @@ export default function AuthPage() {
         {/* ——— Sign-in panel ——— */}
         <section className="clp-form-side">
           <div className="clp-form-wrap">
-            <div className="clp-mobile-lockup">
+            <Link to="/" className="clp-mobile-lockup" title="Return to Home">
               <span className="clp-mark"><Mark /></span>
               <span className="clp-wordmark">TERMJOBS</span>
               <span className="clp-edition">WORKFORCE</span>
-            </div>
+            </Link>
 
             <div className="clp-form-head">
               <p className="clp-eyebrow">Welcome back</p>

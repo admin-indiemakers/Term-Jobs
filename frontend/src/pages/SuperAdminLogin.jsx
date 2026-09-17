@@ -62,13 +62,13 @@ export default function SuperAdminLogin() {
       <div className="pointer-events-none absolute right-[10%] bottom-[12%] h-[140px] w-[140px] rounded-full border border-white/20 bg-white/5 backdrop-blur-sm animate-sa-float-c" />
 
       <main className="relative z-[2] flex w-full max-w-[460px] flex-col items-center gap-7 animate-sa-rise">
-        <header className="flex items-center gap-2.5 text-slate-200">
+        <Link to="/" className="flex items-center gap-2.5 text-slate-200 transition-transform duration-200 hover:scale-[1.02] cursor-pointer" style={{ textDecoration: 'none' }} title="Return to Home">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-300/40 bg-white p-1.5 shadow-[0_0_24px_-6px_rgba(139,92,246,0.6)]">
             <img src="/logo.png" alt="TermJobs Logo" className="h-7 w-7 object-contain" />
           </div>
           <span className="text-[1.05rem] font-extrabold tracking-[0.18em] text-slate-50">TERMJOBS</span>
           <span className="rounded-md border border-violet-300/40 bg-violet-500/10 px-[7px] py-[3px] text-[0.6rem] font-bold tracking-[0.16em] text-violet-300">CONSOLE</span>
-        </header>
+        </Link>
 
         <div className="relative w-full overflow-hidden rounded-[22px] border border-white/15 p-8 pb-7 backdrop-blur-2xl backdrop-saturate-150 max-sm:p-6"
           style={{ background: 'linear-gradient(150deg, rgba(255,255,255,0.09), rgba(255,255,255,0.03))', boxShadow: '0 24px 60px -20px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12)' }}
