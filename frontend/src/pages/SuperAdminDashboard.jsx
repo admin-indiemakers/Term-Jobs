@@ -74,11 +74,14 @@ export default function SuperAdminDashboard() {
     return guestClients.length;
   }, [stats, guestClients]);
   const totalAdmins = useMemo(() => {
-    if (stats?.company_admins !== undefined && stats?.vendor_admins !== undefined) {
-      return stats.company_admins + stats.vendor_admins;
+    if (stats?.total_admin_accounts !== undefined) {
+      return stats.total_admin_accounts;
     }
-    return clientTenants.length + consultancyTenants.length;
-  }, [stats, clientTenants, consultancyTenants]);
+    const baseCount = (stats?.company_admins !== undefined && stats?.vendor_admins !== undefined)
+      ? stats.company_admins + stats.vendor_admins
+      : clientTenants.length + consultancyTenants.length;
+    return baseCount + (guestClientsCount || 0);
+  }, [stats, clientTenants, consultancyTenants, guestClientsCount]);
 
   // Generate dynamic platform activity events based on actual DB records
   const platformActivities = useMemo(() => {
@@ -228,7 +231,7 @@ export default function SuperAdminDashboard() {
               {totalAdmins}
             </div>
             <div className="text-xs text-gray-500 font-medium">
-              Configured buyer & recruiter administrators
+              Configured buyer, vendor & guest administrators
             </div>
           </div>
         </div>

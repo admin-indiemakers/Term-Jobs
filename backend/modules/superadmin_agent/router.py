@@ -151,6 +151,8 @@ def get_superadmin_stats():
                 "tone": "purple"
             })
 
+        total_admin_accounts = len(company_admins) + len(vendor_admins) + len(guest_clients)
+
         return {
             "status": "success",
             "total_companies": len(tenants),
@@ -159,6 +161,7 @@ def get_superadmin_stats():
             "guest_clients": len(guest_clients),
             "company_admins": len(company_admins),
             "vendor_admins": len(vendor_admins),
+            "total_admin_accounts": total_admin_accounts,
             "total_users": len(users),
             "super_admins": len(super_admins),
             "clients": client_list,

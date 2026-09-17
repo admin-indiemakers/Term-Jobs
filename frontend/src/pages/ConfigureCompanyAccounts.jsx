@@ -53,12 +53,38 @@ export default function ConfigureAccounts({ defaultTab }) {
       request('/api/auth/tenants', { token }),
     ])
       .then(([usersRes, tenantsRes]) => {
-        // Only include Admin and Recruiter accounts for Super Admin management
+        const tList = tenantsRes || [];
+        // Include Admin, Recruiter, and all Guest accounts for Super Admin management
         const filteredUsers = (usersRes || []).filter(
-          (u) => u.role === 'Admin' || u.role === 'Recruiter'
+          (u) => {
+            const tObj = tList.find((t) => t.id === u.tenant_id);
+            const isGuest = tObj?.is_guest || tObj?.vendor_type === 'guest' || tObj?.client_type === 'guest' || u.is_guest;
+            return u.role === 'Admin' || u.role === 'Recruiter' || isGuest;
+          }
         );
+
+        // Also ensure any guest tenants without a separate user entry appear as manageable accounts
+        const existingTenantIds = new Set(filteredUsers.map((u) => u.tenant_id));
+        const guestTenantsWithoutUsers = tList.filter(
+          (t) => (t.is_guest || t.vendor_type === 'guest' || t.client_type === 'guest') && !existingTenantIds.has(t.id)
+        );
+        guestTenantsWithoutUsers.forEach((gt) => {
+          filteredUsers.push({
+            id: `guest-${gt.id}`,
+            name: gt.name,
+            email: gt.email || `${gt.name.toLowerCase().replace(/[^a-z0-9]/g, '')}@guest.termjobs.com`,
+            role: gt.tenant_type === 'client' ? 'Guest Client' : 'Guest Recruiter',
+            tenant_id: gt.id,
+            tenant_name: gt.name,
+            tenant_type: gt.tenant_type,
+            is_guest: true,
+            is_active: !gt.is_deleted,
+            created_at: gt.created_at,
+          });
+        });
+
         setUsers(filteredUsers);
-        setTenants(tenantsRes || []);
+        setTenants(tList);
         setError('');
       })
       .catch((err) => setError(err.message))
