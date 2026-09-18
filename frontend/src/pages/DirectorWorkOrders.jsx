@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -56,6 +57,7 @@ function formatCurrency(val) {
 
 export default function DirectorWorkOrders() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
   const [workOrders, setWorkOrders] = useState([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -351,6 +353,42 @@ export default function DirectorWorkOrders() {
               <span>Refresh Work Orders</span>
             </button>
           </div>
+        </div>
+
+        {/* Director Navigation Tabs */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/director')}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs"
+          >
+            📊 Executive Overview
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/director/approvals')}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs"
+          >
+            <ShieldCheck size={14} />
+            <span>Requisition Approvals</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/director/requisitions')}
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer bg-white hover:bg-gray-100 text-gray-700 border border-gray-200 shadow-2xs"
+          >
+            💼 All Requisitions
+          </button>
+
+          <button
+            type="button"
+            className="px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 bg-amber-400 text-black shadow-xs font-black"
+          >
+            <Receipt size={14} />
+            <span>Work Orders (SOW)</span>
+          </button>
         </div>
 
         {/* Top KPI Stat Highlights */}

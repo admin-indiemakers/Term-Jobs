@@ -423,6 +423,8 @@ export default function DashboardLayout() {
                     ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
                     : item.to === '/dashboard/candidates'
                     ? location.pathname.startsWith('/dashboard/candidates')
+                    : item.to === '/dashboard/director'
+                    ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
                     : item.end
                     ? location.pathname === item.to
                     : location.pathname.startsWith(item.to);

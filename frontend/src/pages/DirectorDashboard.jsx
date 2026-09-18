@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
@@ -35,6 +35,16 @@ function formatDate(iso) {
 export default function DirectorDashboard({ view = 'overview' }) {
   const { token, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const currentTab = useMemo(() => {
+    if (view && view !== 'overview') return view;
+    const p = location.pathname.toLowerCase();
+    if (p.includes('/approvals')) return 'approvals';
+    if (p.includes('/requisitions')) return 'requisitions';
+    return view || 'overview';
+  }, [view, location.pathname]);
+
   const [requisitions, setRequisitions] = useState([]);
   const [candidates, setCandidates] = useState([]);
   const [vendors, setVendors] = useState([]);
@@ -44,7 +54,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [error, setError] = useState('');
   const [templateMsg, setTemplateMsg] = useState('');
   const [approvingId, setApprovingId] = useState('');
-  const [activeTab, setActiveTab] = useState(view);
+  const [activeTab, setActiveTab] = useState(currentTab);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [rejectModalReq, setRejectModalReq] = useState(null);
@@ -52,8 +62,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const templateFileRef = useRef(null);
 
   useEffect(() => {
-    setActiveTab(view);
-  }, [view]);
+    setActiveTab(currentTab);
+  }, [currentTab]);
 
   const loadTemplates = () => {
     request('/templates', { token })
@@ -608,7 +618,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
       )}
 
       {/* SECTION 3: ALL REQUISITIONS DIRECTORY */}
-      <div className="bg-white border border-gray-200/90 rounded-3xl p-6 shadow-xs space-y-4">
+      {(activeTab === 'requisitions' || activeTab === 'overview') && (
+        <div className="bg-white border border-gray-200/90 rounded-3xl p-6 shadow-xs space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-gray-100">
           <div>
             <h2 className="text-base font-extrabold text-gray-900">All Company Requisitions</h2>
@@ -754,6 +765,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
           </div>
         )}
       </div>
+      )}
 
       {/* Rejection Reason Modal */}
       {rejectModalReq && (
