@@ -3,6 +3,7 @@ import shutil
 import uuid
 import re
 from datetime import datetime, timezone
+from typing import Any
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
 from modules.identity.domain.models import User
@@ -28,6 +29,14 @@ except Exception as _mkdir_err:
     ESIGN_UPLOAD_DIR = "/tmp/uploads/work_orders"
     os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
 
+
+
+def _format_datetime(val: Any) -> str | None:
+    if not val:
+        return None
+    if hasattr(val, "isoformat"):
+        return val.isoformat()
+    return str(val)
 
 
 def _work_order_dict(wo: WorkOrder) -> dict:
@@ -66,10 +75,10 @@ def _work_order_dict(wo: WorkOrder) -> dict:
         "revision_notes": wo.revision_notes,
         "ai_generated": wo.ai_generated,
         "ai_reasoning": wo.ai_reasoning,
-        "created_at": wo.created_at.isoformat() if wo.created_at else None,
-        "updated_at": wo.updated_at.isoformat() if wo.updated_at else None,
-        "submitted_at": wo.submitted_at.isoformat() if wo.submitted_at else None,
-        "approved_at": wo.approved_at.isoformat() if wo.approved_at else None,
+        "created_at": _format_datetime(wo.created_at),
+        "updated_at": _format_datetime(wo.updated_at),
+        "submitted_at": _format_datetime(wo.submitted_at),
+        "approved_at": _format_datetime(wo.approved_at),
         "approved_by": wo.approved_by,
     }
 

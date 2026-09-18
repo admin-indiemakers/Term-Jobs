@@ -131,7 +131,7 @@ export default function HiringManagerDashboard() {
   const draftRequisitions = useMemo(() => {
     return requisitions.filter((r) => {
       const s = (r.status || '').toLowerCase();
-      return s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring' || s === 'pending_approval' || s === 'pending';
+      return s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring' || s === 'pending_approval' || s === 'pendingapproval' || s === 'pending';
     });
   }, [requisitions]);
 

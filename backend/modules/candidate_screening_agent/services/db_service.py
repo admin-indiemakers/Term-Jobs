@@ -266,7 +266,7 @@ def fetch_published_requisitions(tenant_id: str | None = None, company_tenant_id
                 "title": doc.get("title") or "Untitled Role",
                 "status": doc.get("status"),
                 "jd_text": jd_text,
-                "created_at": doc.get("created_at").isoformat() if doc.get("created_at") else None,
+                "created_at": doc.get("created_at").isoformat() if hasattr(doc.get("created_at"), 'isoformat') else (str(doc.get("created_at")) if doc.get("created_at") else None),
             })
         return results
     except Exception as e:

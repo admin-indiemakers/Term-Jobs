@@ -152,6 +152,13 @@ export default function RequisitionOverview({ section }) {
     return { drafted, published, completed, history };
   }, [requisitions]);
 
+  useEffect(() => {
+    const p = location.pathname.toLowerCase().replace(/\/+$/, '');
+    if (p === '/dashboard/requisitions' && !section && activeTab === 'published' && counts.published === 0 && counts.drafted > 0) {
+      setActiveTab('drafted');
+    }
+  }, [counts.published, counts.drafted, location.pathname, section, activeTab]);
+
   const currentConfig = SECTION_CONFIG[activeTab] || SECTION_CONFIG.published;
 
   // Filtered Rows
