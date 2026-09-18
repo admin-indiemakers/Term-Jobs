@@ -212,7 +212,7 @@ export default function RequisitionOverview({ section }) {
             className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Plus size={14} />
-            <span>+ New Requisition</span>
+            <span>New Requisition</span>
           </button>
         </div>
       </div>
