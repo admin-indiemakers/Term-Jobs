@@ -43,7 +43,8 @@ import {
   Radio,
   Flag,
   Check,
-  UserX
+  UserX,
+  LogOut
 } from 'lucide-react';
 
 /* Voice options for TTS */
@@ -82,7 +83,7 @@ const cleanForTTS = (text) => {
 
 export default function HiringManagerChat() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   // Chat conversation state
   const [messages, setMessages] = useState([
@@ -488,14 +489,26 @@ export default function HiringManagerChat() {
 
         {/* User Profile Footer */}
         <div className="p-3 border-t border-gray-100 bg-gray-50/50">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center">
-              {user?.name?.[0] || 'H'}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-bold text-xs flex items-center justify-center shrink-0">
+                {user?.name?.[0] || 'H'}
+              </div>
+              <div className="truncate flex-1">
+                <div className="text-xs font-bold text-gray-900 truncate">{user?.name || 'Hiring Manager'}</div>
+                <div className="text-[10px] text-gray-500 font-medium">Hiring Manager Console</div>
+              </div>
             </div>
-            <div className="truncate flex-1">
-              <div className="text-xs font-bold text-gray-900 truncate">{user?.name || 'Hiring Manager'}</div>
-              <div className="text-[10px] text-gray-500 font-medium">Hiring Manager Console</div>
-            </div>
+            <button
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              title="Sign out"
+              className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -515,8 +528,29 @@ export default function HiringManagerChat() {
             <span className="text-xs font-medium text-gray-500">Company: {user?.tenant_name || 'Client Workspace'}</span>
           </div>
 
-          {/* Controls: Voice / Audio / VAD */}
-          <div className="flex items-center gap-3">
+          {/* Controls: Voice / Audio / VAD / Sign Out */}
+          <div className="flex items-center gap-2.5">
+            {/* Exit to Requisitions */}
+            <button
+              onClick={() => navigate('/dashboard/requisitions')}
+              className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            >
+              Back to Requisitions
+            </button>
+
+            {/* Sign Out */}
+            <button
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 border border-gray-200 hover:border-red-200 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+
             {/* VAD Toggle Button */}
             <button
               onClick={() => setVadEnabled(!vadEnabled)}

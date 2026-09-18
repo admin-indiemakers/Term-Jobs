@@ -331,85 +331,85 @@ export default function DashboardLayout() {
 
   // Render full reusable sidebar inner contents
   const renderSidebarContent = (onLinkClick) => (
-    <div className="flex flex-col justify-between h-full">
-      <div>
-        {/* Brand Header */}
-        <div className="sidebar-brand pb-4 border-b border-[#EAEAE6] mb-5">
-          {userRole === 'Recruiter' ? (
-            <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-              >
-                TJ
-              </div>
-              <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
-                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
-              </div>
+    <div className="flex flex-col h-full min-h-0 select-none">
+      {/* Brand Header */}
+      <div className="sidebar-brand shrink-0 pb-3.5 border-b border-[#EAEAE6] mb-3">
+        {userRole === 'Recruiter' ? (
+          <div className="flex items-center gap-3">
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                backgroundColor: '#0A0A0A',
+                color: '#FFFFFF',
+              }}
+              className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
+            >
+              TJ
             </div>
-          ) : userRole === 'Hiring Manager' ? (
-            <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
-              >
-                {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
-              </div>
-              <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
-                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
-              </div>
+            <div className="leading-tight">
+              <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
+              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
             </div>
-          ) : ['Admin', 'HR', 'Director', 'Procurement', 'Procurement Team', 'Finance', 'Finance Team'].includes(userRole) ? (
-            <>
-              <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
-              <div className="brand-text">
-                <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
-                <span className="brand-sub">{userRole} Console</span>
-              </div>
-            </>
-          ) : userRole === 'Super Admin' ? (
-            <div className="flex items-center gap-3">
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  backgroundColor: '#0A0A0A',
-                  color: '#FFFFFF',
-                }}
-                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-              >
-                SA
-              </div>
-              <div className="leading-tight">
-                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
-                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Super Admin</div>
-              </div>
+          </div>
+        ) : userRole === 'Hiring Manager' ? (
+          <div className="flex items-center gap-3">
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                backgroundColor: '#0A0A0A',
+                color: '#FFFFFF',
+              }}
+              className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
+            >
+              {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
             </div>
-          ) : (
+            <div className="leading-tight">
+              <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
+              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
+            </div>
+          </div>
+        ) : ['Admin', 'HR', 'Director', 'Procurement', 'Procurement Team', 'Finance', 'Finance Team'].includes(userRole) ? (
+          <>
+            <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
             <div className="brand-text">
-              <span className="brand-name">Term Jobs</span>
-              <span className="brand-sub">{userRole}</span>
+              <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
+              <span className="brand-sub">{userRole} Console</span>
             </div>
-          )}
-        </div>
+          </>
+        ) : userRole === 'Super Admin' ? (
+          <div className="flex items-center gap-3">
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                backgroundColor: '#0A0A0A',
+                color: '#FFFFFF',
+              }}
+              className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
+            >
+              SA
+            </div>
+            <div className="leading-tight">
+              <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
+              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Super Admin</div>
+            </div>
+          </div>
+        ) : (
+          <div className="brand-text">
+            <span className="brand-name">Term Jobs</span>
+            <span className="brand-sub">{userRole}</span>
+          </div>
+        )}
+      </div>
 
-        {/* Navigation Sections */}
-        <nav className="flex flex-col gap-1">
+      {/* Navigation Sections - Smoothly scrollable on smaller screens / laptop displays */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 -mr-1 custom-scrollbar">
+        <nav className="flex flex-col gap-1 pb-2">
           {isModernLayout ? (
             <>
               {(() => {
@@ -432,7 +432,7 @@ export default function DashboardLayout() {
                   return (
                     <React.Fragment key={item.label}>
                       {showSection && (
-                        <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
+                        <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
                           {item.section}
                         </div>
                       )}
@@ -479,7 +479,7 @@ export default function DashboardLayout() {
                         <span className="nav-link sidebar-nav-btn">
                           <div className="flex items-center gap-2.5">
                             {IconComp && <IconComp className="shrink-0" size={15} />}
-                            <span>{item.label}</span>
+                            <span className="font-semibold text-[13px]">{item.label}</span>
                           </div>
                         </span>
                       )}
@@ -490,8 +490,8 @@ export default function DashboardLayout() {
             </>
           ) : userRole === 'Super Admin' ? (
             <>
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-2 pb-1.5">
-                OVERVIEW
+              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
+                PLATFORM
               </div>
               <NavLink
                 to="/dashboard/superadmin"
@@ -504,9 +504,19 @@ export default function DashboardLayout() {
                   <span className="font-semibold text-[13px]">Dashboard</span>
                 </div>
               </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/chat"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.Chat size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">AI Chat</span>
+                </div>
+              </NavLink>
 
               <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                COMPANIES
+                ONBOARDING
               </div>
               <button
                 type="button"
@@ -514,39 +524,35 @@ export default function DashboardLayout() {
                   setIsOnboardCompanyModalOpen(true);
                   if (onLinkClick) onLinkClick();
                 }}
-                className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                className="nav-link sidebar-nav-btn text-left w-full cursor-pointer"
+                style={{ background: 'none', border: 'none' }}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icons.Plus size={15} className="shrink-0" />
+                  <Icons.OnboardCompany size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">Onboard Company</span>
                 </div>
               </button>
               <NavLink
-                to="/dashboard/superadmin/accounts?tab=buyers"
+                to="/dashboard/superadmin/accounts?tab=companies"
                 onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive && location.search.includes('buyers') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                className={({ isActive }) => `nav-link ${isActive && (!location.search || location.search.includes('companies')) ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
               >
                 <div className="flex items-center gap-2.5">
                   <Icons.Requisitions size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Company Accounts</span>
+                  <span className="font-semibold text-[13px]">Buyer Accounts</span>
                 </div>
               </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                VENDORS
-              </div>
               <button
                 type="button"
                 onClick={() => {
                   setIsOnboardVendorModalOpen(true);
                   if (onLinkClick) onLinkClick();
                 }}
-                className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                className="nav-link sidebar-nav-btn text-left w-full cursor-pointer"
+                style={{ background: 'none', border: 'none' }}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icons.Plus size={15} className="shrink-0" />
+                  <Icons.OnboardVendor size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">Onboard Vendor</span>
                 </div>
               </button>
@@ -678,8 +684,8 @@ export default function DashboardLayout() {
         </nav>
       </div>
 
-      {/* Sidebar Footer */}
-      <div className="sidebar-footer pt-4 border-t border-[#EAEAE6] mt-4">
+      {/* Sidebar Footer - Always pinned at bottom, never cut off */}
+      <div className="sidebar-footer shrink-0 pt-3.5 border-t border-[#EAEAE6] mt-auto">
         <div className="flex items-center justify-between px-0.5">
           <div
             onClick={() => userRole === 'Admin' && navigate('/dashboard/admin/profile')}
@@ -716,7 +722,7 @@ export default function DashboardLayout() {
             onClick={handleLogout}
             type="button"
             title="Sign out"
-            className="p-1.5 text-[#8A8A85] hover:text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-lg transition-colors cursor-pointer shrink-0"
+            className="p-1.5 text-[#8A8A85] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-colors cursor-pointer shrink-0"
           >
             <Icons.Logout />
           </button>
@@ -837,6 +843,15 @@ export default function DashboardLayout() {
           )}
           <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white"></span>
         </div>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-10 h-10 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition cursor-pointer"
+          title="Sign out"
+        >
+          <Icons.Logout width={16} height={16} />
+        </button>
       </div>
     </div>
   );
@@ -1128,7 +1143,7 @@ export default function DashboardLayout() {
                 animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
                 exit={{ opacity: 0, scale: 0.94, filter: 'blur(4px)' }}
                 transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="w-full h-full flex flex-col justify-between"
+                className="w-full h-full flex flex-col min-h-0 overflow-hidden"
               >
                 {renderSidebarContent()}
               </motion.div>
@@ -1153,17 +1168,17 @@ export default function DashboardLayout() {
               width: '290px',
               maxWidth: '85vw',
               height: '100%',
-              padding: '24px 20px',
+              padding: '24px 20px 20px 20px',
               boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
               position: 'relative',
               zIndex: 60,
             }}
-            className="flex flex-col justify-between overflow-y-auto animate-in slide-in-from-left duration-200"
+            className="flex flex-col h-full min-h-0 overflow-hidden animate-in slide-in-from-left duration-200"
           >
             <button
               type="button"
               onClick={() => setIsMobileMenuOpen(false)}
-              className="absolute top-4 right-4 p-2 text-[#8A8A85] hover:text-[#0A0A0A] rounded-xl hover:bg-[#F5F5F2] cursor-pointer"
+              className="absolute top-4 right-4 p-2 text-[#8A8A85] hover:text-[#0A0A0A] rounded-xl hover:bg-[#F5F5F2] cursor-pointer z-10"
               title="Close menu"
             >
               <X size={20} strokeWidth={2.2} />
@@ -1253,6 +1268,16 @@ export default function DashboardLayout() {
                   <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
                   <span className="xs:hidden sm:hidden">SECURE</span>
                 </span>
+
+                <button
+                  onClick={handleLogout}
+                  type="button"
+                  title="Sign out"
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E2E2DC] bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-[#737373] text-[11px] sm:text-[12px] font-bold transition-all shadow-2xs cursor-pointer shrink-0 group"
+                >
+                  <Icons.Logout width={14} height={14} className="group-hover:text-red-600 transition-colors" />
+                  <span className="hidden sm:inline">Sign out</span>
+                </button>
               </div>
             </motion.header>
           )}
