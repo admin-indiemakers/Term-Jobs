@@ -295,7 +295,7 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
                 <Field label="Headcount Openings" hint="Total positions to fill" required>
                   <TextField type="number" min="1" value={role.headcount} editable={editable} onChange={(v) => set({ headcount: v === '' ? 1 : Number(v) })} placeholder="1" />
                 </Field>
-                <Field label={<span className="text-red-600 font-extrabold flex items-center gap-2"><span>Vendor Candidate Limit <span className="text-red-600 font-bold">*</span></span><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">IMPORTANT</span></span>} hint="Max candidate submissions allowed per vendor" required>
+                <Field label={<span className="text-red-600 font-extrabold flex items-center gap-1.5 whitespace-nowrap h-5 select-none text-[10.5px] uppercase tracking-tight"><span>Vendor Candidate Limit<span className="text-red-600 font-bold ml-0.5">*</span></span><span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">IMPORTANT</span></span>} hint="Max candidate submissions allowed per vendor" required>
                   <TextField type="number" min="1" max="50" value={role.vendor_candidate_limit ?? 1} editable={editable} onChange={(v) => set({ vendor_candidate_limit: v === '' ? 1 : Number(v) })} placeholder="1" className="bg-red-50/40 border-red-300 text-red-900 font-bold" />
                 </Field>
               </div>
@@ -328,7 +328,7 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
               </Field>
             </div>
             <div className="editor-row-3" style={{ marginTop: 18 }}>
-              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-2"><span>Start Date <span className="text-red-600 font-bold">*</span></span><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
+              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-1.5 whitespace-nowrap h-5 select-none text-[10.5px] uppercase tracking-tight"><span>Start Date<span className="text-red-600 font-bold ml-0.5">*</span></span><span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
                 <TextField
                   type="date"
                   value={role.start_date}
@@ -341,10 +341,10 @@ export default function RequisitionEditor({ role, editable = false, onChange, so
                   className="bg-red-50/40 border-red-300 text-red-900 font-bold"
                 />
               </Field>
-              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-2"><span>Estimated End Date <span className="text-red-600 font-bold">*</span></span><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} hint={editable && !role.ends_on ? 'Auto-calculated from start + duration when left blank.' : undefined} required>
+              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-1.5 whitespace-nowrap h-5 select-none text-[10.5px] uppercase tracking-tight"><span>Estimated End Date<span className="text-red-600 font-bold ml-0.5">*</span></span><span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} hint={editable && !role.ends_on ? 'Auto-calculated from start + duration when left blank.' : undefined} required>
                 <TextField type="date" value={role.ends_on} editable={editable} onChange={(v) => set({ ends_on: v })} className="bg-red-50/40 border-red-300 text-red-900 font-bold" />
               </Field>
-              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-2"><span>Extension Likely? <span className="text-red-600 font-bold">*</span></span><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
+              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-1.5 whitespace-nowrap h-5 select-none text-[10.5px] uppercase tracking-tight"><span>Extension Likely?<span className="text-red-600 font-bold ml-0.5">*</span></span><span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
                 <SelectField value={role.extension_likely ? 'Yes' : (role.extension_likely === false ? 'No' : '')} options={BOOL_OPTIONS} editable={editable} onChange={(v) => set({ extension_likely: v === 'Yes' })} placeholder="Select..." className="bg-red-50/40 border-red-300 text-red-900 font-bold" />
               </Field>
             </div>
@@ -437,7 +437,7 @@ case 'Work setup':
               <Field label="Hiring manager" hint="e.g. Arjun Mehta" required>
                 <TextField value={role.hiring_manager} editable={editable} onChange={(v) => set({ hiring_manager: v })} placeholder="Arjun Mehta" />
               </Field>
-              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-2"><span>Submission Deadline <span className="text-red-600 font-bold">*</span></span><span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
+              <Field label={<span className="text-red-600 font-extrabold flex items-center gap-1.5 whitespace-nowrap h-5 select-none text-[10.5px] uppercase tracking-tight"><span>Submission Deadline<span className="text-red-600 font-bold ml-0.5">*</span></span><span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
                 <TextField type="date" value={role.submission_deadline} editable={editable} onChange={(v) => set({ submission_deadline: v })} className="bg-red-50/40 border-red-300 text-red-900 font-bold" />
               </Field>
               <Field label="Priority" required>

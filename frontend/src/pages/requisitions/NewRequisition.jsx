@@ -1118,10 +1118,10 @@ const PREDEFINED_ROLES = [
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                      <span>Vendor Candidate Limit <span className="text-red-600 font-bold">*</span></span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">IMPORTANT</span>
+                  <div className="space-y-1 min-w-0">
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-extrabold text-red-600 uppercase tracking-tight whitespace-nowrap h-5 select-none">
+                      <span>Vendor Candidate Limit<span className="text-red-600 font-bold ml-0.5">*</span></span>
+                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">IMPORTANT</span>
                     </label>
                     <input
                       type="number"
@@ -1273,10 +1273,10 @@ const PREDEFINED_ROLES = [
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                      <span>Start Date <span className="text-red-600 font-bold">*</span></span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
+                  <div className="space-y-1 min-w-0">
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-extrabold text-red-600 uppercase tracking-tight whitespace-nowrap h-5 select-none">
+                      <span>Start Date<span className="text-red-600 font-bold ml-0.5">*</span></span>
+                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
                     </label>
                     <input
                       type="date"
@@ -1287,10 +1287,10 @@ const PREDEFINED_ROLES = [
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                      <span>Estimated End Date <span className="text-red-600 font-bold">*</span></span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
+                  <div className="space-y-1 min-w-0">
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-extrabold text-red-600 uppercase tracking-tight whitespace-nowrap h-5 select-none">
+                      <span>Estimated End Date<span className="text-red-600 font-bold ml-0.5">*</span></span>
+                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
                     </label>
                     <input
                       type="date"
@@ -1301,10 +1301,10 @@ const PREDEFINED_ROLES = [
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                      <span>Extension Likely? <span className="text-red-600 font-bold">*</span></span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
+                  <div className="space-y-1 min-w-0">
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-extrabold text-red-600 uppercase tracking-tight whitespace-nowrap h-5 select-none">
+                      <span>Extension Likely?<span className="text-red-600 font-bold ml-0.5">*</span></span>
+                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
                     </label>
                     <select
                       value={prefill.extension_likely}
@@ -1511,10 +1511,10 @@ const PREDEFINED_ROLES = [
             {activeTab === 'process' && (
               <div className="space-y-4 pt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-extrabold text-red-600 uppercase tracking-wider flex items-center gap-2">
-                      <span>Submission Deadline <span className="text-red-600 font-bold">*</span></span>
-                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
+                  <div className="space-y-1 min-w-0">
+                    <label className="flex items-center gap-1.5 text-[10.5px] font-extrabold text-red-600 uppercase tracking-tight whitespace-nowrap h-5 select-none">
+                      <span>Submission Deadline<span className="text-red-600 font-bold ml-0.5">*</span></span>
+                      <span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span>
                     </label>
                     <input
                       type="date"
