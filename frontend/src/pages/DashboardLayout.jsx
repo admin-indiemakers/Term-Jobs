@@ -1046,6 +1046,44 @@ export default function DashboardLayout() {
           z-index: 40 !important;
         }
 
+        /* Laptop & Compact Desktop Optimization (Asus TUF, Lenovo LOQ 16", 1080p/1200p at 125%/150% scaling) */
+        @media (min-width: 1024px) and (max-height: 860px) {
+          .recruiter-sidebar-container,
+          .app-shell.console-admin .sidebar,
+          .app-shell.console-superadmin .sidebar,
+          .app-shell.console-director .sidebar,
+          .app-shell.console-hiringmanager .sidebar,
+          .app-shell.console-recruiter .sidebar {
+            height: calc(100vh - 20px) !important;
+            max-height: calc(100vh - 20px) !important;
+            top: 10px !important;
+            margin-top: 10px !important;
+            margin-bottom: 10px !important;
+            padding-top: 16px !important;
+            padding-bottom: 14px !important;
+            padding-left: 14px !important;
+            padding-right: 14px !important;
+          }
+          .sidebar-nav-btn {
+            padding: 6.5px 10px !important;
+            font-size: 12px !important;
+            border-radius: 10px !important;
+          }
+          .active-nav-tab {
+            padding: 7.5px 12px !important;
+            font-size: 12px !important;
+            border-radius: 11px !important;
+          }
+          .sidebar-brand {
+            padding-bottom: 10px !important;
+            margin-bottom: 8px !important;
+          }
+          .sidebar-footer {
+            padding-top: 10px !important;
+            margin-top: 6px !important;
+          }
+        }
+
         /* Mobile & Tablet Responsiveness (< 1024px) */
         @media (max-width: 1023px) {
           .recruiter-sidebar-container,
