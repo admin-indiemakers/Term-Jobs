@@ -133,7 +133,7 @@ export default function AuthPage() {
               <p className="clp-form-sub">Access your role, assignments, and portal.</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="clp-form" noValidate>
+            <form onSubmit={handleSubmit} className="clp-form" noValidate autoComplete="off">
               {error && (
                 <div className="clp-error" role="alert">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -155,12 +155,16 @@ export default function AuthPage() {
                   <input
                     type="text"
                     name="email"
-                    autoComplete="username"
+                    autoComplete="off"
+                    readOnly
+                    onFocus={(e) => { e.target.readOnly = false; }}
+                    onClick={(e) => { e.target.readOnly = false; }}
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="name@company.com or Work Order ID"
                     required
                     disabled={loading}
+                    className="cursor-text"
                   />
                 </div>
               </label>
@@ -175,12 +179,16 @@ export default function AuthPage() {
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
-                    autoComplete="current-password"
+                    autoComplete="new-password"
+                    readOnly
+                    onFocus={(e) => { e.target.readOnly = false; }}
+                    onClick={(e) => { e.target.readOnly = false; }}
                     value={formData.password}
                     onChange={handleInputChange}
                     placeholder="Enter your password"
                     required
                     disabled={loading}
+                    className="cursor-text"
                   />
                   <button
                     type="button"

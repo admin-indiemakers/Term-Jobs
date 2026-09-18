@@ -122,7 +122,11 @@ export default function JoinFinance() {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               {error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 shrink-0" /> {error}
@@ -155,6 +159,10 @@ export default function JoinFinance() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] mb-1">Company Email *</label>
                 <input
                   type="email"
+                  name="join_finance_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   placeholder="finance@company.com"
                   value={email}
@@ -177,6 +185,10 @@ export default function JoinFinance() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] mb-1">Password *</label>
                 <input
                   type="password"
+                  name="join_finance_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={8}
                   placeholder="••••••••"
@@ -190,6 +202,10 @@ export default function JoinFinance() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] mb-1">Confirm Password *</label>
                 <input
                   type="password"
+                  name="join_finance_confirm_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={8}
                   placeholder="••••••••"

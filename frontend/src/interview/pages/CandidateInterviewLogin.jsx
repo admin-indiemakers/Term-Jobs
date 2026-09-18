@@ -117,7 +117,7 @@ export function CandidateInterviewLogin() {
             </div>
           )}
 
-          <form onSubmit={handleManualLogin} className="space-y-4">
+          <form onSubmit={handleManualLogin} className="space-y-4" autoComplete="off">
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 mb-1.5">
                 Candidate Email
@@ -126,6 +126,10 @@ export function CandidateInterviewLogin() {
                 <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="email"
+                  name="candidate_login_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -146,6 +150,10 @@ export function CandidateInterviewLogin() {
                 <KeyRound size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400" />
                 <input
                   type="text"
+                  name="candidate_login_passcode"
+                  autoComplete="one-time-code"
+                  data-lpignore="true"
+                  data-form-type="other"
                   value={passcode}
                   onChange={(e) => setPasscode(e.target.value.toUpperCase())}
                   required

@@ -678,7 +678,11 @@ export default function AdminAccounts() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateAdmin} className="space-y-4">
+            <form onSubmit={handleCreateAdmin} className="space-y-4" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill of saved admin credentials */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               {/* Name */}
               <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1.5">
@@ -702,6 +706,10 @@ export default function AdminAccounts() {
                   </label>
                   <input
                     type="email"
+                    name="admin_new_email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     required
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -733,6 +741,10 @@ export default function AdminAccounts() {
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      name="admin_new_password"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-form-type="other"
                       required
                       value={form.password}
                       onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -756,6 +768,10 @@ export default function AdminAccounts() {
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
+                      name="admin_confirm_password"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-form-type="other"
                       required
                       value={form.confirmPassword}
                       onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}

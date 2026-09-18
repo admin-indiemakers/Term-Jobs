@@ -61,7 +61,7 @@ export default function DirectorLogin() {
           <p className="director-login-subtitle">Executive Gateway — Read-only oversight of hiring activity</p>
         </header>
 
-        <form onSubmit={handleSubmit} className="director-login-form" noValidate>
+        <form onSubmit={handleSubmit} className="director-login-form" noValidate autoComplete="off">
           {error && (
             <div className="director-login-error" role="alert">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -84,13 +84,17 @@ export default function DirectorLogin() {
                 type="email"
                 id="email"
                 name="email"
-                autoComplete="username"
+                autoComplete="off"
+                readOnly
+                onFocus={(e) => { e.target.readOnly = false; }}
+                onClick={(e) => { e.target.readOnly = false; }}
                 inputMode="email"
                 value={formData.email}
                 onChange={handleInputChange}
                 placeholder="director@company.com"
                 required
                 disabled={loading}
+                className="cursor-text"
               />
             </div>
           </div>
@@ -106,12 +110,16 @@ export default function DirectorLogin() {
                 type={showPassword ? 'text' : 'password'}
                 id="password"
                 name="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
+                readOnly
+                onFocus={(e) => { e.target.readOnly = false; }}
+                onClick={(e) => { e.target.readOnly = false; }}
                 value={formData.password}
                 onChange={handleInputChange}
                 placeholder="Enter password"
                 required
                 disabled={loading}
+                className="cursor-text"
               />
               <button
                 type="button"

@@ -689,7 +689,11 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handleInviteSubmit} className="space-y-3.5">
+            <form onSubmit={handleInviteSubmit} className="space-y-3.5" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               {/* Role Select */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
@@ -765,6 +769,10 @@ export default function AdminDashboard() {
                 </label>
                 <input
                   type="email"
+                  name="invite_user_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   value={inviteForm.email}
                   onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
@@ -780,6 +788,10 @@ export default function AdminDashboard() {
                 </label>
                 <input
                   type="password"
+                  name="invite_user_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={4}
                   value={inviteForm.password}
@@ -852,13 +864,21 @@ export default function AdminDashboard() {
               </button>
             </div>
 
-            <form onSubmit={handlePasswordSubmit} className="space-y-3.5">
+            <form onSubmit={handlePasswordSubmit} className="space-y-3.5" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Current Password *
                 </label>
                 <input
                   type="password"
+                  name="user_current_password"
+                  autoComplete="current-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   value={pwdForm.current_password}
                   onChange={(e) => setPwdForm({ ...pwdForm, current_password: e.target.value })}
@@ -873,6 +893,10 @@ export default function AdminDashboard() {
                 </label>
                 <input
                   type="password"
+                  name="user_new_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={4}
                   value={pwdForm.new_password}

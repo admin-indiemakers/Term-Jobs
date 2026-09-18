@@ -182,7 +182,11 @@ export default function JoinDirector() {
             )}
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               {/* Row 1: Full Name & Email Address */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -205,6 +209,10 @@ export default function JoinDirector() {
                   </label>
                   <input
                     type="email"
+                    name="join_director_email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -236,6 +244,10 @@ export default function JoinDirector() {
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
+                      name="join_director_password"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-form-type="other"
                       required
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
@@ -262,6 +274,10 @@ export default function JoinDirector() {
                 <div className="relative">
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
+                    name="join_director_confirm_password"
+                    autoComplete="new-password"
+                    data-lpignore="true"
+                    data-form-type="other"
                     required
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}

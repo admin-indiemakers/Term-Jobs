@@ -704,7 +704,11 @@ export default function ManagePartnerVendors() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateGuestVendor} className="space-y-4">
+            <form onSubmit={handleCreateGuestVendor} className="space-y-4" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               <div>
                 <label className="block text-xs font-bold text-gray-900 mb-1.5">
                   Vendor Consultancy Name <span className="text-red-500">*</span>
@@ -810,6 +814,10 @@ export default function ManagePartnerVendors() {
                   </label>
                   <input
                     type="email"
+                    name="guest_recruiter_email"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-form-type="other"
                     required
                     value={guestForm.email}
                     onChange={(e) => setGuestForm({ ...guestForm, email: e.target.value })}
@@ -833,6 +841,10 @@ export default function ManagePartnerVendors() {
                   <div className="relative">
                     <input
                       type={guestShowPassword ? 'text' : 'password'}
+                      name="guest_recruiter_password"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-form-type="other"
                       required
                       value={guestForm.password}
                       onChange={(e) => setGuestForm({ ...guestForm, password: e.target.value })}

@@ -106,7 +106,11 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="pt-4 space-y-4">
+        <form onSubmit={handleSubmit} className="pt-4 space-y-4" autoComplete="off">
+          {/* Hidden trap inputs to prevent browser autofill of saved admin credentials */}
+          <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+          <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
               <AlertCircle size={15} className="shrink-0 text-red-500" />
@@ -143,6 +147,10 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
             </label>
             <input
               type="email"
+              name="edit_account_email"
+              autoComplete="off"
+              data-lpignore="true"
+              data-form-type="other"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -161,6 +169,10 @@ export default function EditAccountModal({ isOpen, onClose, userAccount, tenant,
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
+                name="edit_account_password"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-form-type="other"
                 minLength={4}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -94,7 +94,7 @@ export default function SuperAdminLogin() {
             Authenticate to manage companies, accounts and platform operations.
           </p>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-[18px]">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-[18px]" autoComplete="off">
             <label className="flex flex-col gap-2">
               <span className="text-[0.75rem] font-semibold uppercase tracking-[0.08em] text-indigo-300">Admin Username</span>
               <div className="flex h-[52px] items-center gap-3 rounded-[14px] border border-white/10 bg-slate-900/45 px-4 transition-all duration-200 focus-within:border-violet-400/60 focus-within:shadow-[0_0_0_4px_rgba(139,92,246,0.15),0_0_24px_-8px_rgba(139,92,246,0.5)]">
@@ -106,12 +106,15 @@ export default function SuperAdminLogin() {
                   type="text"
                   name="email"
                   required
-                  autoComplete="username"
-                  inputMode="email"
+                  autoComplete="off"
+                  readOnly
+                  onFocus={(e) => { e.target.readOnly = false; }}
+                  onClick={(e) => { e.target.readOnly = false; }}
+                  inputMode="text"
                   value={formData.email}
                   onChange={handleInputChange}
                   placeholder="ADMIN"
-                  className="flex-1 bg-transparent text-[0.95rem] text-slate-100 outline-none placeholder:text-slate-500"
+                  className="flex-1 bg-transparent text-[0.95rem] text-slate-100 outline-none placeholder:text-slate-500 cursor-text"
                 />
               </div>
             </label>
@@ -127,11 +130,14 @@ export default function SuperAdminLogin() {
                   type={showPassword ? 'text' : 'password'}
                   name="password"
                   required
-                  autoComplete="current-password"
+                  autoComplete="new-password"
+                  readOnly
+                  onFocus={(e) => { e.target.readOnly = false; }}
+                  onClick={(e) => { e.target.readOnly = false; }}
                   value={formData.password}
                   onChange={handleInputChange}
                   placeholder="Enter passphrase"
-                  className="flex-1 bg-transparent text-[0.95rem] text-slate-100 outline-none placeholder:text-slate-500"
+                  className="flex-1 bg-transparent text-[0.95rem] text-slate-100 outline-none placeholder:text-slate-500 cursor-text"
                 />
                 <button
                   type="button"

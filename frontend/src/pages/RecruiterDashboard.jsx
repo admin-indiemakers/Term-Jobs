@@ -7101,7 +7101,11 @@ function PortalAccessView({ authToken }) {
               </button>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-3.5">
+            <form onSubmit={handleCreate} className="space-y-3.5" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               <div>
                 <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
                   Candidate Name
@@ -7126,6 +7130,10 @@ function PortalAccessView({ authToken }) {
                 </label>
                 <input
                   type="email"
+                  name="candidate_portal_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   value={createEmail}
                   onChange={(e) => setCreateEmail(e.target.value)}
@@ -7144,6 +7152,10 @@ function PortalAccessView({ authToken }) {
                 </label>
                 <input
                   type="password"
+                  name="candidate_portal_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={4}
                   value={createPassword}
@@ -7226,7 +7238,11 @@ function PortalAccessView({ authToken }) {
               </button>
             </div>
 
-            <form onSubmit={handleUpdate} className="space-y-3.5">
+            <form onSubmit={handleUpdate} className="space-y-3.5" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               <div>
                 <label className="block text-[11px] font-black uppercase text-[#8A8A85] mb-1">
                   Candidate Name
@@ -7251,6 +7267,10 @@ function PortalAccessView({ authToken }) {
                 </label>
                 <input
                   type="password"
+                  name="candidate_edit_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   value={editUser._password}
                   onChange={(e) => setEditUser({ ...editUser, _password: e.target.value })}
                   placeholder="Optional new password"

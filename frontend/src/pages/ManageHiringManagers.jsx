@@ -491,7 +491,11 @@ export default function ManageHiringManagers() {
               </button>
             </div>
 
-            <form onSubmit={handleCreateManager} className="space-y-3.5">
+            <form onSubmit={handleCreateManager} className="space-y-3.5" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Full Name *
@@ -513,10 +517,13 @@ export default function ManageHiringManagers() {
                 </label>
                 <input
                   type="email"
-                  name="email"
+                  name="hm_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   value={form.email}
-                  onChange={handleInput}
+                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setError(''); }}
                   placeholder="manager@company.com"
                   className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
@@ -528,11 +535,14 @@ export default function ManageHiringManagers() {
                 </label>
                 <input
                   type="password"
-                  name="password"
+                  name="hm_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={4}
                   value={form.password}
-                  onChange={handleInput}
+                  onChange={(e) => { setForm({ ...form, password: e.target.value }); setError(''); }}
                   placeholder="••••••••"
                   className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
@@ -599,7 +609,11 @@ export default function ManageHiringManagers() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+            <form onSubmit={handleSaveEdit} className="space-y-3.5" autoComplete="off">
+              {/* Hidden trap inputs to prevent browser autofill */}
+              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Full Name *
@@ -619,6 +633,10 @@ export default function ManageHiringManagers() {
                 </label>
                 <input
                   type="email"
+                  name="hm_edit_email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   value={edit.email}
                   onChange={(e) => setEdit({ ...edit, email: e.target.value })}
@@ -645,6 +663,10 @@ export default function ManageHiringManagers() {
                 </label>
                 <input
                   type="password"
+                  name="hm_edit_password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   minLength={4}
                   value={edit.password || ''}
                   onChange={(e) => setEdit({ ...edit, password: e.target.value })}

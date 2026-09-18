@@ -200,7 +200,11 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
           )}
 
 
-          <form id="onboard-company-modal-form" onSubmit={handleSubmit} className="space-y-3.5">
+          <form id="onboard-company-modal-form" onSubmit={handleSubmit} className="space-y-3.5" autoComplete="off">
+            {/* Hidden trap inputs to prevent browser autofill of saved admin credentials */}
+            <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
+            <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
+
             {/* Company Name */}
             <div>
               <div className="flex items-center justify-between mb-1">
@@ -352,6 +356,9 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
                 <input
                   type="email"
                   name="email"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   value={form.email}
                   onChange={handleInput}
@@ -375,6 +382,9 @@ export default function OnboardCompanyModal({ isOpen, onClose, onSuccess }) {
                 <input
                   type={showPassword ? 'text' : 'password'}
                   name="password"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-form-type="other"
                   required
                   minLength={4}
                   value={form.password}
