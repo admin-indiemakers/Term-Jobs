@@ -134,8 +134,10 @@ export default function App() {
           <Route path="hiring-manager" element={<HiringManagerDashboard />} />
           <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
           <Route path="requisitions" element={<RequisitionOverview />} />
-          <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
+          <Route path="requisitions/pending-approval" element={<RequisitionOverview section="pending_approval" />} />
+          <Route path="requisitions/pending" element={<RequisitionOverview section="pending_approval" />} />
+          <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
           <Route path="requisitions/completed" element={<RequisitionOverview section="completed" />} />
           <Route path="requisitions/history" element={<RequisitionOverview section="history" />} />
           <Route path="requisitions/new" element={<NewRequisition />} />

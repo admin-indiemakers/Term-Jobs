@@ -130,8 +130,15 @@ export default function HiringManagerDashboard() {
 
   const draftRequisitions = useMemo(() => {
     return requisitions.filter((r) => {
-      const s = (r.status || '').toLowerCase();
-      return s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring' || s === 'pending_approval' || s === 'pendingapproval' || s === 'pending';
+      const s = (r.status || '').toLowerCase().replace(/[\s_]+/g, '');
+      return s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring';
+    });
+  }, [requisitions]);
+
+  const pendingApprovalRequisitions = useMemo(() => {
+    return requisitions.filter((r) => {
+      const s = (r.status || '').toLowerCase().replace(/[\s_]+/g, '');
+      return s === 'pendingapproval' || s === 'pending';
     });
   }, [requisitions]);
 
@@ -140,6 +147,7 @@ export default function HiringManagerDashboard() {
   const totalRequisitionsCount = requisitions.length;
   const completedCount = completedRequisitions.length;
   const draftCount = draftRequisitions.length;
+  const pendingCount = pendingApprovalRequisitions.length;
   const shortlistedCount = shortlistedCandidates.length;
   const acceptedCount = acceptedCandidates.length;
   const onboardingCount = onboardingList.length;
@@ -150,12 +158,13 @@ export default function HiringManagerDashboard() {
   const pipelineStages = useMemo(() => {
     return [
       { id: 'live', count: liveRolesCount, label: 'LIVE ROLES', to: '/dashboard/requisitions/published' },
-      { id: 'ai', count: draftCount, label: 'AI REVIEW', to: '/dashboard/requisitions/drafted' },
+      { id: 'pending', count: pendingCount, label: 'PENDING APPROVAL', to: '/dashboard/requisitions/pending-approval' },
+      { id: 'ai', count: draftCount, label: 'AI DRAFTS', to: '/dashboard/requisitions/drafted' },
       { id: 'shortlisted', count: shortlistedCount, label: 'SHORTLISTED', to: '/dashboard/candidates' },
       { id: 'accepted', count: acceptedCount, label: 'ACCEPTED', to: '/dashboard/candidates/accepted' },
       { id: 'onboarding', count: onboardingCount, label: 'ONBOARDING', to: '/dashboard/candidates/onboarding' },
     ];
-  }, [liveRolesCount, draftCount, shortlistedCount, acceptedCount, onboardingCount]);
+  }, [liveRolesCount, pendingCount, draftCount, shortlistedCount, acceptedCount, onboardingCount]);
 
   // Greeting
   const greetingText = useMemo(() => {
@@ -368,6 +377,27 @@ export default function HiringManagerDashboard() {
             </div>
 
             <div className="space-y-2 text-xs">
+              {/* Alert 0: Pending Approval */}
+              {pendingCount > 0 && (
+                <div
+                  onClick={() => navigate('/dashboard/requisitions/pending-approval')}
+                  className="p-2.5 rounded-xl hover:bg-amber-50/60 border border-amber-200/80 bg-amber-50/20 transition-colors cursor-pointer space-y-0.5"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mt-1.5" />
+                    <div>
+                      <div className="font-bold text-gray-900">
+                        <span>{pendingApprovalRequisitions[0]?.title || 'Requisition'}</span>{' '}
+                        <span className="font-normal text-amber-800">pending Director approval</span>
+                      </div>
+                      <div className="text-[10px] text-amber-700/80 font-medium mt-0.5">
+                        {pendingCount} requisition{pendingCount > 1 ? 's' : ''} awaiting executive approval
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Alert 1: Drafts */}
               <div
                 onClick={() => navigate('/dashboard/requisitions/drafted')}

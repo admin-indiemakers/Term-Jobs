@@ -1017,6 +1017,7 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
         if db_req:
+            db_req.status = schemas.RequisitionStatus.PUBLISHED.value
             db_req.director_approved = True
             db_req.director_approved_by = current_user.name or current_user.email or "Director"
             db_req.director_approved_at = _utcnow()
@@ -1025,6 +1026,11 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
             db_req.rejected_at = None
             session.commit()
 
+    try:
+        service.publish(requisition_id, by=current_user.name or current_user.email or "Director")
+    except Exception:
+        pass
+
     # Sync to MongoDB and clear cache
     try:
         from modules.shared.db import db
@@ -1032,6 +1038,7 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
         db["requisitions"].update_one(
             {"id": requisition_id},
             {"$set": {
+                "status": schemas.RequisitionStatus.PUBLISHED.value,
                 "director_approved": True,
                 "director_approved_by": current_user.name or current_user.email or "Director",
                 "director_approved_at": now_iso,
@@ -1041,6 +1048,11 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
                 "updated_at": now_iso,
             }}
         )
+    except Exception:
+        pass
+
+    try:
+        notify_requisition_published(requisition_id)
     except Exception:
         pass
 

@@ -27,10 +27,16 @@ const SECTION_CONFIG = {
     statuses: ['Published', 'Active', 'Open'],
     to: '/dashboard/requisitions/published',
   },
+  pending_approval: {
+    title: 'Pending Approval',
+    caption: 'Requisitions awaiting executive director review and commercial sign-off.',
+    statuses: ['PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending'],
+    to: '/dashboard/requisitions/pending-approval',
+  },
   drafted: {
     title: 'Drafted',
-    caption: 'Requisitions in progress — AI assistant intake, structuring, and approval.',
-    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'PendingApproval', 'Pending_Approval'],
+    caption: 'Requisitions in progress — AI assistant intake and role structuring.',
+    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring'],
     to: '/dashboard/requisitions/drafted',
   },
   completed: {
@@ -42,7 +48,7 @@ const SECTION_CONFIG = {
   history: {
     title: 'All History',
     caption: 'Audit trail of all requisition states across this workspace.',
-    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'PendingApproval', 'Pending_Approval', 'Published', 'Active', 'Open', 'Closed', 'Completed', 'Filled'],
+    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending', 'Published', 'Active', 'Open', 'Closed', 'Completed', 'Filled'],
     to: '/dashboard/requisitions/history',
   },
 };
@@ -66,6 +72,7 @@ export default function RequisitionOverview({ section }) {
   const initialSection = useMemo(() => {
     if (section) return section;
     const p = location.pathname.toLowerCase();
+    if (p.includes('/pending-approval') || p.includes('/pending')) return 'pending_approval';
     if (p.includes('/drafted')) return 'drafted';
     if (p.includes('/completed')) return 'completed';
     if (p.includes('/history')) return 'history';
@@ -137,37 +144,44 @@ export default function RequisitionOverview({ section }) {
 
   // Section Counts Calculation from live data
   const counts = useMemo(() => {
-    const normalize = (s) => (s || '').toLowerCase();
-    const drafted = requisitions.filter((r) =>
-      ['draft', 'drafted', 'intake', 'structuring', 'pendingapproval', 'pending_approval'].includes(normalize(r.status))
-    ).length;
+    const normalize = (s) => (s || '').toLowerCase().replace(/[\s_]+/g, '');
     const published = requisitions.filter((r) =>
       ['published', 'active', 'open'].includes(normalize(r.status))
+    ).length;
+    const pending_approval = requisitions.filter((r) =>
+      ['pendingapproval', 'pending'].includes(normalize(r.status))
+    ).length;
+    const drafted = requisitions.filter((r) =>
+      ['draft', 'drafted', 'intake', 'structuring'].includes(normalize(r.status))
     ).length;
     const completed = requisitions.filter((r) =>
       ['closed', 'completed', 'filled'].includes(normalize(r.status))
     ).length;
     const history = requisitions.length;
 
-    return { drafted, published, completed, history };
+    return { published, pending_approval, drafted, completed, history };
   }, [requisitions]);
 
   useEffect(() => {
     const p = location.pathname.toLowerCase().replace(/\/+$/, '');
-    if (p === '/dashboard/requisitions' && !section && activeTab === 'published' && counts.published === 0 && counts.drafted > 0) {
-      setActiveTab('drafted');
+    if (p === '/dashboard/requisitions' && !section && activeTab === 'published' && counts.published === 0) {
+      if (counts.pending_approval > 0) {
+        setActiveTab('pending_approval');
+      } else if (counts.drafted > 0) {
+        setActiveTab('drafted');
+      }
     }
-  }, [counts.published, counts.drafted, location.pathname, section, activeTab]);
+  }, [counts.published, counts.pending_approval, counts.drafted, location.pathname, section, activeTab]);
 
   const currentConfig = SECTION_CONFIG[activeTab] || SECTION_CONFIG.published;
 
   // Filtered Rows
   const filteredRows = useMemo(() => {
     let list = requisitions;
-    const normalize = (s) => (s || '').toLowerCase();
+    const normalize = (s) => (s || '').toLowerCase().replace(/[\s_]+/g, '');
 
     if (activeTab !== 'history') {
-      const allowed = (currentConfig.statuses || []).map((s) => s.toLowerCase());
+      const allowed = (currentConfig.statuses || []).map((s) => normalize(s));
       list = list.filter((r) => allowed.includes(normalize(r.status)));
     }
 

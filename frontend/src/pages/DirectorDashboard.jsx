@@ -156,6 +156,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
           r.id === reqId
             ? {
                 ...r,
+                status: updatedReq?.status || 'Published',
                 director_approved: true,
                 director_approved_by: approverName,
                 director_approved_at: approvedAt,
