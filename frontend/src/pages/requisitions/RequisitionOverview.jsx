@@ -104,11 +104,15 @@ export default function RequisitionOverview({ section }) {
         (Array.isArray(profiles) ? profiles : []).map((p) => [p.id, p.name])
       );
 
-      const reqList = Array.isArray(reqs) ? reqs : reqs?.requisitions || [];
-      const rows = reqList.map((r) => ({
-        ...r,
-        company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
-      }));
+      const rows = reqList.map((r) => {
+        const isDirectorApproved = Boolean(r.director_approved);
+        const effectiveStatus = (isDirectorApproved && r.status !== 'Closed') ? 'Published' : r.status;
+        return {
+          ...r,
+          status: effectiveStatus,
+          company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
+        };
+      });
 
       setRequisitions(rows);
     } catch (err) {

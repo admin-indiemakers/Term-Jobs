@@ -127,12 +127,12 @@ export default function RequisitionDetail() {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const rawStatus = req?.status || 'Draft';
+  const isDirectorApproved = Boolean(req?.director_approved);
+  const rawStatus = (isDirectorApproved && req?.status !== 'Closed') ? 'Published' : (req?.status || 'Draft');
   const status = NORMALIZED[rawStatus] || rawStatus;
   const structuredRole = draftRole || req?.structured_role;
 
   const isDirectorOrAdmin = user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin';
-  const isDirectorApproved = Boolean(req?.director_approved);
 
   const currentStepIndex = Math.max(
     0,
@@ -355,7 +355,7 @@ export default function RequisitionDetail() {
             <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
               {req.title || structuredRole?.title || 'Untitled Requisition'}
             </h1>
-            <StatusBadge status={req.status} />
+            <StatusBadge status={status} />
           </div>
           <p className="text-xs text-gray-500 font-normal mt-0.5">
             {req.department || structuredRole?.department || 'Engineering'} • Created {formatDate(req.created_at)}
@@ -435,17 +435,7 @@ export default function RequisitionDetail() {
           )}
 
           {status === 'PendingApproval' && (
-            isDirectorApproved ? (
-              <button
-                type="button"
-                onClick={handlePublish}
-                disabled={Boolean(busy)}
-                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles size={13} />
-                <span>{busy === 'publish' ? 'Publishing...' : 'Publish to Vendors →'}</span>
-              </button>
-            ) : isDirectorOrAdmin ? (
+            isDirectorOrAdmin ? (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -534,19 +524,7 @@ export default function RequisitionDetail() {
 
       {/* Workflow Status Banner for Pending Approval */}
       {status === 'PendingApproval' && (
-        isDirectorApproved ? (
-          <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl flex items-center gap-3 text-emerald-900 shadow-2xs">
-            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
-            <div>
-              <div className="text-xs font-bold text-emerald-950">
-                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''}
-              </div>
-              <p className="text-[11px] text-emerald-800 mt-0.5">
-                This requisition has been formally approved by the Director and is ready to be published to partner vendors.
-              </p>
-            </div>
-          </div>
-        ) : isDirectorOrAdmin ? (
+        isDirectorOrAdmin ? (
           <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-2xs">
             <div className="flex items-center gap-3">
               <ShieldCheck size={20} className="shrink-0 text-amber-700" />
@@ -584,11 +562,31 @@ export default function RequisitionDetail() {
             <div>
               <div className="text-xs font-bold text-blue-950">⏳ Pending Director Approval</div>
               <p className="text-[11px] text-blue-800 mt-0.5">
-                Submitted to the company Director for approval. Once approved, you will be able to publish this requisition to partner vendors.
+                Submitted to the company Director for approval. Once approved, the requisition will be published to partner vendors.
               </p>
             </div>
           </div>
         )
+      )}
+
+      {/* Banner for Published Requisition */}
+      {status === 'Published' && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl flex items-center justify-between gap-3 text-emerald-900 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
+            <div>
+              <div className="text-xs font-bold text-emerald-950">
+                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''} — Published & Live to Vendors
+              </div>
+              <p className="text-[11px] text-emerald-800 mt-0.5">
+                This requisition has been formally approved by the Director and is live for partner vendor consultancies.
+              </p>
+            </div>
+          </div>
+          <span className="shrink-0 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300">
+            Live
+          </span>
+        </div>
       )}
 
       {info && (
@@ -841,7 +839,11 @@ export default function RequisitionDetail() {
                   <p className="text-[10px] text-gray-400">Current state guidance</p>
                 </div>
               </div>
-              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-900 text-[10px] font-extrabold">
+              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+                status === 'Published'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  : 'bg-gray-100 text-gray-900'
+              }`}>
                 {status}
               </span>
             </div>
@@ -898,23 +900,12 @@ export default function RequisitionDetail() {
               {status === 'PendingApproval' && (
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
                   <div className="font-bold text-gray-900">
-                    {isDirectorApproved ? 'Publish to Partners' : 'Director Approval Required'}
+                    Director Approval Required
                   </div>
                   <p className="text-[11px] text-gray-500">
-                    {isDirectorApproved
-                      ? 'Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.'
-                      : 'Director approval is required before this requisition can be published to partner vendors.'}
+                    Director approval is required before this requisition can be published to partner vendors.
                   </p>
-                  {isDirectorApproved ? (
-                    <button
-                      type="button"
-                      onClick={handlePublish}
-                      disabled={Boolean(busy)}
-                      className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                    >
-                      Publish to Vendors →
-                    </button>
-                  ) : isDirectorOrAdmin ? (
+                  {isDirectorOrAdmin ? (
                     <button
                       type="button"
                       onClick={handleDirectorApprove}
@@ -928,6 +919,18 @@ export default function RequisitionDetail() {
                       ⏳ Awaiting Director approval before publication.
                     </div>
                   )}
+                </div>
+              )}
+
+              {status === 'Published' && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 space-y-1 text-emerald-900">
+                  <div className="font-bold text-emerald-950 flex items-center gap-1.5">
+                    <CheckCircle2 size={14} className="text-emerald-600" />
+                    <span>Live & Published</span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800">
+                    Requisition is live and broadcasted to partner vendor consultancies.
+                  </p>
                 </div>
               )}
 

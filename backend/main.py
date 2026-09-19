@@ -236,6 +236,28 @@ try:
     except Exception as s_exc:
         import logging
         logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
+
+    # Ensure any requisitions marked director_approved are published
+    try:
+        with get_session() as session:
+            director_approved_reqs = session.query(models.Requisition).filter(
+                models.Requisition.director_approved == True,
+                models.Requisition.status != schemas.RequisitionStatus.CLOSED.value
+            ).all()
+            for r in director_approved_reqs:
+                if r.status != schemas.RequisitionStatus.PUBLISHED.value:
+                    r.status = schemas.RequisitionStatus.PUBLISHED.value
+            session.commit()
+        from modules.shared.db import db
+        db["requisitions"].update_many(
+            {
+                "director_approved": True,
+                "status": {"$nin": [schemas.RequisitionStatus.CLOSED.value, schemas.RequisitionStatus.PUBLISHED.value]}
+            },
+            {"$set": {"status": schemas.RequisitionStatus.PUBLISHED.value}}
+        )
+    except Exception as m_exc:
+        pass
 except Exception as exc:  # noqa: BLE001
     # Do not hard-crash at startup if MongoDB is unreachable (e.g. Atlas
     # paused / IP allowlist changed). The server boots and reports degraded
@@ -400,13 +422,18 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
                     for v in vendors
                 ]
 
+        effective_status = (
+            schemas.RequisitionStatus.PUBLISHED.value
+            if (bool(getattr(req, "director_approved", False)) and req.status != schemas.RequisitionStatus.CLOSED.value)
+            else req.status
+        )
         return {
             "id": req.id,
             "ref": f"REQ-{req.id[:6].upper()}",
             "tenant_id": req.tenant_id,
             "company_profile_id": req.company_profile_id,
             "company": company,
-            "status": req.status,
+            "status": effective_status,
             "title": req.title,
             "intent": req.intent,
             "intake_answers": req.intake_answers,
@@ -897,7 +924,11 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
                 "id": r.id,
                 "ref": f"REQ-{r.id[:6].upper()}",
                 "tenant_id": r.tenant_id,
-                "status": r.status,
+                "status": (
+                    schemas.RequisitionStatus.PUBLISHED.value
+                    if (bool(getattr(r, "director_approved", False)) and r.status != schemas.RequisitionStatus.CLOSED.value)
+                    else r.status
+                ),
                 "title": r.title,
                 "company_profile_id": r.company_profile_id,
                 "company_name": profiles[r.company_profile_id].name
