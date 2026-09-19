@@ -346,7 +346,7 @@ export default function ShortlistedCandidates() {
                 const reqCode = cand.requisition_ref || (cand.requisition_id ? `REQ-${String(cand.requisition_id).slice(0, 6).toUpperCase()}` : 'REQ-F7F406');
                 const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
                 const rawVendor = cand.vendor_name || '';
-                const sourceLabel = (!rawVendor || rawVendor.toLowerCase().includes('talent') || rawVendor === 'bridgeon') ? 'Talent Pool' : rawVendor;
+                const sourceLabel = 'Talent Pool';
                 const roleTitle = cand.requisition_title || 'Software Engineer';
                 const score = cand.match_score != null ? Math.round(cand.match_score) : 85;
 

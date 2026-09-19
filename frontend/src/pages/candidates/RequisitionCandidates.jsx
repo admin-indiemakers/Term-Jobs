@@ -337,13 +337,9 @@ function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist
           {c.candidate_email && <div className="cand-email">{c.candidate_email}</div>}
         </td>
         <td className="td-company">
-          {c.vendor_name === 'Talent Pool' || c.vendor_name === 'Direct Talent Pool' || !c.vendor_name ? (
-            <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
-              Talent Pool
-            </span>
-          ) : (
-            c.vendor_name
-          )}
+          <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
+            Talent Pool
+          </span>
         </td>
         <td><StatusBadge status={c.status} /></td>
         <td style={{ minWidth: 130 }}><ScoreBar score={c.match_score} /></td>
