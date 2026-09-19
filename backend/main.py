@@ -1087,6 +1087,12 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
     except Exception:
         pass
 
+    try:
+        from modules.candidate.router import trigger_auto_match_pool
+        trigger_auto_match_pool(requisition_id, current_user=current_user)
+    except Exception:
+        pass
+
     _cache.clear()
     return _requisition_dict(requisition_id)
 
@@ -1166,11 +1172,20 @@ def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, cu
     by = body.by if body else (current_user.name or current_user.email)
     try:
         req = service.publish(requisition_id, by=by)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        current_req = _get_requisition(requisition_id)
+        if current_req and getattr(current_req, "status", None) == schemas.RequisitionStatus.PUBLISHED.value:
+            req = current_req
+        else:
+            raise HTTPException(status_code=400, detail=str(exc))
     try:
         notify_requisition_published(requisition_id)
     except Exception:  # noqa: BLE001
+        pass
+    try:
+        from modules.candidate.router import trigger_auto_match_pool
+        trigger_auto_match_pool(requisition_id, current_user=current_user)
+    except Exception:
         pass
     _cache.clear()
     return _requisition_dict(requisition_id)

@@ -82,6 +82,7 @@ export default function RequisitionCandidates() {
   const [expanded, setExpanded] = useState(null);
   const [jdExpanded, setJdExpanded] = useState(false);
   const [candJdExpanded, setCandJdExpanded] = useState(null);
+  const [matchingPool, setMatchingPool] = useState(false);
   const [acting, setActing] = useState(null);
 
   const load = () => {
@@ -103,6 +104,23 @@ export default function RequisitionCandidates() {
   };
 
   useEffect(load, [id, token]);
+
+  const handleMatchTalentPool = async () => {
+    setMatchingPool(true);
+    setError('');
+    try {
+      await request(`/candidates/pool/auto-match/${id}`, {
+        method: 'POST',
+        token,
+      });
+      load();
+    } catch (err) {
+      console.error('Failed to match talent pool:', err);
+      setError(err.message || 'Failed to match talent pool.');
+    } finally {
+      setMatchingPool(false);
+    }
+  };
 
   const stats = useMemo(() => {
     const byStatus = {};
@@ -214,23 +232,47 @@ export default function RequisitionCandidates() {
       </div>
 
       <div className="glass-panel table-card" style={{ marginTop: '20px' }}>
-        <div className="shortlist-head">
-          <h3 className="card-title">Candidates for {ref}</h3>
-          <span className="muted">{stats.total} total · {stats.shortlisted} shortlisted · {stats.rejected} rejected</span>
+        <div className="shortlist-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 className="card-title">Candidates for {ref}</h3>
+            <span className="muted">{stats.total} total · {stats.shortlisted} shortlisted · {stats.rejected} rejected</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleMatchTalentPool}
+            disabled={matchingPool}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: '#0f172a',
+              color: '#ffffff',
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: 'none',
+              cursor: matchingPool ? 'not-allowed' : 'pointer',
+              opacity: matchingPool ? 0.6 : 1,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+            }}
+          >
+            <span>{matchingPool ? 'Scoring Talent Pool...' : '✨ Match Talent Pool with AI'}</span>
+          </button>
         </div>
         {loading ? (
           <p className="muted" style={{ padding: 24 }}>Loading candidates...</p>
         ) : candidates.length === 0 ? (
           <div className="empty-state">
-            <h3>No candidates submitted yet</h3>
-            <p>Once vendors screen resumes against this JD, screened candidates will appear here for your review.</p>
+            <h3>No candidates in review queue yet</h3>
+            <p>AI automatically matches and ranks candidates from the platform Talent Pool. Click "Match Talent Pool with AI" above to run scoring.</p>
           </div>
         ) : (
           <table className="data-table cand-table">
             <thead>
               <tr>
                 <th>Candidate</th>
-                <th>Vendor</th>
+                <th>Source</th>
                 <th>Status</th>
                 <th>Match Score</th>
                 <th>Recommendation</th>
@@ -294,7 +336,15 @@ function CandidateRow({ candidate: c, interview, expanded, onToggle, onShortlist
           </div>
           {c.candidate_email && <div className="cand-email">{c.candidate_email}</div>}
         </td>
-        <td className="td-company">{c.vendor_name || '—'}</td>
+        <td className="td-company">
+          {c.vendor_name === 'Talent Pool' || c.vendor_name === 'Direct Talent Pool' || !c.vendor_name ? (
+            <span style={{ fontSize: '0.7rem', fontWeight: 800, padding: '2px 8px', borderRadius: '999px', background: '#ecfdf5', color: '#047857', border: '1px solid #a7f3d0' }}>
+              Talent Pool
+            </span>
+          ) : (
+            c.vendor_name
+          )}
+        </td>
         <td><StatusBadge status={c.status} /></td>
         <td style={{ minWidth: 130 }}><ScoreBar score={c.match_score} /></td>
         <td><RecommendationBadge recommendation={c.recommendation} /></td>

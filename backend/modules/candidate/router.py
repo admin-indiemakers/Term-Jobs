@@ -233,6 +233,175 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
     return results
 
 
+@router.post("/join")
+async def join_talent_pool(
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str | None = Form(None),
+    role_title: str | None = Form(None),
+    skills: str | None = Form(None),
+    linkedin_url: str | None = Form(None),
+    portfolio_url: str | None = Form(None),
+    resume: UploadFile | None = File(None),
+) -> dict:
+    """Public, frictionless registration endpoint for candidates to join the review-gated Talent Pool."""
+    from modules.shared.db import db as mongo_db
+    import tempfile
+    import re
+    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+    from modules.candidate.extractor import extract_candidate_profile
+
+    clean_email = (email or "").strip().lower()
+    clean_name = (name or "").strip()
+    if not clean_email or not clean_name:
+        raise HTTPException(status_code=400, detail="Name and email are required.")
+
+    extracted_text = ""
+    pdf_base64_data = None
+    safe_filename = ""
+    profile_data = {}
+
+    if resume and resume.filename:
+        safe_filename = os.path.basename(resume.filename)
+        ext = os.path.splitext(safe_filename)[1].lower()
+        if ext not in [".pdf", ".docx"]:
+            raise HTTPException(status_code=400, detail="Only PDF and DOCX resume formats are supported.")
+
+        content = await resume.read()
+        if len(content) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="Resume file exceeds 15MB limit.")
+
+        pdf_base64_data = base64.b64encode(content).decode("utf-8")
+
+        target_dir = os.path.join(os.path.dirname(__file__), "..", "..", "uploads")
+        os.makedirs(target_dir, exist_ok=True)
+        disk_path = os.path.join(target_dir, f"{uuid.uuid4().hex[:8]}_{safe_filename}")
+        try:
+            with open(disk_path, "wb") as f:
+                f.write(content)
+        except Exception:
+            pass
+
+        file_type = "docx" if ext == ".docx" else "pdf"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            extracted_text = _extract_text_new(tmp_path, file_type)
+        except Exception as ex:
+            print(f"[CANDIDATE JOIN] Text extraction failed for {safe_filename}: {ex}")
+            extracted_text = ""
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        if extracted_text:
+            try:
+                profile_data = await extract_candidate_profile(extracted_text, safe_filename)
+            except Exception as ex:
+                print(f"[CANDIDATE JOIN] Profile extraction failed: {ex}")
+                profile_data = {}
+
+    manual_skills = [s.strip() for s in (skills or "").split(",") if s.strip()]
+    extracted_skills = profile_data.get("skills") or []
+    all_skills = list(dict.fromkeys(manual_skills + extracted_skills))
+
+    final_name = clean_name or profile_data.get("candidate_name") or "Candidate"
+    final_email = clean_email
+    final_phone = (phone or "").strip() or profile_data.get("candidate_phone") or ""
+    final_title = (role_title or "").strip() or profile_data.get("candidate_title") or "Professional"
+    final_summary = profile_data.get("summary") or f"{final_name} - {final_title}"
+
+    cid = str(uuid.uuid4())
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+
+    details = {
+        "linkedin_url": (linkedin_url or "").strip(),
+        "portfolio_url": (portfolio_url or "").strip(),
+        "experience_years": profile_data.get("experience_years") or 0,
+        "source": "Public Direct Form",
+        "review_gated": True,
+    }
+
+    mongo_doc = {
+        "id": cid,
+        "candidate_name": final_name,
+        "candidate_email": final_email,
+        "candidate_phone": final_phone,
+        "candidate_title": final_title,
+        "vendor_company_name": "Direct Talent Pool",
+        "skills": all_skills,
+        "summary": final_summary,
+        "extracted_text": extracted_text,
+        "filename": safe_filename or f"{final_name}.pdf",
+        "status": "In Pool",
+        "review_gated": True,
+        "details": details,
+        "created_at": now_iso,
+        "updated_at": now_iso,
+    }
+    if pdf_base64_data:
+        mongo_doc["resume_pdf"] = pdf_base64_data
+
+    existing_mongo = mongo_db["candidates"].find_one({"candidate_email": final_email})
+    if existing_mongo:
+        cid = existing_mongo.get("id") or cid
+        mongo_doc["id"] = cid
+        mongo_db["candidates"].update_one(
+            {"candidate_email": final_email},
+            {"$set": mongo_doc}
+        )
+    else:
+        mongo_db["candidates"].insert_one(mongo_doc)
+
+    try:
+        with get_session() as session:
+            db_cand = session.query(Candidate).filter(Candidate.candidate_email == final_email).first()
+            if not db_cand:
+                db_cand = Candidate(
+                    id=cid,
+                    candidate_name=final_name,
+                    candidate_title=final_title,
+                    candidate_email=final_email,
+                    candidate_phone=final_phone,
+                    vendor_company_name="Direct Talent Pool",
+                    skills=all_skills,
+                    filename=safe_filename,
+                    summary=final_summary,
+                    extracted_text=extracted_text,
+                    details=details,
+                    created_at=now_dt,
+                    updated_at=now_dt,
+                )
+                session.add(db_cand)
+            else:
+                db_cand.candidate_name = final_name
+                db_cand.candidate_title = final_title
+                db_cand.candidate_phone = final_phone
+                db_cand.skills = all_skills
+                db_cand.summary = final_summary
+                if extracted_text:
+                    db_cand.extracted_text = extracted_text
+                db_cand.updated_at = now_dt
+            session.commit()
+    except Exception as sq_err:
+        print(f"[CANDIDATE JOIN] SQLite save warning: {sq_err}")
+
+    return {
+        "status": "success",
+        "message": "Successfully enrolled in the Talent Pool! You will be contacted for matching roles.",
+        "candidate_id": cid,
+        "candidate_name": final_name,
+        "candidate_email": final_email,
+        "candidate_title": final_title,
+        "skills": all_skills,
+    }
+
+
 @router.get("")
 def list_candidates(
     status: str | None = None,
@@ -1169,6 +1338,140 @@ async def match_bulk_candidates(
             "cache_hit": False,
             "screened_candidates": enriched_screened
         }
+
+
+@router.post("/pool/auto-match/{requisition_id}")
+async def auto_match_pool_to_requisition(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Automatically score active candidates in the Talent Pool against a published requisition and generate ranked shortlist."""
+    from modules.shared.db import db as mongo_db
+    from modules.requisition.domain.models import Requisition
+
+    with get_session() as session:
+        req = session.get(Requisition, requisition_id)
+        if not req:
+            raise HTTPException(status_code=404, detail="Requisition not found")
+
+        # 1. Fetch eligible talent pool candidates
+        candidates_cursor = mongo_db["candidates"].find(
+            {"status": {"$nin": ["Hired", "Offboarded"]}},
+            {"id": 1, "candidate_name": 1, "candidate_email": 1, "candidate_title": 1, "skills": 1, "summary": 1, "extracted_text": 1, "filename": 1, "_id": 0}
+        )
+        pool_candidates = list(candidates_cursor)
+        if not pool_candidates:
+            return {
+                "status": "success",
+                "matched_count": 0,
+                "message": "No candidates currently in the Talent Pool."
+            }
+
+        candidate_ids = [c["id"] for c in pool_candidates if c.get("id")]
+        
+        # 2. Run bulk matching
+        match_result = await match_bulk_candidates(
+            body={"requisition_id": requisition_id, "candidate_ids": candidate_ids},
+            current_user=current_user
+        )
+        screened = match_result.get("screened_candidates") or []
+
+        # 3. Persist top/good matches into candidate_submissions if not already submitted
+        existing_subs = session.query(CandidateSubmission).filter(
+            CandidateSubmission.requisition_id == requisition_id
+        ).all()
+        existing_emails = {s.candidate_email.strip().lower() for s in existing_subs if s.candidate_email}
+        existing_names = {s.candidate_name.strip().lower() for s in existing_subs if s.candidate_name}
+
+        created_count = 0
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+
+        for cand_data in screened:
+            c_email = (cand_data.get("candidate_email") or "").strip().lower()
+            c_name = (cand_data.get("candidate_name") or "").strip()
+            score = cand_data.get("match_score") or 0
+
+            if c_email and c_email in existing_emails:
+                continue
+            if c_name and c_name.lower() in existing_names:
+                continue
+
+            sub_id = str(uuid.uuid4())
+            new_sub = CandidateSubmission(
+                id=sub_id,
+                requisition_id=requisition_id,
+                candidate_name=c_name or "Candidate",
+                candidate_email=c_email or None,
+                vendor_name="Talent Pool",
+                filename=cand_data.get("filename") or f"{c_name}.pdf",
+                match_score=float(score),
+                recommendation=cand_data.get("recommendation") or "Screened",
+                status="Screened",
+                summary=cand_data.get("summary") or f"{c_name} evaluated by AI for {req.title}",
+                matched_skills=cand_data.get("matched_skills") or [],
+                missing_skills=cand_data.get("missing_skills") or [],
+                details=cand_data.get("breakdown") or {},
+                created_at=now_dt,
+                updated_at=now_dt,
+            )
+            session.add(new_sub)
+
+            mongo_sub_doc = {
+                "id": sub_id,
+                "submission_id": sub_id,
+                "requisition_id": requisition_id,
+                "candidate_name": c_name or "Candidate",
+                "candidate_email": c_email or None,
+                "vendor_name": "Talent Pool",
+                "filename": cand_data.get("filename") or f"{c_name}.pdf",
+                "match_score": float(score),
+                "recommendation": cand_data.get("recommendation") or "Screened",
+                "status": "Screened",
+                "summary": cand_data.get("summary") or f"{c_name} evaluated by AI for {req.title}",
+                "matched_skills": cand_data.get("matched_skills") or [],
+                "missing_skills": cand_data.get("missing_skills") or [],
+                "details": cand_data.get("breakdown") or {},
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }
+            mongo_db["candidate_submissions"].insert_one(mongo_sub_doc)
+            if c_email:
+                existing_emails.add(c_email)
+            if c_name:
+                existing_names.add(c_name.lower())
+            created_count += 1
+
+        session.commit()
+
+        return {
+            "status": "success",
+            "message": f"Successfully evaluated {len(screened)} Talent Pool candidates. {created_count} new candidates added to review queue.",
+            "total_screened": len(screened),
+            "new_matches_added": created_count,
+            "candidates": screened,
+        }
+
+
+def trigger_auto_match_pool(requisition_id: str, current_user: User = None) -> None:
+    """Trigger AI matching of active Talent Pool candidates in a background thread."""
+    import threading
+    import asyncio
+    import logging
+    _log = logging.getLogger(__name__)
+
+    def _bg_run():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(auto_match_pool_to_requisition(requisition_id, current_user=current_user))
+            loop.close()
+        except Exception as e:
+            _log.warning(f"Failed to auto-match talent pool for req {requisition_id}: {e}")
+
+    t = threading.Thread(target=_bg_run, daemon=True)
+    t.start()
+
 
 
 

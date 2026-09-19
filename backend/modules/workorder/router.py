@@ -5,7 +5,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 from pydantic import BaseModel
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Header, Body
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.requisition.domain.models import Requisition
@@ -1269,3 +1269,110 @@ def director_reject_agreement(
         "rejected_by": rejector_label,
         "rejected_at": now_iso
     }
+
+
+@router.post("/agreements/{workorder_id}/complete-contract")
+@router.post("/work-orders/{workorder_id}/complete")
+def complete_contract_and_return_to_pool(
+    workorder_id: str,
+    notes: str = Body(default="", embed=True),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Mark a contract/engagement as completed and return the candidate to the active Talent Pool."""
+    clean_id = workorder_id.replace("agreement_", "").replace("wo_", "").strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    now_dt = datetime.now(timezone.utc)
+
+    # 1. Update Work Order in MongoDB
+    wo_or = [
+        {"id": clean_id},
+        {"id": f"wo_{clean_id}"},
+        {"id": f"agreement_{clean_id}"},
+        {"workorder_id": clean_id},
+        {"candidate_id": clean_id},
+    ]
+    wo_doc = db["work_orders"].find_one({"$or": wo_or})
+    cand_name = None
+    cand_email = None
+    cand_id = None
+
+    if wo_doc:
+        cand_name = wo_doc.get("candidate_name")
+        cand_email = wo_doc.get("candidate_email")
+        cand_id = wo_doc.get("candidate_id") or clean_id
+        db["work_orders"].update_one(
+            {"_id": wo_doc["_id"]},
+            {"$set": {
+                "status": "Completed",
+                "agreement_status": "Completed",
+                "completed_at": now_iso,
+                "completed_by": current_user.name or current_user.email,
+                "completion_notes": notes,
+                "updated_at": now_iso,
+            }}
+        )
+
+    # 2. Update Work Order in SQLite
+    with get_session() as session:
+        sql_wo = session.query(WorkOrder).filter(
+            (WorkOrder.candidate_id == clean_id) |
+            (WorkOrder.workorder_id == clean_id) |
+            (WorkOrder.id == clean_id)
+        ).first()
+        if sql_wo:
+            sql_wo.status = "Completed"
+            sql_wo.updated_at = now_dt
+            if not cand_name:
+                cand_name = sql_wo.candidate_name
+            if not cand_email:
+                cand_email = sql_wo.candidate_email
+            session.commit()
+
+    # 3. Return Candidate to Talent Pool (Step 10 loop)
+    cand_or = []
+    if cand_id:
+        cand_or.append({"id": cand_id})
+    if cand_email:
+        cand_or.append({"candidate_email": cand_email.strip().lower()})
+        cand_or.append({"email": cand_email.strip().lower()})
+    if cand_name:
+        cand_or.append({"candidate_name": cand_name})
+        cand_or.append({"name": cand_name})
+
+    if cand_or:
+        db["candidates"].update_many(
+            {"$or": cand_or},
+            {"$set": {
+                "status": "In Pool",
+                "is_active": True,
+                "current_engagement": None,
+                "available_for_matching": True,
+                "last_contract_completed_at": now_iso,
+                "updated_at": now_iso,
+            }}
+        )
+
+    # 4. Notify Hiring Manager / System
+    try:
+        db["notifications"].insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": str(current_user.id),
+            "tenant_id": str(current_user.tenant_id),
+            "type": "contract.completed",
+            "title": "Contract Completed • Candidate Returned to Pool",
+            "body": f"{cand_name or 'Candidate'} contract marked complete. Candidate has returned to the active Talent Pool for future matching.",
+            "read": False,
+            "created_at": now_iso,
+        })
+    except Exception:
+        pass
+
+    return {
+        "success": True,
+        "message": f"Contract for {cand_name or clean_id} successfully completed. Candidate returned to Talent Pool.",
+        "workorder_id": clean_id,
+        "candidate_name": cand_name,
+        "talent_pool_status": "In Pool",
+        "completed_at": now_iso,
+    }
+

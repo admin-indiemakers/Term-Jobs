@@ -470,14 +470,23 @@ export default function RequisitionDetail() {
           )}
 
           {status === 'Published' && (
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={Boolean(busy)}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Close Requisition
-            </button>
+            <>
+              <Link
+                to={`/dashboard/requisitions/${id}/candidates`}
+                className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
+              >
+                <Users size={13} />
+                <span>View Candidates</span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={Boolean(busy)}
+                className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Close Requisition
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -576,16 +585,20 @@ export default function RequisitionDetail() {
             <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
             <div>
               <div className="text-xs font-bold text-emerald-950">
-                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''} — Published & Live to Vendors
+                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''} — Published & Live to Talent Pool
               </div>
               <p className="text-[11px] text-emerald-800 mt-0.5">
-                This requisition has been formally approved by the Director and is live for partner vendor consultancies.
+                This requisition has been formally approved by the Director and is now live. AI matches and scores active Talent Pool profiles.
               </p>
             </div>
           </div>
-          <span className="shrink-0 px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black border border-emerald-300">
-            Live
-          </span>
+          <Link
+            to={`/dashboard/requisitions/${id}/candidates`}
+            className="shrink-0 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-black text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors"
+          >
+            <span>View Candidates</span>
+            <ArrowRight size={13} />
+          </Link>
         </div>
       )}
 
@@ -935,19 +948,27 @@ export default function RequisitionDetail() {
               )}
 
               {status === 'Published' && (
-                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
+                <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200/80 space-y-2 text-emerald-950">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                      <Building size={14} className="text-amber-700" />
-                      Engaged Vendor Consultancies (3)
+                    <div className="font-extrabold text-xs uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-emerald-700" />
+                      Platform Talent Pool • AI Matching Active
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
-                      Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-200/80 text-[10px] font-black text-emerald-950 border border-emerald-300">
+                      Direct Candidate Pool
                     </span>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                    3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
+                  <p className="text-[11px] text-emerald-800 leading-relaxed font-medium">
+                    AI continuously scores active Talent Pool profiles against this role's criteria. Ranked candidates are instantly available in your review queue.
                   </p>
+                  <div className="pt-1">
+                    <Link
+                      to={`/dashboard/requisitions/${id}/candidates`}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-black text-white text-xs font-bold transition-colors shadow-2xs"
+                    >
+                      <span>Review Matched Candidates →</span>
+                    </Link>
+                  </div>
                 </div>
               )}
             </div>
@@ -963,10 +984,10 @@ export default function RequisitionDetail() {
                   <span className="text-gray-500">Headcount Openings</span>
                   <span className="font-bold text-gray-900">{structuredRole?.headcount || req?.headcount || 1} position(s)</span>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50/80 border border-amber-200/60 text-amber-900">
-                  <span className="text-amber-800 font-semibold">Vendor Candidate Limit</span>
-                  <span className="font-bold text-amber-950 px-2 py-0.5 rounded bg-amber-200/60 text-xs">
-                    {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} candidate / vendor
+                <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50/80 border border-emerald-200/60 text-emerald-900">
+                  <span className="text-emerald-800 font-semibold">Shortlist Capacity</span>
+                  <span className="font-bold text-emerald-950 px-2 py-0.5 rounded bg-emerald-200/60 text-xs">
+                    {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 3} candidates
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">

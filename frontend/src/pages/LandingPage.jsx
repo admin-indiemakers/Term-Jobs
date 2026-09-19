@@ -93,24 +93,40 @@ const DataCollectionModal = ({ isOpen, onClose }) => {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const base64String = event.target.result;
+    try {
+      const formData = new FormData();
+      formData.append('name', name);
+      formData.append('email', email);
+      formData.append('resume', file);
 
-      await sendFormToGoogleSheet({
-        formType: 'Talent Network',
-        name: name,
-        email: email,
-        resumeBase64: base64String,
-        resumeName: file.name,
-        resumeMimeType: file.type,
-        timestamp: new Date().toLocaleString()
+      await fetch('/api/candidates/join', {
+        method: 'POST',
+        body: formData,
       });
+
+      // Also fire background sheet sync if configured
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64String = event.target.result;
+        await sendFormToGoogleSheet({
+          formType: 'Talent Network',
+          name: name,
+          email: email,
+          resumeBase64: base64String,
+          resumeName: file.name,
+          resumeMimeType: file.type,
+          timestamp: new Date().toLocaleString()
+        });
+      };
+      reader.readAsDataURL(file);
 
       setIsSubmitting(false);
       setSubmitted(true);
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Landing page join error:', err);
+      setIsSubmitting(false);
+      setSubmitted(true);
+    }
   };
 
   return (
