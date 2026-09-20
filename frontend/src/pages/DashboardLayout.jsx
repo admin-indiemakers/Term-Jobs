@@ -323,6 +323,7 @@ export default function DashboardLayout() {
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
               { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
+              { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
               { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
               { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, icon: Icons.PortalAccess },
             ]
@@ -349,7 +350,7 @@ export default function DashboardLayout() {
             </div>
             <div className="leading-tight">
               <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
-              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Talent Portal</div>
+              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
             </div>
           </div>
         ) : userRole === 'Hiring Manager' ? (
@@ -541,14 +542,28 @@ export default function DashboardLayout() {
                   <span className="font-semibold text-[13px]">Buyer Accounts</span>
                 </div>
               </NavLink>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsOnboardVendorModalOpen(true);
+                  if (onLinkClick) onLinkClick();
+                }}
+                className="nav-link sidebar-nav-btn text-left w-full cursor-pointer"
+                style={{ background: 'none', border: 'none' }}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.OnboardVendor size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">Onboard Vendor</span>
+                </div>
+              </button>
               <NavLink
-                to="/dashboard/candidates/shortlisted"
+                to="/dashboard/superadmin/vendor-accounts?tab=vendors"
                 onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                className={({ isActive }) => `nav-link ${isActive && location.search.includes('vendors') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
               >
                 <div className="flex items-center gap-2.5">
                   <Icons.CandidatesBank size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Talent Pool</span>
+                  <span className="font-semibold text-[13px]">Vendor Accounts</span>
                 </div>
               </NavLink>
 
@@ -606,11 +621,11 @@ export default function DashboardLayout() {
                 Finance
               </NavLink>
               <NavLink
-                to="/dashboard/candidates/shortlisted"
+                to="/dashboard/admin/partner-vendors"
                 onClick={onLinkClick}
                 className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
               >
-                Talent Pool
+                Partner Vendors
               </NavLink>
               <NavLink
                 to="/dashboard/interviews"
@@ -766,7 +781,20 @@ export default function DashboardLayout() {
           <Building2 size={18} />
         </button>
 
-
+        <button
+          type="button"
+          onClick={() => {
+            if (isAiChatPage) {
+              window.dispatchEvent(new CustomEvent('ai-chat-quick-prompt', { detail: { prompt: 'Draft onboarding preview for vendor consultancy' } }));
+            } else {
+              setIsOnboardVendorModalOpen(true);
+            }
+          }}
+          className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-white/60 flex items-center justify-center transition cursor-pointer"
+          title="Onboard Vendor"
+        >
+          <Users size={18} />
+        </button>
 
         <button
           type="button"
@@ -1311,14 +1339,23 @@ export default function DashboardLayout() {
 
       <AssistantWidget isOpen={isAssistantOpen} setIsOpen={setIsAssistantOpen} />
       {userRole === 'Super Admin' && (
-        <OnboardCompanyModal
-          isOpen={isOnboardCompanyModalOpen}
-          onClose={() => setIsOnboardCompanyModalOpen(false)}
-          onSuccess={() => {
-            // Dispatches custom event to notify SuperAdminDashboard to reload
-            window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
-          }}
-        />
+        <>
+          <OnboardVendorModal
+            isOpen={isOnboardVendorModalOpen}
+            onClose={() => setIsOnboardVendorModalOpen(false)}
+            onSuccess={() => {
+              window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
+            }}
+          />
+          <OnboardCompanyModal
+            isOpen={isOnboardCompanyModalOpen}
+            onClose={() => setIsOnboardCompanyModalOpen(false)}
+            onSuccess={() => {
+              // Dispatches custom event to notify SuperAdminDashboard to reload
+              window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
+            }}
+          />
+        </>
       )}
     </div>
   );

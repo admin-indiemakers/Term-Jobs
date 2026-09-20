@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
+import OnboardVendorModal from '../components/OnboardVendorModal';
 import {
   Building2,
   Users,
@@ -10,34 +11,29 @@ import {
   Plus,
   Edit3,
   ArrowRight,
-  UserCheck,
-  Sparkles
+  UserCheck
 } from 'lucide-react';
 
 export default function SuperAdminDashboard() {
   const { token } = useAuth();
   const [tenants, setTenants] = useState([]);
-  const [candidates, setCandidates] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const [showOnboardVendorModal, setShowOnboardVendorModal] = useState(false);
 
   const load = () => {
     setLoading(true);
     Promise.all([
       request('/api/auth/tenants', { token }),
       request('/api/superadmin/agent/stats', { token }).catch(() => null),
-      request('/api/candidates/bank', { token }).catch(() => []),
     ])
-      .then(([tenantsRes, statsRes, candRes]) => {
+      .then(([tenantsRes, statsRes]) => {
         setTenants(tenantsRes || []);
         if (statsRes) {
           setStats(statsRes);
-        }
-        if (Array.isArray(candRes)) {
-          setCandidates(candRes);
         }
         setError('');
       })
@@ -63,6 +59,7 @@ export default function SuperAdminDashboard() {
   }, [success]);
 
   const clientTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'client'), [tenants]);
+  const consultancyTenants = useMemo(() => tenants.filter((t) => t.tenant_type === 'consultancy'), [tenants]);
   const guestClients = useMemo(() => {
     return tenants.filter(
       (t) =>
@@ -80,54 +77,41 @@ export default function SuperAdminDashboard() {
     if (stats?.total_admin_accounts !== undefined) {
       return stats.total_admin_accounts;
     }
-    const baseCount = (stats?.company_admins !== undefined)
-      ? stats.company_admins
-      : clientTenants.length;
+    const baseCount = (stats?.company_admins !== undefined && stats?.vendor_admins !== undefined)
+      ? stats.company_admins + stats.vendor_admins
+      : clientTenants.length + consultancyTenants.length;
     return baseCount + (guestClientsCount || 0);
-  }, [stats, clientTenants, guestClientsCount]);
+  }, [stats, clientTenants, consultancyTenants, guestClientsCount]);
 
   // Generate dynamic platform activity events based on actual DB records
   const platformActivities = useMemo(() => {
     if (stats?.platform_activities && stats.platform_activities.length > 0) {
-      return stats.platform_activities
-        .filter((act) => act.type !== 'vendor')
-        .map((act) => ({
-          id: act.id,
-          icon: act.type === 'buyer' ? Building2 : Sparkles,
-          title: act.title ? act.title.replace(/vendor consultancy/gi, 'Talent pool').replace(/vendor/gi, 'Direct Talent') : 'Platform activity',
-          desc: act.desc ? act.desc.replace(/recruiter access provisioned/gi, 'Direct candidate profile activated') : '',
-          date: 'Recent',
-          badge: act.badge || 'Active',
-          badgeTone: act.tone === 'green' ? 'green' : 'gray',
-        }));
+      return stats.platform_activities.map((act) => ({
+        id: act.id,
+        icon: act.type === 'buyer' ? Building2 : act.type === 'vendor' ? Layers : Edit3,
+        title: act.title,
+        desc: act.desc,
+        date: 'Recent',
+        badge: act.badge || 'Active',
+        badgeTone: act.tone === 'green' ? 'green' : 'gray',
+      }));
     }
 
     const list = [];
-    tenants.filter(t => t.tenant_type === 'client').slice(-4).reverse().forEach((t, idx) => {
+    tenants.slice(-3).reverse().forEach((t, idx) => {
+      const isClient = t.tenant_type === 'client';
       list.push({
         id: `tenant-${t.id}`,
-        icon: Building2,
-        title: 'Buyer company onboarded',
-        desc: `${t.name} • Tenant and admin provisioned`,
+        icon: isClient ? Building2 : Layers,
+        title: isClient ? 'Buyer company onboarded' : 'Vendor consultancy onboarded',
+        desc: `${t.name} • ${isClient ? 'Tenant and admin provisioned' : 'Recruiter access provisioned'}`,
         date: idx === 0 ? 'Today' : 'Yesterday',
-        badge: 'Completed',
+        badge: isClient ? 'Completed' : 'Active',
         badgeTone: 'green',
       });
     });
 
-    if (list.length === 0) {
-      list.push({
-        id: 'candidate-pool-init',
-        icon: Sparkles,
-        title: 'Direct Talent Pool active',
-        desc: 'Direct candidate submissions enabled',
-        date: 'Today',
-        badge: 'Active',
-        badgeTone: 'green',
-      });
-    }
-
-    return list;
+    return list.slice(0, 4);
   }, [stats, tenants]);
 
   return (
@@ -142,7 +126,7 @@ export default function SuperAdminDashboard() {
             Super Admin Console
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
-            Manage buyer companies, direct talent pool profiles, administrator accounts and platform records from one central workspace.
+            Manage buyer companies, vendor consultancies, administrator accounts and archived records from one central workspace.
           </p>
 
           <div className="flex items-center gap-2 mt-4 flex-wrap">
@@ -153,14 +137,13 @@ export default function SuperAdminDashboard() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
-          <Link
-            to="/join/candidate"
-            target="_blank"
-            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5"
+          <button
+            type="button"
+            onClick={() => setShowOnboardVendorModal(true)}
+            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors cursor-pointer"
           >
-            <Sparkles size={14} />
-            Public Candidate Form
-          </Link>
+            + Onboard Vendor
+          </button>
           <button
             type="button"
             onClick={() => setShowOnboardModal(true)}
@@ -171,7 +154,7 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* 4 Core Platform Metric Cards: Buyers, Guest Clients, Talent Pool, Admin Accounts */}
+      {/* 4 Core Platform Metric Cards: Buyers, Guest Clients, Vendors, Admin Accounts */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: Buyer Companies */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
@@ -213,22 +196,22 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        {/* Card 3: Direct Talent Pool */}
+        {/* Card 3: Vendor Consultancies */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
               <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                TALENT POOL
+                VENDOR PARTNERS
               </span>
               <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center">
-                <Sparkles size={16} />
+                <Layers size={16} />
               </div>
             </div>
             <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
-              {candidates.length || (stats?.total_candidates || 12)}
+              {consultancyTenants.length}
             </div>
             <div className="text-xs text-gray-500 font-medium">
-              Active direct talent candidates
+              Approved staffing & sourcing agencies
             </div>
           </div>
         </div>
@@ -248,7 +231,7 @@ export default function SuperAdminDashboard() {
               {totalAdmins}
             </div>
             <div className="text-xs text-gray-500 font-medium">
-              Configured enterprise & platform administrators
+              Configured buyer, vendor & guest administrators
             </div>
           </div>
         </div>
@@ -270,7 +253,7 @@ export default function SuperAdminDashboard() {
             <div className="flex items-center justify-between pb-4 border-b border-gray-100 mb-3">
               <div>
                 <h2 className="text-base font-bold text-gray-900 tracking-tight">Platform Activity</h2>
-                <p className="text-xs text-gray-500 mt-0.5">Recent onboarding and candidate events.</p>
+                <p className="text-xs text-gray-500 mt-0.5">Recent onboarding and account events.</p>
               </div>
               <Link to="/dashboard/superadmin/accounts" className="text-xs font-bold text-gray-900 hover:text-black flex items-center gap-1 transition-colors">
                 View all <ArrowRight size={13} />
@@ -341,19 +324,20 @@ export default function SuperAdminDashboard() {
               <div className="p-3 bg-gray-50/70 border border-gray-200/80 rounded-xl flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
-                    <Sparkles size={15} />
+                    <Layers size={15} />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-gray-900">Direct Talent Pool</div>
-                    <div className="text-[11px] text-gray-500 truncate">Review active candidate profiles</div>
+                    <div className="text-xs font-bold text-gray-900">Vendor consultancy</div>
+                    <div className="text-[11px] text-gray-500 truncate">Create vendor + recruiter</div>
                   </div>
                 </div>
-                <Link
-                  to="/dashboard/candidates/shortlisted"
-                  className="px-3 py-1.5 rounded-lg bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-2xs transition-colors shrink-0"
+                <button
+                  type="button"
+                  onClick={() => setShowOnboardVendorModal(true)}
+                  className="px-3 py-1.5 rounded-lg bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-2xs transition-colors shrink-0 cursor-pointer"
                 >
-                  Review
-                </Link>
+                  Onboard
+                </button>
               </div>
 
               <div className="p-3 bg-gray-50/70 border border-gray-200/80 rounded-xl flex items-center justify-between gap-3 hover:bg-gray-50 transition-colors">
@@ -377,6 +361,16 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Onboard Vendor Modal Popup */}
+      <OnboardVendorModal
+        isOpen={showOnboardVendorModal}
+        onClose={() => setShowOnboardVendorModal(false)}
+        onSuccess={() => {
+          load();
+          setSuccess('Vendor onboarded successfully!');
+        }}
+      />
 
       {/* Onboard Company Modal Popup */}
       <OnboardCompanyModal

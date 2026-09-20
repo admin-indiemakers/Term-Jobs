@@ -127,12 +127,12 @@ export default function RequisitionDetail() {
     return () => clearTimeout(timer);
   }, [error]);
 
-  const isDirectorApproved = Boolean(req?.director_approved);
-  const rawStatus = (isDirectorApproved && req?.status !== 'Closed') ? 'Published' : (req?.status || 'Draft');
+  const rawStatus = req?.status || 'Draft';
   const status = NORMALIZED[rawStatus] || rawStatus;
   const structuredRole = draftRole || req?.structured_role;
 
   const isDirectorOrAdmin = user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin';
+  const isDirectorApproved = Boolean(req?.director_approved);
 
   const currentStepIndex = Math.max(
     0,
@@ -355,7 +355,7 @@ export default function RequisitionDetail() {
             <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
               {req.title || structuredRole?.title || 'Untitled Requisition'}
             </h1>
-            <StatusBadge status={status} />
+            <StatusBadge status={req.status} />
           </div>
           <p className="text-xs text-gray-500 font-normal mt-0.5">
             {req.department || structuredRole?.department || 'Engineering'} • Created {formatDate(req.created_at)}
@@ -435,7 +435,17 @@ export default function RequisitionDetail() {
           )}
 
           {status === 'PendingApproval' && (
-            isDirectorOrAdmin ? (
+            isDirectorApproved ? (
+              <button
+                type="button"
+                onClick={handlePublish}
+                disabled={Boolean(busy)}
+                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Sparkles size={13} />
+                <span>{busy === 'publish' ? 'Publishing...' : 'Publish to Vendors →'}</span>
+              </button>
+            ) : isDirectorOrAdmin ? (
               <div className="flex items-center gap-2">
                 <button
                   type="button"
@@ -470,23 +480,14 @@ export default function RequisitionDetail() {
           )}
 
           {status === 'Published' && (
-            <>
-              <Link
-                to={`/dashboard/requisitions/${id}/candidates`}
-                className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5 shadow-xs"
-              >
-                <Users size={13} />
-                <span>View Candidates</span>
-              </Link>
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={Boolean(busy)}
-                className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-              >
-                Close Requisition
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={Boolean(busy)}
+              className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Close Requisition
+            </button>
           )}
         </div>
       </div>
@@ -533,7 +534,19 @@ export default function RequisitionDetail() {
 
       {/* Workflow Status Banner for Pending Approval */}
       {status === 'PendingApproval' && (
-        isDirectorOrAdmin ? (
+        isDirectorApproved ? (
+          <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl flex items-center gap-3 text-emerald-900 shadow-2xs">
+            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
+            <div>
+              <div className="text-xs font-bold text-emerald-950">
+                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''}
+              </div>
+              <p className="text-[11px] text-emerald-800 mt-0.5">
+                This requisition has been formally approved by the Director and is ready to be published to partner vendors.
+              </p>
+            </div>
+          </div>
+        ) : isDirectorOrAdmin ? (
           <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-2xs">
             <div className="flex items-center gap-3">
               <ShieldCheck size={20} className="shrink-0 text-amber-700" />
@@ -571,35 +584,11 @@ export default function RequisitionDetail() {
             <div>
               <div className="text-xs font-bold text-blue-950">⏳ Pending Director Approval</div>
               <p className="text-[11px] text-blue-800 mt-0.5">
-                Submitted to the company Director for approval. Once approved, the requisition will be published to partner vendors.
+                Submitted to the company Director for approval. Once approved, you will be able to publish this requisition to partner vendors.
               </p>
             </div>
           </div>
         )
-      )}
-
-      {/* Banner for Published Requisition */}
-      {status === 'Published' && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl flex items-center justify-between gap-3 text-emerald-900 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
-            <div>
-              <div className="text-xs font-bold text-emerald-950">
-                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''} — Published & Live to Talent Pool
-              </div>
-              <p className="text-[11px] text-emerald-800 mt-0.5">
-                This requisition has been formally approved by the Director and is now live. AI matches and scores active Talent Pool profiles.
-              </p>
-            </div>
-          </div>
-          <Link
-            to={`/dashboard/requisitions/${id}/candidates`}
-            className="shrink-0 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-black text-white text-xs font-bold shadow-xs flex items-center gap-1.5 transition-colors"
-          >
-            <span>View Candidates</span>
-            <ArrowRight size={13} />
-          </Link>
-        </div>
       )}
 
       {info && (
@@ -852,11 +841,7 @@ export default function RequisitionDetail() {
                   <p className="text-[10px] text-gray-400">Current state guidance</p>
                 </div>
               </div>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
-                status === 'Published'
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  : 'bg-gray-100 text-gray-900'
-              }`}>
+              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-900 text-[10px] font-extrabold">
                 {status}
               </span>
             </div>
@@ -913,12 +898,23 @@ export default function RequisitionDetail() {
               {status === 'PendingApproval' && (
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
                   <div className="font-bold text-gray-900">
-                    Director Approval Required
+                    {isDirectorApproved ? 'Publish to Partners' : 'Director Approval Required'}
                   </div>
                   <p className="text-[11px] text-gray-500">
-                    Director approval is required before this requisition can be published to partner vendors.
+                    {isDirectorApproved
+                      ? 'Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.'
+                      : 'Director approval is required before this requisition can be published to partner vendors.'}
                   </p>
-                  {isDirectorOrAdmin ? (
+                  {isDirectorApproved ? (
+                    <button
+                      type="button"
+                      onClick={handlePublish}
+                      disabled={Boolean(busy)}
+                      className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
+                    >
+                      Publish to Vendors →
+                    </button>
+                  ) : isDirectorOrAdmin ? (
                     <button
                       type="button"
                       onClick={handleDirectorApprove}
@@ -936,39 +932,19 @@ export default function RequisitionDetail() {
               )}
 
               {status === 'Published' && (
-                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 space-y-1 text-emerald-900">
-                  <div className="font-bold text-emerald-950 flex items-center gap-1.5">
-                    <CheckCircle2 size={14} className="text-emerald-600" />
-                    <span>Live & Published</span>
-                  </div>
-                  <p className="text-[11px] text-emerald-800">
-                    Requisition is live and broadcasted to partner vendor consultancies.
-                  </p>
-                </div>
-              )}
-
-              {status === 'Published' && (
-                <div className="p-4 rounded-2xl bg-emerald-50/90 border border-emerald-200/80 space-y-2 text-emerald-950">
+                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="font-extrabold text-xs uppercase tracking-wider text-emerald-900 flex items-center gap-1.5">
-                      <Sparkles size={14} className="text-emerald-700" />
-                      Platform Talent Pool • AI Matching Active
+                    <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                      <Building size={14} className="text-amber-700" />
+                      Engaged Vendor Consultancies (3)
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-200/80 text-[10px] font-black text-emerald-950 border border-emerald-300">
-                      Direct Candidate Pool
+                    <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
+                      Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
                     </span>
                   </div>
-                  <p className="text-[11px] text-emerald-800 leading-relaxed font-medium">
-                    AI continuously scores active Talent Pool profiles against this role's criteria. Ranked candidates are instantly available in your review queue.
+                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                    3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
                   </p>
-                  <div className="pt-1">
-                    <Link
-                      to={`/dashboard/requisitions/${id}/candidates`}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-800 hover:bg-black text-white text-xs font-bold transition-colors shadow-2xs"
-                    >
-                      <span>Review Matched Candidates →</span>
-                    </Link>
-                  </div>
                 </div>
               )}
             </div>
@@ -984,10 +960,10 @@ export default function RequisitionDetail() {
                   <span className="text-gray-500">Headcount Openings</span>
                   <span className="font-bold text-gray-900">{structuredRole?.headcount || req?.headcount || 1} position(s)</span>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-emerald-50/80 border border-emerald-200/60 text-emerald-900">
-                  <span className="text-emerald-800 font-semibold">Shortlist Capacity</span>
-                  <span className="font-bold text-emerald-950 px-2 py-0.5 rounded bg-emerald-200/60 text-xs">
-                    {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 3} candidates
+                <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50/80 border border-amber-200/60 text-amber-900">
+                  <span className="text-amber-800 font-semibold">Vendor Candidate Limit</span>
+                  <span className="font-bold text-amber-950 px-2 py-0.5 rounded bg-amber-200/60 text-xs">
+                    {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} candidate / vendor
                   </span>
                 </div>
                 <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">

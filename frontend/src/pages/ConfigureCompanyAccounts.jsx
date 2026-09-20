@@ -186,13 +186,20 @@ export default function ConfigureAccounts({ defaultTab }) {
             Account Management
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
-            Manage administrator credentials, roles, and account permissions across enterprise client companies.
+            Manage administrator credentials, roles, and candidate submission limits across buyer companies and vendor consultancies.
           </p>
 
 
         </div>
 
         <div className="flex items-center gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowOnboardVendorModal(true)}
+            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors"
+          >
+            + Onboard Vendor
+          </button>
           <button
             type="button"
             onClick={() => setShowOnboardModal(true)}
@@ -251,7 +258,7 @@ export default function ConfigureAccounts({ defaultTab }) {
                 : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
             >
-              Recruiters ({vendorRecruiters.length})
+              Vendor Recruiters ({vendorRecruiters.length})
             </button>
             <button
               type="button"
@@ -327,7 +334,7 @@ export default function ConfigureAccounts({ defaultTab }) {
                       {/* Role Pill */}
                       <td className="py-3.5 px-3">
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
-                          {isRecruiter ? 'Recruiter' : 'Buyer Admin'}
+                          {isRecruiter ? 'Vendor Recruiter' : 'Buyer Admin'}
                         </span>
                       </td>
 
@@ -452,7 +459,15 @@ export default function ConfigureAccounts({ defaultTab }) {
         }}
       />
 
-
+      {/* Onboard Vendor Modal Popup */}
+      <OnboardVendorModal
+        isOpen={showOnboardVendorModal}
+        onClose={() => setShowOnboardVendorModal(false)}
+        onSuccess={() => {
+          load();
+          setSuccess('Vendor onboarded successfully!');
+        }}
+      />
     </div>
   );
 }

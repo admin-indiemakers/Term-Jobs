@@ -337,18 +337,17 @@ export default function ShortlistedCandidates() {
                 No Shortlisted Candidates
               </div>
               <p className="text-[12.5px] text-[#8A8A85] max-w-md mx-auto">
-                Candidates matched from the Talent Pool for your open requisitions will appear here for review and workspace actions.
+                Candidates shortlisted by vendor recruiters for your open requisitions will appear here for review and workspace actions.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {displayCandidates.map((cand, idx) => {
                 const reqCode = cand.requisition_ref || (cand.requisition_id ? `REQ-${String(cand.requisition_id).slice(0, 6).toUpperCase()}` : 'REQ-F7F406');
-                const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
-                const rawVendor = cand.vendor_name || '';
-                const sourceLabel = 'Talent Pool';
-                const roleTitle = cand.requisition_title || 'Software Engineer';
-                const score = cand.match_score != null ? Math.round(cand.match_score) : 85;
+                const candName = cand.candidate_name || cand.full_name || cand.name || 'SURAJKUMAR K S';
+                const vendorName = cand.vendor_name || 'bridgeon';
+                const roleTitle = cand.requisition_title || 'DevOps Engineer';
+                const score = cand.match_score != null ? Math.round(cand.match_score) : 41;
 
                 return (
                   <div
@@ -398,9 +397,7 @@ export default function ShortlistedCandidates() {
                         </p>
                         <p className="text-[11px] text-[#737373] font-medium mt-0.5 flex items-center justify-between">
                           <span>🏢 {cand.company_name || 'Bearitt'}</span>
-                          <span className="font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 text-[10px]">
-                            {sourceLabel}
-                          </span>
+                          <span>Vendor: {vendorName}</span>
                         </p>
                       </div>
                     </div>

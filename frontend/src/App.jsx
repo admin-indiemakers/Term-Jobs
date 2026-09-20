@@ -8,7 +8,6 @@ import JoinHiringManager from './pages/JoinHiringManager';
 import JoinDirector from './pages/JoinDirector';
 import JoinProcurement from './pages/JoinProcurement';
 import JoinFinance from './pages/JoinFinance';
-import JoinCandidate from './pages/JoinCandidate';
 import SuperAdminLogin from './pages/SuperAdminLogin';
 import DirectorLogin from './pages/DirectorLogin';
 import DashboardLayout from './pages/DashboardLayout';
@@ -113,10 +112,6 @@ export default function App() {
         <Route path="/invite/procurement" element={<JoinProcurement />} />
         <Route path="/join/finance" element={<JoinFinance />} />
         <Route path="/invite/finance" element={<JoinFinance />} />
-        <Route path="/join/candidate" element={<JoinCandidate />} />
-        <Route path="/candidate/join" element={<JoinCandidate />} />
-        <Route path="/apply" element={<JoinCandidate />} />
-        <Route path="/join-talent-pool" element={<JoinCandidate />} />
         <Route path="/candidate/login" element={<Navigate to="/login" replace />} />
         <Route path="/interview/login" element={<CandidateInterviewLogin />} />
         <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
