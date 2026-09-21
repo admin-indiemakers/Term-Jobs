@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import SEOHead from '../components/SEOHead';
+import PublicJobBoard from '../components/PublicJobBoard';
 
 /* ============ GOOGLE SHEET & EMAIL INTEGRATION ============ */
 const WAITLIST_SHEET_URL = "https://script.google.com/macros/s/AKfycbwes1glJQAnCMds8Pdp_2kRWe-Om2oAdwrMHVlbpzhjn5_x5SLPh0LhlLkqjxxNgyiY/exec";
@@ -198,6 +199,15 @@ const Nav = ({ currentRoute, setRoute, onOpenModal }) => {
       </a>
       <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
         <a
+          href="#jobs"
+          onClick={() => setRoute('#jobs')}
+          className={`font-inter font-semibold text-[11.5px] sm:text-[13px] px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-[100px] whitespace-nowrap transition-colors duration-200 ${
+            currentRoute === '#jobs' || currentRoute === '#roles' || currentRoute === '#careers' ? 'bg-mist text-ink font-bold' : 'text-grey hover:text-ink'
+          }`}
+        >
+          Open Roles
+        </a>
+        <a
           href="#contact"
           onClick={() => setRoute('#contact')}
           className={`font-inter font-semibold text-[11.5px] sm:text-[13px] px-2.5 py-1.5 sm:px-3.5 sm:py-2 rounded-[100px] whitespace-nowrap transition-colors duration-200 ${
@@ -236,7 +246,7 @@ const Nav = ({ currentRoute, setRoute, onOpenModal }) => {
 };
 
 /* ============ HERO ============ */
-const Hero = ({ onOpenModal }) => {
+const Hero = ({ setRoute, onOpenModal }) => {
   const [joined, setJoined] = useState(false);
   const [status, setStatus] = useState('');
 
@@ -320,15 +330,28 @@ const Hero = ({ onOpenModal }) => {
               Be the first candidate to get hired.
             </h2>
             <p className="font-inter text-white/70 text-[14px] md:text-[15px] max-w-[400px] mx-auto mb-6 leading-[1.5]">
-              Submit your profile and resume to get early access to exclusive contract roles.
+              Browse live open requisitions across verified partner companies and submit your application.
             </p>
           </div>
-          <button
-            onClick={onOpenModal}
-            className="w-full max-w-[320px] mx-auto block font-inter font-semibold text-[15px] bg-white text-ink border-none rounded-[100px] px-6 py-4 cursor-pointer whitespace-nowrap transition-opacity duration-200 hover:opacity-[0.82] shadow-sm mt-auto"
-          >
-            Apply for Early Access →
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2.5 max-w-[380px] mx-auto w-full mt-auto">
+            <a
+              href="#jobs"
+              onClick={() => {
+                window.location.hash = '#jobs';
+                if (typeof setRoute === 'function') setRoute('#jobs');
+              }}
+              className="flex-1 font-inter font-bold text-[14px] bg-white text-ink border-none rounded-[100px] px-5 py-3.5 text-center cursor-pointer whitespace-nowrap transition-opacity duration-200 hover:opacity-[0.88] shadow-sm no-underline"
+            >
+              Browse Open Roles →
+            </a>
+            <button
+              type="button"
+              onClick={onOpenModal}
+              className="font-inter font-semibold text-[13px] bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-[100px] px-4 py-3.5 cursor-pointer whitespace-nowrap transition-colors duration-200"
+            >
+              Quick Apply
+            </button>
+          </div>
           <div className="mt-3.5 text-[13px] min-h-4"></div>
         </div>
       </div>
@@ -893,9 +916,15 @@ const Footer = () => (
   </footer>
 );
 
-export default function LandingPage() {
-  const [route, setRoute] = useState(window.location.hash || '#home');
+export default function LandingPage({ defaultRoute = null }) {
+  const [route, setRoute] = useState(defaultRoute || window.location.hash || '#home');
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (defaultRoute) {
+      setRoute(defaultRoute);
+    }
+  }, [defaultRoute]);
 
   useEffect(() => {
     const onHashChange = () => {
@@ -913,16 +942,22 @@ export default function LandingPage() {
         title={
           route === '#contact'
             ? 'Contact Us | TermJobs'
+            : route === '#jobs' || route === '#roles' || route === '#careers'
+            ? 'Open Requisitions & Careers | TermJobs'
             : 'TermJobs'
         }
         description={
           route === '#contact'
             ? 'Get in touch with Term Jobs for enterprise contractor hiring, waitlist priority, vendor partnerships, or flexible talent support.'
+            : route === '#jobs' || route === '#roles' || route === '#careers'
+            ? 'Browse live open contractor positions across verified partner enterprises. Direct application with AI resume screening and match scoring.'
             : 'Term Jobs connects enterprise teams with verified contract professionals, trusted staffing vendors, automated timesheet tracking, and transparent billing.'
         }
         canonicalUrl={
           route === '#contact'
             ? 'https://termjobs.vercel.app/#contact'
+            : route === '#jobs'
+            ? 'https://termjobs.vercel.app/#jobs'
             : 'https://termjobs.vercel.app/'
         }
       />
@@ -930,9 +965,14 @@ export default function LandingPage() {
       <main>
         {route === '#contact' ? (
           <ContactPage setRoute={setRoute} />
+        ) : route === '#jobs' || route === '#roles' || route === '#careers' ? (
+          <PublicJobBoard onBackToHome={() => {
+            window.location.hash = '#home';
+            setRoute('#home');
+          }} />
         ) : (
           <>
-            <Hero onOpenModal={() => setIsModalOpen(true)} />
+            <Hero setRoute={setRoute} onOpenModal={() => setIsModalOpen(true)} />
             <DarkSection />
             <PhonePreview />
             <Statement />

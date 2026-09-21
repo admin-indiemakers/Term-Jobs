@@ -229,6 +229,19 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token, location.pathname]);
 
+  // Dynamic live count for Super Admin candidate pool
+  const [superAdminCandidateCount, setSuperAdminCandidateCount] = useState(0);
+
+  useEffect(() => {
+    if (user?.role === 'Super Admin' && token) {
+      request('/api/superadmin/candidate-pool', { token })
+        .then((res) => {
+          setSuperAdminCandidateCount(res?.total_count || 0);
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token, location.pathname]);
+
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -267,9 +280,9 @@ export default function DashboardLayout() {
     );
   }
 
-  const userRole = user?.role || '';
+  const userRole = (user?.role || '').trim();
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
-  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin';
+  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
   const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
   const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
   const isAiChatPage = isSuperAdminChat || isHiringManagerChat;
@@ -318,9 +331,10 @@ export default function DashboardLayout() {
                 { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, icon: Icons.Receipt, badge: financePendingPayments },
                 { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
               ]
-          : userRole === 'Super Admin'
+          : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, icon: Icons.Diamond, count: superAdminCandidateCount },
               { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
               { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
@@ -421,8 +435,8 @@ export default function DashboardLayout() {
 
                   const isItemActive = item.to === '/dashboard/requisitions'
                     ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
-                    : item.to === '/dashboard/candidates'
-                    ? location.pathname.startsWith('/dashboard/candidates')
+                    : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
+                    ? (location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
                     : item.to === '/dashboard/director'
                     ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
                     : item.end
@@ -502,6 +516,21 @@ export default function DashboardLayout() {
                 <div className="flex items-center gap-2.5">
                   <Icons.Dashboard size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">Dashboard</span>
+                </div>
+              </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/candidates"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive || location.pathname.includes('/candidates') || location.pathname.includes('candidate') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.Diamond size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">Candidate Pool</span>
+                  {superAdminCandidateCount > 0 && (
+                    <span className="text-[11px] font-bold text-[#8A8A85] ml-auto pr-1">
+                      {superAdminCandidateCount}
+                    </span>
+                  )}
                 </div>
               </NavLink>
               <NavLink
@@ -1261,8 +1290,9 @@ export default function DashboardLayout() {
                 <span className="text-[#8A8A85] font-normal">/</span>
                 <span className="text-[#0A0A0A] font-semibold truncate">
                   {userRole === 'Super Admin' && location.pathname === '/dashboard/superadmin' ? 'Console'
+                    : (location.pathname.includes('/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
+                    ? (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin' ? 'Candidate Pool' : (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates'))
                     : location.pathname.includes('/requisitions') ? 'Requisitions'
-                    : location.pathname.startsWith('/dashboard/candidates') ? (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates')
                     : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
                     : location.pathname.includes('/interviews') ? 'Interview Requests'
                     : location.pathname.includes('/agreements') ? 'Agreements'

@@ -51,6 +51,7 @@ import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Workers from './pages/workforce/Workers';
 import LandingPage from './pages/LandingPage';
 import AdminAccounts from './pages/AdminAccounts';
+import SuperAdminCandidatePool from './pages/SuperAdminCandidatePool';
 import { CandidateInterviewLogin } from './interview/pages/CandidateInterviewLogin';
 import { CandidateInterviewPortal } from './interview/pages/CandidateInterviewPortal';
 import { InterviewerStaffPortal } from './interview/pages/InterviewerStaffPortal';
@@ -99,6 +100,14 @@ function DashboardIndex() {
   return <Navigate to="/dashboard/requisitions" replace />;
 }
 
+function CandidateRouteDispatcher() {
+  const { user } = useAuth();
+  if (user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') {
+    return <SuperAdminCandidatePool />;
+  }
+  return <ShortlistedCandidates />;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -121,6 +130,9 @@ export default function App() {
         <Route path="/admin/login" element={<SuperAdminLogin />} />
         <Route path="/director/login" element={<DirectorLogin />} />
         <Route path="/" element={<LandingPage />} />
+        <Route path="/jobs" element={<LandingPage defaultRoute="#jobs" />} />
+        <Route path="/careers" element={<LandingPage defaultRoute="#jobs" />} />
+        <Route path="/apply" element={<LandingPage defaultRoute="#jobs" />} />
         <Route
           path="/dashboard"
           element={
@@ -148,7 +160,11 @@ export default function App() {
           <Route path="candidates/onboarding" element={<OnboardingManagement />} />
           <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />
           <Route path="candidates/issues" element={<ReportedIssues />} />
-          <Route path="candidates" element={<ShortlistedCandidates />} />
+          <Route path="candidates" element={<CandidateRouteDispatcher />} />
+          <Route path="candidatepool" element={<SuperAdminCandidatePool />} />
+          <Route path="candidate-pool" element={<SuperAdminCandidatePool />} />
+          <Route path="candidatespool" element={<SuperAdminCandidatePool />} />
+          <Route path="candidates-pool" element={<SuperAdminCandidatePool />} />
           <Route path="workforce/team" element={<TeamOverview />} />
           <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
           <Route path="workforce/expenses" element={<ExpenseApprovals />} />
@@ -187,6 +203,10 @@ export default function App() {
           <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
           <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
           <Route path="superadmin/admins" element={<AdminAccounts />} />
+          <Route path="superadmin/candidates" element={<SuperAdminCandidatePool />} />
+          <Route path="superadmin/candidate-pool" element={<SuperAdminCandidatePool />} />
+          <Route path="superadmin/candidatepool" element={<SuperAdminCandidatePool />} />
+          <Route path="superadmin/candidates-pool" element={<SuperAdminCandidatePool />} />
           <Route path="superadmin/archives" element={<Navigate to="/dashboard/superadmin" replace />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>
@@ -243,6 +263,62 @@ export default function App() {
           element={
             <RequireAuth>
               <CandidatePortal />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidatepool"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidate-pool"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidatespool"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/candidates-pool"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/superadmin/candidates"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/superadmin/candidate-pool"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/superadmin/candidatepool"
+          element={
+            <RequireAuth>
+              <Navigate to="/dashboard/superadmin/candidates" replace />
             </RequireAuth>
           }
         />

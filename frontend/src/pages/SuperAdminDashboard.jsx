@@ -11,7 +11,8 @@ import {
   Plus,
   Edit3,
   ArrowRight,
-  UserCheck
+  UserCheck,
+  FileText
 } from 'lucide-react';
 
 export default function SuperAdminDashboard() {
@@ -23,17 +24,24 @@ export default function SuperAdminDashboard() {
   const [success, setSuccess] = useState('');
   const [showOnboardModal, setShowOnboardModal] = useState(false);
   const [showOnboardVendorModal, setShowOnboardVendorModal] = useState(false);
+  const [poolStats, setPoolStats] = useState({ total: 0, portal_applicants: 0, vendor_candidates: 0 });
 
   const load = () => {
     setLoading(true);
     Promise.all([
       request('/api/auth/tenants', { token }),
       request('/api/superadmin/agent/stats', { token }).catch(() => null),
+      request('/api/superadmin/candidate-pool', { token }).catch(() => null),
     ])
-      .then(([tenantsRes, statsRes]) => {
+      .then(([tenantsRes, statsRes, poolRes]) => {
         setTenants(tenantsRes || []);
         if (statsRes) {
           setStats(statsRes);
+        }
+        if (poolRes?.stats) {
+          setPoolStats(poolRes.stats);
+        } else if (poolRes?.total_count !== undefined) {
+          setPoolStats({ total: poolRes.total_count, portal_applicants: 0, vendor_candidates: poolRes.total_count });
         }
         setError('');
       })
@@ -136,7 +144,14 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <Link
+            to="/dashboard/superadmin/candidates"
+            className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5"
+          >
+            <FileText size={14} />
+            Candidate Pool
+          </Link>
           <button
             type="button"
             onClick={() => setShowOnboardVendorModal(true)}
@@ -154,8 +169,8 @@ export default function SuperAdminDashboard() {
         </div>
       </div>
 
-      {/* 4 Core Platform Metric Cards: Buyers, Guest Clients, Vendors, Admin Accounts */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 5 Core Platform Metric Cards: Buyers, Guest Clients, Vendors, Admin Accounts, Candidate Pool */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {/* Card 1: Buyer Companies */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-300 transition-colors">
           <div>
@@ -235,6 +250,32 @@ export default function SuperAdminDashboard() {
             </div>
           </div>
         </div>
+
+        {/* Card 5: Candidate Pool */}
+        <Link
+          to="/dashboard/superadmin/candidates"
+          className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between group hover:border-gray-400 hover:shadow-sm transition-all cursor-pointer block text-left"
+        >
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-black transition-colors">
+                CANDIDATE POOL
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+                <FileText size={16} />
+              </div>
+            </div>
+            <div className="text-3xl font-extrabold text-emerald-600 tracking-tight my-1">
+              {poolStats.total}
+            </div>
+            <div className="text-xs text-gray-500 font-medium">
+              Direct portal applicants & vendor talent
+            </div>
+          </div>
+          <div className="mt-3 text-xs font-bold text-black group-hover:underline flex items-center gap-1">
+            Open Pool <ArrowRight size={12} />
+          </div>
+        </Link>
       </div>
 
       {error && <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700">{error}</div>}
@@ -357,6 +398,26 @@ export default function SuperAdminDashboard() {
                   Open
                 </Link>
               </div>
+
+              <Link
+                to="/dashboard/superadmin/candidates"
+                className="p-3 bg-gray-50/70 border border-gray-200/80 rounded-xl flex items-center justify-between gap-3 hover:bg-gray-100/80 hover:border-gray-300 transition-all cursor-pointer block"
+              >
+                <div className="flex items-center justify-between gap-3 w-full">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
+                      <FileText size={15} />
+                    </div>
+                    <div className="min-w-0 text-left">
+                      <div className="text-xs font-bold text-gray-900">Candidate Pool</div>
+                      <div className="text-[11px] text-gray-500 truncate">All portal & vendor resumes</div>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-800 text-xs font-bold shadow-2xs transition-colors shrink-0">
+                    Open
+                  </span>
+                </div>
+              </Link>
             </div>
           </div>
         </div>

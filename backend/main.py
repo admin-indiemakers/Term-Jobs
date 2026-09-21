@@ -17,15 +17,17 @@ Quick test (company -> requisition -> approve -> publish):
 import json
 import os
 import sys
+import uuid
+import base64
 from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Request
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from pydantic import BaseModel, Field
 
@@ -921,6 +923,739 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         ]
         _cache.set(_cache_key, result, ttl=30)  # 30s cache
         return result
+
+
+@app.get("/api/public/requisitions")
+def list_public_requisitions() -> list[dict]:
+    """Public endpoint listing all live published requisitions across all companies."""
+    _auto_close_expired()
+    with get_session() as session:
+        rows = (
+            session.query(models.Requisition)
+            .filter(models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value)
+            .order_by(models.Requisition.created_at.desc())
+            .all()
+        )
+        needed_cp_ids = {r.company_profile_id for r in rows if r.company_profile_id}
+        profiles = {}
+        if needed_cp_ids:
+            profiles = {
+                p.id: p
+                for p in session.query(models.CompanyProfile)
+                .filter(models.CompanyProfile.id.in_(list(needed_cp_ids)))
+                .all()
+            }
+
+        needed_tenant_ids = {r.tenant_id for r in rows if r.tenant_id}
+        tenants = {}
+        if needed_tenant_ids:
+            tenants = {
+                t.id: t
+                for t in session.query(Tenant)
+                .filter(Tenant.id.in_(list(needed_tenant_ids)))
+                .all()
+            }
+
+        result = []
+        for r in rows:
+            cp = profiles.get(r.company_profile_id)
+            tn = tenants.get(r.tenant_id)
+            comp_name = (
+                cp.name
+                if cp and cp.name
+                else (tn.name if tn and tn.name else "Partner Enterprise")
+            )
+            role = r.structured_role or {}
+
+            # Sanitize role: public fields only, omit internal pricing/margin variances
+            public_role = {
+                "title": role.get("title") or r.title,
+                "job_family": role.get("job_family") or "General",
+                "must_have_skills": role.get("must_have_skills") or [],
+                "nice_to_have_skills": role.get("nice_to_have_skills") or [],
+                "seniority_level": role.get("seniority_level") or "Mid-Senior",
+                "experience": role.get("experience") or "3+ years",
+                "headcount": role.get("headcount") or 1,
+                "work_mode": role.get("work_mode") or "Remote",
+                "location": role.get("location") or ["Remote"],
+                "engagement_type": role.get("engagement_type") or "Contract",
+                "duration": role.get("duration") or "6 months",
+                "currency": role.get("currency") or "INR",
+                "weekly_hours": role.get("weekly_hours") or 40,
+                "range_min": role.get("range_vendor_min") or role.get("target_rate_min") or None,
+                "range_max": role.get("range_vendor_max") or role.get("target_rate_max") or None,
+            }
+
+            result.append({
+                "id": r.id,
+                "ref": f"REQ-{r.id[:6].upper()}",
+                "title": r.title or public_role["title"],
+                "company_name": comp_name,
+                "company_industry": getattr(cp, "industry", None) or "Technology",
+                "company_location": getattr(cp, "location", None) or "India",
+                "company_logo_url": getattr(cp, "logo_url", None) or getattr(tn, "logo_url", None) or "",
+                "structured_role": public_role,
+                "generated_jd_markdown": r.generated_jd_markdown or "",
+                "created_at": _format_datetime(r.created_at),
+            })
+        return result
+
+
+@app.get("/api/public/requisitions/{requisition_id}")
+def get_public_requisition(requisition_id: str) -> dict:
+    """Public endpoint to get single published requisition."""
+    _auto_close_expired()
+    with get_session() as session:
+        r = session.get(models.Requisition, requisition_id)
+        if not r or r.status != schemas.RequisitionStatus.PUBLISHED.value:
+            raise HTTPException(status_code=404, detail="Published job requisition not found.")
+
+        cp = session.get(models.CompanyProfile, r.company_profile_id) if r.company_profile_id else None
+        tn = session.get(Tenant, r.tenant_id) if r.tenant_id else None
+        comp_name = (
+            cp.name
+            if cp and cp.name
+            else (tn.name if tn and tn.name else "Partner Enterprise")
+        )
+        role = r.structured_role or {}
+
+        public_role = {
+            "title": role.get("title") or r.title,
+            "job_family": role.get("job_family") or "General",
+            "must_have_skills": role.get("must_have_skills") or [],
+            "nice_to_have_skills": role.get("nice_to_have_skills") or [],
+            "seniority_level": role.get("seniority_level") or "Mid-Senior",
+            "experience": role.get("experience") or "3+ years",
+            "headcount": role.get("headcount") or 1,
+            "work_mode": role.get("work_mode") or "Remote",
+            "location": role.get("location") or ["Remote"],
+            "engagement_type": role.get("engagement_type") or "Contract",
+            "duration": role.get("duration") or "6 months",
+            "currency": role.get("currency") or "INR",
+            "weekly_hours": role.get("weekly_hours") or 40,
+            "range_min": role.get("range_vendor_min") or role.get("target_rate_min") or None,
+            "range_max": role.get("range_vendor_max") or role.get("target_rate_max") or None,
+        }
+
+        return {
+            "id": r.id,
+            "ref": f"REQ-{r.id[:6].upper()}",
+            "title": r.title or public_role["title"],
+            "company_name": comp_name,
+            "company_industry": getattr(cp, "industry", None) or "Technology",
+            "company_location": getattr(cp, "location", None) or "India",
+            "company_logo_url": getattr(cp, "logo_url", None) or getattr(tn, "logo_url", None) or "",
+            "structured_role": public_role,
+            "generated_jd_markdown": r.generated_jd_markdown or "",
+            "created_at": _format_datetime(r.created_at),
+        }
+
+
+@app.post("/api/public/requisitions/{requisition_id}/apply")
+async def apply_to_requisition(
+    requisition_id: str,
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(""),
+    linkedin_url: str = Form(""),
+    github_url: str = Form(""),
+    cover_note: str = Form(""),
+    resume: UploadFile = File(...),
+) -> dict:
+    """Public candidate application submission for a published requisition."""
+    import tempfile
+    from datetime import datetime, timezone
+    from modules.candidate.domain.models import CandidateSubmission
+    from modules.candidate.extractor import extract_candidate_profile
+    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+    from modules.shared.db import db
+
+    with get_session() as session:
+        req = session.get(models.Requisition, requisition_id)
+        if not req:
+            raise HTTPException(status_code=404, detail="Requisition not found.")
+        if req.status != schemas.RequisitionStatus.PUBLISHED.value:
+            raise HTTPException(
+                status_code=400,
+                detail="This requisition is not currently open for public applications."
+            )
+
+        cp = session.get(models.CompanyProfile, req.company_profile_id) if req.company_profile_id else None
+        comp_name = cp.name if cp and cp.name else "Partner Enterprise"
+
+    content = await resume.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+
+    filename = resume.filename or "resume.pdf"
+    file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+    pdf_base64 = base64.b64encode(content).decode("utf-8")
+
+    extracted_text = ""
+    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        extracted_text = _extract_text_new(tmp_path, file_type)
+    except Exception as ex:
+        print(f"[RESUME EXTRACT ERROR] {ex}")
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    profile = {}
+    if extracted_text:
+        try:
+            profile = await extract_candidate_profile(extracted_text, filename)
+        except Exception as ex:
+            print(f"[PROFILE EXTRACT ERROR] {ex}")
+
+    role = req.structured_role or {}
+    must_have = role.get("must_have_skills") or []
+    nice_to_have = role.get("nice_to_have_skills") or []
+
+    cand_skills = profile.get("skills") or []
+    text_lower = (extracted_text or "").lower()
+
+    matched = []
+    missing = []
+    for s in (must_have + nice_to_have):
+        s_clean = s.strip()
+        s_low = s_clean.lower()
+        if any(s_low in cs.lower() for cs in cand_skills) or s_low in text_lower:
+            matched.append(s_clean)
+        else:
+            missing.append(s_clean)
+
+    total_skills = len(must_have) + len(nice_to_have)
+    if total_skills > 0:
+        base_score = (len(matched) / total_skills) * 100.0
+        score = round(max(55.0, min(96.0, base_score)), 1)
+    else:
+        score = 80.0
+
+    recommendation = "Strong Match" if score >= 80 else ("Moderate Match" if score >= 65 else "Screened")
+    now_utc = datetime.now(timezone.utc)
+    sub_id = f"CND-{uuid.uuid4().hex[:8]}"
+
+    details = {
+        "candidate_phone": phone or profile.get("candidate_phone") or "",
+        "linkedin_url": linkedin_url or profile.get("linkedin_url") or "",
+        "github_url": github_url or profile.get("github_url") or "",
+        "cover_note": cover_note,
+        "skills": profile.get("skills", []),
+        "experience": profile.get("experience", []),
+        "education": profile.get("education", []),
+        "projects": profile.get("projects", []),
+    }
+
+    sub_doc = {
+        "id": sub_id,
+        "submission_id": sub_id,
+        "workorder_id": sub_id,
+        "requisition_id": requisition_id,
+        "candidate_name": name.strip(),
+        "candidate_email": email.strip().lower(),
+        "vendor_name": "Direct Applicant",
+        "filename": filename,
+        "fingerprint": "",
+        "resume_text": extracted_text,
+        "jd_text": req.generated_jd_markdown or "",
+        "match_score": score,
+        "recommendation": recommendation,
+        "status": "Screened",
+        "summary": profile.get("summary") or cover_note or f"Direct application for {req.title}.",
+        "details": details,
+        "matched_skills": matched,
+        "missing_skills": missing,
+        "hiring_manager_notes": f"Applied via public careers board on {now_utc.strftime('%Y-%m-%d %H:%M')}",
+        "resume_pdf": pdf_base64,
+        "created_at": now_utc,
+        "updated_at": now_utc,
+    }
+
+    try:
+        db["candidate_submissions"].insert_one(sub_doc)
+    except Exception as err:
+        print(f"[DB SUBMISSION INSERT ERROR] {err}")
+
+    cand_doc = {
+        "id": sub_id,
+        "candidate_name": name.strip(),
+        "candidate_title": profile.get("candidate_title") or role.get("title") or "Candidate",
+        "candidate_email": email.strip().lower(),
+        "candidate_phone": phone or profile.get("candidate_phone") or "",
+        "vendor_company_name": "Direct Applicant",
+        "skills": profile.get("skills", []),
+        "filename": filename,
+        "summary": profile.get("summary") or cover_note or "",
+        "extracted_text": extracted_text,
+        "details": details,
+        "tenant_id": req.tenant_id,
+        "resume_pdf": pdf_base64,
+        "created_at": now_utc,
+        "updated_at": now_utc,
+    }
+
+    try:
+        db["candidates"].insert_one(cand_doc)
+    except Exception as err:
+        print(f"[DB CANDIDATE INSERT ERROR] {err}")
+
+    return {
+        "status": "success",
+        "application_ref": sub_id,
+        "candidate_name": name.strip(),
+        "candidate_email": email.strip().lower(),
+        "requisition_id": requisition_id,
+        "requisition_title": req.title,
+        "company_name": comp_name,
+        "match_score": score,
+        "recommendation": recommendation,
+        "message": f"Thank you, {name}! Your application for '{req.title}' at {comp_name} has been successfully received.",
+    }
+
+
+@app.post("/api/public/candidate/register")
+async def register_public_candidate(
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(""),
+    title: str = Form(""),
+    linkedin_url: str = Form(""),
+    github_url: str = Form(""),
+    skills: str = Form(""),
+    cover_note: str = Form(""),
+    resume: UploadFile = File(...),
+) -> dict:
+    """Allow any prospective candidate to register their profile and resume to join the talent pool."""
+    import tempfile
+    from datetime import datetime, timezone
+    from modules.candidate.extractor import extract_candidate_profile
+    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+    from modules.shared.db import db
+
+    content = await resume.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+
+    filename = resume.filename or "resume.pdf"
+    file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+    pdf_base64 = base64.b64encode(content).decode("utf-8")
+
+    extracted_text = ""
+    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        extracted_text = _extract_text_new(tmp_path, file_type)
+    except Exception as ex:
+        print(f"[PORTAL REGISTER RESUME EXTRACT ERROR] {ex}")
+    finally:
+        try:
+            os.remove(tmp_path)
+        except Exception:
+            pass
+
+    profile = {}
+    if extracted_text:
+        try:
+            profile = await extract_candidate_profile(extracted_text, filename)
+        except Exception as ex:
+            print(f"[PORTAL REGISTER PROFILE EXTRACT ERROR] {ex}")
+
+    parsed_skills = profile.get("skills") or []
+    if skills:
+        manual_skills = [s.strip() for s in skills.split(",") if s.strip()]
+        for s in manual_skills:
+            if s not in parsed_skills:
+                parsed_skills.append(s)
+
+    now_utc = datetime.now(timezone.utc)
+    cand_id = f"CND-REG-{uuid.uuid4().hex[:8]}"
+
+    details = {
+        "candidate_phone": phone or profile.get("candidate_phone") or "",
+        "linkedin_url": linkedin_url or profile.get("linkedin_url") or "",
+        "github_url": github_url or profile.get("github_url") or "",
+        "cover_note": cover_note,
+        "skills": parsed_skills,
+        "experience": profile.get("experience", []),
+        "education": profile.get("education", []),
+        "projects": profile.get("projects", []),
+    }
+
+    cand_doc = {
+        "id": cand_id,
+        "candidate_name": name.strip(),
+        "candidate_title": title.strip() or profile.get("candidate_title") or "Candidate",
+        "candidate_email": email.strip().lower(),
+        "candidate_phone": phone.strip() or profile.get("candidate_phone") or "",
+        "vendor_company_name": "Direct Applicant",
+        "skills": parsed_skills,
+        "filename": filename,
+        "summary": profile.get("summary") or cover_note or "Registered via TermJobs Candidate Portal.",
+        "extracted_text": extracted_text,
+        "details": details,
+        "resume_pdf": pdf_base64,
+        "source": "Portal Registration",
+        "created_at": now_utc,
+        "updated_at": now_utc,
+    }
+
+    try:
+        db["candidates"].insert_one(cand_doc)
+    except Exception as err:
+        print(f"[DB CANDIDATE REGISTER ERROR] {err}")
+
+    # Also register general entry in candidate_submissions so they are discoverable in pipeline
+    sub_doc = {
+        "id": cand_id,
+        "submission_id": cand_id,
+        "workorder_id": cand_id,
+        "requisition_id": None,
+        "candidate_name": name.strip(),
+        "candidate_email": email.strip().lower(),
+        "vendor_name": "Direct Applicant",
+        "filename": filename,
+        "fingerprint": "",
+        "resume_text": extracted_text,
+        "jd_text": "",
+        "match_score": 85.0,
+        "recommendation": "Portal Member",
+        "status": "Available",
+        "summary": profile.get("summary") or cover_note or "Registered via TermJobs Candidate Portal.",
+        "details": details,
+        "matched_skills": parsed_skills,
+        "missing_skills": [],
+        "hiring_manager_notes": f"Self-registered through candidate portal on {now_utc.strftime('%Y-%m-%d %H:%M')}",
+        "resume_pdf": pdf_base64,
+        "created_at": now_utc,
+        "updated_at": now_utc,
+    }
+    try:
+        db["candidate_submissions"].insert_one(sub_doc)
+    except Exception as err:
+        print(f"[DB SUBMISSION REGISTER ERROR] {err}")
+
+    return {
+        "status": "success",
+        "candidate_id": cand_id,
+        "message": f"Welcome, {name}! Your profile and resume have been successfully added to the TermJobs Talent Pool.",
+    }
+
+
+@app.get("/api/superadmin/candidate-pool")
+def get_superadmin_candidate_pool(
+    search: str | None = None,
+    source: str | None = None,
+    vendor: str | None = None,
+    skill: str | None = None,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Unified Candidate Pool for Super Admin console, consolidating candidates from all vendors,
+
+    direct portal applicants, and registered portal members.
+    """
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    from modules.shared.db import db
+
+    # 1. Fetch candidates from candidates bank
+    bank_candidates = list(db["candidates"].find({}, {"resume_pdf": 0, "extracted_text": 0}).sort("created_at", -1))
+
+    # 2. Fetch candidate submissions
+    submissions = list(db["candidate_submissions"].find({}, {"resume_pdf": 0, "resume_text": 0}).sort("created_at", -1))
+
+    # Pre-cache requisitions for metadata
+    req_ids = list({s.get("requisition_id") for s in submissions if s.get("requisition_id")})
+    req_map = {}
+    if req_ids:
+        for r in db["requisitions"].find({"id": {"$in": req_ids}}, {"id": 1, "title": 1, "company_name": 1, "company_profile_id": 1, "client_name": 1}):
+            comp_name = r.get("company_name") or r.get("client_name") or ""
+            if not comp_name and r.get("company_profile_id"):
+                cp = db["company_profiles"].find_one({"id": r["company_profile_id"]}, {"name": 1})
+                if cp:
+                    comp_name = cp.get("name", "")
+            req_map[r["id"]] = {"title": r.get("title", "Open Role"), "company": comp_name or "Enterprise Partner"}
+
+    # Consolidated index by email or ID
+    cand_dict: dict[str, dict] = {}
+    distinct_vendors = set()
+
+    def _clean_skills(raw) -> list[str]:
+        if not raw:
+            return []
+        if isinstance(raw, list):
+            res = []
+            for item in raw:
+                if isinstance(item, str):
+                    for piece in item.split(","):
+                        p = piece.strip()
+                        if p:
+                            res.append(p)
+                elif item:
+                    res.append(str(item).strip())
+            return res
+        if isinstance(raw, str):
+            return [p.strip() for p in raw.split(",") if p.strip()]
+        return []
+
+    for c in bank_candidates:
+        cid = c.get("id") or str(c.get("_id"))
+        email = (c.get("candidate_email") or "").strip().lower()
+        key = email if email else cid
+        v_name = (c.get("vendor_company_name") or c.get("vendor_name") or "GlobalStaff Partners").strip()
+        is_direct = v_name.lower() in ["direct applicant", "portal registration", "portal applicant"]
+        if not is_direct and v_name:
+            distinct_vendors.add(v_name)
+
+        created_val = c.get("created_at")
+        cand_dict[key] = {
+            "id": cid,
+            "candidate_name": c.get("candidate_name") or "Unnamed Candidate",
+            "candidate_email": c.get("candidate_email") or "",
+            "candidate_phone": c.get("candidate_phone") or (c.get("details") or {}).get("candidate_phone") or "",
+            "candidate_title": c.get("candidate_title") or (c.get("details") or {}).get("candidate_title") or "Candidate",
+            "source_type": "Direct Applicant" if is_direct else "Vendor Sourced",
+            "source_label": "Portal Applicant" if is_direct else f"Vendor: {v_name}",
+            "vendor_name": v_name,
+            "is_direct_applicant": is_direct,
+            "skills": _clean_skills(c.get("skills")),
+            "summary": c.get("summary") or "",
+            "details": c.get("details") or {},
+            "filename": c.get("filename") or f"{c.get('candidate_name', 'resume')}.pdf",
+            "has_resume": True,
+            "applications": [],
+            "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
+        }
+
+    for s in submissions:
+        sub_id = s.get("id") or str(s.get("_id"))
+        email = (s.get("candidate_email") or "").strip().lower()
+        cid = s.get("workorder_id") or s.get("candidate_id") or sub_id
+        key = email if (email and email in cand_dict) else cid
+
+        req_info = req_map.get(s.get("requisition_id"), {})
+        created_val = s.get("created_at")
+        app_entry = {
+            "submission_id": sub_id,
+            "requisition_id": s.get("requisition_id"),
+            "requisition_title": req_info.get("title") or s.get("requisition_title") or "Open Role",
+            "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
+            "match_score": float(s.get("match_score")) if s.get("match_score") is not None else None,
+            "recommendation": s.get("recommendation"),
+            "status": s.get("status") or "Screened",
+            "applied_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
+        }
+
+        v_name = (s.get("vendor_name") or "GlobalStaff Partners").strip()
+        is_direct = v_name.lower() in ["direct applicant", "portal registration", "portal applicant"]
+        if not is_direct and v_name:
+            distinct_vendors.add(v_name)
+
+        if key in cand_dict:
+            # Check if this requisition application isn't already recorded
+            existing_sub_ids = {a["submission_id"] for a in cand_dict[key]["applications"]}
+            if sub_id not in existing_sub_ids and s.get("requisition_id"):
+                cand_dict[key]["applications"].append(app_entry)
+            if not cand_dict[key]["skills"] and s.get("matched_skills"):
+                cand_dict[key]["skills"] = _clean_skills(s.get("matched_skills"))
+            if not cand_dict[key]["candidate_phone"]:
+                cand_dict[key]["candidate_phone"] = (s.get("details") or {}).get("candidate_phone") or ""
+        else:
+            cand_dict[key] = {
+                "id": sub_id,
+                "candidate_name": s.get("candidate_name") or "Unnamed Candidate",
+                "candidate_email": s.get("candidate_email") or "",
+                "candidate_phone": (s.get("details") or {}).get("candidate_phone") or "",
+                "candidate_title": (s.get("details") or {}).get("candidate_title") or "Candidate",
+                "source_type": "Direct Applicant" if is_direct else "Vendor Sourced",
+                "source_label": "Portal Applicant" if is_direct else f"Vendor: {v_name}",
+                "vendor_name": v_name,
+                "is_direct_applicant": is_direct,
+                "skills": _clean_skills(s.get("matched_skills") or (s.get("details") or {}).get("skills")),
+                "summary": s.get("summary") or "",
+                "details": s.get("details") or {},
+                "filename": s.get("filename") or f"{s.get('candidate_name', 'resume')}.pdf",
+                "has_resume": True,
+                "applications": [app_entry] if s.get("requisition_id") else [],
+                "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
+            }
+
+    all_candidates = list(cand_dict.values())
+
+    # Calculate overall stats prior to search filtering
+    total_count = len(all_candidates)
+    portal_count = sum(1 for c in all_candidates if c["is_direct_applicant"])
+    vendor_count = total_count - portal_count
+    resumes_count = total_count
+
+    # Apply filters
+    filtered = all_candidates
+
+    if source:
+        src_lower = source.strip().lower()
+        if src_lower in ["portal", "direct"]:
+            filtered = [c for c in filtered if c["is_direct_applicant"]]
+        elif src_lower in ["vendor", "consultancy"]:
+            filtered = [c for c in filtered if not c["is_direct_applicant"]]
+
+    if vendor:
+        v_target = vendor.strip().lower()
+        filtered = [c for c in filtered if c["vendor_name"].lower() == v_target]
+
+    if skill:
+        s_target = skill.strip().lower()
+        filtered = [c for c in filtered if any(s_target in sk.lower() for sk in c.get("skills", []))]
+
+    if search:
+        terms = [t.strip().lower() for t in search.split() if t.strip()]
+        def matches(c):
+            haystack = (
+                f"{c['candidate_name']} {c['candidate_email']} {c['candidate_phone']} "
+                f"{c['candidate_title']} {c['vendor_name']} {' '.join(c['skills'])} {c['summary']}"
+            ).lower()
+            return all(term in haystack for term in terms)
+        filtered = [c for c in filtered if matches(c)]
+
+    return {
+        "candidates": filtered,
+        "total_count": len(filtered),
+        "vendors": sorted(list(distinct_vendors)),
+        "stats": {
+            "total": total_count,
+            "portal_applicants": portal_count,
+            "vendor_candidates": vendor_count,
+            "resumes_count": resumes_count,
+            "contributing_vendors": len(distinct_vendors),
+        },
+    }
+
+
+@app.post("/api/superadmin/candidate-pool")
+async def add_superadmin_candidate(
+    name: str = Form(...),
+    email: str = Form(...),
+    phone: str = Form(""),
+    title: str = Form(""),
+    vendor_name: str = Form("Direct Applicant"),
+    skills: str = Form(""),
+    summary: str = Form(""),
+    resume: UploadFile = File(None),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Allows Super Admin to directly add a candidate and their resume into the platform pool."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    import tempfile
+    from datetime import datetime, timezone
+    from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+    from modules.shared.db import db
+
+    pdf_base64 = None
+    extracted_text = ""
+    filename = "resume.pdf"
+
+    if resume:
+        content = await resume.read()
+        if content:
+            filename = resume.filename or "resume.pdf"
+            file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+            pdf_base64 = base64.b64encode(content).decode("utf-8")
+            with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                extracted_text = _extract_text_new(tmp_path, file_type)
+            except Exception as ex:
+                print(f"[SUPERADMIN CANDIDATE EXTRACT ERROR] {ex}")
+            finally:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
+
+    cand_skills = [s.strip() for s in skills.split(",") if s.strip()]
+    now_utc = datetime.now(timezone.utc)
+    cand_id = f"CND-ADM-{uuid.uuid4().hex[:8]}"
+
+    details = {
+        "candidate_phone": phone.strip(),
+        "skills": cand_skills,
+        "experience": [],
+        "education": [],
+        "projects": [],
+    }
+
+    cand_doc = {
+        "id": cand_id,
+        "candidate_name": name.strip(),
+        "candidate_title": title.strip() or "Candidate",
+        "candidate_email": email.strip().lower(),
+        "candidate_phone": phone.strip(),
+        "vendor_company_name": vendor_name.strip() or "Direct Applicant",
+        "skills": cand_skills,
+        "filename": filename,
+        "summary": summary.strip() or "Added manually via Super Admin Console.",
+        "extracted_text": extracted_text,
+        "details": details,
+        "resume_pdf": pdf_base64,
+        "source": "Super Admin Provisioned",
+        "created_at": now_utc,
+        "updated_at": now_utc,
+    }
+
+    try:
+        db["candidates"].insert_one(cand_doc)
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Database insert error: {err}")
+
+    return {
+        "status": "success",
+        "candidate_id": cand_id,
+        "message": f"Candidate {name} added to Candidate Pool successfully.",
+    }
+
+
+@app.delete("/api/superadmin/candidate-pool/{candidate_id}")
+def delete_superadmin_candidate(
+    candidate_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Allows Super Admin to delete a candidate record from the candidate pool."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    from modules.shared.db import db
+    from bson import ObjectId
+
+    # Remove from candidates
+    q = {"id": candidate_id}
+    res_c = db["candidates"].delete_many(q)
+    try:
+        db["candidates"].delete_many({"_id": ObjectId(candidate_id)})
+    except Exception:
+        pass
+
+    # Remove from candidate_submissions
+    res_s = db["candidate_submissions"].delete_many(q)
+    try:
+        db["candidate_submissions"].delete_many({"_id": ObjectId(candidate_id)})
+    except Exception:
+        pass
+
+    return {
+        "status": "success",
+        "message": f"Candidate {candidate_id} removed from candidate pool.",
+        "deleted_count": (res_c.deleted_count or 0) + (res_s.deleted_count or 0),
+    }
 
 
 @app.get("/requisitions/{requisition_id}")

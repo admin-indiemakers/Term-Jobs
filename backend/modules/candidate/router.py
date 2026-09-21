@@ -313,8 +313,9 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
                 bank_doc = db["candidates"].find_one({"_id": ObjectId(candidate_id)})
             except Exception:
                 pass
-        if bank_doc and bank_doc.get("resume_pdf"):
-            doc = bank_doc
+        if bank_doc:
+            if bank_doc.get("resume_pdf") or not doc:
+                doc = bank_doc
 
     # 3. If still not found by ID, look up by candidate name or email if matched in submission
     if doc and not doc.get("resume_pdf"):
@@ -358,6 +359,105 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
                     media_type="application/pdf",
                     filename=fname,
                 )
+
+    # 5. Dynamic PDF generation fallback from profile data
+    if doc:
+        try:
+            import pymupdf
+            pdf_doc = pymupdf.open()
+            page = pdf_doc.new_page(width=595, height=842)
+
+            name = (doc.get("candidate_name") or "Candidate Resume").strip().upper()
+            title = (doc.get("candidate_title") or "").strip()
+            email = (doc.get("candidate_email") or "").strip()
+            phone = (doc.get("candidate_phone") or (doc.get("details") or {}).get("candidate_phone") or "").strip()
+            vendor = (doc.get("vendor_company_name") or doc.get("vendor_name") or "").strip()
+            skills = doc.get("skills") or doc.get("matched_skills") or []
+            summary = (doc.get("summary") or "").strip()
+            details = doc.get("details") or {}
+            experience = details.get("experience") or []
+            education = details.get("education") or []
+            projects = details.get("projects") or []
+
+            # Header
+            page.insert_text((50, 60), name, fontsize=18, fontname="helv", color=(0.06, 0.09, 0.16))
+            y = 80
+            if title:
+                page.insert_text((50, y), title, fontsize=11, fontname="helv", color=(0.25, 0.35, 0.5))
+                y += 18
+
+            contact_parts = []
+            if email:
+                contact_parts.append(email)
+            if phone:
+                contact_parts.append(phone)
+            if vendor and vendor.lower() != "direct applicant":
+                contact_parts.append(f"Represented by: {vendor}")
+            elif vendor:
+                contact_parts.append("Direct Portal Applicant")
+
+            if contact_parts:
+                page.insert_text((50, y), "  •  ".join(contact_parts), fontsize=9, fontname="helv", color=(0.4, 0.45, 0.5))
+                y += 14
+
+            page.draw_line((50, y), (545, y), color=(0.82, 0.85, 0.9), width=1)
+            y += 24
+
+            # Summary
+            if summary:
+                page.insert_text((50, y), "PROFESSIONAL SUMMARY", fontsize=10, fontname="helv", color=(0.1, 0.15, 0.25))
+                y += 14
+                summary_rect = pymupdf.Rect(50, y, 545, y + 60)
+                page.insert_textbox(summary_rect, summary, fontsize=9.5, fontname="helv", color=(0.25, 0.3, 0.35))
+                y += 65
+
+            # Skills
+            if skills:
+                page.insert_text((50, y), "CORE TECHNICAL COMPETENCIES", fontsize=10, fontname="helv", color=(0.1, 0.15, 0.25))
+                y += 14
+                skills_str = ", ".join(skills if isinstance(skills, list) else [str(skills)])
+                skills_rect = pymupdf.Rect(50, y, 545, y + 45)
+                page.insert_textbox(skills_rect, skills_str, fontsize=9.5, fontname="helv", color=(0.25, 0.3, 0.35))
+                y += 50
+
+            # Experience
+            if experience:
+                page.insert_text((50, y), "WORK EXPERIENCE & BACKGROUND", fontsize=10, fontname="helv", color=(0.1, 0.15, 0.25))
+                y += 14
+                exp_text = "\n".join([f"• {e}" if isinstance(e, str) else f"• {e.get('role', '')} at {e.get('company', '')}" for e in experience[:5]])
+                exp_rect = pymupdf.Rect(50, y, 545, y + 100)
+                page.insert_textbox(exp_rect, exp_text, fontsize=9, fontname="helv", color=(0.25, 0.3, 0.35))
+                y += 110
+
+            # Education & Projects
+            if education or projects:
+                page.insert_text((50, y), "EDUCATION & PROJECTS", fontsize=10, fontname="helv", color=(0.1, 0.15, 0.25))
+                y += 14
+                items = []
+                for ed in education[:3]:
+                    items.append(f"• Education: {ed if isinstance(ed, str) else str(ed)}")
+                for pr in projects[:3]:
+                    items.append(f"• Project: {pr if isinstance(pr, str) else str(pr)}")
+                extra_text = "\n".join(items)
+                extra_rect = pymupdf.Rect(50, y, 545, y + 80)
+                page.insert_textbox(extra_rect, extra_text, fontsize=9, fontname="helv", color=(0.25, 0.3, 0.35))
+
+            # Footer
+            page.draw_line((50, 800), (545, 800), color=(0.88, 0.9, 0.93), width=0.8)
+            page.insert_text((50, 814), "TermJobs Verified Candidate Profile", fontsize=8, fontname="helv", color=(0.55, 0.6, 0.65))
+
+            gen_bytes = pdf_doc.tobytes()
+            safe_name = (doc.get("candidate_name") or "candidate").replace(" ", "_")
+            return Response(
+                content=gen_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'inline; filename="{safe_name}_Resume.pdf"',
+                    "Content-Type": "application/pdf",
+                }
+            )
+        except Exception as g_err:
+            logger.error(f"Fallback resume generation failed for {candidate_id}: {g_err}")
 
     raise HTTPException(status_code=404, detail="Resume PDF not found for this candidate")
 
