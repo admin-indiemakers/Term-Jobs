@@ -52,6 +52,7 @@ import Workers from './pages/workforce/Workers';
 import LandingPage from './pages/LandingPage';
 import AdminAccounts from './pages/AdminAccounts';
 import SuperAdminCandidatePool from './pages/SuperAdminCandidatePool';
+import SuperAdminOutreachControl from './pages/SuperAdminOutreachControl';
 import { CandidateInterviewLogin } from './interview/pages/CandidateInterviewLogin';
 import { CandidateInterviewPortal } from './interview/pages/CandidateInterviewPortal';
 import { InterviewerStaffPortal } from './interview/pages/InterviewerStaffPortal';
@@ -165,6 +166,8 @@ export default function App() {
           <Route path="candidate-pool" element={<SuperAdminCandidatePool />} />
           <Route path="candidatespool" element={<SuperAdminCandidatePool />} />
           <Route path="candidates-pool" element={<SuperAdminCandidatePool />} />
+          <Route path="outreach" element={<SuperAdminOutreachControl />} />
+          <Route path="candidate-outreach" element={<SuperAdminOutreachControl />} />
           <Route path="workforce/team" element={<TeamOverview />} />
           <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
           <Route path="workforce/expenses" element={<ExpenseApprovals />} />
@@ -207,6 +210,8 @@ export default function App() {
           <Route path="superadmin/candidate-pool" element={<SuperAdminCandidatePool />} />
           <Route path="superadmin/candidatepool" element={<SuperAdminCandidatePool />} />
           <Route path="superadmin/candidates-pool" element={<SuperAdminCandidatePool />} />
+          <Route path="superadmin/outreach" element={<SuperAdminOutreachControl />} />
+          <Route path="superadmin/candidate-outreach" element={<SuperAdminOutreachControl />} />
           <Route path="superadmin/archives" element={<Navigate to="/dashboard/superadmin" replace />} />
           <Route path="hr" element={<HRDashboard />} />
         </Route>

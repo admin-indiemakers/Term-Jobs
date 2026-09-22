@@ -25,9 +25,9 @@ from typing import Any
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
 from pydantic import BaseModel, Field
 
@@ -808,7 +808,11 @@ def delete_template(template_id: str, current_user: User = Depends(get_current_u
 
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
-def create_requisition(body: RequisitionIn, current_user: User = Depends(get_current_user)) -> dict:
+def create_requisition(
+    body: RequisitionIn,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(get_current_user)
+) -> dict:
     _require_writable(current_user)
 
     # The company profile must belong to the requester's tenant.
@@ -844,6 +848,7 @@ def create_requisition(body: RequisitionIn, current_user: User = Depends(get_cur
         },
     )
     _cache.clear()
+    background_tasks.add_task(_async_trigger_top_candidate_outreach, req.id)
     return _requisition_dict(req.id)
 
 
@@ -1658,6 +1663,234 @@ def delete_superadmin_candidate(
     }
 
 
+# --- Candidate Automated Top 20 Matching & Email Outreach -------------------
+
+def _async_trigger_top_candidate_outreach(requisition_id: str):
+    """Background task to rank candidates and email the Top 20."""
+    try:
+        from modules.shared.db import db
+        from modules.candidate.outreach_service import dispatch_outreach_to_top_candidates
+
+        # Check system setting
+        setting = db["system_settings"].find_one({"key": "auto_outreach_enabled"})
+        if setting and setting.get("value") is False:
+            logger.info(f"Auto outreach is disabled in system settings. Skipping for {requisition_id}.")
+            return
+
+        result = dispatch_outreach_to_top_candidates(requisition_id, limit=20)
+        logger.info(f"Auto-outreach completed for {requisition_id}: {result.get('outreach_dispatched', 0)} emails sent.")
+    except Exception as e:
+        logger.error(f"Failed in _async_trigger_top_candidate_outreach for {requisition_id}: {e}")
+
+
+@app.get("/api/public/outreach/{token}/respond", response_class=HTMLResponse)
+def candidate_outreach_respond(token: str, action: str = "interested"):
+    """
+    Public interactive response endpoint triggered when a candidate clicks
+    [Available & Interested] or [Not Available] in their email.
+    """
+    from modules.candidate.outreach_service import handle_candidate_rsvp
+
+    res = handle_candidate_rsvp(token, action)
+    if res.get("error"):
+        return HTMLResponse(
+            status_code=400,
+            content=f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Verification Error - TermJobs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {{ margin:0; padding:0; background:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; }}
+    .card {{ background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; padding:36px; max-width:480px; width:90%; text-align:center; box-shadow:0 10px 25px rgba(0,0,0,0.05); }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div style="font-size:36px; margin-bottom:16px;">⚠️</div>
+    <h2 style="margin:0 0 12px 0; color:#0f172a;">Link Expired or Invalid</h2>
+    <p style="color:#64748b; font-size:14px; line-height:1.5;">{res.get('error')}</p>
+    <a href="/" style="display:inline-block; margin-top:20px; background:#0a0a0a; color:#ffffff; padding:10px 20px; border-radius:8px; text-decoration:none; font-size:13px; font-weight:bold;">Return to Homepage</a>
+  </div>
+</body>
+</html>"""
+        )
+
+    cand_name = res.get("candidate_name", "Candidate")
+    req_title = res.get("requisition_title", "Position")
+    comp_name = res.get("company_name", "Hiring Team")
+    act = res.get("action")
+
+    if act == "interested":
+        headline = "Availability & Interest Confirmed!"
+        badge_bg = "#ecfdf5"
+        badge_color = "#059669"
+        icon = "✓"
+        desc = f"Thank you, <strong>{cand_name}</strong>! We've notified <strong>{comp_name}</strong> that you are available and interested in the <strong>{req_title}</strong> role."
+        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. The recruitment coordinator will reach out directly."
+    elif act == "unavailable":
+        headline = "Status Successfully Updated"
+        badge_bg = "#f1f5f9"
+        badge_color = "#475569"
+        icon = "✓"
+        desc = f"Thank you for letting us know, <strong>{cand_name}</strong>. Congratulations if you've recently taken another role!"
+        sub_desc = "We have updated your record so our talent coordinators will not disturb you while you are unavailable."
+    else:
+        headline = "Feedback Recorded"
+        badge_bg = "#f8fafc"
+        badge_color = "#64748b"
+        icon = "ℹ"
+        desc = f"We've noted that you are passing on the <strong>{req_title}</strong> role at this time."
+        sub_desc = "We will keep your profile in our candidate pool and notify you when other roles matching your skillset open up."
+
+    return HTMLResponse(
+        content=f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{headline} - TermJobs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {{ margin:0; padding:0; background:#f8fafc; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; }}
+    .card {{ background:#ffffff; border:1px solid #e2e8f0; border-radius:20px; padding:44px 32px; max-width:520px; width:90%; text-align:center; box-shadow:0 12px 30px rgba(0,0,0,0.06); }}
+    .icon-badge {{ width:64px; height:64px; border-radius:50%; background:{badge_bg}; color:{badge_color}; display:inline-flex; align-items:center; justify-content:center; font-size:28px; font-weight:bold; margin-bottom:20px; }}
+    h1 {{ font-size:22px; font-weight:800; color:#0f172a; margin:0 0 16px 0; }}
+    p {{ color:#475569; font-size:14px; line-height:1.6; margin:0 0 12px 0; }}
+    .highlight-box {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:20px 0; text-align:left; font-size:13px; color:#334155; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon-badge">{icon}</div>
+    <h1>{headline}</h1>
+    <p>{desc}</p>
+    <div class="highlight-box">
+      <strong>Position:</strong> {req_title}<br/>
+      <strong>Hiring Partner:</strong> {comp_name}
+    </div>
+    <p style="font-size:12.5px; color:#64748b;">{sub_desc}</p>
+    <div style="margin-top:28px; border-top:1px solid #f1f5f9; padding-top:20px; font-size:11px; color:#94a3b8;">
+      TermJobs Automated Talent Network &bull; Secured with Verified RSVP Token
+    </div>
+  </div>
+</body>
+</html>"""
+    )
+
+
+@app.get("/api/superadmin/outreach/stats")
+def get_superadmin_outreach_stats(current_user: User = Depends(get_current_user)) -> dict:
+    """Super Admin Control Panel: Global candidate email outreach analytics."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    from modules.candidate.outreach_service import get_outreach_stats_summary
+    return get_outreach_stats_summary()
+
+
+@app.get("/api/superadmin/outreach/requisitions")
+def get_superadmin_outreach_requisitions(current_user: User = Depends(get_current_user)) -> list:
+    """Super Admin Control Panel: List requisitions for matching & outreach launcher."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    from modules.shared.db import db
+    req_docs = list(db["requisitions"].find({}, {"id": 1, "title": 1, "company_name": 1, "status": 1, "skills": 1, "last_ai_outreach_at": 1, "ai_outreach_candidate_count": 1}).sort("created_at", -1))
+    
+    # Calculate outreach stats for each requisition
+    outreach_counts = {}
+    for o in db["candidate_outreach"].find({}, {"requisition_id": 1, "status": 1}):
+        rid = o.get("requisition_id")
+        if rid:
+            if rid not in outreach_counts:
+                outreach_counts[rid] = {"total": 0, "interested": 0, "unavailable": 0}
+            outreach_counts[rid]["total"] += 1
+            if o.get("status") == "interested":
+                outreach_counts[rid]["interested"] += 1
+            elif o.get("status") == "unavailable":
+                outreach_counts[rid]["unavailable"] += 1
+
+    results = []
+    for r in req_docs:
+        rid = r.get("id")
+        stats = outreach_counts.get(rid, {"total": 0, "interested": 0, "unavailable": 0})
+        results.append({
+            "id": rid,
+            "title": r.get("title") or "Open Position",
+            "company_name": r.get("company_name") or "Enterprise Partner",
+            "status": r.get("status") or "ACTIVE",
+            "skills": r.get("skills") or [],
+            "outreach_stats": stats,
+            "last_outreach_at": r.get("last_ai_outreach_at"),
+        })
+    return results
+
+
+@app.get("/api/superadmin/outreach/requisition/{requisition_id}")
+def get_superadmin_requisition_outreach(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Super Admin Control Panel: Top 20 ranked candidates and their live email outreach status."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    from modules.candidate.outreach_service import get_requisition_outreach_details
+    return get_requisition_outreach_details(requisition_id)
+
+
+@app.post("/api/superadmin/outreach/trigger/{requisition_id}")
+def trigger_superadmin_requisition_outreach(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Super Admin Control Panel: Manually trigger Top 20 candidate match and email dispatch."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    from modules.candidate.outreach_service import dispatch_outreach_to_top_candidates
+    return dispatch_outreach_to_top_candidates(requisition_id, limit=20, force_resend=True)
+
+
+@app.get("/api/superadmin/outreach/settings")
+def get_superadmin_outreach_settings(current_user: User = Depends(get_current_user)) -> dict:
+    """Get automated candidate outreach system settings."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    from modules.shared.db import db
+    doc = db["system_settings"].find_one({"key": "auto_outreach_enabled"})
+    enabled = doc.get("value", True) if doc else True
+    return {"auto_outreach_enabled": enabled}
+
+
+@app.post("/api/superadmin/outreach/settings")
+def update_superadmin_outreach_settings(
+    payload: dict,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Update automated candidate outreach system settings."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    from modules.shared.db import db
+    enabled = bool(payload.get("auto_outreach_enabled", True))
+    db["system_settings"].update_one(
+        {"key": "auto_outreach_enabled"},
+        {"$set": {"key": "auto_outreach_enabled", "value": enabled, "updated_at": _utcnow().isoformat()}},
+        upsert=True
+    )
+    return {"auto_outreach_enabled": enabled, "message": "Settings updated successfully."}
+
+
+@app.get("/api/superadmin/outreach/activity")
+def get_superadmin_outreach_activity(current_user: User = Depends(get_current_user)) -> list:
+    """Recent live email outreach activity feed for Super Admin."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    from modules.shared.db import db
+    records = list(db["candidate_outreach"].find({}, {"html_preview": 0}).sort("sent_at", -1).limit(40))
+    for r in records:
+        r["_id"] = str(r["_id"])
+    return records
+
+
 @app.get("/requisitions/{requisition_id}")
 @app.get("/api/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
@@ -1740,7 +1973,11 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
 
 @app.post("/requisitions/{requisition_id}/director-approve")
 @app.post("/api/requisitions/{requisition_id}/director-approve")
-def director_approve_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
+def director_approve_requisition(
+    requisition_id: str,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(get_current_user)
+) -> dict:
     if current_user.role not in ("Director", "Admin", "Super Admin"):
         raise HTTPException(
             status_code=403,
@@ -1792,6 +2029,7 @@ def director_approve_requisition(requisition_id: str, current_user: User = Depen
         pass
 
     _cache.clear()
+    background_tasks.add_task(_async_trigger_top_candidate_outreach, requisition_id)
     return _requisition_dict(requisition_id)
 
 

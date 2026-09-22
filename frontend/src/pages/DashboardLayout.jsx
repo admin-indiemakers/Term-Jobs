@@ -132,6 +132,12 @@ const Icons = {
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </svg>
   ),
+  Mail: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect width="20" height="16" x="2" y="4" rx="2"/>
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -335,6 +341,7 @@ export default function DashboardLayout() {
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
               { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, icon: Icons.Diamond, count: superAdminCandidateCount },
+              { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, icon: Icons.Mail },
               { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
               { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
               { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
