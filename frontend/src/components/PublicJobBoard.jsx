@@ -513,6 +513,10 @@ export default function PublicJobBoard({ onBackToHome }) {
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center gap-1.5 shadow-2xs">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        Active
+                      </span>
                       <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
                         (role.work_mode || '').toLowerCase() === 'remote'
                           ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
@@ -568,9 +572,13 @@ export default function PublicJobBoard({ onBackToHome }) {
 
                 {/* Card Footer Actions */}
                 <div className="pt-4 border-t border-[#F0F0EC] flex items-center justify-between gap-3">
-                  <div className="text-[11.5px] text-[#8A8A85] flex items-center gap-1">
-                    <Calendar size={12} />
-                    <span>Verified {job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Active'}</span>
+                  <div className="text-[11.5px] text-[#8A8A85] flex items-center gap-1.5">
+                    <Calendar size={12} className="text-emerald-600" />
+                    <span>
+                      {role.submission_deadline
+                        ? `Deadline: ${new Date(role.submission_deadline).toLocaleDateString()}`
+                        : `Verified ${job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Active'}`}
+                    </span>
                   </div>
 
                   <button

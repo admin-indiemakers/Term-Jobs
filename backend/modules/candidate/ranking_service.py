@@ -100,11 +100,13 @@ def get_requisition_data(requisition_id: str) -> Optional[Dict[str, Any]]:
             if req_model:
                 req_dict["id"] = req_model.id
                 req_dict["title"] = req_model.title or "Open Position"
-                req_dict["description"] = req_model.description or ""
+                req_dict["description"] = getattr(req_model, "generated_jd_markdown", "") or ""
                 req_dict["tenant_id"] = req_model.tenant_id
                 req_dict["status"] = req_model.status
-                if req_model.company_profile:
-                    req_dict["company_name"] = req_model.company_profile.name
+                if getattr(req_model, "company_profile_id", None):
+                    cp = session.get(models.CompanyProfile, req_model.company_profile_id)
+                    if cp and cp.name:
+                        req_dict["company_name"] = cp.name
     except Exception as e:
         logger.warning(f"Failed to fetch SQL requisition {requisition_id}: {e}")
 
@@ -114,7 +116,7 @@ def get_requisition_data(requisition_id: str) -> Optional[Dict[str, Any]]:
         if mongo_doc:
             req_dict["id"] = mongo_doc.get("id", req_dict.get("id", requisition_id))
             req_dict["title"] = mongo_doc.get("title") or req_dict.get("title", "Open Position")
-            req_dict["company_name"] = mongo_doc.get("company_name") or req_dict.get("company_name", "Enterprise Partner")
+            req_dict["company_name"] = req_dict.get("company_name") or mongo_doc.get("company_name", "Enterprise Partner")
             req_dict["description"] = mongo_doc.get("description") or req_dict.get("description", "")
             req_dict["structured_role"] = mongo_doc.get("structured_role") or {}
             req_dict["skills"] = mongo_doc.get("skills") or []
@@ -130,6 +132,10 @@ def get_requisition_data(requisition_id: str) -> Optional[Dict[str, Any]]:
         target_skills.extend(_parse_candidate_skills(req_dict["skills"]))
 
     structured = req_dict.get("structured_role") or {}
+    if structured.get("must_have_skills"):
+        target_skills.extend(_parse_candidate_skills(structured["must_have_skills"]))
+    if structured.get("nice_to_have_skills"):
+        target_skills.extend(_parse_candidate_skills(structured["nice_to_have_skills"]))
     if structured.get("required_skills"):
         target_skills.extend(_parse_candidate_skills(structured["required_skills"]))
     if structured.get("skills"):
@@ -278,6 +284,18 @@ def rank_candidates_for_requisition(
         v_name = (c.get("vendor_company_name") or c.get("vendor_name") or "Direct Applicant").strip()
         is_direct = v_name.lower() in ["direct applicant", "portal registration", "portal applicant"]
 
+        skills = c.get("skills") or c.get("extracted_skills") or []
+        if isinstance(skills, list) and not skills:
+            skills = c.get("extracted_skills") or []
+
+        tg_chat_id = c.get("telegram_chat_id")
+        tg_user = c.get("telegram_username")
+        if not tg_chat_id:
+            tg_link = db["telegram_links"].find_one({"$or": [{"candidate_id": cid}, {"candidate_email": email}]})
+            if tg_link:
+                tg_chat_id = tg_link.get("chat_id")
+                tg_user = tg_link.get("username")
+
         cand_map[key] = {
             "id": cid,
             "candidate_name": c.get("candidate_name") or "Candidate",
@@ -286,7 +304,9 @@ def rank_candidates_for_requisition(
             "candidate_title": c.get("candidate_title") or (c.get("details") or {}).get("candidate_title") or "Candidate",
             "vendor_name": v_name,
             "is_direct_applicant": is_direct,
-            "skills": c.get("skills") or [],
+            "skills": skills,
+            "telegram_chat_id": tg_chat_id,
+            "telegram_username": tg_user,
             "summary": c.get("summary") or "",
             "details": c.get("details") or {},
             "availability": c.get("availability") or "available",

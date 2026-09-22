@@ -187,7 +187,7 @@ def create_requisitions(tenants: dict, users: dict, profiles: dict) -> list:
             "title": "Senior Backend Engineer",
             "hm_email": "hm_eng@acme.com",
             "client": "Acme Corp",
-            "status": "Published",
+            "status": "Closed",
             "structured_role": {
                 "title": "Senior Backend Engineer",
                 "job_family": "Engineering / Platform",
@@ -215,7 +215,7 @@ def create_requisitions(tenants: dict, users: dict, profiles: dict) -> list:
             "title": "DevOps Engineer",
             "hm_email": "hm_eng@acme.com",
             "client": "Acme Corp",
-            "status": "Published",
+            "status": "Closed",
             "structured_role": {
                 "title": "DevOps Engineer",
                 "job_family": "Engineering / Infrastructure",
@@ -243,7 +243,7 @@ def create_requisitions(tenants: dict, users: dict, profiles: dict) -> list:
             "title": "UI/UX Designer",
             "hm_email": "hm_product@acme.com",
             "client": "Acme Corp",
-            "status": "Published",
+            "status": "Closed",
             "structured_role": {
                 "title": "UI/UX Designer",
                 "job_family": "Design",
@@ -271,7 +271,7 @@ def create_requisitions(tenants: dict, users: dict, profiles: dict) -> list:
             "title": "Senior Python Developer",
             "hm_email": "hm_tech@techvista.com",
             "client": "TechVista Solutions",
-            "status": "Published",
+            "status": "Closed",
             "structured_role": {
                 "title": "Senior Python Developer",
                 "job_family": "Engineering / Backend",

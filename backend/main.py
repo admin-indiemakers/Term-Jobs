@@ -516,19 +516,38 @@ def _auto_close_expired() -> None:
         for req in session.query(models.Requisition).filter(
             models.Requisition.status == schemas.RequisitionStatus.PUBLISHED.value
         ).all():
-            deadline = (req.structured_role or {}).get("submission_deadline")
-            if not deadline:
-                continue
-            try:
-                deadline_date = _dt.date.fromisoformat(str(deadline))
-            except ValueError:
-                continue
-            if deadline_date <= _dt.date.today():
-                sm = StateMachine(schemas.RequisitionStatus(req.status))
-                sm.transition(schemas.RequisitionStatus.CLOSED)
-                req.status = sm.status.value
+            sr = req.structured_role or {}
+            deadline = sr.get("submission_deadline")
+            ends_on = sr.get("ends_on")
+            today = _dt.date.today()
+            should_close = False
+
+            if deadline:
+                try:
+                    deadline_date = _dt.date.fromisoformat(str(deadline)[:10])
+                    if deadline_date < today:
+                        should_close = True
+                except ValueError:
+                    pass
+
+            if not should_close and ends_on:
+                try:
+                    ends_on_date = _dt.date.fromisoformat(str(ends_on)[:10])
+                    if ends_on_date < today:
+                        should_close = True
+                except ValueError:
+                    pass
+
+            if should_close:
+                try:
+                    sm = StateMachine(schemas.RequisitionStatus(req.status))
+                    sm.transition(schemas.RequisitionStatus.CLOSED)
+                    req.status = sm.status.value
+                except Exception:
+                    req.status = schemas.RequisitionStatus.CLOSED.value
                 session.commit()
                 req = None  # release for next iteration
+
 
 
 # --- company profile endpoints ----------------------------------------------
@@ -987,6 +1006,7 @@ def list_public_requisitions() -> list[dict]:
                 "duration": role.get("duration") or "6 months",
                 "currency": role.get("currency") or "INR",
                 "weekly_hours": role.get("weekly_hours") or 40,
+                "submission_deadline": role.get("submission_deadline") or None,
                 "range_min": role.get("range_vendor_min") or role.get("target_rate_min") or None,
                 "range_max": role.get("range_vendor_max") or role.get("target_rate_max") or None,
             }
@@ -1683,6 +1703,21 @@ def _async_trigger_top_candidate_outreach(requisition_id: str):
         logger.error(f"Failed in _async_trigger_top_candidate_outreach for {requisition_id}: {e}")
 
 
+# Subscribe to event bus so any internal publication triggers candidate matching & outreach
+try:
+    from modules.shared.events import bus
+    import threading
+
+    def _on_requisition_published_bus(requisition_id: str, **kwargs):
+        t = threading.Thread(target=_async_trigger_top_candidate_outreach, args=(requisition_id,), daemon=True)
+        t.start()
+
+    bus.on("requisition.published", _on_requisition_published_bus)
+except Exception as bus_err:
+    logger.warning(f"Could not bind requisition.published to outreach: {bus_err}")
+
+
+
 @app.get("/api/public/outreach/{token}/respond", response_class=HTMLResponse)
 def candidate_outreach_respond(token: str, action: str = "interested"):
     """
@@ -1795,7 +1830,14 @@ def get_superadmin_outreach_requisitions(current_user: User = Depends(get_curren
         raise HTTPException(status_code=403, detail="Super Admin authorization required.")
 
     from modules.shared.db import db
-    req_docs = list(db["requisitions"].find({}, {"id": 1, "title": 1, "company_name": 1, "status": 1, "skills": 1, "last_ai_outreach_at": 1, "ai_outreach_candidate_count": 1}).sort("created_at", -1))
+    req_docs = list(
+        db["requisitions"]
+        .find(
+            {"status": {"$in": ["Published", "Active", "Open"]}},
+            {"id": 1, "title": 1, "company_name": 1, "status": 1, "skills": 1, "last_ai_outreach_at": 1, "ai_outreach_candidate_count": 1}
+        )
+        .sort("created_at", -1)
+    )
     
     # Calculate outreach stats for each requisition
     outreach_counts = {}
@@ -2164,7 +2206,12 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
 
 @app.post("/requisitions/{requisition_id}/publish")
 @app.post("/api/requisitions/{requisition_id}/publish")
-def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
+def publish_requisition(
+    requisition_id: str,
+    body: ApproveByIn | None = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(get_current_user)
+) -> dict:
     _require_tenant(_get_requisition(requisition_id), current_user)
 
     db_req = _get_requisition(requisition_id)
@@ -2194,7 +2241,23 @@ def publish_requisition(requisition_id: str, body: ApproveByIn | None = None, cu
         notify_requisition_published(requisition_id)
     except Exception:  # noqa: BLE001
         pass
+
+    # Sync status to MongoDB
+    try:
+        from modules.shared.db import db
+        now_iso = _utcnow().isoformat()
+        db["requisitions"].update_one(
+            {"id": requisition_id},
+            {"$set": {
+                "status": schemas.RequisitionStatus.PUBLISHED.value,
+                "updated_at": now_iso,
+            }}
+        )
+    except Exception:
+        pass
+
     _cache.clear()
+    background_tasks.add_task(_async_trigger_top_candidate_outreach, requisition_id)
     return _requisition_dict(requisition_id)
 
 
