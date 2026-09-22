@@ -46,5 +46,9 @@ class Settings(BaseSettings):
     zoho_client_id: str = ""
     zoho_client_secret: str = ""
 
+    # Telegram Bot Alerts
+    telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    telegram_bot_username: str = os.getenv("TELEGRAM_BOT_USERNAME", "Termjobs_alertbot")
+
 
 settings = Settings()

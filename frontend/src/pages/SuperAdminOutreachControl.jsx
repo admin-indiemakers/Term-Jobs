@@ -43,6 +43,8 @@ export default function SuperAdminOutreachControl() {
     interested_count: 0,
     unavailable_count: 0,
     response_rate_percent: 0,
+    telegram_sent_count: 0,
+    telegram_connected_candidates: 0,
     auto_outreach_enabled: true
   });
   const [requisitions, setRequisitions] = useState([]);
@@ -58,7 +60,8 @@ export default function SuperAdminOutreachControl() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingReqDetails, setLoadingReqDetails] = useState(false);
   const [triggeringOutreach, setTriggeringOutreach] = useState(false);
-  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' | 'activity' | 'email_preview'
+  const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' | 'activity' | 'message_preview'
+  const [previewChannel, setPreviewChannel] = useState('telegram'); // 'telegram' | 'email'
   const [filterRsvp, setFilterRsvp] = useState('all'); // 'all' | 'interested' | 'unavailable' | 'pending'
   const [searchCandidate, setSearchCandidate] = useState('');
   const [notification, setNotification] = useState({ type: '', message: '' });
@@ -240,7 +243,20 @@ export default function SuperAdminOutreachControl() {
         </div>
 
         {/* Global Controls */}
-        <div className="flex items-center gap-3 self-start md:self-auto">
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
+          {/* Telegram Bot Direct Link */}
+          <a
+            href="https://t.me/Termjobs_alertbot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold hover:bg-sky-100 transition-all shadow-xs cursor-pointer text-decoration-none"
+            title="Open Telegram Bot"
+          >
+            <Send size={14} className="text-[#229ED9]" />
+            <span>Bot: @Termjobs_alertbot</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          </a>
+
           {/* Automated Dispatch Toggle */}
           <button
             type="button"
@@ -280,13 +296,13 @@ export default function SuperAdminOutreachControl() {
         </div>
       </div>
 
-      {/* KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Emails Sent */}
+      {/* 5 KPI Metric Cards: Total, Interested, Placed, Telegram Alerts, RSVP Rate */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+        {/* Total Outreach Sent */}
         <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2 mb-2">
             <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-              TOTAL EMAILS DISPATCHED
+              TOTAL OUTREACH SENT
             </span>
             <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-200/80 text-blue-700 flex items-center justify-center">
               <Mail size={16} />
@@ -296,7 +312,7 @@ export default function SuperAdminOutreachControl() {
             {stats.total_outreach_sent}
           </div>
           <div className="text-xs text-gray-500 font-medium">
-            Personalized HTML emails to Top 20 ranked candidates
+            Multi-channel candidate outreach across active roles
           </div>
         </div>
 
@@ -314,7 +330,7 @@ export default function SuperAdminOutreachControl() {
             {stats.interested_count}
           </div>
           <div className="text-xs text-gray-500 font-medium">
-            Clicked button & auto fast-tracked into recruiter pipeline
+            1-tap confirmed & fast-tracked to recruiter review
           </div>
         </div>
 
@@ -332,7 +348,25 @@ export default function SuperAdminOutreachControl() {
             {stats.unavailable_count}
           </div>
           <div className="text-xs text-gray-500 font-medium">
-            Talent memory auto-updated to prevent wasted recruiter outreach
+            Talent memory updated to prevent recruiter spam
+          </div>
+        </div>
+
+        {/* Telegram Alerts Delivered */}
+        <div className="bg-white border border-sky-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2 mb-2">
+            <span className="text-[11px] font-bold text-sky-700 uppercase tracking-wider flex items-center gap-1">
+              <Send size={11} className="text-[#229ED9]" /> TELEGRAM ALERTS
+            </span>
+            <div className="w-8 h-8 rounded-xl bg-sky-50 border border-sky-200/80 text-[#229ED9] flex items-center justify-center">
+              <Send size={16} />
+            </div>
+          </div>
+          <div className="text-3xl font-extrabold text-sky-800 tracking-tight my-1">
+            {stats.telegram_sent_count || 0}
+          </div>
+          <div className="text-xs text-sky-700/80 font-medium">
+            {stats.telegram_connected_candidates || 0} candidates linked on Telegram
           </div>
         </div>
 
@@ -465,8 +499,8 @@ export default function SuperAdminOutreachControl() {
                   : 'border-transparent text-gray-500 hover:text-gray-800'
               }`}
             >
-              <Mail size={15} />
-              <span>Interactive Email Design</span>
+              <Send size={15} className="text-[#229ED9]" />
+              <span>Interactive Alerts (Telegram & Email)</span>
             </button>
             <button
               type="button"
@@ -579,10 +613,23 @@ export default function SuperAdminOutreachControl() {
                           <td className="py-3 px-4">
                             <div className="font-bold text-gray-900 text-xs">{c.name}</div>
                             <div className="text-[11px] text-gray-500 font-mono">{c.email}</div>
-                            <div className="mt-1 flex items-center gap-1.5">
+                            <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200">
                                 {c.vendor_name || 'Direct Applicant'}
                               </span>
+                              {c.telegram_connected ? (
+                                <a
+                                  href={`https://t.me/${c.telegram_username || 'Termjobs_alertbot'}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-1.5 py-0.5 rounded bg-sky-50 text-[#229ED9] text-[10px] font-bold border border-sky-200 flex items-center gap-1 hover:bg-sky-100 transition-colors"
+                                  title="Open Candidate Telegram"
+                                >
+                                  <Send size={10} /> @{c.telegram_username || 'Telegram'}
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-gray-400">✉️ Email Only</span>
+                              )}
                               {c.experience_years && (
                                 <span className="text-[10px] text-gray-400">
                                   {c.experience_years} yrs exp
@@ -640,7 +687,7 @@ export default function SuperAdminOutreachControl() {
                             </div>
                           </td>
 
-                          {/* Live Email RSVP Status */}
+                          {/* Live Email & Telegram RSVP Status */}
                           <td className="py-3 px-4">
                             {!outreach ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
@@ -654,6 +701,11 @@ export default function SuperAdminOutreachControl() {
                                 <div className="text-[9.5px] text-emerald-600 font-medium mt-0.5">
                                   Fast-Tracked into Pipeline
                                 </div>
+                                {outreach.telegram_sent && (
+                                  <div className="text-[9.5px] text-sky-700 font-semibold flex items-center gap-1 mt-0.5">
+                                    <Send size={9} /> Telegram Alert Sent
+                                  </div>
+                                )}
                               </div>
                             ) : outreach.status === 'unavailable' ? (
                               <div>
@@ -671,8 +723,13 @@ export default function SuperAdminOutreachControl() {
                             ) : (
                               <div>
                                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                                  <Mail size={11} /> Email Sent • Awaiting RSVP
+                                  <Mail size={11} /> Outreach Sent • Awaiting RSVP
                                 </span>
+                                {outreach.telegram_sent && (
+                                  <div className="text-[9.5px] text-sky-700 font-semibold flex items-center gap-1 mt-0.5">
+                                    <Send size={9} /> Telegram Alert Sent
+                                  </div>
+                                )}
                                 {outreach.sent_at && (
                                   <div className="text-[9.5px] text-gray-400 mt-0.5">
                                     {new Date(outreach.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -715,77 +772,183 @@ export default function SuperAdminOutreachControl() {
           </div>
         )}
 
-        {/* Tab 2: Interactive Email Template Preview */}
+        {/* Tab 2: Interactive Outreach Preview (Telegram & Email) */}
         {activeTab === 'email_preview' && (
-          <div className="p-5 sm:p-8 bg-gray-100/70">
-            <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-              {/* Fake Email Client Chrome */}
-              <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between text-xs text-gray-500">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 rounded-full bg-red-400 inline-block" />
-                  <span className="w-3 h-3 rounded-full bg-amber-400 inline-block" />
-                  <span className="w-3 h-3 rounded-full bg-emerald-400 inline-block" />
-                  <span className="font-semibold text-gray-700 ml-2">Inbox Preview (Interactive Email)</span>
-                </div>
-                <span className="font-mono text-[11px]">from: TermJobs Talent Team &lt;talent@termjobs.com&gt;</span>
-              </div>
-
-              {/* Email Content Body */}
-              <div className="p-6 sm:p-8 space-y-6">
-                {/* Header */}
-                <div className="border-b border-gray-100 pb-5">
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-7 h-7 rounded-lg bg-black text-white font-extrabold flex items-center justify-center text-xs">
-                      TJ
-                    </div>
-                    <span className="font-extrabold text-sm text-gray-900 tracking-tight">TermJobs Executive Staffing</span>
-                  </div>
-                  <h2 className="text-xl font-extrabold text-gray-900">
-                    Exclusive Opportunity: {selectedReq?.title || 'Senior Software Engineer'} at {selectedReq?.company_name || 'Enterprise Partner'}
-                  </h2>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Matching your candidate talent profile on the TermJobs network.
-                  </p>
-                </div>
-
-                {/* Body Message */}
-                <div className="text-xs text-gray-700 leading-relaxed space-y-3">
-                  <p>Hi <strong>[Candidate Name]</strong>,</p>
-                  <p>
-                    Our AI talent matching engine identified your background as a <strong>Top 20 fit</strong> for an active requisition with <strong>{selectedReq?.company_name || 'our enterprise client'}</strong>.
-                  </p>
-                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 space-y-1.5 text-xs">
-                    <div><strong>Position:</strong> {selectedReq?.title || 'Open Role'}</div>
-                    <div><strong>Organization:</strong> {selectedReq?.company_name || 'Client Company'}</div>
-                    <div><strong>Key Skills:</strong> {(selectedReq?.skills || ['Cloud Architecture', 'Python', 'React']).join(', ')}</div>
-                    <div><strong>Status:</strong> Immediate Hiring Priority</div>
-                  </div>
-                  <p>
-                    Because candidate availability changes over time, please click one of the buttons below so our hiring managers know your current status:
-                  </p>
-                </div>
-
-                {/* THE TWO BIG INTERACTIVE BUTTONS */}
-                <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3 text-center">
-                  <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                    Interactive 1-Click RSVP
-                  </div>
-                  <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <div className="w-full sm:w-auto px-5 py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-700">
-                      <Check size={16} />
-                      <span>✓ Yes, I am Available & Interested</span>
-                    </div>
-                    <div className="w-full sm:w-auto px-5 py-3 rounded-xl bg-rose-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer hover:bg-rose-700">
-                      <X size={16} />
-                      <span>✕ No Longer Available / Placed Elsewhere</span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-gray-400 mt-2">
-                    No password or login required. Clicking instantly updates your profile and notifies the recruiting team.
-                  </p>
-                </div>
+          <div className="p-5 sm:p-8 bg-gray-100/70 space-y-6">
+            {/* Format Toggle */}
+            <div className="flex items-center justify-center">
+              <div className="bg-gray-200/80 p-1 rounded-xl flex items-center gap-1 shadow-inner">
+                <button
+                  type="button"
+                  onClick={() => setPreviewChannel('telegram')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    previewChannel === 'telegram'
+                      ? 'bg-white text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-black'
+                  }`}
+                >
+                  <Send size={14} className="text-[#229ED9]" />
+                  <span>Telegram Bot Alert</span>
+                  <span className="px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 text-[10px] font-mono">LIVE</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreviewChannel('email')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    previewChannel === 'email'
+                      ? 'bg-white text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-black'
+                  }`}
+                >
+                  <Mail size={14} className="text-gray-700" />
+                  <span>HTML Email Design</span>
+                </button>
               </div>
             </div>
+
+            {/* View 1: Telegram Bot Alert Interface */}
+            {previewChannel === 'telegram' && (
+              <div className="max-w-md mx-auto bg-[#0F141C] text-white rounded-3xl p-4 shadow-2xl border border-gray-800 animate-in fade-in zoom-in-95 duration-150">
+                {/* Telegram App Header Bar */}
+                <div className="flex items-center justify-between pb-3 border-b border-gray-800/80 mb-3 px-1 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-[#229ED9] text-white font-extrabold flex items-center justify-center text-xs shadow-xs">
+                      TJ
+                    </div>
+                    <div>
+                      <div className="font-bold text-white flex items-center gap-1 text-[13px]">
+                        TermJobs Career Alerts
+                        <CheckCircle2 size={13} className="text-[#229ED9] fill-[#229ED9]" />
+                      </div>
+                      <div className="text-[10px] text-gray-400">@Termjobs_alertbot • bot</div>
+                    </div>
+                  </div>
+                  <a
+                    href="https://t.me/Termjobs_alertbot"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold text-[#229ED9] hover:underline"
+                  >
+                    Open Bot ↗
+                  </a>
+                </div>
+
+                {/* Telegram Chat Bubble */}
+                <div className="bg-[#18222D] rounded-2xl p-4 text-xs leading-relaxed space-y-3 border border-gray-700/60 shadow-md">
+                  <div className="font-bold text-sm text-white flex items-center gap-1.5">
+                    💼 NEW MATCH: {selectedReq?.title || 'Senior Software Engineer'}
+                  </div>
+                  <div className="text-[11.5px] text-gray-300 space-y-1 bg-black/25 p-2.5 rounded-xl border border-white/5">
+                    <div>🏢 <strong>Organization:</strong> {selectedReq?.company_name || 'Enterprise Partner'}</div>
+                    <div>⭐ <strong>Match Fit:</strong> 96% Score</div>
+                    <div>🎯 <strong>Key Requirements:</strong> {(selectedReq?.skills || ['Python', 'FastAPI', 'Cloud']).join(', ')}</div>
+                    <div>💡 <strong>Why you matched:</strong> High overlap with verified candidate competencies</div>
+                  </div>
+
+                  <p className="text-[11.5px] text-gray-200">
+                    Hi <strong>Rahul</strong>! Our AI talent engine ranked your profile among the <strong>Top 20 best-fit candidates</strong> for this requisition.
+                  </p>
+                  <p className="text-[11px] text-gray-400">
+                    Because availability changes, please confirm your interest with 1 tap below:
+                  </p>
+
+                  {/* Telegram Inline Keyboard Buttons */}
+                  <div className="pt-2 space-y-2">
+                    <button
+                      type="button"
+                      className="w-full py-2.5 px-3 rounded-xl bg-[#2B5278] hover:bg-[#346394] text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors border border-sky-400/30 shadow-xs cursor-pointer"
+                    >
+                      <Check size={14} className="text-emerald-400" />
+                      <span>✅ Yes, I am Available & Interested</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full py-2.5 px-3 rounded-xl bg-[#2B5278]/70 hover:bg-[#2B5278] text-gray-300 hover:text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-colors border border-white/10 cursor-pointer"
+                    >
+                      <X size={14} className="text-rose-400" />
+                      <span>❌ No Longer Available / Placed</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Explanatory footer */}
+                <div className="mt-3 text-center text-[10.5px] text-gray-400 px-2">
+                  ⚡ <strong>Zero friction:</strong> Tapping either button triggers an instant callback update in MongoDB and notifies your hiring managers in real time.
+                </div>
+              </div>
+            )}
+
+            {/* View 2: HTML Email Design */}
+            {previewChannel === 'email' && (
+              <div className="max-w-2xl mx-auto bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                {/* Fake Email Client Chrome */}
+                <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center justify-between text-xs text-gray-500">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full bg-red-400 inline-block" />
+                    <span className="w-3 h-3 rounded-full bg-amber-400 inline-block" />
+                    <span className="w-3 h-3 rounded-full bg-emerald-400 inline-block" />
+                    <span className="font-semibold text-gray-700 ml-2">Inbox Preview (Interactive Email)</span>
+                  </div>
+                  <span className="font-mono text-[11px]">from: TermJobs Talent Team &lt;talent@termjobs.com&gt;</span>
+                </div>
+
+                {/* Email Content Body */}
+                <div className="p-6 sm:p-8 space-y-6">
+                  {/* Header */}
+                  <div className="border-b border-gray-100 pb-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-7 h-7 rounded-lg bg-black text-white font-extrabold flex items-center justify-center text-xs">
+                        TJ
+                      </div>
+                      <span className="font-extrabold text-sm text-gray-900 tracking-tight">TermJobs Executive Staffing</span>
+                    </div>
+                    <h2 className="text-xl font-extrabold text-gray-900">
+                      Exclusive Opportunity: {selectedReq?.title || 'Senior Software Engineer'} at {selectedReq?.company_name || 'Enterprise Partner'}
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Matching your candidate talent profile on the TermJobs network.
+                    </p>
+                  </div>
+
+                  {/* Body Message */}
+                  <div className="text-xs text-gray-700 leading-relaxed space-y-3">
+                    <p>Hi <strong>[Candidate Name]</strong>,</p>
+                    <p>
+                      Our AI talent matching engine identified your background as a <strong>Top 20 fit</strong> for an active requisition with <strong>{selectedReq?.company_name || 'our enterprise client'}</strong>.
+                    </p>
+                    <div className="p-4 bg-gray-50 rounded-xl border border-gray-200/80 space-y-1.5 text-xs">
+                      <div><strong>Position:</strong> {selectedReq?.title || 'Open Role'}</div>
+                      <div><strong>Organization:</strong> {selectedReq?.company_name || 'Client Company'}</div>
+                      <div><strong>Key Skills:</strong> {(selectedReq?.skills || ['Cloud Architecture', 'Python', 'React']).join(', ')}</div>
+                      <div><strong>Status:</strong> Immediate Hiring Priority</div>
+                    </div>
+                    <p>
+                      Because candidate availability changes over time, please click one of the buttons below so our hiring managers know your current status:
+                    </p>
+                  </div>
+
+                  {/* THE TWO BIG INTERACTIVE BUTTONS */}
+                  <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200 space-y-3 text-center">
+                    <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                      Interactive 1-Click RSVP
+                    </div>
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                      <div className="w-full sm:w-auto px-5 py-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer hover:bg-emerald-700">
+                        <Check size={16} />
+                        <span>✓ Yes, I am Available & Interested</span>
+                      </div>
+                      <div className="w-full sm:w-auto px-5 py-3 rounded-xl bg-rose-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-2 cursor-pointer hover:bg-rose-700">
+                        <X size={16} />
+                        <span>✕ No Longer Available / Placed Elsewhere</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-2">
+                      No password or login required. Clicking instantly updates your profile and notifies the recruiting team.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

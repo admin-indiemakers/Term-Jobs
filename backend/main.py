@@ -1881,7 +1881,7 @@ def update_superadmin_outreach_settings(
 
 @app.get("/api/superadmin/outreach/activity")
 def get_superadmin_outreach_activity(current_user: User = Depends(get_current_user)) -> list:
-    """Recent live email outreach activity feed for Super Admin."""
+    """Recent live email & Telegram outreach activity feed for Super Admin."""
     if current_user.role != "Super Admin":
         raise HTTPException(status_code=403, detail="Super Admin authorization required.")
     from modules.shared.db import db
@@ -1889,6 +1889,86 @@ def get_superadmin_outreach_activity(current_user: User = Depends(get_current_us
     for r in records:
         r["_id"] = str(r["_id"])
     return records
+
+
+# --- Telegram Bot Endpoints & Lifecycle ---
+
+@app.on_event("startup")
+async def on_app_startup():
+    """Start background services on app launch."""
+    try:
+        from modules.candidate.telegram_service import start_telegram_polling
+        start_telegram_polling()
+        print("[APP STARTUP] Telegram Bot long-polling initialized successfully.")
+    except Exception as exc:
+        print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
+
+
+@app.on_event("shutdown")
+async def on_app_shutdown():
+    """Cleanly tear down background tasks."""
+    try:
+        from modules.candidate.telegram_service import stop_telegram_polling
+        stop_telegram_polling()
+    except Exception:
+        pass
+
+
+@app.get("/api/telegram/status")
+async def get_telegram_status_endpoint():
+    """Returns real-time status of Telegram Bot connection."""
+    from modules.candidate.telegram_service import get_bot_info, get_telegram_bot_username
+    info = await get_bot_info()
+    username = get_telegram_bot_username()
+    return {
+        "bot_username": username,
+        "bot_link": f"https://t.me/{username}",
+        "connected": info.get("ok", False),
+        "details": info.get("result", {})
+    }
+
+
+@app.post("/api/telegram/webhook")
+async def telegram_webhook_endpoint(request: Request):
+    """Optional webhook endpoint for Telegram updates (in addition to long-polling)."""
+    try:
+        update = await request.json()
+        from modules.candidate.telegram_service import process_telegram_update
+        await process_telegram_update(update)
+        return {"ok": True}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.post("/api/telegram/send-test")
+async def telegram_send_test_endpoint(payload: dict, current_user: User = Depends(get_current_user)):
+    """Allows Super Admin to test send an interactive Telegram alert card."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    chat_id = payload.get("chat_id")
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="chat_id is required.")
+    
+    from modules.candidate.telegram_service import send_candidate_requisition_alert
+    sample_req = {
+        "id": "DEMO-REQ-001",
+        "title": "Lead Software Architect",
+        "company_name": "TermJobs Enterprise",
+        "skills": ["Python", "FastAPI", "Microservices", "Cloud"],
+    }
+    sample_cand = {
+        "candidate_name": current_user.name or "Administrator",
+        "id": current_user.id
+    }
+    res = await send_candidate_requisition_alert(
+        chat_id=chat_id,
+        requisition=sample_req,
+        candidate=sample_cand,
+        outreach_token="test_demo_token",
+        match_score=96.0,
+        match_reasons=["Direct Skill Match: Python, FastAPI", "Seniority matches job criteria"]
+    )
+    return res
 
 
 @app.get("/requisitions/{requisition_id}")

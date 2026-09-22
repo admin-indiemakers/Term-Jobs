@@ -224,6 +224,63 @@ def dispatch_outreach_to_top_candidates(
 
         delivery_status = "sent" if email_result.get("status") == "success" else "simulated_sent"
 
+        # Check if candidate has Telegram connected
+        telegram_chat_id = cand.get("telegram_chat_id")
+        telegram_username = cand.get("telegram_username")
+        if not telegram_chat_id:
+            c_doc = db["candidates"].find_one({
+                "$or": [
+                    {"id": cand["id"]},
+                    {"candidate_email": email.lower()}
+                ]
+            })
+            if c_doc:
+                telegram_chat_id = c_doc.get("telegram_chat_id")
+                telegram_username = c_doc.get("telegram_username")
+
+        telegram_sent = False
+        telegram_result = None
+        if telegram_chat_id:
+            try:
+                import asyncio
+                from modules.candidate.telegram_service import send_candidate_requisition_alert
+                
+                # Check if running in async event loop
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+
+                if loop and loop.is_running():
+                    asyncio.create_task(
+                        send_candidate_requisition_alert(
+                            chat_id=telegram_chat_id,
+                            requisition=req_data,
+                            candidate=cand,
+                            outreach_token=token,
+                            match_score=cand["match_score"],
+                            match_reasons=cand.get("match_reasons", [])
+                        )
+                    )
+                    telegram_result = {"status": "dispatched", "chat_id": telegram_chat_id}
+                    telegram_sent = True
+                else:
+                    tg_res = asyncio.run(
+                        send_candidate_requisition_alert(
+                            chat_id=telegram_chat_id,
+                            requisition=req_data,
+                            candidate=cand,
+                            outreach_token=token,
+                            match_score=cand["match_score"],
+                            match_reasons=cand.get("match_reasons", [])
+                        )
+                    )
+                    telegram_result = tg_res
+                    telegram_sent = bool(tg_res.get("ok"))
+            except Exception as tg_err:
+                logger.warning(f"Telegram dispatch error: {tg_err}")
+                telegram_result = {"status": "error", "error": str(tg_err)}
+
         # Record outreach entry
         now = _utcnow_iso()
         outreach_doc = {
@@ -241,6 +298,11 @@ def dispatch_outreach_to_top_candidates(
             "rank": cand.get("rank"),
             "status": delivery_status,
             "email_delivery_result": email_result,
+            "telegram_chat_id": telegram_chat_id or None,
+            "telegram_username": telegram_username or None,
+            "telegram_sent": telegram_sent,
+            "telegram_delivery_result": telegram_result,
+            "channels": ["telegram", "email"] if telegram_sent else ["email"],
             "html_preview": html_body,
             "created_at": now,
             "sent_at": now,
@@ -257,6 +319,9 @@ def dispatch_outreach_to_top_candidates(
         sent_count += 1
         cand["outreach_status"] = delivery_status
         cand["outreach_token"] = token
+        cand["telegram_connected"] = bool(telegram_chat_id)
+        cand["telegram_sent"] = telegram_sent
+        cand["telegram_username"] = telegram_username
         outreach_results.append(cand)
 
     # Record scan log in requisition document
@@ -386,13 +451,17 @@ def handle_candidate_rsvp(token: str, action: str) -> Dict[str, Any]:
 
 
 def get_outreach_stats_summary() -> Dict[str, Any]:
-    """Computes global email outreach statistics for the Super Admin control panel."""
+    """Computes global email and Telegram outreach statistics for the Super Admin control panel."""
     all_outreach = list(db["candidate_outreach"].find({}))
     total_sent = len(all_outreach)
     interested = sum(1 for o in all_outreach if o.get("status") == "interested")
     unavailable = sum(1 for o in all_outreach if o.get("status") == "unavailable")
     declined = sum(1 for o in all_outreach if o.get("status") == "declined")
     pending = total_sent - (interested + unavailable + declined)
+    telegram_sent_count = sum(1 for o in all_outreach if o.get("telegram_sent") is True)
+
+    # Count candidates with connected Telegram
+    telegram_connected_candidates = db["candidates"].count_documents({"telegram_chat_id": {"$exists": True, "$ne": None, "$ne": ""}})
 
     response_rate = round(((interested + unavailable + declined) / max(total_sent, 1)) * 100, 1)
 
@@ -401,17 +470,21 @@ def get_outreach_stats_summary() -> Dict[str, Any]:
 
     return {
         "total_emails_sent": total_sent,
+        "total_outreach_sent": total_sent,
         "interested_count": interested,
         "unavailable_count": unavailable,
         "declined_count": declined,
         "pending_count": pending,
+        "telegram_sent_count": telegram_sent_count,
+        "telegram_connected_candidates": telegram_connected_candidates,
+        "response_rate_percent": response_rate,
         "response_rate_pct": response_rate,
         "requisitions_covered": distinct_reqs,
     }
 
 
 def get_requisition_outreach_details(requisition_id: str) -> Dict[str, Any]:
-    """Returns the Top 20 ranked candidates and their live email outreach status for a requisition."""
+    """Returns the Top 20 ranked candidates and their live email & Telegram outreach status."""
     req_data = get_requisition_data(requisition_id)
     if not req_data:
         return {"error": "Requisition not found"}
@@ -428,13 +501,26 @@ def get_requisition_outreach_details(requisition_id: str) -> Dict[str, Any]:
     for cand in ranked:
         email = (cand.get("candidate_email") or "").lower()
         rec = outreach_records.get(email)
+
+        # Check Telegram linkage in DB
+        c_doc = db["candidates"].find_one({"$or": [{"id": cand.get("id")}, {"candidate_email": email}]})
+        telegram_chat_id = c_doc.get("telegram_chat_id") if c_doc else None
+        telegram_username = c_doc.get("telegram_username") if c_doc else None
+
+        cand["telegram_connected"] = bool(telegram_chat_id)
+        cand["telegram_username"] = telegram_username
+
         if rec:
             cand["outreach_status"] = rec.get("status", "sent")
             cand["outreach_sent_at"] = rec.get("sent_at")
             cand["outreach_responded_at"] = rec.get("responded_at")
             cand["outreach_token"] = rec.get("token")
+            cand["telegram_sent"] = bool(rec.get("telegram_sent"))
+            cand["outreach"] = rec
         else:
             cand["outreach_status"] = "not_sent"
+            cand["telegram_sent"] = False
+            cand["outreach"] = None
 
     return {
         "requisition": req_data,

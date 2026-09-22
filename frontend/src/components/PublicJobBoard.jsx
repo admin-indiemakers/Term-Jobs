@@ -661,7 +661,7 @@ export default function PublicJobBoard({ onBackToHome }) {
                     {submitSuccess.message || `Your application for '${selectedJob.title}' has been successfully forwarded to ${selectedJob.company_name}.`}
                   </p>
 
-                  <div className="bg-[#F5F5F2] border border-[#EAEAE6] rounded-2xl p-5 mb-8 text-left">
+                  <div className="bg-[#F5F5F2] border border-[#EAEAE6] rounded-2xl p-5 mb-5 text-left">
                     <div className="text-xs font-bold text-[#8A8A85] uppercase tracking-wider mb-2">Application Summary</div>
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       <div>
@@ -681,6 +681,26 @@ export default function PublicJobBoard({ onBackToHome }) {
                         <span className="font-semibold text-emerald-700">{submitSuccess.match_score || 85}% ({submitSuccess.recommendation || 'Strong'})</span>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Connect Telegram Callout */}
+                  <div className="p-5 bg-sky-50/80 border border-sky-200 rounded-2xl mb-7 text-left">
+                    <div className="flex items-center gap-2 text-sky-950 font-bold text-sm mb-1.5">
+                      <Send size={16} className="text-[#229ED9]" />
+                      <span>Get Instant Job Alerts with 1-Tap RSVP in Telegram</span>
+                    </div>
+                    <p className="text-xs text-sky-800 leading-relaxed mb-3.5">
+                      Link your Telegram to get matched opportunities delivered directly to your chat. You can reply with <strong>"Interested"</strong> or <strong>"Not Interested"</strong> in 1 tap!
+                    </p>
+                    <a
+                      href={`https://t.me/Termjobs_alertbot?start=${submitSuccess.candidate_id || submitSuccess.application_ref || ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs rounded-xl shadow-xs transition-all text-decoration-none cursor-pointer"
+                    >
+                      <Send size={14} />
+                      <span>Connect Telegram (@Termjobs_alertbot)</span>
+                    </a>
                   </div>
 
                   <div className="flex items-center justify-center gap-3">
@@ -1003,9 +1023,30 @@ export default function PublicJobBoard({ onBackToHome }) {
                     <CheckCircle2 size={32} />
                   </div>
                   <h4 className="text-xl font-extrabold text-[#0A0A0A] mb-2">Registration Complete!</h4>
-                  <p className="text-xs text-[#666660] max-w-md mx-auto leading-relaxed mb-6">
+                  <p className="text-xs text-[#666660] max-w-md mx-auto leading-relaxed mb-5">
                     {poolSuccess.message || 'Your resume and details have been registered into the candidate pool.'}
                   </p>
+
+                  {/* Connect Telegram Callout */}
+                  <div className="p-4 bg-sky-50/80 border border-sky-200 rounded-2xl mb-6 text-left max-w-md mx-auto">
+                    <div className="flex items-center gap-2 text-sky-950 font-bold text-xs mb-1">
+                      <Send size={15} className="text-[#229ED9]" />
+                      <span>Connect Telegram for Instant 1-Tap Job Matches</span>
+                    </div>
+                    <p className="text-[11.5px] text-sky-800 leading-relaxed mb-3">
+                      Receive VIP alerts in Telegram when new positions match your profile. Confirm with <strong>"Interested"</strong> or <strong>"Not Interested"</strong> buttons instantly.
+                    </p>
+                    <a
+                      href={`https://t.me/Termjobs_alertbot?start=${poolSuccess.candidate_id || poolSuccess.id || ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3.5 bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs rounded-xl shadow-xs transition-all text-decoration-none cursor-pointer"
+                    >
+                      <Send size={13} />
+                      <span>Connect to @Termjobs_alertbot</span>
+                    </a>
+                  </div>
+
                   <button
                     onClick={() => {
                       setShowGeneralPoolModal(false);
