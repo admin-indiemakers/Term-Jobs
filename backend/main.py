@@ -100,32 +100,34 @@ async def vercel_routing_middleware(request: Request, call_next):
         request.scope["root_path"] = ""
 
     origin = request.headers.get("origin")
-    req_headers = request.headers.get("access-control-request-headers", "*")
+    req_headers = request.headers.get("access-control-request-headers")
+    default_headers = "Authorization, Content-Type, Accept, Origin, X-Requested-With, X-CSRF-Token, Cache-Control, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version"
+    allowed_headers = req_headers if req_headers and req_headers.strip() and req_headers.strip() != "*" else default_headers
 
-    print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | RequestedHeaders: {req_headers}")
+    print(f" [CORS LOG] {request.method} {request.url.path} | Origin: {origin} | AllowedHeaders: {allowed_headers}")
 
     # Handle OPTIONS preflight explicitly to prevent Vercel / serverless CORS blocking
     if request.method == "OPTIONS":
         from fastapi.responses import Response
-        print(f" [CORS PREFLIGHT OK] Returning 200 for OPTIONS preflight from Origin: {origin}")
+        res_origin = origin if origin else "*"
         return Response(
             status_code=200,
             headers={
-                "Access-Control-Allow-Origin": origin or "*",
+                "Access-Control-Allow-Origin": res_origin,
                 "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": req_headers,
+                "Access-Control-Allow-Headers": allowed_headers,
                 "Access-Control-Allow-Credentials": "true",
             },
         )
 
     response = await call_next(request)
 
-    # Ensure CORS headers on all HTTP responses for any origin (including Vercel branch previews)
+    # Ensure CORS headers on all HTTP responses for any origin
     if origin:
         response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Credentials"] = "true"
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
-        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = allowed_headers
 
     return response
 

@@ -1,31 +1,33 @@
 const getApiBaseUrl = () => {
-  // 1. If explicit backend URL is provided via environment variables (e.g. Vercel backend URL), prioritize it
-  const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
-  if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
-    const trimmed = envUrl.trim().replace(/\/+$/, '');
-    // If running on a remote public domain, do not accidentally use localhost
-    if (typeof window !== 'undefined') {
-      const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-      if (!isLocal && (trimmed.includes('localhost') || trimmed.includes('127.0.0.1'))) {
-        return window.location.origin;
-      }
-    }
-    return trimmed;
-  }
-
-  // 2. Browser runtime checks
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    // Always route to local backend when running on localhost
+
+    // 1. Localhost development always points directly to local uvicorn backend
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `http://${hostname}:8000`;
     }
-    // If running on a Vercel deployment and no custom env is set, connect directly to production backend
-    if (hostname.endsWith('.vercel.app') && !hostname.includes('term-jobs-j8ja-seven')) {
-      return 'https://term-jobs-j8ja-seven.vercel.app';
+
+    // 2. On production domain (termjobs.in, www.termjobs.in, or termjobs.vercel.app),
+    // use same-origin relative path '' so Vercel rewrites proxy all /api requests without CORS
+    if (
+      hostname === 'termjobs.in' ||
+      hostname === 'www.termjobs.in' ||
+      hostname === 'termjobs.vercel.app'
+    ) {
+      return '';
     }
-    // When accessing via ngrok or rewrite proxy
-    return window.location.origin;
+
+    // 3. If explicit backend URL is provided via environment variables, use it
+    const envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL;
+    if (envUrl && typeof envUrl === 'string' && envUrl.trim()) {
+      const trimmed = envUrl.trim().replace(/\/+$/, '');
+      if (!trimmed.includes('localhost') && !trimmed.includes('127.0.0.1')) {
+        return trimmed;
+      }
+    }
+
+    // 4. Default for production preview deployments: use relative proxy ''
+    return '';
   }
 
   return 'http://localhost:8000';
