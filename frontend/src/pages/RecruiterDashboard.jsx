@@ -6050,24 +6050,42 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
 
                         {/* Action Links & 1-Click Sync Bar */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingTop: '10px', borderTop: '1px solid #f1f5f9' }}>
-                          {inv.calendar_links?.cal_booking_url && (
-                            <a
-                              href={inv.calendar_links.cal_booking_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{
-                                fontSize: '0.8rem',
-                                fontWeight: 700,
-                                color: '#2563eb',
-                                textDecoration: 'none',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                              }}
-                            >
-                              🔗 Open Cal.com Live Booking Link ↗
-                            </a>
-                          )}
+                          {(() => {
+                            const origin = typeof window !== 'undefined' ? window.location.origin : 'https://termjobs.in';
+                            const link = (inv.meeting_link && !inv.meeting_link.includes('cal.com'))
+                              ? inv.meeting_link
+                              : (inv.round_id || inv.id ? `${origin}/interview/room/${inv.round_id || inv.id}` : (inv.calendar_links?.cal_booking_url || ''));
+                            return (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                {link && (
+                                  <a
+                                    href={link}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{
+                                      fontSize: '0.8rem',
+                                      fontWeight: 800,
+                                      color: '#ffffff',
+                                      background: '#2563eb',
+                                      textDecoration: 'none',
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: '5px',
+                                      padding: '6px 12px',
+                                      borderRadius: '7px',
+                                    }}
+                                  >
+                                    🎥 Video Room ↗
+                                  </a>
+                                )}
+                                {inv.candidate_passcode && (
+                                  <span style={{ fontSize: '0.78rem', background: '#f8fafc', border: '1px solid #cbd5e1', padding: '4px 8px', borderRadius: '6px', color: '#0f172a', fontWeight: 700 }}>
+                                    🔑 <code>{inv.candidate_passcode}</code>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
 
                           {inv.calendar_links && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

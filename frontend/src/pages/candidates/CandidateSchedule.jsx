@@ -200,6 +200,7 @@ export default function CandidateSchedule() {
   const [decision, setDecision] = useState('Accepted');
   const [remark, setRemark] = useState('');
   const [copied, setCopied] = useState(false);
+  const [copiedPasscode, setCopiedPasscode] = useState(false);
   const [editingDecision, setEditingDecision] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -223,7 +224,18 @@ export default function CandidateSchedule() {
 
   useEffect(load, [candidateId, token]);
 
-  const meetingLink = interview?.meeting_link || interview?.calendar_links?.cal_booking_url || '';
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://termjobs.in';
+  const meetingLink = useMemo(() => {
+    let raw = interview?.meeting_link || interview?.calendar_links?.cal_booking_url || '';
+    if (!raw || raw.includes('cal.com')) {
+      const rid = interview?.round_id || interview?.id;
+      if (rid) {
+        return `${currentOrigin}/interview/room/${rid}`;
+      }
+    }
+    return raw;
+  }, [interview, currentOrigin]);
+
   const isOver = interview?.status === 'COMPLETED';
   const recordedDecision = isOver ? interview?.decision || '' : '';
 
@@ -463,10 +475,16 @@ export default function CandidateSchedule() {
 
                   {/* Meeting link */}
                   <div style={{ background: INK, borderRadius: '16px', padding: '20px', marginTop: '18px' }}>
-                    <div style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.16em', marginBottom: '10px' }}>
-                      Meeting Link
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                      <div style={{ fontSize: '0.66rem', fontWeight: 800, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: '0.16em' }}>
+                        🌐 Native Video Interview Room
+                      </div>
+                      <span style={{ fontSize: '0.7rem', color: '#86efac', background: 'rgba(34,197,94,0.15)', padding: '2px 8px', borderRadius: '999px', fontWeight: 700 }}>
+                        {currentOrigin.replace(/^https?:\/\//, '')}
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: interview.candidate_passcode ? '12px' : '14px' }}>
                       <input
                         type="text"
                         readOnly
@@ -478,10 +496,34 @@ export default function CandidateSchedule() {
                         onClick={copyLink}
                         style={{ padding: '10px 16px', background: PAPER, color: INK, border: 0, borderRadius: '10px', fontSize: '0.8rem', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap' }}
                       >
-                        {copied ? '✓ Copied' : 'Copy'}
+                        {copied ? '✓ Copied' : 'Copy Link'}
                       </button>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '14px' }}>
+
+                    {/* Candidate Passcode if available */}
+                    {interview.candidate_passcode && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '10px', padding: '8px 14px', marginBottom: '14px' }}>
+                        <span style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.7)', fontWeight: 600 }}>Candidate Access Passcode:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <code style={{ fontSize: '0.92rem', color: '#facc15', fontWeight: 800, letterSpacing: '0.06em' }}>
+                            {interview.candidate_passcode}
+                          </code>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(interview.candidate_passcode);
+                              setCopiedPasscode(true);
+                              setTimeout(() => setCopiedPasscode(false), 2000);
+                            }}
+                            style={{ background: 'rgba(255,255,255,0.15)', border: 0, color: PAPER, borderRadius: '6px', padding: '3px 8px', fontSize: '0.72rem', cursor: 'pointer', fontWeight: 700 }}
+                          >
+                            {copiedPasscode ? '✓' : 'Copy'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
                       {meetingLink && (
                         <a
                           href={meetingLink}
@@ -489,7 +531,7 @@ export default function CandidateSchedule() {
                           rel="noopener noreferrer"
                           style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: PAPER, color: INK, padding: '9px 18px', borderRadius: '10px', fontSize: '0.84rem', fontWeight: 800, textDecoration: 'none' }}
                         >
-                          Join Meeting ↗
+                          🎥 Join Video Room ↗
                         </a>
                       )}
                       {interview.calendar_links?.google && (

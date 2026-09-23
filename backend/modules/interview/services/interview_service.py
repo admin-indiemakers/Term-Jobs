@@ -1,14 +1,122 @@
 """
-Interview Scheduling business logic and Cal.com / Cal.diy Integration.
+Interview Scheduling business logic and Hosted Domain Meeting Room Integration.
 """
+import os
+import random
+import string
+import time
+import jwt
 import urllib.parse
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 import uuid
 
 from modules.shared.db import get_session, db
-from modules.interview.domain.models import InterviewSchedule, InterviewStatus
+from modules.interview.domain.models import InterviewSchedule, InterviewStatus, InterviewRound, InterviewChatMessage
 from modules.calendar.domain.models import CalendarConfig
+from modules.candidate.domain.models import CandidateSubmission
+
+
+def _generate_candidate_passcode() -> str:
+    """Generate a clean, memorable candidate interview passcode like TJ-INT-5829."""
+    digits = "".join(random.choices(string.digits, k=4))
+    return f"TJ-INT-{digits}"
+
+
+def send_interview_invitation_email(
+    candidate_name: str,
+    candidate_email: str,
+    requisition_title: str,
+    company_name: str,
+    round_name: str,
+    scheduled_date: str,
+    scheduled_time: str,
+    duration_minutes: int,
+    meeting_link: str,
+    candidate_portal_link: str,
+    passcode: str,
+    instructions: str = "",
+) -> Dict[str, Any]:
+    """Sends an official HTML interview invitation with hosted domain meeting link & passcode."""
+    from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
+    
+    subject = f"Interview Invitation: {round_name} for {requisition_title} at {company_name}"
+    
+    html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <tr>
+      <td style="padding: 24px 32px; background-color: #0f172a; text-align: left;">
+        <span style="font-size: 20px; font-weight: 800; color: #ffffff; letter-spacing: -0.5px;">TermJobs</span>
+        <span style="font-size: 11px; font-weight: 700; color: #38bdf8; background: rgba(56,189,248,0.15); padding: 3px 8px; border-radius: 6px; margin-left: 8px; text-transform: uppercase;">Interview Portal</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">Interview Invitation Confirmed</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+          Hi <strong>{candidate_name}</strong>,<br/>
+          You have been scheduled for <strong>{round_name}</strong> for the <strong>{requisition_title}</strong> role at <strong>{company_name}</strong>.
+        </p>
+
+        <!-- Meeting Details Box -->
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="6">
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; width: 35%;">Role</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{requisition_title}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Hiring Company</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">{company_name}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Date</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">📅 {scheduled_date or 'To Be Decided'}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Scheduled Time</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">⏰ {scheduled_time or 'TBD'} ({duration_minutes} minutes)</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Candidate Passcode</td>
+              <td style="font-size: 16px; color: #059669; font-weight: 900; font-family: monospace;">🔑 {passcode}</td>
+            </tr>
+          </table>
+        </div>
+
+        <!-- Join Video Room Button -->
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="{meeting_link}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(15,23,42,0.25);">
+            🎥 Join TermJobs Video Interview Room
+          </a>
+        </div>
+
+        <!-- Secondary Portal Link -->
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="{candidate_portal_link}" target="_blank" style="color: #2563eb; font-size: 13px; font-weight: 700; text-decoration: underline;">
+            Or log in to your Candidate Interview Portal
+          </a>
+        </div>
+
+        {f'<div style="background-color: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 6px; font-size: 13px; color: #92400e; margin-bottom: 20px;"><strong>Special Instructions:</strong> {instructions}</div>' if instructions else ''}
+
+        <div style="font-size: 12px; color: #94a3b8; line-height: 1.5; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+          Please join a few minutes prior to the scheduled time using Google Chrome, Safari, or Microsoft Edge. Grant camera and microphone access when prompted.
+        </div>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 16px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 11px; color: #94a3b8;">
+        TermJobs AI Talent & Interview Platform &copy; {datetime.now().year}
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    return send_email_via_gmail(candidate_email, subject, html)
 
 
 def normalize_cal_url(raw_input: str, event_slug: str = "30min") -> tuple[str, str]:
@@ -64,9 +172,9 @@ def get_company_cal_config(tenant_id: str) -> Dict[str, Any]:
     }
 
 
-def generate_calendar_links(interview: Dict[str, Any]) -> Dict[str, str]:
+def generate_calendar_links(interview: Dict[str, Any], base_url: Optional[str] = None) -> Dict[str, str]:
     """
-    Generates Cal.com dynamic booking URL + 1-click fallback sync links.
+    Generates hosted TermJobs domain video room links + 1-click fallback sync links.
     """
     confirmed = interview.get("confirmed_slot") or (interview.get("proposed_slots") and interview["proposed_slots"][0]) or {}
     date = confirmed.get("date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
@@ -77,33 +185,27 @@ def generate_calendar_links(interview: Dict[str, Any]) -> Dict[str, str]:
     cand_email = interview.get("candidate_email", "")
     req_title = interview.get("requisition_title", "Role")
     
-    # 1. Cal.com Dynamic Booking URL
-    tenant_id = interview.get("tenant_id", "")
-    cal_cfg = get_company_cal_config(tenant_id)
-    raw_cal = cal_cfg.get("cal_link", "https://cal.com/")
-    slug = cal_cfg.get("event_slug", "30min")
-    embed_path, cal_path = normalize_cal_url(raw_cal, slug)
-        
-    cal_params = {
-        "name": cand_name,
-        "email": cand_email,
-        "notes": f"Interview for {req_title}. {interview.get('notes', '')}".strip(),
-    }
-    cal_booking_url = f"{cal_path}?{urllib.parse.urlencode(cal_params)}"
+    # Priority: Native TermJobs hosted room on our domain
+    raw_base = (base_url or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    round_identifier = interview.get("round_id") or interview.get("id") or "active"
     
-    # Universal fallback web intents
-    title = f"{interview.get('interview_round', 'Interview')}: {cand_name} - {req_title}"
-    location = interview.get("meeting_link") or interview.get("platform") or "Cal.com Video Room"
+    meeting_link = interview.get("meeting_link")
+    if not meeting_link or "cal.com" in meeting_link.lower():
+        meeting_link = f"{raw_base}/interview/room/{round_identifier}"
+    
+    location = meeting_link
     
     desc_lines = [
         f"Role: {req_title}",
         f"Candidate: {cand_name} ({cand_email})",
         f"Interviewer: {interview.get('interviewer_name', '')} ({interview.get('interviewer_email', '')})",
         f"Company: {interview.get('company_name', 'Company')}",
-        f"Cal Booking Link: {cal_booking_url}",
+        f"TermJobs Video Room: {meeting_link}",
     ]
-    if interview.get("meeting_link"):
-        desc_lines.append(f"Meeting Link: {interview.get('meeting_link')}")
+    if interview.get("candidate_passcode"):
+        desc_lines.append(f"Candidate Passcode: {interview.get('candidate_passcode')}")
+    if interview.get("candidate_portal_link"):
+        desc_lines.append(f"Candidate Portal: {interview.get('candidate_portal_link')}")
     if interview.get("notes"):
         desc_lines.append(f"Notes: {interview.get('notes')}")
         
@@ -117,7 +219,7 @@ def generate_calendar_links(interview: Dict[str, Any]) -> Dict[str, str]:
     
     google_params = {
         "action": "TEMPLATE",
-        "text": title,
+        "text": f"{interview.get('interview_round', 'Interview')}: {cand_name} - {req_title}",
         "details": description,
         "location": location,
         "dates": f"{start_dt_str}/{end_dt_str}",
@@ -127,7 +229,7 @@ def generate_calendar_links(interview: Dict[str, Any]) -> Dict[str, str]:
     outlook_params = {
         "path": "/calendar/action/compose",
         "rru": "addevent",
-        "subject": title,
+        "subject": f"{interview.get('interview_round', 'Interview')}: {cand_name} - {req_title}",
         "body": description,
         "location": location,
         "startdt": f"{date}T{start_time}:00",
@@ -138,12 +240,14 @@ def generate_calendar_links(interview: Dict[str, Any]) -> Dict[str, str]:
     ics_url = f"/api/interviews/{interview.get('id')}/invite.ics"
     
     return {
-        "cal_booking_url": cal_booking_url,
-        "cal_path": cal_path,
+        "meeting_link": meeting_link,
+        "meeting_url": meeting_link,
+        "cal_booking_url": meeting_link,
+        "cal_path": meeting_link,
         "google": google_url,
         "outlook": outlook_url,
         "ics": ics_url,
-        "provider": "cal",
+        "provider": "termjobs_hosted",
     }
 
 
@@ -159,21 +263,24 @@ def generate_ics_content(interview: Dict[str, Any]) -> str:
     end_dt = f"{clean_date}T{end_time.replace(':', '')}00"
     now_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     
-    summary = f"{interview.get('interview_round', 'Interview')} - {interview.get('candidate_name', 'Candidate')} ({interview.get('requisition_title', 'Role')})"
-    location = interview.get("meeting_link") or interview.get("platform") or "Cal.com Meeting"
+    raw_base = (os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    location = interview.get("meeting_link") or f"{raw_base}/interview/room/{interview.get('round_id') or interview.get('id')}"
+    if "cal.com" in location.lower():
+        location = f"{raw_base}/interview/room/{interview.get('round_id') or interview.get('id')}"
     
+    summary = f"{interview.get('interview_round', 'Interview')} - {interview.get('candidate_name', 'Candidate')} ({interview.get('requisition_title', 'Role')})"
     description = (
         f"Interview for {interview.get('requisition_title', 'Role')}\\n"
         f"Candidate: {interview.get('candidate_name', '')} ({interview.get('candidate_email', '')})\\n"
         f"Company: {interview.get('company_name', '')}\\n"
         f"Interviewer: {interview.get('interviewer_name', '')} ({interview.get('interviewer_email', '')})\\n"
-        f"Meeting Link: {interview.get('meeting_link', '')}\\n"
+        f"Meeting Link: {location}\\n"
         f"Notes: {interview.get('notes', '')}"
     )
 
     ics_payload = f"""BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//TermJobs Workforce Platform//Cal.com Scheduling//EN
+PRODID:-//TermJobs Workforce Platform//Hosted Interview//EN
 CALSCALE:GREGORIAN
 METHOD:REQUEST
 BEGIN:VEVENT
@@ -195,38 +302,185 @@ END:VCALENDAR"""
     return ics_payload.strip()
 
 
-def create_interview_proposal(data: Dict[str, Any], tenant_id: str, company_name: str = "") -> Dict[str, Any]:
-    """Create a new interview proposal from the Hiring Manager."""
-    interview = InterviewSchedule(
-        tenant_id=tenant_id,
-        company_name=company_name or "Company",
-        calendar_provider="cal",
-        requisition_id=data.get("requisition_id"),
-        requisition_title=data.get("requisition_title", "Untitled Role"),
-        candidate_submission_id=data.get("candidate_submission_id"),
-        candidate_name=data.get("candidate_name", "Candidate"),
-        candidate_email=data.get("candidate_email", ""),
-        vendor_id=data.get("vendor_id"),
-        vendor_name=data.get("vendor_name", "Vendor"),
-        interview_round=data.get("interview_round", "Technical Round 1"),
-        interviewer_name=data.get("interviewer_name", ""),
-        interviewer_email=data.get("interviewer_email", ""),
-        meeting_link=data.get("meeting_link", ""),
-        platform=data.get("platform", "Cal.com Video"),
-        proposed_slots=data.get("proposed_slots", []),
-        confirmed_slot=data.get("confirmed_slot", {}),
-        status=InterviewStatus.PROPOSED_BY_COMPANY.value,
-        notes=data.get("notes", ""),
-        vendor_notes="",
-    )
+def create_interview_proposal(
+    data: Dict[str, Any],
+    tenant_id: str,
+    company_name: str = "",
+    origin: Optional[str] = None
+) -> Dict[str, Any]:
+    """Create a new interview proposal from the Hiring Manager, generating hosted domain links and initializing the InterviewRound."""
+    raw_origin = (origin or data.get("origin") or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    base_url = raw_origin
+    
+    cand_sub_id = data.get("candidate_submission_id", "")
+    round_name = (data.get("interview_round") or "Technical Round 1").strip()
+    slots = data.get("proposed_slots") or []
+    slot = slots[0] if slots else {}
+    date_str = slot.get("date", "")
+    time_str = slot.get("start_time", "")
+    cand_email = (data.get("candidate_email") or "").strip()
+    cand_name = (data.get("candidate_name") or "Candidate").strip()
     
     with get_session() as session:
+        # Check or create associated InterviewRound
+        round_obj = session.query(InterviewRound).filter(
+            InterviewRound.candidate_submission_id == cand_sub_id,
+            InterviewRound.round_name == round_name,
+            InterviewRound.status != "Cancelled"
+        ).first()
+        
+        if not round_obj:
+            passcode = _generate_candidate_passcode()
+            cand_token = str(uuid.uuid4())
+            interviewer_token = str(uuid.uuid4())
+            room_id = f"room_round_{uuid.uuid4().hex[:10]}"
+            
+            round_obj = InterviewRound(
+                tenant_id=tenant_id,
+                requisition_id=data.get("requisition_id", ""),
+                requisition_title=data.get("requisition_title", "Untitled Role"),
+                candidate_submission_id=cand_sub_id,
+                candidate_name=cand_name,
+                candidate_email=cand_email,
+                round_number=1,
+                round_name=round_name,
+                round_type="Technical",
+                scheduled_date=date_str,
+                scheduled_time=time_str,
+                duration_minutes=int(data.get("duration_minutes", 45)),
+                interviewer_name=data.get("interviewer_name", ""),
+                interviewer_email=data.get("interviewer_email", ""),
+                interviewer_role="Interviewer",
+                instructions=data.get("notes", ""),
+                internal_notes="",
+                candidate_passcode=passcode,
+                candidate_token=cand_token,
+                interviewer_token=interviewer_token,
+                room_id=room_id,
+                status="Scheduled",
+                evaluation={},
+                created_by=company_name or "Hiring Team",
+            )
+            session.add(round_obj)
+            session.flush()
+
+        hosted_meeting_link = f"{base_url}/interview/room/{round_obj.id}"
+        cand_portal_link = f"{base_url}/interview/candidate/login?token={round_obj.candidate_token}&email={urllib.parse.quote(cand_email)}&passcode={round_obj.candidate_passcode}"
+        interviewer_link = f"{base_url}/interview/staff?token={round_obj.interviewer_token}"
+
+        req_meeting_link = (data.get("meeting_link") or "").strip()
+        if not req_meeting_link or "cal.com" in req_meeting_link.lower() or data.get("use_hosted_room", True):
+            meeting_link = hosted_meeting_link
+        else:
+            meeting_link = req_meeting_link
+
+        interview = InterviewSchedule(
+            tenant_id=tenant_id,
+            company_name=company_name or "Company",
+            calendar_provider="termjobs_hosted",
+            requisition_id=data.get("requisition_id"),
+            requisition_title=data.get("requisition_title", "Untitled Role"),
+            candidate_submission_id=cand_sub_id,
+            candidate_name=cand_name,
+            candidate_email=cand_email,
+            vendor_id=data.get("vendor_id"),
+            vendor_name=data.get("vendor_name", "Vendor"),
+            interview_round=round_name,
+            interviewer_name=data.get("interviewer_name", ""),
+            interviewer_email=data.get("interviewer_email", ""),
+            meeting_link=meeting_link,
+            round_id=round_obj.id,
+            candidate_passcode=round_obj.candidate_passcode,
+            platform="TermJobs Video Room",
+            proposed_slots=data.get("proposed_slots", []),
+            confirmed_slot=data.get("confirmed_slot", {}),
+            status=InterviewStatus.PROPOSED_BY_COMPANY.value,
+            notes=data.get("notes", ""),
+            vendor_notes="",
+        )
+        
         session.add(interview)
         session.flush()
         doc = interview.to_doc()
         session.commit()
-        
-    doc["calendar_links"] = generate_calendar_links(doc)
+
+    doc["round_id"] = round_obj.id
+    doc["room_id"] = round_obj.room_id
+    doc["candidate_passcode"] = round_obj.candidate_passcode
+    doc["candidate_token"] = round_obj.candidate_token
+    doc["candidate_portal_link"] = cand_portal_link
+    doc["interviewer_link"] = interviewer_link
+    doc["meeting_link"] = meeting_link
+    doc["calendar_links"] = generate_calendar_links(doc, base_url=base_url)
+
+    # Automatically dispatch notification to candidate
+    try:
+        if cand_email:
+            send_interview_invitation_email(
+                candidate_name=cand_name,
+                candidate_email=cand_email,
+                requisition_title=data.get("requisition_title", "Untitled Role"),
+                company_name=company_name or "TermJobs Partner",
+                round_name=round_name,
+                scheduled_date=date_str,
+                scheduled_time=time_str,
+                duration_minutes=int(data.get("duration_minutes", 45)),
+                meeting_link=meeting_link,
+                candidate_portal_link=cand_portal_link,
+                passcode=round_obj.candidate_passcode,
+                instructions=data.get("notes", ""),
+            )
+    except Exception as em_err:
+        print(f"[INTERVIEW EMAIL DISPATCH ERROR] {em_err}")
+
+    # Automatically notify Telegram if connected
+    try:
+        cand_doc = db["candidates"].find_one({"$or": [{"candidate_email": cand_email.lower()}, {"id": cand_sub_id}]}) if cand_email else None
+        tg_chat = cand_doc.get("telegram_chat_id") if cand_doc else None
+        if not tg_chat and cand_email:
+            tlink = db["telegram_links"].find_one({"candidate_email": cand_email.lower()})
+            if tlink:
+                tg_chat = tlink.get("chat_id")
+        if tg_chat:
+            import asyncio
+            from modules.candidate.telegram_service import send_candidate_interview_scheduled_alert
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                asyncio.create_task(
+                    send_candidate_interview_scheduled_alert(
+                        chat_id=tg_chat,
+                        candidate_name=cand_name,
+                        requisition_title=data.get("requisition_title", "Untitled Role"),
+                        company_name=company_name or "TermJobs Partner",
+                        round_name=round_name,
+                        scheduled_date=date_str,
+                        scheduled_time=time_str,
+                        duration_minutes=int(data.get("duration_minutes", 45)),
+                        meeting_link=meeting_link,
+                        passcode=round_obj.candidate_passcode,
+                    )
+                )
+            else:
+                asyncio.run(
+                    send_candidate_interview_scheduled_alert(
+                        chat_id=tg_chat,
+                        candidate_name=cand_name,
+                        requisition_title=data.get("requisition_title", "Untitled Role"),
+                        company_name=company_name or "TermJobs Partner",
+                        round_name=round_name,
+                        scheduled_date=date_str,
+                        scheduled_time=time_str,
+                        duration_minutes=int(data.get("duration_minutes", 45)),
+                        meeting_link=meeting_link,
+                        passcode=round_obj.candidate_passcode,
+                    )
+                )
+    except Exception as tg_err:
+        print(f"[INTERVIEW TELEGRAM DISPATCH ERROR] {tg_err}")
+
     return doc
 
 
@@ -334,26 +588,15 @@ def complete_interview(interview_id: str, final_remark: str, decision: str) -> O
 # MULTI-ROUND INTERVIEW WORKFLOW & LIVEKIT INTEGRATION
 # =====================================================================
 
-import os
-import random
-import string
-import time
-import jwt
-from modules.interview.domain.models import InterviewRound, InterviewChatMessage
-from modules.candidate.domain.models import CandidateSubmission
 
-
-def _generate_candidate_passcode() -> str:
-    """Generate a clean, memorable candidate interview passcode like TJ-INT-5829."""
-    digits = "".join(random.choices(string.digits, k=4))
-    return f"TJ-INT-{digits}"
-
-
-def create_interview_round(data: dict, tenant_id: str, created_by: str) -> dict:
+def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: Optional[str] = None) -> dict:
     """
     Create a new interview round for a candidate under a requisition.
-    Prevents duplicate rounds and duplicate assignments.
+    Prevents duplicate rounds and duplicate assignments, generates hosted links and dispatches candidate invites.
     """
+    raw_origin = (origin or data.get("origin") or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    base_url = raw_origin
+
     with get_session() as session:
         cand_sub_id = data.get("candidate_submission_id", "")
         round_name = (data.get("round_name") or "Technical Round 1").strip()
@@ -406,7 +649,85 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str) -> dict:
         
         session.add(round_obj)
         session.commit()
-        return round_obj.to_doc()
+        doc = round_obj.to_doc()
+
+    hosted_meeting_link = f"{base_url}/interview/room/{doc['id']}"
+    cand_portal_link = f"{base_url}/interview/candidate/login?token={doc['candidate_token']}&email={urllib.parse.quote(doc.get('candidate_email') or '')}&passcode={doc['candidate_passcode']}"
+    interviewer_link = f"{base_url}/interview/staff?token={doc['interviewer_token']}"
+
+    doc["meeting_link"] = hosted_meeting_link
+    doc["hosted_meeting_link"] = hosted_meeting_link
+    doc["candidate_portal_link"] = cand_portal_link
+    doc["interviewer_link"] = interviewer_link
+    doc["calendar_links"] = generate_calendar_links(doc, base_url=base_url)
+
+    # Automatically dispatch notification to candidate
+    cand_email = (doc.get("candidate_email") or "").strip()
+    cand_name = doc.get("candidate_name") or "Candidate"
+    if cand_email:
+        try:
+            send_interview_invitation_email(
+                candidate_name=cand_name,
+                candidate_email=cand_email,
+                requisition_title=doc.get("requisition_title", "Position"),
+                company_name=created_by or "Hiring Team",
+                round_name=round_name,
+                scheduled_date=doc.get("scheduled_date", ""),
+                scheduled_time=doc.get("scheduled_time", ""),
+                duration_minutes=int(doc.get("duration_minutes", 45)),
+                meeting_link=hosted_meeting_link,
+                candidate_portal_link=cand_portal_link,
+                passcode=doc.get("candidate_passcode"),
+                instructions=doc.get("instructions", ""),
+            )
+        except Exception as em_err:
+            print(f"[ROUND EMAIL DISPATCH ERROR] {em_err}")
+
+    # Automatically notify Telegram if connected
+    try:
+        cand_doc = db["candidates"].find_one({"$or": [{"candidate_email": cand_email.lower()}, {"id": cand_sub_id}]}) if cand_email else None
+        tg_chat = cand_doc.get("telegram_chat_id") if cand_doc else None
+        if not tg_chat and cand_email:
+            tlink = db["telegram_links"].find_one({"candidate_email": cand_email.lower()})
+            if tlink:
+                tg_chat = tlink.get("chat_id")
+        if tg_chat:
+            import asyncio
+            from modules.candidate.telegram_service import send_candidate_interview_scheduled_alert
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                asyncio.create_task(send_candidate_interview_scheduled_alert(
+                    chat_id=tg_chat,
+                    candidate_name=cand_name,
+                    requisition_title=doc.get("requisition_title", "Position"),
+                    company_name=created_by or "Hiring Team",
+                    round_name=round_name,
+                    scheduled_date=doc.get("scheduled_date", ""),
+                    scheduled_time=doc.get("scheduled_time", ""),
+                    duration_minutes=int(doc.get("duration_minutes", 45)),
+                    meeting_link=hosted_meeting_link,
+                    passcode=doc.get("candidate_passcode"),
+                ))
+            else:
+                asyncio.run(send_candidate_interview_scheduled_alert(
+                    chat_id=tg_chat,
+                    candidate_name=cand_name,
+                    requisition_title=doc.get("requisition_title", "Position"),
+                    company_name=created_by or "Hiring Team",
+                    round_name=round_name,
+                    scheduled_date=doc.get("scheduled_date", ""),
+                    scheduled_time=doc.get("scheduled_time", ""),
+                    duration_minutes=int(doc.get("duration_minutes", 45)),
+                    meeting_link=hosted_meeting_link,
+                    passcode=doc.get("candidate_passcode"),
+                ))
+    except Exception as tg_err:
+        print(f"[ROUND TELEGRAM NOTIFY ERROR] {tg_err}")
+
+    return doc
 
 
 def get_hiring_manager_rounds(

@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { Icons, StatCard, WelcomeBanner } from '../../components/Dashboard';
@@ -320,31 +320,45 @@ export default function InterviewRequests() {
                   </div>
                 )}
 
-                {/* Cal.com Direct Booking Link & 1-Click Sync Bar */}
+                {/* Direct Video Interview Room & 1-Click Sync Bar */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', paddingTop: '14px', borderTop: '1px solid #f1f5f9' }}>
-                  {inv.calendar_links?.cal_booking_url ? (
-                    <a
-                      href={inv.calendar_links.cal_booking_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        fontSize: '0.84rem',
-                        fontWeight: 700,
-                        color: '#2563eb',
-                        textDecoration: 'none',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        background: '#eff6ff',
-                        padding: '6px 14px',
-                        borderRadius: '8px',
-                      }}
-                    >
-                      🔗 Open Candidate Cal.com Booking Link ↗
-                    </a>
-                  ) : (
-                    <span />
-                  )}
+                  {(() => {
+                    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://termjobs.in';
+                    const link = (inv.meeting_link && !inv.meeting_link.includes('cal.com')) 
+                      ? inv.meeting_link 
+                      : (inv.round_id || inv.id ? `${origin}/interview/room/${inv.round_id || inv.id}` : (inv.calendar_links?.cal_booking_url || ''));
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        {link && (
+                          <a
+                            href={link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: '0.84rem',
+                              fontWeight: 800,
+                              color: '#ffffff',
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              background: '#2563eb',
+                              padding: '7px 16px',
+                              borderRadius: '8px',
+                              boxShadow: '0 2px 6px rgba(37,99,235,0.25)',
+                            }}
+                          >
+                            🎥 Join Native Video Room ↗
+                          </a>
+                        )}
+                        {inv.candidate_passcode && (
+                          <span style={{ fontSize: '0.8rem', background: '#f8fafc', border: '1px solid #cbd5e1', padding: '5px 10px', borderRadius: '8px', color: '#0f172a', fontWeight: 700 }}>
+                            🔑 Passcode: <code style={{ color: '#2563eb' }}>{inv.candidate_passcode}</code>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {inv.calendar_links && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

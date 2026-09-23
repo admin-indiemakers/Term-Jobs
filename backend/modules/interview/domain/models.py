@@ -39,7 +39,9 @@ class InterviewSchedule(Model):
         "interviewer_name": "",
         "interviewer_email": "",
         "meeting_link": "",
-        "platform": "Google Meet",         # "Google Meet" | "Microsoft Teams" | "Zoom" | "In-Person"
+        "round_id": "",
+        "candidate_passcode": "",
+        "platform": "TermJobs Video Room", # "TermJobs Video Room" | "Google Meet" | "Microsoft Teams" | "Zoom"
         
         "proposed_slots": list,            # list of {slot_id, date, start_time, end_time, timezone}
         "confirmed_slot": dict,            # {slot_id, date, start_time, end_time, timezone}
@@ -58,6 +60,20 @@ class InterviewSchedule(Model):
     tenant_id = Column("tenant_id")
     company_name = Column("company_name")
     calendar_provider = Column("calendar_provider")
+    requisition_id = Column("requisition_id")
+    requisition_title = Column("requisition_title")
+    candidate_submission_id = Column("candidate_submission_id")
+    candidate_name = Column("candidate_name")
+    candidate_email = Column("candidate_email")
+    vendor_id = Column("vendor_id")
+    vendor_name = Column("vendor_name")
+    interview_round = Column("interview_round")
+    interviewer_name = Column("interviewer_name")
+    interviewer_email = Column("interviewer_email")
+    meeting_link = Column("meeting_link")
+    round_id = Column("round_id")
+    candidate_passcode = Column("candidate_passcode")
+    platform = Column("platform")
     requisition_id = Column("requisition_id")
     requisition_title = Column("requisition_title")
     candidate_submission_id = Column("candidate_submission_id")
@@ -102,9 +118,11 @@ class ScheduleInterviewRequest(BaseModel):
     interviewer_name: Optional[str] = ""
     interviewer_email: Optional[str] = ""
     meeting_link: Optional[str] = ""
-    platform: Optional[str] = "Google Meet"
+    platform: Optional[str] = "TermJobs Video Room"
     proposed_slots: List[SlotSchema]
     notes: Optional[str] = ""
+    origin: Optional[str] = None
+    use_hosted_room: Optional[bool] = True
 
 
 class VendorConfirmRequest(BaseModel):
@@ -229,6 +247,7 @@ class CreateInterviewRoundRequest(BaseModel):
     interviewer_role: Optional[str] = "Interviewer"
     instructions: Optional[str] = ""
     internal_notes: Optional[str] = ""
+    origin: Optional[str] = None
 
 
 class CandidateLoginRequest(BaseModel):

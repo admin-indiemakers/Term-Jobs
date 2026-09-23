@@ -123,6 +123,62 @@ async def send_candidate_requisition_alert(
         return {"ok": False, "error": str(exc)}
 
 
+async def send_candidate_interview_scheduled_alert(
+    chat_id: int | str,
+    candidate_name: str,
+    requisition_title: str,
+    company_name: str,
+    round_name: str,
+    scheduled_date: str,
+    scheduled_time: str,
+    duration_minutes: int,
+    meeting_link: str,
+    passcode: str,
+) -> dict:
+    """Send an instant Telegram alert to the candidate with their hosted interview room link and passcode."""
+    token = get_telegram_token()
+    if not token or not chat_id:
+        return {"ok": False, "error": "Missing token or chat_id."}
+
+    text = (
+        f"📅 *INTERVIEW SCHEDULED: {round_name}*\n"
+        f"🏢 *Company:* {company_name}\n"
+        f"💼 *Position:* {requisition_title}\n"
+        f"🗓️ *Date:* {scheduled_date or 'As Scheduled'}\n"
+        f"⏰ *Time:* {scheduled_time or 'TBD'} ({duration_minutes} mins)\n"
+        f"🔑 *Your Passcode:* `{passcode}`\n\n"
+        f"Hi *{candidate_name}*, your interview has been confirmed on TermJobs!\n\n"
+        f"Tap the button below to join your live video room:"
+    )
+
+    inline_keyboard = [
+        [
+            {
+                "text": "🎥 Join Video Interview Room",
+                "url": meeting_link
+            }
+        ]
+    ]
+
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+        "reply_markup": {
+            "inline_keyboard": inline_keyboard
+        }
+    }
+
+    url = f"{TELEGRAM_API_BASE}/bot{token}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.post(url, json=payload)
+            return res.json()
+    except Exception as exc:
+        print(f"[TELEGRAM INTERVIEW ALERT ERROR] {exc}")
+        return {"ok": False, "error": str(exc)}
+
+
 async def process_telegram_update(update: dict) -> None:
     """Process incoming webhook or polled Telegram update."""
     token = get_telegram_token()

@@ -13,9 +13,7 @@ export function normalizeCalLink(rawInput, eventSlug = '30min') {
   }
 
   let trimmed = rawInput.trim();
-  // Remove leading http:// or https://
   trimmed = trimmed.replace(/^https?:\/\//i, '');
-  // Remove trailing slashes
   trimmed = trimmed.replace(/\/+$/, '');
 
   let isCustomHost = false;
@@ -62,26 +60,38 @@ export function normalizeCalLink(rawInput, eventSlug = '30min') {
 
 export default function ScheduleInterviewModal({ candidate, onClose, onScheduled }) {
   const { token, user } = useAuth();
-  const [calConfig, setCalConfig] = useState({ provider: 'cal', cal_link: 'https://cal.com/', event_slug: '30min', default_duration: 60, default_timezone: 'Asia/Kolkata' });
-  const [activeTab, setActiveTab] = useState('embed'); // 'embed' | 'form'
+  const [calConfig, setCalConfig] = useState({
+    provider: 'termjobs_hosted',
+    cal_link: 'https://cal.com/',
+    event_slug: '30min',
+    default_duration: 45,
+    default_timezone: 'Asia/Kolkata',
+  });
+  // Default to native hosted room on our domain!
+  const [activeTab, setActiveTab] = useState('hosted'); // 'hosted' | 'cal'
   const [loadingConfig, setLoadingConfig] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [scheduledResult, setScheduledResult] = useState(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [copiedPasscode, setCopiedPasscode] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
 
   // Form State
-  const [round, setRound] = useState('Round 1 - Technical & System Design');
+  const [round, setRound] = useState('Round 1 - Technical & Communication Assessment');
   const [date, setDate] = useState(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 2);
+    d.setDate(d.getDate() + 1);
     return d.toISOString().split('T')[0];
   });
-  const [startTime, setStartTime] = useState('10:00');
-  const [endTime, setEndTime] = useState('11:00');
-  const [interviewerName, setInterviewerName] = useState(user?.name || '');
+  const [startTime, setStartTime] = useState('11:00');
+  const [endTime, setEndTime] = useState('11:45');
+  const [candidateEmail, setCandidateEmail] = useState(candidate?.candidate_email || '');
+  const [interviewerName, setInterviewerName] = useState(user?.name || 'Hiring Manager');
   const [interviewerEmail, setInterviewerEmail] = useState(user?.email || '');
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState('Please join via desktop or laptop with working microphone and camera for communication skills analysis.');
+
+  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'https://termjobs.in';
 
   useEffect(() => {
     request('/api/calendar/config', { token })
@@ -92,13 +102,13 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
       .finally(() => setLoadingConfig(false));
   }, [token]);
 
-  // Compute normalized Cal links
+  // Compute normalized Cal links for the legacy/secondary Cal tab
   const { embedLink, fullUrl } = useMemo(() => {
     return normalizeCalLink(calConfig.cal_link, calConfig.event_slug);
   }, [calConfig.cal_link, calConfig.event_slug]);
 
   useEffect(() => {
-    if (activeTab === 'embed') {
+    if (activeTab === 'cal') {
       (async function () {
         try {
           const cal = await getCalApi();
@@ -131,14 +141,15 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
       requisition_title: candidate?.requisition_title || candidate?.requisition_ref || 'Role Opening',
       candidate_submission_id: candidate?.id || '',
       candidate_name: candidate?.candidate_name || 'Candidate',
-      candidate_email: candidate?.candidate_email || '',
+      candidate_email: candidateEmail,
       vendor_name: candidate?.vendor_name || 'Vendor',
       vendor_id: candidate?.vendor_id || candidate?.tenant_id || null,
       interview_round: round,
       interviewer_name: interviewerName,
       interviewer_email: interviewerEmail,
-      meeting_link: fullUrl,
-      platform: 'Cal.com Video',
+      platform: activeTab === 'hosted' ? 'TermJobs Video Room' : 'Cal.com Video',
+      origin: currentOrigin,
+      use_hosted_room: activeTab === 'hosted',
       proposed_slots: [
         {
           slot_id: `slot_${Date.now()}`,
@@ -166,10 +177,49 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
     }
   };
 
-  const copyCalUrl = () => {
-    navigator.clipboard.writeText(fullUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 3000);
+  const effectiveMeetingLink = useMemo(() => {
+    if (!scheduledResult) return '';
+    if (scheduledResult.meeting_link && !scheduledResult.meeting_link.includes('cal.com')) {
+      return scheduledResult.meeting_link;
+    }
+    const rid = scheduledResult.round_id || scheduledResult.id;
+    return `${currentOrigin}/interview/room/${rid}`;
+  }, [scheduledResult, currentOrigin]);
+
+  const copyMeetingLink = () => {
+    if (!effectiveMeetingLink) return;
+    navigator.clipboard.writeText(effectiveMeetingLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2500);
+  };
+
+  const copyPasscode = () => {
+    if (!scheduledResult?.candidate_passcode) return;
+    navigator.clipboard.writeText(scheduledResult.candidate_passcode);
+    setCopiedPasscode(true);
+    setTimeout(() => setCopiedPasscode(false), 2500);
+  };
+
+  const copyFullInvitation = () => {
+    const inviteText = `TermJobs Official Interview Invitation
+Role: ${candidate?.requisition_title || 'Position'}
+Candidate: ${candidate?.candidate_name || 'Candidate'}
+Date: ${date}
+Time: ${startTime} - ${endTime} (IST)
+
+🎥 Join Video Room:
+${effectiveMeetingLink}
+
+🔑 Candidate Passcode:
+${scheduledResult?.candidate_passcode || 'N/A'}
+
+Candidate Login Portal:
+${scheduledResult?.candidate_portal_link || `${currentOrigin}/interview/candidate/login`}
+
+Please ensure you have a working camera and microphone ready.`;
+    navigator.clipboard.writeText(inviteText);
+    setCopiedInvite(true);
+    setTimeout(() => setCopiedInvite(false), 3000);
   };
 
   return (
@@ -195,7 +245,7 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
           background: '#ffffff',
           borderRadius: '20px',
           width: '100%',
-          maxWidth: activeTab === 'embed' ? '860px' : '620px',
+          maxWidth: activeTab === 'cal' ? '860px' : '650px',
           maxHeight: '92vh',
           overflowY: 'auto',
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
@@ -209,9 +259,9 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '14px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '1.4rem' }}>📅</span>
-              <h2 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                Schedule Interview
+              <span style={{ fontSize: '1.4rem' }}>🎥</span>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                Schedule Interview & Generate Room
               </h2>
             </div>
             <p style={{ fontSize: '0.85rem', color: '#64748b', margin: '4px 0 0 0' }}>
@@ -230,39 +280,46 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
         <div style={{ display: 'flex', gap: '8px', marginBottom: '18px', background: '#f1f5f9', padding: '4px', borderRadius: '10px' }}>
           <button
             type="button"
-            onClick={() => setActiveTab('embed')}
+            onClick={() => setActiveTab('hosted')}
             style={{
               flex: 1,
-              padding: '8px 12px',
+              padding: '9px 12px',
               borderRadius: '8px',
               border: 0,
-              background: activeTab === 'embed' ? '#ffffff' : 'transparent',
-              color: activeTab === 'embed' ? '#0f172a' : '#64748b',
-              fontWeight: 700,
+              background: activeTab === 'hosted' ? '#ffffff' : 'transparent',
+              color: activeTab === 'hosted' ? '#0f172a' : '#64748b',
+              fontWeight: 800,
               fontSize: '0.82rem',
               cursor: 'pointer',
-              boxShadow: activeTab === 'embed' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+              boxShadow: activeTab === 'hosted' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
             }}
           >
-            🗓️ Interactive Cal.com Calendar
+            <span>🌐</span> Native Video Room ({currentOrigin.replace(/^https?:\/\//, '')})
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab('form')}
+            onClick={() => setActiveTab('cal')}
             style={{
-              flex: 1,
-              padding: '8px 12px',
+              padding: '9px 16px',
               borderRadius: '8px',
               border: 0,
-              background: activeTab === 'form' ? '#ffffff' : 'transparent',
-              color: activeTab === 'form' ? '#0f172a' : '#64748b',
+              background: activeTab === 'cal' ? '#ffffff' : 'transparent',
+              color: activeTab === 'cal' ? '#0f172a' : '#64748b',
               fontWeight: 700,
               fontSize: '0.82rem',
               cursor: 'pointer',
-              boxShadow: activeTab === 'form' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+              boxShadow: activeTab === 'cal' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
             }}
           >
-            🚀 Dispatch Proposal to Vendor
+            <span>🗓️</span> External Cal.com
           </button>
         </div>
 
@@ -272,39 +329,117 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
           </div>
         )}
 
-        {/* View 1: Success confirmation */}
+        {/* SUCCESS CONFIRMATION VIEW */}
         {scheduledResult ? (
           <div style={{ textAlign: 'center', padding: '10px 0' }}>
             <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🎉</div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#059669', margin: '0 0 8px 0' }}>
-              Interview Dispatched Successfully!
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#059669', margin: '0 0 6px 0' }}>
+              Interview Scheduled & Native Room Created!
             </h3>
-            <p style={{ fontSize: '0.88rem', color: '#475569', lineHeight: '1.5', marginBottom: '20px' }}>
-              The Cal.com interview booking link has been transmitted to <strong style={{ color: '#0f172a' }}>{candidate?.vendor_name || 'the recruiter agency'}</strong>.
+            <p style={{ fontSize: '0.86rem', color: '#475569', lineHeight: '1.5', marginBottom: '18px' }}>
+              The interview has been officially generated on <strong>{currentOrigin}</strong>. The invitation email and notifications have been dispatched.
             </p>
 
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '16px', marginBottom: '20px', textAlign: 'left' }}>
-              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
-                🔗 Cal.com Booking Link
-              </div>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '12px' }}>
-                <input
-                  type="text"
-                  readOnly
-                  value={scheduledResult.calendar_links?.cal_booking_url || fullUrl}
-                  style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', background: '#ffffff' }}
-                />
-                <button
-                  type="button"
-                  onClick={copyCalUrl}
-                  style={{ padding: '8px 14px', background: '#2563eb', color: '#ffffff', border: 0, borderRadius: '8px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-                >
-                  {copied ? '✓ Copied' : 'Copy'}
-                </button>
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '16px', padding: '18px', marginBottom: '20px', textAlign: 'left' }}>
+              {/* Meeting Room Link */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '0.74rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    🌐 Native Video Interview Link
+                  </span>
+                  <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '999px', fontWeight: 700 }}>
+                    Active Domain Room
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={effectiveMeetingLink}
+                    style={{ width: '100%', padding: '9px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '0.82rem', background: '#ffffff', color: '#0f172a', fontWeight: 600 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={copyMeetingLink}
+                    style={{ padding: '9px 16px', background: '#2563eb', color: '#ffffff', border: 0, borderRadius: '8px', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+                  >
+                    {copiedLink ? '✓ Copied' : 'Copy'}
+                  </button>
+                </div>
               </div>
 
-              <div style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
-                Universal 1-Click Sync
+              {/* Passcode & Direct Join */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+                <div style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '12px' }}>
+                  <div style={{ fontSize: '0.7rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '4px' }}>
+                    Candidate Passcode
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <code style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', letterSpacing: '0.06em' }}>
+                      {scheduledResult.candidate_passcode || 'TJ-INT-2026'}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={copyPasscode}
+                      style={{ background: '#f1f5f9', border: 0, padding: '4px 8px', borderRadius: '6px', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', color: '#334155' }}
+                    >
+                      {copiedPasscode ? '✓' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
+
+                <a
+                  href={effectiveMeetingLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    borderRadius: '10px',
+                    padding: '12px',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
+                    textAlign: 'center',
+                    boxShadow: '0 4px 12px rgba(15,23,42,0.15)',
+                  }}
+                >
+                  <span>🎥 Join Video Room Now ↗</span>
+                  <span style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 500, marginTop: '2px' }}>Opens directly in browser</span>
+                </a>
+              </div>
+
+              {/* Copy Full Invitation */}
+              <button
+                type="button"
+                onClick={copyFullInvitation}
+                style={{
+                  width: '100%',
+                  background: '#eff6ff',
+                  border: '1px solid #bfdbfe',
+                  color: '#1e40af',
+                  padding: '9px 14px',
+                  borderRadius: '10px',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  marginBottom: '16px',
+                }}
+              >
+                <span>📋</span> {copiedInvite ? '✓ Full Invitation Copied to Clipboard!' : 'Copy Complete Invitation (WhatsApp / Email)'}
+              </button>
+
+              {/* 1-Click Sync */}
+              <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '8px' }}>
+                Universal 1-Click Calendar Sync
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
                 {scheduledResult.calendar_links?.google && (
@@ -339,13 +474,13 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
 
             <button
               onClick={onClose}
-              style={{ background: '#0f172a', color: '#ffffff', border: 0, padding: '10px 24px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', width: '100%' }}
+              style={{ background: '#0f172a', color: '#ffffff', border: 0, padding: '11px 24px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 700, cursor: 'pointer', width: '100%' }}
             >
-              Done & Close
+              Done & Return
             </button>
           </div>
-        ) : activeTab === 'embed' ? (
-          /* View 2: Cal.com Live Embed */
+        ) : activeTab === 'cal' ? (
+          /* View: Cal.com Live Embed */
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <span style={{ fontSize: '0.82rem', color: '#64748b' }}>
@@ -384,28 +519,35 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
             </div>
           </div>
         ) : (
-          /* View 3: Proposal Dispatch Form */
+          /* View: TermJobs Hosted Video Room Scheduling Form (DEFAULT) */
           <form onSubmit={handleSubmit}>
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '12px', padding: '12px 14px', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <span style={{ fontSize: '1.25rem' }}>✨</span>
+              <div style={{ fontSize: '0.8rem', color: '#1e3a8a', lineHeight: '1.4' }}>
+                <strong>Zero 3rd-Party Setup:</strong> This generates a high-definition browser-based meeting room on <code style={{ background: '#dbeafe', padding: '2px 4px', borderRadius: '4px' }}>{currentOrigin}</code> with real-time speech transcription & AI communication skill analysis.
+              </div>
+            </div>
+
             {/* Interview Round */}
             <div style={{ marginBottom: '14px' }}>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Interview Round / Title
+                Interview Round / Assessment Type
               </label>
               <select
                 value={round}
                 onChange={(e) => setRound(e.target.value)}
-                style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem', color: '#0f172a' }}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem', color: '#0f172a', fontWeight: 600 }}
               >
-                <option value="Round 1 - Technical & System Design">Round 1 - Technical & System Design</option>
+                <option value="Round 1 - Technical & Communication Assessment">Round 1 - Technical & Communication Assessment</option>
                 <option value="Round 2 - Live Coding & Problem Solving">Round 2 - Live Coding & Problem Solving</option>
-                <option value="Hiring Manager Discussion">Hiring Manager Discussion</option>
+                <option value="Hiring Manager In-Depth Discussion">Hiring Manager In-Depth Discussion</option>
                 <option value="HR Culture & Fit Round">HR Culture & Fit Round</option>
-                <option value="Final Director Round">Final Director Round</option>
+                <option value="Final Executive Round">Final Executive Round</option>
               </select>
             </div>
 
             {/* Date & Time Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: '12px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
                   Target Date
@@ -444,11 +586,24 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
               </div>
             </div>
 
-            {/* Interviewer Info */}
+            {/* Candidate & Interviewer Email */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Interviewer Name
+                  Candidate Email (Invitation Destination)
+                </label>
+                <input
+                  type="email"
+                  placeholder="candidate@email.com"
+                  value={candidateEmail}
+                  onChange={(e) => setCandidateEmail(e.target.value)}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+                  required
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                  Interviewer Name & Role
                 </label>
                 <input
                   type="text"
@@ -458,27 +613,29 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
                   style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Interviewer Email
-                </label>
-                <input
-                  type="email"
-                  placeholder="e.g. sarah@company.com"
-                  value={interviewerEmail}
-                  onChange={(e) => setInterviewerEmail(e.target.value)}
-                  style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
-                />
-              </div>
+            </div>
+
+            {/* Interviewer Email */}
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
+                Interviewer Email
+              </label>
+              <input
+                type="email"
+                placeholder="interviewer@company.com"
+                value={interviewerEmail}
+                onChange={(e) => setInterviewerEmail(e.target.value)}
+                style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.85rem' }}
+              />
             </div>
 
             {/* Notes */}
             <div style={{ marginBottom: '20px' }}>
               <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                Instructions / Cal Notes
+                Candidate Instructions & Agenda
               </label>
               <textarea
-                placeholder="e.g. Please be ready with your laptop and IDE for hands-on live coding..."
+                placeholder="e.g. Please be ready in a quiet room with a working webcam and microphone..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
@@ -498,10 +655,10 @@ export default function ScheduleInterviewModal({ candidate, onClose, onScheduled
               </button>
               <button
                 type="submit"
-                style={{ background: '#2563eb', color: '#ffffff', border: 0, padding: '10px 22px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)' }}
+                style={{ background: '#2563eb', color: '#ffffff', border: 0, padding: '10px 22px', borderRadius: '10px', fontSize: '0.85rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.25)', display: 'flex', alignItems: 'center', gap: '6px' }}
                 disabled={submitting}
               >
-                {submitting ? 'Dispatching...' : '🚀 Send Proposal to Vendor'}
+                <span>🎥</span> {submitting ? 'Generating Hosted Room...' : `Create Interview on ${currentOrigin.replace(/^https?:\/\//, '')}`}
               </button>
             </div>
           </form>

@@ -1,10 +1,11 @@
 """
 Interview Scheduling REST router for Company Admins, Hiring Managers, and Vendors.
 """
-from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect
-from fastapi.encoders import jsonable_encoder
+import os
 import uuid
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Request
+from fastapi.encoders import jsonable_encoder
 
 from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
@@ -51,6 +52,18 @@ from modules.interview.services.interview_service import (
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
 
+def _extract_origin(request: Request, body_origin: Optional[str] = None) -> str:
+    if body_origin and body_origin.strip():
+        return body_origin.strip().rstrip("/")
+    header_origin = request.headers.get("origin") or request.headers.get("referer")
+    if header_origin:
+        parts = header_origin.split("://")
+        if len(parts) == 2:
+            domain_part = parts[1].split("/")[0]
+            return f"{parts[0]}://{domain_part}"
+    return (os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").rstrip("/")
+
+
 def _get_tenant_name(tenant_id: str) -> str:
     if not tenant_id:
         return "Company"
@@ -67,22 +80,26 @@ def _get_tenant_name(tenant_id: str) -> str:
 @router.post("/schedule")
 def schedule_interview(
     body: ScheduleInterviewRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """
     Hiring Manager / Company proposes an interview schedule for a shortlisted candidate.
-    Dispatches the proposed slots to the Vendor.
+    Dispatches the proposed slots to the Vendor and candidate.
     """
     company_name = _get_tenant_name(current_user.tenant_id)
     if not company_name or company_name == "Company":
         company_name = getattr(current_user, "name", "Company")
     data = body.model_dump()
-    result = create_interview_proposal(data, current_user.tenant_id, company_name)
+    origin = _extract_origin(request, data.get("origin"))
+    data["origin"] = origin
+    result = create_interview_proposal(data, current_user.tenant_id, company_name, origin=origin)
     return result
 
 
 @router.get("/company")
 def get_company_interviews(
+    request: Request,
     requisition_id: Optional[str] = Query(default=None),
     candidate_submission_id: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
@@ -90,6 +107,7 @@ def get_company_interviews(
     """
     Fetch all interview schedules created by the company tenant.
     """
+    origin = _extract_origin(request)
     with get_session() as session:
         query = session.query(InterviewSchedule).filter(
             InterviewSchedule.tenant_id == current_user.tenant_id
@@ -103,19 +121,24 @@ def get_company_interviews(
         results = []
         for inv in interviews:
             doc = inv.to_doc()
-            doc["calendar_links"] = generate_calendar_links(doc)
+            # If meeting_link is legacy cal.com or empty, resolve to hosted domain room if round_id is present
+            if doc.get("round_id") and (not doc.get("meeting_link") or "cal.com" in doc.get("meeting_link", "").lower()):
+                doc["meeting_link"] = f"{origin}/interview/room/{doc['round_id']}"
+            doc["calendar_links"] = generate_calendar_links(doc, base_url=origin)
             results.append(doc)
         return results
 
 
 @router.get("/vendor")
 def get_vendor_interviews(
+    request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """
     Fetch all interview requests transmitted to the current vendor agency.
     Matches either by vendor_id or vendor_name.
     """
+    origin = _extract_origin(request)
     with get_session() as session:
         all_invs = session.query(InterviewSchedule).all()
         results = []
@@ -130,7 +153,9 @@ def get_vendor_interviews(
             # Match vendor tenant
             if (v_id and v_id == user_tenant_id) or (user_tenant_name and (user_tenant_name in v_name or v_name in user_tenant_name)) or (user_name and (user_name in v_name or v_name in user_name)) or not v_name or v_name == "vendor":
                 doc = inv.to_doc()
-                doc["calendar_links"] = generate_calendar_links(doc)
+                if doc.get("round_id") and (not doc.get("meeting_link") or "cal.com" in doc.get("meeting_link", "").lower()):
+                    doc["meeting_link"] = f"{origin}/interview/room/{doc['round_id']}"
+                doc["calendar_links"] = generate_calendar_links(doc, base_url=origin)
                 results.append(doc)
                 
         return results
@@ -143,6 +168,7 @@ def get_vendor_interviews(
 @router.post("/rounds")
 def create_round_endpoint(
     body: CreateInterviewRoundRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -151,10 +177,13 @@ def create_round_endpoint(
     """
     try:
         data = body.model_dump()
+        origin = _extract_origin(request, data.get("origin"))
+        data["origin"] = origin
         result = create_interview_round(
             data=data,
             tenant_id=current_user.tenant_id,
             created_by=str(current_user.id),
+            origin=origin,
         )
         return result
     except ValueError as e:
