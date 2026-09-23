@@ -24,6 +24,7 @@ import { useInterviewChat } from '../hooks/useInterviewChat';
 import { useSpeechTranscription } from '../hooks/useSpeechTranscription';
 import { EvaluationForm } from './EvaluationForm';
 import { interviewApi } from '../services/interviewApi';
+import { AiInterviewStage } from './AiInterviewStage';
 
 export function InterviewRoom({
   round,
@@ -42,6 +43,7 @@ export function InterviewRoom({
   const [showCaptions, setShowCaptions] = useState(true);
   const [communicationAnalysis, setCommunicationAnalysis] = useState(round?.communication_analysis || null);
   const [analyzingSpeech, setAnalyzingSpeech] = useState(false);
+  const [aiInterviewMode, setAiInterviewMode] = useState(true);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -247,8 +249,21 @@ export function InterviewRoom({
           </div>
         </div>
 
-        {/* Timer & Connection Status */}
-        <div className="flex items-center gap-4">
+        {/* AI Interview Toggle & Room Status */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setAiInterviewMode(!aiInterviewMode)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
+              aiInterviewMode
+                ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-sm'
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-zinc-200'
+            }`}
+          >
+            <Sparkles size={13} className={aiInterviewMode ? 'text-cyan-400' : 'text-zinc-500'} />
+            <span>{aiInterviewMode ? 'AI Interviewer Active' : 'Peer Video Mode'}</span>
+          </button>
+
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-xs font-mono font-medium text-zinc-300">
             <Clock size={13} className="text-zinc-400" />
             <span>{formatCallTime(callDuration)}</span>
@@ -400,35 +415,59 @@ export function InterviewRoom({
               </div>
             </div>
 
-            {/* Remote Participant Tile */}
-            <div className="relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 flex items-center justify-center shadow-lg">
-              {remoteStream || (participants.length > 0 && participants[0].videoTrack) ? (
-                <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
-              ) : (
-                <div className="flex flex-col items-center justify-center p-6 text-center">
-                  <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 text-white font-black text-2xl flex items-center justify-center shadow-inner border border-zinc-600 mb-3 relative">
-                    {remoteParticipantName.slice(0, 2).toUpperCase()}
-                    <span className="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-zinc-900" />
-                  </div>
-                  <div className="font-semibold text-sm text-zinc-200">
-                    {remoteParticipantName}
-                  </div>
-                  <div className="text-xs text-zinc-500 mt-0.5">
-                    {remoteParticipantRole}
-                  </div>
-                  <div className="mt-3 px-3 py-1 rounded-full bg-zinc-800/60 border border-zinc-700/50 text-[11px] text-zinc-400">
-                    Connected · Ready for stream
-                  </div>
-                </div>
-              )}
-
-              <div className="absolute bottom-4 left-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs font-medium text-white flex items-center gap-2">
-                <span>{remoteParticipantName}</span>
-                <span className="text-[10px] px-1.5 py-0.2 bg-zinc-800 rounded-md text-zinc-300 capitalize">
-                  {remoteParticipantRole}
-                </span>
+            {/* AI Interviewer or Remote Participant Tile */}
+            {aiInterviewMode ? (
+              <div className="relative rounded-3xl overflow-hidden shadow-lg h-full">
+                <AiInterviewStage
+                  round={round}
+                  candidateName={round?.candidate_name || currentUserName}
+                  requisitionTitle={round?.requisition_title || 'Position'}
+                  companyName={round?.company_name || 'Hiring Partner'}
+                  isMicOn={isMicOn}
+                  liveTranscript={liveTranscript}
+                  transcriptTurns={transcriptTurns}
+                  startSpeechRecognition={startSpeechRecognition}
+                  stopSpeechRecognition={stopSpeechRecognition}
+                  onAnalysisReady={(result) => {
+                    if (result?.analysis) {
+                      setCommunicationAnalysis(result.analysis);
+                    }
+                    if (onEvaluationComplete) {
+                      onEvaluationComplete(result);
+                    }
+                  }}
+                />
               </div>
-            </div>
+            ) : (
+              <div className="relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 flex items-center justify-center shadow-lg">
+                {remoteStream || (participants.length > 0 && participants[0].videoTrack) ? (
+                  <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-6 text-center">
+                    <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-tr from-zinc-800 to-zinc-700 text-white font-black text-2xl flex items-center justify-center shadow-inner border border-zinc-600 mb-3 relative">
+                      {remoteParticipantName.slice(0, 2).toUpperCase()}
+                      <span className="absolute bottom-1 right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-zinc-900" />
+                    </div>
+                    <div className="font-semibold text-sm text-zinc-200">
+                      {remoteParticipantName}
+                    </div>
+                    <div className="text-xs text-zinc-500 mt-0.5">
+                      {remoteParticipantRole}
+                    </div>
+                    <div className="mt-3 px-3 py-1 rounded-full bg-zinc-800/60 border border-zinc-700/50 text-[11px] text-zinc-400">
+                      Connected · Ready for stream
+                    </div>
+                  </div>
+                )}
+
+                <div className="absolute bottom-4 left-4 px-3 py-1.5 rounded-full bg-black/60 backdrop-blur-md border border-white/10 text-xs font-medium text-white flex items-center gap-2">
+                  <span>{remoteParticipantName}</span>
+                  <span className="text-[10px] px-1.5 py-0.2 bg-zinc-800 rounded-md text-zinc-300 capitalize">
+                    {remoteParticipantRole}
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
