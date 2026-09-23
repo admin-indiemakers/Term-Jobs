@@ -118,6 +118,30 @@ async def send_candidate_requisition_alert(
             data = res.json()
             if data.get("ok"):
                 print(f"[TELEGRAM ALERT SENT] Successfully sent to chat_id={chat_id} for req={requisition.get('id')}")
+                try:
+                    cand_email = (candidate.get("candidate_email") or candidate.get("email") or "").lower()
+                    now_iso = datetime.now(timezone.utc).isoformat()
+                    db["candidate_outreach"].update_one(
+                        {"token": outreach_token},
+                        {"$set": {
+                            "token": outreach_token,
+                            "requisition_id": requisition.get("id", ""),
+                            "requisition_title": req_title,
+                            "company_name": company_name,
+                            "candidate_id": candidate.get("id", ""),
+                            "candidate_name": cand_name,
+                            "candidate_email": cand_email,
+                            "match_score": match_score,
+                            "matched_skills": skills_list[:5] if isinstance(skills_list, list) else [],
+                            "telegram_chat_id": str(chat_id),
+                            "telegram_sent": True,
+                            "status": "sent",
+                            "created_at": now_iso
+                        }},
+                        upsert=True
+                    )
+                except Exception as out_err:
+                    print(f"[TELEGRAM OUTREACH RECORD WARNING] {out_err}")
             else:
                 print(f"[TELEGRAM ALERT FAILED] chat_id={chat_id}, err={data.get('description')}")
             return data
@@ -407,15 +431,37 @@ async def process_telegram_update(update: dict) -> None:
                 cand_name = rsvp_result.get("candidate_name") or sender_name
                 req_title = rsvp_result.get("requisition_title") or "the position"
                 company = rsvp_result.get("company_name") or "our client"
+                meeting_link = rsvp_result.get("meeting_link")
+                portal_link = rsvp_result.get("candidate_portal_link")
+                passcode = rsvp_result.get("candidate_passcode") or "TJ-FAST-TRACK"
 
+                reply_markup = None
                 if action == "interested":
-                    toast_text = "🎉 Fast-Track Confirmed! Hiring team notified."
+                    toast_text = "🎉 Fast-Track Confirmed! Interview link ready."
+                    
+                    interview_section = ""
+                    if meeting_link:
+                        interview_section = (
+                            f"\n\n🎥 *Your Live Interview Room:*\n"
+                            f"🔗 {meeting_link}\n\n"
+                            f"🔑 *Candidate Passcode:* `{passcode}`\n\n"
+                            f"_You can enter your interview room immediately or at your scheduled convenience._"
+                        )
+
                     updated_text = (
                         f"✅ *STATUS CONFIRMED: AVAILABLE & INTERESTED*\n\n"
-                        f"Thank you, *{cand_name}*! Your profile has been fast-tracked into the priority recruiter review queue for:\n"
-                        f"📌 *{req_title}* at *{company}*\n\n"
-                        f"Our hiring director will review your details and reach out shortly."
+                        f"Awesome, *{cand_name}*! Your profile has been fast-tracked for:\n"
+                        f"📌 *{req_title}* at *{company}*"
+                        f"{interview_section}"
                     )
+
+                    if meeting_link:
+                        keyboard_buttons = [
+                            [{"text": "🎥 Enter Video Interview Room", "url": meeting_link}]
+                        ]
+                        if portal_link:
+                            keyboard_buttons.append([{"text": "🚀 Candidate Portal Login", "url": portal_link}])
+                        reply_markup = {"inline_keyboard": keyboard_buttons}
                 else:
                     toast_text = "Profile updated: Marked as placed elsewhere."
                     updated_text = (
@@ -431,18 +477,40 @@ async def process_telegram_update(update: dict) -> None:
                         f"{TELEGRAM_API_BASE}/bot{token}/answerCallbackQuery",
                         json={"callback_query_id": cb_id, "text": toast_text, "show_alert": False}
                     )
-                    # 2. Edit the original message to remove buttons and show confirmation
+                    # 2. Edit the original message to show confirmed status + interview buttons
                     if chat_id and message_id:
+                        edit_payload = {
+                            "chat_id": chat_id,
+                            "message_id": message_id,
+                            "text": updated_text,
+                            "parse_mode": "Markdown"
+                        }
+                        if reply_markup:
+                            edit_payload["reply_markup"] = reply_markup
                         await client.post(
                             f"{TELEGRAM_API_BASE}/bot{token}/editMessageText",
+                            json=edit_payload
+                        )
+                    # 3. Send a new direct alert message with the interview room link & button so the candidate gets notified
+                    if action == "interested" and chat_id and meeting_link:
+                        new_msg = (
+                            f"🎉 *Here is your Live Interview Room Link!*\n\n"
+                            f"💼 *Position:* {req_title}\n"
+                            f"🏢 *Company:* {company}\n"
+                            f"🔑 *Passcode:* `{passcode}`\n\n"
+                            f"🎥 *Meeting Room:*\n{meeting_link}\n\n"
+                            f"Tap below to join the live video room:"
+                        )
+                        await client.post(
+                            f"{TELEGRAM_API_BASE}/bot{token}/sendMessage",
                             json={
                                 "chat_id": chat_id,
-                                "message_id": message_id,
-                                "text": updated_text,
-                                "parse_mode": "Markdown"
+                                "text": new_msg,
+                                "parse_mode": "Markdown",
+                                "reply_markup": reply_markup
                             }
                         )
-                print(f"[TELEGRAM RSVP PROCESSED] Token={outreach_token} Action={action} Candidate={cand_name}")
+                print(f"[TELEGRAM RSVP PROCESSED] Token={outreach_token} Action={action} Candidate={cand_name} MeetingLink={meeting_link}")
                 return
 
 

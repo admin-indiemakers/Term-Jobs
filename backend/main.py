@@ -1753,14 +1753,23 @@ except Exception as bus_err:
 
 
 @app.get("/api/public/outreach/{token}/respond", response_class=HTMLResponse)
-def candidate_outreach_respond(token: str, action: str = "interested"):
+def candidate_outreach_respond(request: Request, token: str, action: str = "interested"):
     """
     Public interactive response endpoint triggered when a candidate clicks
-    [Available & Interested] or [Not Available] in their email.
+    [Available & Interested] or [Not Available] in their email or outreach.
     """
     from modules.candidate.outreach_service import handle_candidate_rsvp
 
-    res = handle_candidate_rsvp(token, action)
+    origin = None
+    if request:
+        origin = request.headers.get("origin") or request.headers.get("referer")
+        if origin:
+            parts = origin.split("://")
+            if len(parts) == 2:
+                domain_part = parts[1].split("/")[0]
+                origin = f"{parts[0]}://{domain_part}"
+
+    res = handle_candidate_rsvp(token, action, origin=origin)
     if res.get("error"):
         return HTMLResponse(
             status_code=400,
@@ -1790,6 +1799,32 @@ def candidate_outreach_respond(token: str, action: str = "interested"):
     req_title = res.get("requisition_title", "Position")
     comp_name = res.get("company_name", "Hiring Team")
     act = res.get("action")
+    meeting_link = res.get("meeting_link")
+    portal_link = res.get("candidate_portal_link")
+    passcode = res.get("candidate_passcode") or "TJ-FAST-TRACK"
+
+    interview_box = ""
+    if act == "interested" and meeting_link:
+        interview_box = f"""
+    <div style="margin: 20px 0; padding: 20px; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 14px; text-align: center;">
+      <div style="font-size: 13px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+        🎥 Your Video Interview Room is Ready
+      </div>
+      <div style="margin: 14px 0;">
+        <a href="{meeting_link}" target="_blank" style="display: inline-block; background: #059669; color: #ffffff; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 4px 12px rgba(5,150,105,0.25);">
+          Enter Video Interview Room &rarr;
+        </a>
+      </div>
+      <div style="font-size: 12px; color: #374151; margin-top: 10px;">
+        Candidate Access Passcode: <code style="background: #ffffff; padding: 4px 8px; border-radius: 6px; font-weight: 800; border: 1px solid #d1d5db; font-family: monospace;">{passcode}</code>
+      </div>
+      <div style="margin-top: 12px;">
+        <a href="{portal_link}" target="_blank" style="font-size: 12px; color: #059669; text-decoration: underline;">
+          Or login via Candidate Interview Portal
+        </a>
+      </div>
+    </div>
+"""
 
     if act == "interested":
         headline = "Availability & Interest Confirmed!"
@@ -1797,7 +1832,7 @@ def candidate_outreach_respond(token: str, action: str = "interested"):
         badge_color = "#059669"
         icon = "✓"
         desc = f"Thank you, <strong>{cand_name}</strong>! We've notified <strong>{comp_name}</strong> that you are available and interested in the <strong>{req_title}</strong> role."
-        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. The recruitment coordinator will reach out directly."
+        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your video room is provisioned above."
     elif act == "unavailable":
         headline = "Status Successfully Updated"
         badge_bg = "#f1f5f9"
@@ -1838,6 +1873,7 @@ def candidate_outreach_respond(token: str, action: str = "interested"):
       <strong>Position:</strong> {req_title}<br/>
       <strong>Hiring Partner:</strong> {comp_name}
     </div>
+    {interview_box}
     <p style="font-size:12.5px; color:#64748b;">{sub_desc}</p>
     <div style="margin-top:28px; border-top:1px solid #f1f5f9; padding-top:20px; font-size:11px; color:#94a3b8;">
       TermJobs Automated Talent Network &bull; Secured with Verified RSVP Token
