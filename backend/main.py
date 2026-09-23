@@ -1926,6 +1926,83 @@ def trigger_superadmin_requisition_outreach(
     return dispatch_outreach_to_top_candidates(requisition_id, limit=20, force_resend=True)
 
 
+@app.post("/api/superadmin/outreach/send-test-telegram")
+def send_test_telegram_alert_endpoint(
+    payload: dict,
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    """Super Admin Control Panel: Send a live test Telegram alert to a candidate or chat_id."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+    
+    chat_id = payload.get("chat_id")
+    email = (payload.get("email") or "").strip().lower()
+    requisition_id = payload.get("requisition_id")
+    
+    from modules.shared.db import db
+    from modules.candidate.telegram_service import send_candidate_requisition_alert
+    import asyncio
+    import secrets
+    import concurrent.futures
+    
+    if not chat_id and email:
+        cand = db["candidates"].find_one({"candidate_email": email})
+        if cand:
+            chat_id = cand.get("telegram_chat_id")
+        if not chat_id:
+            tlink = db["telegram_links"].find_one({"candidate_email": email})
+            if tlink:
+                chat_id = tlink.get("chat_id")
+                
+    if not chat_id:
+        cand_with_tg = db["candidates"].find_one({"telegram_chat_id": {"$exists": True, "$ne": None, "$ne": ""}})
+        if cand_with_tg:
+            chat_id = cand_with_tg.get("telegram_chat_id")
+            
+    if not chat_id:
+        raise HTTPException(status_code=400, detail="No connected Telegram Chat ID found. Please link via @Termjobs_alertbot first.")
+        
+    req = db["requisitions"].find_one({"id": requisition_id}) if requisition_id else (
+        db["requisitions"].find_one({"status": {"$in": ["Published", "Active", "Open"]}}) or db["requisitions"].find_one({})
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="No active requisition found to test with.")
+        
+    cand_info = {
+        "candidate_name": getattr(current_user, "name", "Super Admin"),
+        "candidate_email": email or getattr(current_user, "email", "admin@termjobs.in"),
+        "id": str(current_user.id)
+    }
+    
+    token = secrets.token_urlsafe(24)
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+        
+    if loop and loop.is_running():
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            res = pool.submit(asyncio.run, send_candidate_requisition_alert(
+                chat_id=chat_id,
+                requisition=req,
+                candidate=cand_info,
+                outreach_token=token,
+                match_score=98.0,
+                match_reasons=["Direct Admin Live Test", "Telegram delivery verified"]
+            )).result()
+    else:
+        res = asyncio.run(send_candidate_requisition_alert(
+            chat_id=chat_id,
+            requisition=req,
+            candidate=cand_info,
+            outreach_token=token,
+            match_score=98.0,
+            match_reasons=["Direct Admin Live Test", "Telegram delivery verified"]
+        ))
+        
+    return {"status": "success", "chat_id": chat_id, "telegram_result": res}
+
+
 @app.get("/api/superadmin/outreach/settings")
 def get_superadmin_outreach_settings(current_user: User = Depends(get_current_user)) -> dict:
     """Get automated candidate outreach system settings."""

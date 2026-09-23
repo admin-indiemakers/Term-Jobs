@@ -60,6 +60,7 @@ export default function SuperAdminOutreachControl() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [loadingReqDetails, setLoadingReqDetails] = useState(false);
   const [triggeringOutreach, setTriggeringOutreach] = useState(false);
+  const [testingTelegram, setTestingTelegram] = useState(false);
   const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' | 'activity' | 'message_preview'
   const [previewChannel, setPreviewChannel] = useState('telegram'); // 'telegram' | 'email'
   const [filterRsvp, setFilterRsvp] = useState('all'); // 'all' | 'interested' | 'unavailable' | 'pending'
@@ -158,7 +159,9 @@ export default function SuperAdminOutreachControl() {
         token,
         method: 'POST'
       });
-      showToast(`Successfully evaluated pool and dispatched emails to ${res.emails_sent || 0} top candidates!`);
+      const tgCount = res.telegram_alerts_sent != null ? res.telegram_alerts_sent : (res.top_candidates || []).filter(c => c.telegram_sent).length;
+      const count = res.outreach_dispatched || res.emails_sent || (res.top_candidates || []).length || 0;
+      showToast(`Successfully evaluated pool: outreach dispatched to ${count} candidates (${tgCount} live Telegram alerts sent)!`);
       // Refresh current requisition details and stats
       await fetchRequisitionDetails(selectedReqId);
       const updatedStats = await request('/api/superadmin/outreach/stats', { token }).catch(() => null);
@@ -167,6 +170,25 @@ export default function SuperAdminOutreachControl() {
       showToast(err.message || 'Failed to trigger candidate matching & outreach', 'error');
     } finally {
       setTriggeringOutreach(false);
+    }
+  };
+
+  // Send single live test alert to Telegram
+  const handleSendTestTelegram = async (email = '', name = '') => {
+    setTestingTelegram(true);
+    try {
+      const res = await request('/api/superadmin/outreach/send-test-telegram', {
+        token,
+        method: 'POST',
+        body: { email, requisition_id: selectedReqId },
+      });
+      showToast(`⚡ Live Telegram alert delivered to ${name || 'connected Telegram'} (Chat ID: ${res.chat_id})!`);
+      // Refresh details to reflect sent status
+      if (selectedReqId) await fetchRequisitionDetails(selectedReqId);
+    } catch (err) {
+      showToast(err.message || 'Failed to send test Telegram alert. Open @Termjobs_alertbot in Telegram and send your email to link!', 'error');
+    } finally {
+      setTestingTelegram(false);
     }
   };
 
@@ -244,18 +266,30 @@ export default function SuperAdminOutreachControl() {
 
         {/* Global Controls */}
         <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto">
-          {/* Telegram Bot Direct Link */}
-          <a
-            href="https://t.me/Termjobs_alertbot"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold hover:bg-sky-100 transition-all shadow-xs cursor-pointer text-decoration-none"
-            title="Open Telegram Bot"
-          >
-            <Send size={14} className="text-[#229ED9]" />
-            <span>Bot: @Termjobs_alertbot</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          </a>
+          {/* Telegram Bot Direct Link & Test Alert */}
+          <div className="flex items-center gap-1.5">
+            <a
+              href="https://t.me/Termjobs_alertbot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 px-3 py-2 rounded-xl border border-sky-300 bg-sky-50 text-sky-800 text-xs font-bold hover:bg-sky-100 transition-all shadow-xs cursor-pointer text-decoration-none"
+              title="Open Telegram Bot"
+            >
+              <Send size={14} className="text-[#229ED9]" />
+              <span>Bot: @Termjobs_alertbot</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            </a>
+            <button
+              type="button"
+              onClick={() => handleSendTestTelegram()}
+              disabled={testingTelegram}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 text-xs font-bold hover:bg-emerald-100 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              title="Send a live test alert to Telegram right now"
+            >
+              <Send size={13} className="text-emerald-600" />
+              <span>{testingTelegram ? 'Sending...' : '⚡ Test Alert to Telegram'}</span>
+            </button>
+          </div>
 
           {/* Automated Dispatch Toggle */}
           <button
@@ -628,7 +662,15 @@ export default function SuperAdminOutreachControl() {
                                   <Send size={10} /> @{c.telegram_username || 'Telegram'}
                                 </a>
                               ) : (
-                                <span className="text-[10px] text-gray-400">✉️ Email Only</span>
+                                <a
+                                  href={`https://t.me/Termjobs_alertbot?start=${encodeURIComponent(c.email || c.candidate_email || c.id)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-300 text-[10px] font-bold hover:bg-amber-100 transition-colors flex items-center gap-1 cursor-pointer"
+                                  title="Click to link this candidate via Telegram Bot"
+                                >
+                                  <span>🔗</span> Link Telegram
+                                </a>
                               )}
                               {c.experience_years && (
                                 <span className="text-[10px] text-gray-400">
@@ -753,6 +795,16 @@ export default function SuperAdminOutreachControl() {
                                   <FileText size={13} />
                                 </a>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => handleSendTestTelegram(c.email || c.candidate_email, c.name || c.candidate_name)}
+                                disabled={testingTelegram}
+                                className="px-2 py-1 rounded-lg border border-sky-300 bg-sky-50 hover:bg-sky-100 text-[11px] font-bold text-sky-800 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                                title="Send live Telegram match alert to this candidate"
+                              >
+                                <Send size={10} className="text-[#229ED9]" />
+                                <span>Alert</span>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => setPreviewCandidateModal(c)}

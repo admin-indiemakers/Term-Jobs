@@ -5,6 +5,7 @@ to the Top 20 ranked candidates, and handles candidate one-click RSVP responses.
 """
 
 import os
+import uuid
 import secrets
 import logging
 from datetime import datetime, timezone
@@ -248,13 +249,30 @@ def dispatch_outreach_to_top_candidates(
         if not telegram_chat_id:
             c_doc = db["candidates"].find_one({
                 "$or": [
-                    {"id": cand["id"]},
+                    {"id": cand.get("id")},
                     {"candidate_email": email.lower()}
                 ]
             })
             if c_doc:
                 telegram_chat_id = c_doc.get("telegram_chat_id")
                 telegram_username = c_doc.get("telegram_username")
+
+        if not telegram_chat_id:
+            t_doc = db["telegram_links"].find_one({
+                "$or": [
+                    {"candidate_id": cand.get("id")},
+                    {"candidate_email": email.lower()}
+                ]
+            })
+            if t_doc:
+                telegram_chat_id = t_doc.get("chat_id")
+                telegram_username = t_doc.get("username")
+
+        if not telegram_chat_id:
+            u_doc = db["users"].find_one({"email": email.lower()})
+            if u_doc and u_doc.get("telegram_chat_id"):
+                telegram_chat_id = u_doc.get("telegram_chat_id")
+                telegram_username = u_doc.get("telegram_username")
 
         telegram_sent = False
         telegram_result = None
@@ -423,6 +441,7 @@ def handle_candidate_rsvp(token: str, action: str) -> Dict[str, Any]:
             )
         else:
             sub_doc = {
+                "id": str(uuid.uuid4()),
                 "requisition_id": req_id,
                 "requisition_title": req_title,
                 "candidate_id": cand_id,
@@ -479,7 +498,7 @@ def get_outreach_stats_summary() -> Dict[str, Any]:
     telegram_sent_count = sum(1 for o in all_outreach if o.get("telegram_sent") is True)
 
     # Count candidates with connected Telegram
-    telegram_connected_candidates = db["candidates"].count_documents({"telegram_chat_id": {"$exists": True, "$ne": None, "$ne": ""}})
+    telegram_connected_candidates = db["candidates"].count_documents({"telegram_chat_id": {"$nin": [None, ""]}})
 
     response_rate = round(((interested + unavailable + declined) / max(total_sent, 1)) * 100, 1)
 
