@@ -4,7 +4,7 @@ Interview Scheduling REST router for Company Admins, Hiring Managers, and Vendor
 import os
 import uuid
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, Request, UploadFile, File, Form
 from fastapi.encoders import jsonable_encoder
 
 from modules.identity.domain.models import User, Tenant
@@ -47,6 +47,8 @@ from modules.interview.services.interview_service import (
     record_round_transcript,
     analyze_round_communication,
     get_round_communication_analysis,
+    save_round_recording,
+    get_round_recording,
 )
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
@@ -334,6 +336,109 @@ def get_communication_analysis_endpoint(round_id: str):
     if not report:
         raise HTTPException(status_code=404, detail="Interview round not found")
     return report
+
+
+@router.post("/rounds/{round_id}/recording")
+async def upload_round_recording_endpoint(
+    round_id: str,
+    file: UploadFile = File(...),
+    duration_seconds: int = Form(0),
+):
+    """
+    Upload candidate video & audio recording for an interview round.
+    Stores reliably to MongoDB GridFS and local storage, updating InterviewRound metadata.
+    """
+    contents = await file.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Empty video recording file provided")
+
+    updated = save_round_recording(
+        round_id=round_id,
+        file_bytes=contents,
+        filename=file.filename or f"interview_{round_id}.webm",
+        content_type=file.content_type or "video/webm",
+        duration_seconds=duration_seconds,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+
+    return {
+        "status": "success",
+        "round_id": round_id,
+        "recording_url": updated.get("recording_url"),
+        "recording_metadata": updated.get("recording_metadata"),
+    }
+
+
+@router.get("/rounds/{round_id}/recording")
+async def get_round_recording_endpoint(
+    round_id: str,
+    request: Request,
+    download: bool = Query(False),
+):
+    """
+    Streams or downloads candidate video recording with HTTP 206 Partial Content (Range requests)
+    for seamless, instant video scrubbing and playback in modern web browsers.
+    """
+    rec = get_round_recording(round_id)
+    if not rec or not rec.get("bytes"):
+        raise HTTPException(status_code=404, detail="Recording not found for this interview round")
+
+    data_bytes = rec["bytes"]
+    total_size = len(data_bytes)
+    content_type = rec.get("content_type", "video/webm") or "video/webm"
+    filename = rec.get("filename", f"interview_{round_id}.webm")
+    disposition = f'attachment; filename="{filename}"' if download else f'inline; filename="{filename}"'
+
+    range_header = request.headers.get("range")
+    if not range_header or download:
+        return Response(
+            content=data_bytes,
+            status_code=200,
+            media_type=content_type,
+            headers={
+                "Content-Length": str(total_size),
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": disposition,
+            },
+        )
+
+    # Handle HTTP 206 Byte-Range for fluid video scrubbing
+    try:
+        range_str = range_header.replace("bytes=", "").strip()
+        parts = range_str.split("-")
+        start = int(parts[0]) if parts[0] else 0
+        end = int(parts[1]) if len(parts) > 1 and parts[1] else total_size - 1
+        end = min(end, total_size - 1)
+        if start > end or start >= total_size:
+            return Response(
+                status_code=416,
+                headers={"Content-Range": f"bytes */{total_size}"}
+            )
+        chunk_length = end - start + 1
+        chunk = data_bytes[start : end + 1]
+        return Response(
+            content=chunk,
+            status_code=206,
+            media_type=content_type,
+            headers={
+                "Content-Range": f"bytes {start}-{end}/{total_size}",
+                "Accept-Ranges": "bytes",
+                "Content-Length": str(chunk_length),
+                "Content-Disposition": disposition,
+            },
+        )
+    except Exception:
+        return Response(
+            content=data_bytes,
+            status_code=200,
+            media_type=content_type,
+            headers={
+                "Content-Length": str(total_size),
+                "Accept-Ranges": "bytes",
+                "Content-Disposition": disposition,
+            },
+        )
 
 
 @router.post("/livekit/token")

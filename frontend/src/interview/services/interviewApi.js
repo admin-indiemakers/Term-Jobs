@@ -118,4 +118,19 @@ export const interviewApi = {
       method: 'GET',
     });
   },
+
+  // Candidate Interview Video Recording
+  async uploadRecording(roundId, videoBlob, durationSeconds = 0) {
+    const formData = new FormData();
+    formData.append('file', videoBlob, `recording_${roundId}.webm`);
+    formData.append('duration_seconds', String(Math.round(durationSeconds)));
+    return request(`/api/interviews/rounds/${roundId}/recording`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  getRecordingStreamUrl(roundId, download = false) {
+    return `/api/interviews/rounds/${roundId}/recording${download ? '?download=true' : ''}`;
+  },
 };

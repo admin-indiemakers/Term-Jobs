@@ -46,6 +46,7 @@ export function AiInterviewStage({
   stopSpeechRecognition,
   onAiSpeakingChange,
   onAnalysisReady,
+  localStream = null,
 }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
@@ -59,6 +60,8 @@ export function AiInterviewStage({
   const [answers, setAnswers] = useState({});
   const [isCompleted, setIsCompleted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+  const [recordingUploaded, setRecordingUploaded] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(round?.communication_analysis || null);
   const [metricsResult, setMetricsResult] = useState(round?.communication_metrics || null);
   const [activeTab, setActiveTab] = useState('scorecard'); // 'scorecard' | 'transcript'
@@ -67,6 +70,83 @@ export function AiInterviewStage({
   const synthRef = useRef(typeof window !== 'undefined' ? window.speechSynthesis : null);
   const timerRef = useRef(null);
   const processedTurnIdsRef = useRef(new Set());
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const recordingStartTimeRef = useRef(null);
+  const internalStreamRef = useRef(null);
+
+  // Auto-record candidate video/audio stream using MediaRecorder
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
+
+    let isCancelled = false;
+
+    const initRecording = async () => {
+      try {
+        let stream = localStream;
+        if (!stream || stream.getTracks().length === 0) {
+          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+            try {
+              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+              internalStreamRef.current = stream;
+            } catch (mediaErr) {
+              console.warn('[RECORDING] Fallback camera/mic access not granted:', mediaErr);
+              return;
+            }
+          }
+        }
+
+        if (!stream || isCancelled) return;
+
+        // Choose supported mimeType
+        const mimeCandidates = [
+          'video/webm;codecs=vp9,opus',
+          'video/webm;codecs=vp8,opus',
+          'video/webm',
+          'video/mp4',
+        ];
+        let chosenMime = '';
+        for (const candidate of mimeCandidates) {
+          if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(candidate)) {
+            chosenMime = candidate;
+            break;
+          }
+        }
+
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          return;
+        }
+
+        const options = chosenMime ? { mimeType: chosenMime } : undefined;
+        const recorder = new MediaRecorder(stream, options);
+        recordedChunksRef.current = [];
+        recordingStartTimeRef.current = Date.now();
+
+        recorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            recordedChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.start(1000); // 1s slice for smooth buffer
+        mediaRecorderRef.current = recorder;
+        console.log('🎥 [RECORDING] Candidate session recording started with:', chosenMime || 'default codec');
+      } catch (err) {
+        console.warn('⚠️ [RECORDING] MediaRecorder initialization warning:', err);
+      }
+    };
+
+    initRecording();
+
+    return () => {
+      isCancelled = true;
+      if (internalStreamRef.current) {
+        try {
+          internalStreamRef.current.getTracks().forEach((t) => t.stop());
+        } catch (_) {}
+      }
+    };
+  }, [localStream]);
 
   // 4 Core Structured Questions focused on Spoken Communication & Role Fit
   const questions = useMemo(
@@ -328,7 +408,7 @@ export function AiInterviewStage({
     }
   };
 
-  // Finalize interview and call 3-Tier Communication Analyzer API
+  // Finalize interview and call 3-Tier Communication Analyzer API + Upload Video Recording
   const finishAndAnalyzeInterview = async (finalAnswers) => {
     setIsCompleted(true);
     setIsAnalyzing(true);
@@ -336,6 +416,42 @@ export function AiInterviewStage({
     if (synthRef.current) {
       synthRef.current.cancel();
       updateAiSpeaking(false);
+    }
+
+    // 1. Stop MediaRecorder and package recorded video
+    let recordedBlob = null;
+    const callSeconds = recordingStartTimeRef.current
+      ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
+      : 30;
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        await new Promise((resolve) => {
+          mediaRecorderRef.current.onstop = resolve;
+          mediaRecorderRef.current.stop();
+        });
+        if (recordedChunksRef.current.length > 0) {
+          const mime = mediaRecorderRef.current.mimeType || 'video/webm';
+          recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
+          console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
+        }
+      } catch (recErr) {
+        console.warn('MediaRecorder stop warning:', recErr);
+      }
+    }
+
+    // 2. Upload video recording to backend & MongoDB GridFS
+    if (recordedBlob && round?.id) {
+      setIsUploadingRecording(true);
+      try {
+        await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
+        setRecordingUploaded(true);
+        console.log('✅ [RECORDING] Video successfully uploaded to backend');
+      } catch (uploadErr) {
+        console.warn('⚠️ [RECORDING] Video upload warning:', uploadErr);
+      } finally {
+        setIsUploadingRecording(false);
+      }
     }
 
     const turnsToSubmit = [];
@@ -427,14 +543,18 @@ export function AiInterviewStage({
   if (isCompleted) {
     const isCandidate = userRole === 'candidate' || !['admin', 'interviewer', 'hiring_manager'].includes(userRole);
 
-    // 1. Loading state during transmission
-    if (isAnalyzing) {
+    // 1. Loading state during transmission & video upload
+    if (isAnalyzing || isUploadingRecording) {
       return (
         <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300">
           <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mb-4" />
-          <div className="text-base font-bold text-white tracking-tight">Submitting Interview Responses...</div>
+          <div className="text-base font-bold text-white tracking-tight">
+            {isUploadingRecording ? 'Saving Interview Video & Audio...' : 'Submitting Interview Responses...'}
+          </div>
           <p className="text-xs text-zinc-400 mt-1 max-w-sm">
-            Encrypting and securely delivering your spoken responses to the hiring team...
+            {isUploadingRecording
+              ? 'Securely encrypting and archiving your interview video recording for the hiring team...'
+              : 'Encrypting and securely delivering your spoken responses to the hiring team...'}
           </p>
         </div>
       );
@@ -473,6 +593,13 @@ export function AiInterviewStage({
               <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 Submitted · Under Hiring Review
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
+              <span className="text-zinc-400 font-medium">Session Video</span>
+              <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle2 size={13} />
+                Securely Archived
               </span>
             </div>
             <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">

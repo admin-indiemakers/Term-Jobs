@@ -1224,3 +1224,115 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
         summary.sort(key=lambda x: (not (x.get("ready_for_round_1") or x.get("ready_for_next_round")), x.get("candidate_name", "")))
         return summary
 
+
+def save_round_recording(
+    round_id: str,
+    file_bytes: bytes,
+    filename: str = "",
+    content_type: str = "video/webm",
+    duration_seconds: int = 0,
+) -> Optional[dict]:
+    """
+    Saves candidate interview video recording:
+    1. Persists locally in uploads/interview_videos/{round_id}.webm
+    2. Stores in MongoDB GridFS for persistent multi-machine/cloud access
+    3. Updates InterviewRound.recording_url and InterviewRound.recording_metadata
+    """
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+
+        # 1. Local filesystem persistence
+        backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+        local_dir = os.path.join(backend_dir, "uploads", "interview_videos")
+        os.makedirs(local_dir, exist_ok=True)
+        local_path = os.path.join(local_dir, f"{round_id}.webm")
+        try:
+            with open(local_path, "wb") as f:
+                f.write(file_bytes)
+        except Exception as e:
+            print(f"[RECORDING] Local file write warning: {e}")
+
+        # 2. MongoDB GridFS persistence
+        grid_id = None
+        try:
+            import gridfs
+            from modules.shared.db import _get_client, settings
+            real_db = _get_client()[settings.mongo_db_name]
+            fs = gridfs.GridFS(real_db)
+            # Remove any previous recording for this round to prevent orphaned data
+            for existing in fs.find({"round_id": round_id}):
+                fs.delete(existing._id)
+            grid_id = fs.put(
+                file_bytes,
+                filename=filename or f"recording_{round_id}.webm",
+                content_type=content_type or "video/webm",
+                round_id=round_id,
+                duration_seconds=duration_seconds,
+                uploaded_at=datetime.now(timezone.utc),
+            )
+        except Exception as e:
+            print(f"[RECORDING] GridFS storage warning: {e}")
+
+        # 3. Update InterviewRound
+        clean_filename = filename or f"interview_{round_id}.webm"
+        r.recording_url = f"/api/interviews/rounds/{round_id}/recording"
+        r.recording_metadata = {
+            "filename": clean_filename,
+            "content_type": content_type or "video/webm",
+            "size_bytes": len(file_bytes),
+            "duration_seconds": duration_seconds,
+            "gridfs_id": str(grid_id) if grid_id else None,
+            "local_path": local_path if os.path.exists(local_path) else None,
+            "uploaded_at": datetime.now(timezone.utc).isoformat(),
+        }
+        r.updated_at = datetime.now(timezone.utc)
+        session._track(r)
+        session.commit()
+        return r.to_doc()
+
+
+def get_round_recording(round_id: str) -> Optional[dict]:
+    """
+    Retrieves video recording bytes and metadata for an interview round.
+    Checks local filesystem first, then falls back to MongoDB GridFS.
+    """
+    # 1. Check local filesystem
+    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    local_dir = os.path.join(backend_dir, "uploads", "interview_videos")
+    local_path = os.path.join(local_dir, f"{round_id}.webm")
+    if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+        try:
+            with open(local_path, "rb") as f:
+                data = f.read()
+            return {
+                "bytes": data,
+                "size": len(data),
+                "content_type": "video/webm",
+                "filename": f"interview_{round_id}.webm",
+            }
+        except Exception as e:
+            print(f"[RECORDING] Local read warning: {e}")
+
+    # 2. Check MongoDB GridFS
+    try:
+        import gridfs
+        from modules.shared.db import _get_client, settings
+        real_db = _get_client()[settings.mongo_db_name]
+        fs = gridfs.GridFS(real_db)
+        grid_file = fs.find_one({"round_id": round_id})
+        if grid_file:
+            data = grid_file.read()
+            return {
+                "bytes": data,
+                "size": len(data),
+                "content_type": getattr(grid_file, "content_type", "video/webm") or "video/webm",
+                "filename": getattr(grid_file, "filename", f"interview_{round_id}.webm") or f"interview_{round_id}.webm",
+            }
+    except Exception as e:
+        print(f"[RECORDING] GridFS read warning: {e}")
+
+    return None
+
+

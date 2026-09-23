@@ -169,6 +169,8 @@ class InterviewRound(Model):
         "transcript": list,                     # list of {speaker, text, timestamp, duration_seconds}
         "communication_metrics": dict,          # deterministic linguistic heuristics (WPM, fillers, diversity)
         "communication_analysis": dict,         # structured AI communication evaluation
+        "recording_url": "",                    # streaming/download URL for interview video recording
+        "recording_metadata": dict,             # {size_bytes, duration_seconds, format, uploaded_at}
         "created_by": "",
         "created_at": _utcnow,
         "updated_at": _utcnow,
@@ -201,6 +203,8 @@ class InterviewRound(Model):
     transcript = Column("transcript")
     communication_metrics = Column("communication_metrics")
     communication_analysis = Column("communication_analysis")
+    recording_url = Column("recording_url")
+    recording_metadata = Column("recording_metadata")
     created_by = Column("created_by")
     created_at = Column("created_at")
     updated_at = Column("updated_at")

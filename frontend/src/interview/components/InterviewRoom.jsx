@@ -429,6 +429,7 @@ export function InterviewRoom({
                   companyName={round?.company_name || 'Hiring Partner'}
                   userRole={currentUserRole}
                   isMicOn={isMicOn}
+                  localStream={localStream}
                   liveTranscript={liveTranscript}
                   transcriptTurns={transcriptTurns}
                   startSpeechRecognition={startSpeechRecognition}

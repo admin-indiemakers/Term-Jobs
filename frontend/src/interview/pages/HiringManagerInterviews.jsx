@@ -20,6 +20,7 @@ import { RoundTimeline } from '../components/RoundTimeline';
 import { CreateRoundModal } from '../components/CreateRoundModal';
 import { InviteActionsModal } from '../components/InviteActionsModal';
 import { EvaluationForm } from '../components/EvaluationForm';
+import { CandidateRecordingPlayer } from '../components/CandidateRecordingPlayer';
 import { EVALUATION_VERDICTS } from '../utils/interviewConstants';
 
 export function HiringManagerInterviews() {
@@ -599,6 +600,12 @@ export function HiringManagerInterviews() {
                       )}
                     </div>
                   )}
+
+                  {/* Candidate Video Recording Player */}
+                  <CandidateRecordingPlayer
+                    round={selectedRoundForDetails}
+                    candidateName={selectedCandidate?.candidate_name}
+                  />
 
                   {/* AI Spoken Communication Assessment & Executive Scorecard for Admin */}
                   {roundCommAnalysis && roundCommAnalysis.analysis && Object.keys(roundCommAnalysis.analysis).length > 0 ? (

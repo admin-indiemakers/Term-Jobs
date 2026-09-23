@@ -48,7 +48,11 @@ export async function request(path, { method = 'GET', body, data: requestData, t
   const fullUrl = `${API_BASE_URL}${path}`;
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
 
-  const headers = { 'Content-Type': 'application/json' };
+  const isFormData = typeof FormData !== 'undefined' && payloadBody instanceof FormData;
+  const headers = {};
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -59,7 +63,7 @@ export async function request(path, { method = 'GET', body, data: requestData, t
     path,
     method,
     headers,
-    body: payloadBody !== undefined ? payloadBody : null,
+    body: isFormData ? '[FormData]' : (payloadBody !== undefined ? payloadBody : null),
   });
 
   const controller = new AbortController();
@@ -70,7 +74,7 @@ export async function request(path, { method = 'GET', body, data: requestData, t
     response = await fetch(fullUrl, {
       method,
       headers,
-      body: payloadBody !== undefined ? JSON.stringify(payloadBody) : undefined,
+      body: payloadBody !== undefined ? (isFormData ? payloadBody : JSON.stringify(payloadBody)) : undefined,
       signal: controller.signal,
     });
   } catch (err) {
