@@ -139,6 +139,13 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
             }
           }
         },
+        error_callback: (err) => {
+          console.warn('Google OAuth token client error:', err);
+          const currentOrigin = window.location.origin;
+          setError(
+            `Google OAuth Error (origin_mismatch): "${currentOrigin}" is not registered in Google Cloud Console. Please add "${currentOrigin}" to Authorized JavaScript origins.`
+          );
+        },
       });
 
       client.requestAccessToken();
