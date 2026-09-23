@@ -93,7 +93,11 @@ export function HiringManagerInterviews() {
       setRounds(Array.isArray(roundsRes) ? roundsRes : []);
 
       if (Array.isArray(summaryRes) && summaryRes.length > 0) {
-        setSelectedCandidate(summaryRes[0]);
+        const first = summaryRes[0];
+        setSelectedCandidate(first);
+        const candRounds = first.rounds || [];
+        const latest = first.latest_round || (candRounds.length > 0 ? candRounds[candRounds.length - 1] : null);
+        setSelectedRoundForDetails(latest);
       }
     } catch (err) {
       setErrorMsg(err?.message || 'Failed to load interview workflows.');
@@ -293,6 +297,8 @@ export function HiringManagerInterviews() {
                   key={cand.candidate_submission_id || cand.candidate_email}
                   onClick={() => {
                     setSelectedCandidate(cand);
+                    const candRounds = cand.rounds || [];
+                    const latest = cand.latest_round || (candRounds.length > 0 ? candRounds[candRounds.length - 1] : null);
                     setSelectedRoundForDetails(latest || null);
                   }}
                   className={`p-5 rounded-3xl border transition cursor-pointer ${
@@ -323,7 +329,20 @@ export function HiringManagerInterviews() {
                     )}
                   </div>
 
-                  <h3 className="font-extrabold text-base tracking-tight mb-0.5">{cand.candidate_name}</h3>
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <h3 className="font-extrabold text-base tracking-tight">{cand.candidate_name}</h3>
+                    {(() => {
+                      const completedWithScore = candRounds.find(r => r.communication_analysis?.overall_score) || (cand.latest_round?.communication_analysis?.overall_score ? cand.latest_round : null);
+                      const score = completedWithScore?.communication_analysis?.overall_score;
+                      if (!score) return null;
+                      return (
+                        <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500 text-zinc-950 flex items-center gap-1 shadow-sm shrink-0">
+                          <Sparkles size={11} className="stroke-[3]" />
+                          <span>AI: {score}/100</span>
+                        </span>
+                      );
+                    })()}
+                  </div>
                   <div className={`text-xs truncate ${isSelected ? 'text-zinc-400' : 'text-zinc-500'}`}>
                     {cand.requisition_title || 'Position'} {cand.vendor_name ? `· ${cand.vendor_name}` : ''}
                   </div>
@@ -400,6 +419,40 @@ export function HiringManagerInterviews() {
                   <span>{selectedCandidate.total_rounds === 0 ? 'Schedule Round 1' : 'Add Next Round'}</span>
                 </button>
               </div>
+
+              {/* Highlight AI Communication Score Banner if Available */}
+              {(() => {
+                const candRounds = selectedCandidate.rounds || [];
+                const completedWithScore = candRounds.find(r => r.communication_analysis?.overall_score) || (selectedCandidate.latest_round?.communication_analysis?.overall_score ? selectedCandidate.latest_round : null);
+                const score = completedWithScore?.communication_analysis?.overall_score;
+                if (!score) return null;
+                return (
+                  <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-teal-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-emerald-500 text-zinc-950 font-black text-xl flex items-center justify-center shadow-md shrink-0">
+                        {score}
+                      </div>
+                      <div>
+                        <div className="text-xs font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
+                          <Sparkles size={13} className="text-emerald-600" />
+                          <span>AI Spoken Communication Score: {score} / 100</span>
+                        </div>
+                        <div className="text-[11px] text-emerald-800 mt-0.5">
+                          {completedWithScore.communication_analysis?.summary || 'Spoken interview completed. Click below to inspect dimensional scores & transcript.'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setSelectedRoundForDetails(completedWithScore)}
+                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shrink-0 cursor-pointer shadow-xs"
+                    >
+                      View AI Scorecard
+                    </button>
+                  </div>
+                );
+              })()}
 
               {/* Ready For Round 1 Banner (Shortlisted Candidates) */}
               {selectedCandidate.total_rounds === 0 && (

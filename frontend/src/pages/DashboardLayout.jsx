@@ -301,7 +301,7 @@ export default function DashboardLayout() {
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
-        { to: '/dashboard/interviews', label: 'Interviews', end: false, section: 'CANDIDATES', icon: Icons.Interviews },
+        { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'CANDIDATES', icon: Icons.Interviews },
         { to: '/dashboard/candidates/issues', label: 'Reported Issues', end: true, section: 'CANDIDATES', icon: Icons.Flag, badge: hmCounts.openIssues },
         { to: '/dashboard/candidates/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATES', icon: Icons.PortalAccess },
         { to: '/dashboard/workforce/team', label: 'Team Overview', end: false, section: 'WORKFORCE', icon: Icons.Team },
@@ -311,6 +311,7 @@ export default function DashboardLayout() {
       : userRole === 'Recruiter'
         ? [
           { to: '/dashboard/recruiter', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+          { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
           { to: '/dashboard/recruiter/requisitions', label: 'Requisitions', end: true, section: 'WORKSPACE', icon: Icons.Requisitions },
           { to: '/dashboard/recruiter/candidates', label: 'Candidates Bank', end: true, section: 'WORKSPACE', icon: Icons.CandidatesBank },
           { to: '/dashboard/recruiter/shortlisted', label: 'Shortlisted Candidates', end: true, section: 'WORKSPACE', icon: Icons.Shortlisted },
@@ -324,6 +325,7 @@ export default function DashboardLayout() {
         : userRole === 'Director'
           ? [
               { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
               { to: '/dashboard/director/work-orders', label: 'Work Orders', end: true, icon: Icons.Receipt, badge: directorPendingWorkOrders },
               { to: '/dashboard/director/agreements', label: 'Agreements', end: true, icon: Icons.Agreements, badge: directorPendingAgreements }
             ]
@@ -331,15 +333,18 @@ export default function DashboardLayout() {
             ? [
                 { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
                 { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+                { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
               ]
           : (userRole === 'Finance' || userRole === 'Finance Team')
             ? [
                 { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, icon: Icons.Receipt, badge: financePendingPayments },
                 { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+                { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
               ]
           : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
             ? [
               { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
               { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, icon: Icons.Diamond, count: superAdminCandidateCount },
               { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, icon: Icons.Mail },
               { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
@@ -348,7 +353,18 @@ export default function DashboardLayout() {
               { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
               { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, icon: Icons.PortalAccess },
             ]
-            : [{ to: '/dashboard/hr', label: 'Dashboard', end: true }];
+            : (userRole === 'Admin' || userRole.toLowerCase() === 'admin')
+              ? [
+                  { to: '/dashboard/admin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                  { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+                  { to: '/dashboard/candidates', label: 'Candidates', end: false, icon: Icons.Diamond },
+                  { to: '/dashboard/admin/partner-vendors', label: 'Vendors', end: false, icon: Icons.Building },
+                ]
+              : [
+                  { to: '/dashboard/hr', label: 'Dashboard', end: true },
+                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                ];
 
   // Render full reusable sidebar inner contents
   const renderSidebarContent = (onLinkClick) => (

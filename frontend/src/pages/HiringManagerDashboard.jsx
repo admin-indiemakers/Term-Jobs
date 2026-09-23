@@ -17,8 +17,11 @@ import {
   TrendingUp,
   Clock,
   ShieldCheck,
-  FileText
+  FileText,
+  Award,
+  Activity,
 } from 'lucide-react';
+import { interviewApi } from '../interview/services/interviewApi';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -71,18 +74,20 @@ export default function HiringManagerDashboard() {
   const [onboardingList, setOnboardingList] = useState([]);
   const [openIssues, setOpenIssues] = useState([]);
   const [wfStats, setWfStats] = useState(null);
+  const [interviewSummary, setInterviewSummary] = useState([]);
 
   const loadDashboardData = async () => {
     setLoading(true);
     setError('');
     try {
-      const [reqsData, shortlistedData, acceptedData, obData, issuesData, wfData] = await Promise.all([
+      const [reqsData, shortlistedData, acceptedData, obData, issuesData, wfData, interviewSummaryData] = await Promise.all([
         request('/requisitions', { token }).catch(() => []),
         request('/candidates/shortlisted', { token }).catch(() => []),
         request('/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
+        interviewApi.getSummary(token).catch(() => []),
       ]);
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
@@ -101,6 +106,7 @@ export default function HiringManagerDashboard() {
       setOpenIssues(iList.filter((i) => i.status === 'open'));
 
       if (wfData) setWfStats(wfData);
+      setInterviewSummary(Array.isArray(interviewSummaryData) ? interviewSummaryData : []);
     } catch (err) {
       console.error('Failed to load hiring manager dashboard data:', err);
       setError(err.message || 'Unable to load live dashboard statistics.');
@@ -154,6 +160,26 @@ export default function HiringManagerDashboard() {
   const activeTeamCount = wfStats?.stats?.active_workers || wfStats?.active_count || 0;
   const pendingTimesheetsCount = wfStats?.stats?.pending_timesheets || wfStats?.pending_timesheets || 0;
 
+  // Completed AI Interviews with Scores
+  const candidatesWithAiScores = useMemo(() => {
+    return interviewSummary
+      .map((c) => {
+        const rounds = c.rounds || [];
+        const completedWithScore =
+          rounds.find((r) => r.communication_analysis?.overall_score) ||
+          (c.latest_round?.communication_analysis?.overall_score ? c.latest_round : null);
+        const score = completedWithScore?.communication_analysis?.overall_score;
+        return {
+          ...c,
+          completedRound: completedWithScore,
+          aiScore: score,
+          metrics: completedWithScore?.communication_metrics,
+          summary: completedWithScore?.communication_analysis?.summary,
+        };
+      })
+      .filter((c) => c.aiScore);
+  }, [interviewSummary]);
+
   // Pipeline Stage Calculations from Real Data
   const pipelineStages = useMemo(() => {
     return [
@@ -161,10 +187,11 @@ export default function HiringManagerDashboard() {
       { id: 'pending', count: pendingCount, label: 'PENDING APPROVAL', to: '/dashboard/requisitions/pending-approval' },
       { id: 'ai', count: draftCount, label: 'AI DRAFTS', to: '/dashboard/requisitions/drafted' },
       { id: 'shortlisted', count: shortlistedCount, label: 'SHORTLISTED', to: '/dashboard/candidates' },
+      { id: 'interviews', count: candidatesWithAiScores.length, label: 'AI INTERVIEWS', to: '/dashboard/interviews' },
       { id: 'accepted', count: acceptedCount, label: 'ACCEPTED', to: '/dashboard/candidates/accepted' },
       { id: 'onboarding', count: onboardingCount, label: 'ONBOARDING', to: '/dashboard/candidates/onboarding' },
     ];
-  }, [liveRolesCount, pendingCount, draftCount, shortlistedCount, acceptedCount, onboardingCount]);
+  }, [liveRolesCount, pendingCount, draftCount, shortlistedCount, candidatesWithAiScores.length, acceptedCount, onboardingCount]);
 
   // Greeting
   const greetingText = useMemo(() => {
@@ -490,7 +517,7 @@ export default function HiringManagerDashboard() {
               </Link>
             </div>
 
-            <div className="grid grid-cols-5 gap-1.5 pt-1">
+            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5 pt-1">
               {pipelineStages.map((stage) => (
                 <div
                   key={stage.id}
@@ -514,6 +541,93 @@ export default function HiringManagerDashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Dedicated AI Candidate Interview Evaluations & Scores Card */}
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold border border-emerald-500/20">
+              <Sparkles size={18} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-gray-900 tracking-tight">AI Interview Candidate Scores</h2>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  {candidatesWithAiScores.length} Evaluated
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 mt-0.5">
+                Spoken communication ratings, cadence metrics, and transcript assessments
+              </p>
+            </div>
+          </div>
+
+          <Link
+            to="/dashboard/interviews"
+            className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition flex items-center gap-1.5 self-start sm:self-auto cursor-pointer shadow-xs"
+          >
+            <span>Open All Interviews & Scorecards</span>
+            <ArrowRight size={13} />
+          </Link>
+        </div>
+
+        {candidatesWithAiScores.length === 0 ? (
+          <div className="p-8 text-center bg-gray-50/60 rounded-xl border border-gray-200/60">
+            <p className="text-xs text-gray-500">No candidates have completed AI spoken interviews yet.</p>
+            <Link
+              to="/dashboard/interviews"
+              className="text-xs text-emerald-600 font-bold hover:underline mt-1.5 inline-block"
+            >
+              Schedule an AI Interview Round →
+            </Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+            {candidatesWithAiScores.map((cand) => (
+              <div
+                key={cand.candidate_submission_id || cand.candidate_email}
+                onClick={() => navigate('/dashboard/interviews')}
+                className="p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:shadow-sm bg-gradient-to-b from-white to-gray-50/40 transition-all cursor-pointer flex flex-col justify-between space-y-3"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                      {cand.requisition_title || 'Position'}
+                    </span>
+                    <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-500 text-zinc-950 flex items-center gap-1 shadow-xs">
+                      <Sparkles size={11} className="stroke-[3]" />
+                      <span>{cand.aiScore} / 100</span>
+                    </span>
+                  </div>
+
+                  <h3 className="text-base font-extrabold text-gray-900 tracking-tight">
+                    {cand.candidate_name}
+                  </h3>
+                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                    {cand.candidate_email}
+                  </div>
+
+                  {cand.summary && (
+                    <p className="text-[11px] text-gray-600 mt-2 line-clamp-2 italic bg-gray-50 p-2 rounded-lg border border-gray-100">
+                      "{cand.summary}"
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-2.5 border-t border-gray-100 flex items-center justify-between text-[11px]">
+                  <span className="text-gray-400 font-medium">
+                    {cand.metrics?.words_per_minute ? `${cand.metrics.words_per_minute} WPM` : 'Completed'}
+                  </span>
+                  <span className="text-emerald-700 font-bold flex items-center gap-1 hover:underline">
+                    <span>Inspect Scorecard</span>
+                    <ChevronRight size={12} />
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
