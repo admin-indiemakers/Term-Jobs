@@ -17,12 +17,68 @@ import {
   Sparkles,
   FileText,
   Layers,
-  Send
+  Send,
+  User,
+  LogOut,
+  ShieldCheck,
+  Lock,
+  Edit3,
+  Check
 } from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
+import { useCandidateAuth } from '../context/CandidateAuthContext';
 
-export default function PublicJobBoard({ onBackToHome }) {
+export default function PublicJobBoard({ onBackToHome, candidateProfile: propCandidate, onCandidateLogout }) {
+  const candidateAuth = useCandidateAuth();
+  const candidateUser = propCandidate || candidateAuth?.candidateUser;
+  const applications = candidateAuth?.applications || [];
+  const logout = onCandidateLogout || candidateAuth?.logout;
+  const refreshProfile = candidateAuth?.refreshProfile;
+  const setupProfile = candidateAuth?.setupProfile;
+  const [showMyAppsModal, setShowMyAppsModal] = useState(false);
+
+  // Setup Profile State
+  const [showSetupModal, setShowSetupModal] = useState(false);
+  const [setupForm, setSetupForm] = useState({
+    name: '',
+    phone: '',
+    title: '',
+    skills: '',
+    linkedin_url: '',
+    github_url: '',
+    summary: '',
+  });
+  const [setupResumeFile, setSetupResumeFile] = useState(null);
+  const [setupSubmitting, setSetupSubmitting] = useState(false);
+  const [setupError, setSetupError] = useState(null);
+  const [setupSuccess, setSetupSuccess] = useState(false);
+  const setupResumeInputRef = useRef(null);
+
+  // Whether user wants to override profile resume for this specific job application
+  const [useCustomResume, setUseCustomResume] = useState(false);
+
+  // Derive Profile Completeness
+  const hasResume = Boolean(
+    candidateAuth?.hasResume ||
+    candidateAuth?.resumeFilename ||
+    candidateUser?.has_resume ||
+    candidateUser?.filename ||
+    candidateUser?.resume_pdf
+  );
+
+  const hasPhone = Boolean(
+    candidateUser?.candidate_phone ||
+    candidateUser?.details?.candidate_phone
+  );
+
+  const isProfileComplete = Boolean(
+    (candidateAuth?.profileCompleted || candidateUser?.profile_completed || (hasResume && hasPhone)) &&
+    hasResume
+  );
+
+  const currentResumeName = candidateAuth?.resumeFilename || candidateUser?.filename || 'profile_resume.pdf';
+
   const [requisitions, setRequisitions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -70,6 +126,39 @@ export default function PublicJobBoard({ onBackToHome }) {
   // Drag & drop highlight
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Auto-populate candidate profile into apply form and setup form
+  useEffect(() => {
+    if (candidateUser) {
+      setApplyForm((prev) => ({
+        ...prev,
+        name: candidateUser.candidate_name || prev.name,
+        email: candidateUser.candidate_email || prev.email,
+        phone: candidateUser.candidate_phone || candidateUser.details?.candidate_phone || prev.phone,
+        linkedin_url: candidateUser.details?.linkedin_url || prev.linkedin_url,
+        github_url: candidateUser.details?.github_url || prev.github_url,
+      }));
+      setSetupForm({
+        name: candidateUser.candidate_name || '',
+        phone: candidateUser.candidate_phone || candidateUser.details?.candidate_phone || '',
+        title: candidateUser.candidate_title || '',
+        skills: Array.isArray(candidateUser.skills) ? candidateUser.skills.join(', ') : '',
+        linkedin_url: candidateUser.details?.linkedin_url || '',
+        github_url: candidateUser.details?.github_url || '',
+        summary: candidateUser.summary || '',
+      });
+      setPoolForm((prev) => ({
+        ...prev,
+        name: candidateUser.candidate_name || prev.name,
+        email: candidateUser.candidate_email || prev.email,
+        phone: candidateUser.candidate_phone || candidateUser.details?.candidate_phone || prev.phone,
+        title: candidateUser.candidate_title || prev.title,
+        skills: Array.isArray(candidateUser.skills) ? candidateUser.skills.join(', ') : prev.skills,
+        linkedin_url: candidateUser.details?.linkedin_url || prev.linkedin_url,
+        github_url: candidateUser.details?.github_url || prev.github_url,
+      }));
+    }
+  }, [candidateUser, selectedJob, showGeneralPoolModal]);
 
   // Fetch public requisitions
   useEffect(() => {
@@ -198,20 +287,80 @@ export default function PublicJobBoard({ onBackToHome }) {
     }
   };
 
+  const handleSetupSubmit = async (e) => {
+    e.preventDefault();
+    setSetupError(null);
+
+    if (!setupForm.name.trim()) {
+      setSetupError('Please enter your full name.');
+      return;
+    }
+    if (!setupForm.phone.trim()) {
+      setSetupError('Phone number is required so hiring managers can reach you.');
+      return;
+    }
+    if (!setupForm.title.trim()) {
+      setSetupError('Professional title / primary role is required.');
+      return;
+    }
+    // Resume is strictly mandatory if no resume is currently on file
+    if (!setupResumeFile && !hasResume) {
+      setSetupError('Resume file (PDF or DOCX) is strictly mandatory to set up your talent profile.');
+      return;
+    }
+
+    setSetupSubmitting(true);
+    try {
+      const fd = new FormData();
+      fd.append('candidate_name', setupForm.name.trim());
+      fd.append('candidate_phone', setupForm.phone.trim());
+      fd.append('candidate_title', setupForm.title.trim());
+      fd.append('skills', setupForm.skills.trim());
+      fd.append('linkedin_url', setupForm.linkedin_url.trim());
+      fd.append('github_url', setupForm.github_url.trim());
+      fd.append('summary', setupForm.summary.trim());
+      if (setupResumeFile) {
+        fd.append('resume', setupResumeFile);
+      }
+
+      await setupProfile(fd);
+      setSetupSuccess(true);
+      setTimeout(() => {
+        setSetupSuccess(false);
+        setShowSetupModal(false);
+      }, 1000);
+    } catch (err) {
+      console.error('Setup profile error:', err);
+      setSetupError(err.message || 'Failed to update talent profile. Please try again.');
+    } finally {
+      setSetupSubmitting(false);
+    }
+  };
+
   const handleApplySubmit = async (e) => {
     e.preventDefault();
     if (!selectedJob) return;
 
-    if (!applyForm.name.trim()) {
+    if (!isProfileComplete) {
+      setShowSetupModal(true);
+      return;
+    }
+
+    const applicantName = applyForm.name.trim() || candidateUser?.candidate_name || '';
+    const applicantEmail = applyForm.email.trim() || candidateUser?.candidate_email || '';
+    const applicantPhone = applyForm.phone.trim() || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '';
+
+    if (!applicantName) {
       setSubmitError('Please enter your full name.');
       return;
     }
-    if (!applyForm.email.trim()) {
+    if (!applicantEmail) {
       setSubmitError('Please enter your email address.');
       return;
     }
-    if (!resumeFile) {
-      setSubmitError('Please upload your resume (PDF or DOCX).');
+
+    if (useCustomResume && !resumeFile) {
+      setSubmitError('Please choose a resume file to upload, or uncheck to use your saved profile resume.');
       return;
     }
 
@@ -220,13 +369,16 @@ export default function PublicJobBoard({ onBackToHome }) {
 
     try {
       const formData = new FormData();
-      formData.append('name', applyForm.name.trim());
-      formData.append('email', applyForm.email.trim());
-      formData.append('phone', applyForm.phone.trim());
-      formData.append('linkedin_url', applyForm.linkedin_url.trim());
-      formData.append('github_url', applyForm.github_url.trim());
+      formData.append('name', applicantName);
+      formData.append('email', applicantEmail);
+      formData.append('phone', applicantPhone);
+      formData.append('linkedin_url', applyForm.linkedin_url.trim() || candidateUser?.details?.linkedin_url || '');
+      formData.append('github_url', applyForm.github_url.trim() || candidateUser?.details?.github_url || '');
       formData.append('cover_note', applyForm.cover_note.trim());
-      formData.append('resume', resumeFile);
+      
+      if (useCustomResume && resumeFile) {
+        formData.append('resume', resumeFile);
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/public/requisitions/${selectedJob.id}/apply`, {
         method: 'POST',
@@ -239,6 +391,9 @@ export default function PublicJobBoard({ onBackToHome }) {
       }
 
       setSubmitSuccess(result);
+      if (refreshProfile) {
+        refreshProfile();
+      }
     } catch (err) {
       console.error('Error applying to requisition:', err);
       setSubmitError(err.message || 'An unexpected error occurred while submitting your application.');
@@ -299,6 +454,105 @@ export default function PublicJobBoard({ onBackToHome }) {
           Live Talent Marketplace
         </div>
       </div>
+
+      {/* Candidate Profile Session Bar */}
+      {candidateUser && (
+        <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-white border border-[#E5E5E0] shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-full bg-[#0A0A0A] text-white flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden shadow-inner">
+              {candidateUser.picture ? (
+                <img src={candidateUser.picture} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                candidateUser.candidate_name?.charAt(0)?.toUpperCase() || 'C'
+              )}
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-extrabold text-[15px] text-[#0A0A0A]">{candidateUser.candidate_name}</span>
+                {isProfileComplete ? (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <CheckCircle2 size={12} className="text-emerald-600" />
+                    Profile Complete • Resume on File
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-300 animate-pulse">
+                    <AlertCircle size={12} className="text-amber-600" />
+                    Profile Incomplete • Resume Required
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#666660] mt-0.5">
+                {candidateUser.candidate_email} {candidateUser.candidate_title ? `• ${candidateUser.candidate_title}` : ''}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            <button
+              onClick={() => setShowSetupModal(true)}
+              className={`px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ${
+                isProfileComplete
+                  ? 'border border-[#D5D5CF] bg-[#F5F5F2] hover:bg-[#EBEBE6] text-[#0A0A0A]'
+                  : 'bg-[#0A0A0A] hover:bg-[#222220] text-white shadow-sm border-none'
+              }`}
+            >
+              {isProfileComplete ? (
+                <>
+                  <Edit3 size={13} />
+                  <span>Edit Profile & Resume</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={13} className="text-amber-400" />
+                  <span>Setup Profile Now</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={() => setShowMyAppsModal(true)}
+              className="px-3.5 py-2 rounded-xl border border-[#D5D5CF] bg-[#F5F5F2] hover:bg-[#EBEBE6] text-xs font-semibold text-[#0A0A0A] transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <FileText size={14} />
+              <span>My Applications ({applications.length})</span>
+            </button>
+            <button
+              onClick={logout}
+              className="px-3 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-xs font-semibold text-red-700 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <LogOut size={13} />
+              <span>Sign Out</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Profile Incomplete Action Alert Banner */}
+      {candidateUser && !isProfileComplete && (
+        <div className="mb-8 p-4 sm:p-5 rounded-2xl bg-amber-500/10 border border-amber-300/80 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-800 flex items-center justify-center shrink-0">
+              <ShieldCheck size={22} />
+            </div>
+            <div>
+              <h4 className="font-bold text-sm text-[#0A0A0A] flex items-center gap-2">
+                <span>Setup Your Talent Profile to Apply</span>
+                <span className="text-[10.5px] px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 font-extrabold uppercase">
+                  Resume Mandatory
+                </span>
+              </h4>
+              <p className="text-xs text-[#555550] mt-0.5">
+                You must set up your contact details and upload your master resume before you can apply for open requisitions. After completing setup once, you will be able to apply to any role with a single click.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowSetupModal(true)}
+            className="shrink-0 px-4 py-2.5 rounded-xl bg-[#0A0A0A] hover:bg-[#222220] text-white text-xs font-bold transition-all shadow-xs cursor-pointer border-none flex items-center gap-2"
+          >
+            <Sparkles size={14} className="text-amber-400" />
+            <span>Setup Profile & Resume</span>
+          </button>
+        </div>
+      )}
 
       {/* Hero Header */}
       <div className="text-center max-w-[780px] mx-auto mb-12">
@@ -812,184 +1066,188 @@ export default function PublicJobBoard({ onBackToHome }) {
 
                   {/* Right Column: Direct Application Form */}
                   <div className="lg:col-span-5 bg-[#FAFAF8] p-6 rounded-2xl border border-[#E5E5E0] flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Send size={16} className="text-[#0A0A0A]" />
-                        <h3 className="font-extrabold text-lg text-[#0A0A0A]">Apply for this Position</h3>
+                    {!isProfileComplete ? (
+                      <div>
+                        <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center mb-4 shadow-xs">
+                          <ShieldCheck size={26} />
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-bold uppercase tracking-wider mb-2">
+                          <AlertCircle size={13} />
+                          Setup Profile Required
+                        </div>
+                        <h3 className="font-extrabold text-xl text-[#0A0A0A] mb-2">Complete Profile to Apply</h3>
+                        <p className="text-xs text-[#666660] leading-relaxed mb-5">
+                          To apply for positions at <span className="font-semibold text-[#0A0A0A]">{selectedJob.company_name}</span>, you must complete your candidate talent profile and upload your master resume first.
+                        </p>
+
+                        <div className="space-y-3 bg-white p-4 rounded-xl border border-[#EAEAE6] mb-6 shadow-xs">
+                          <div className="flex items-start gap-2.5 text-xs text-[#444440]">
+                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                            <span><strong>Upload Resume Once:</strong> Mandatory resume upload during profile setup enables AI competence extraction.</span>
+                          </div>
+                          <div className="flex items-start gap-2.5 text-xs text-[#444440]">
+                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                            <span><strong>1-Click Applications:</strong> Once setup is done, apply to any open role instantly with zero repeated typing.</span>
+                          </div>
+                          <div className="flex items-start gap-2.5 text-xs text-[#444440]">
+                            <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                            <span><strong>Instant Matching:</strong> Your profile is directly scored against {selectedJob.company_name}'s requirements.</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setShowSetupModal(true)}
+                          className="w-full py-3.5 bg-[#0A0A0A] hover:bg-[#222220] text-white text-xs font-bold tracking-wide uppercase rounded-xl transition-all shadow-md cursor-pointer border-none flex items-center justify-center gap-2"
+                        >
+                          <Sparkles size={15} className="text-amber-400" />
+                          <span>Setup Profile & Upload Resume</span>
+                        </button>
                       </div>
-                      <p className="text-xs text-[#666660] mb-5">
-                        Submit your profile directly to {selectedJob.company_name}'s hiring team.
-                      </p>
-
-                      {submitError && (
-                        <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
-                          <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                          <span>{submitError}</span>
-                        </div>
-                      )}
-
-                      <form onSubmit={handleApplySubmit} className="space-y-4">
-                        {/* Name */}
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-[#444440] mb-1">
-                            Full Name <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={applyForm.name}
-                            onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })}
-                            placeholder="e.g. Maya Chen"
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-white text-sm text-[#0A0A0A] outline-none focus:border-[#0A0A0A] transition-colors"
-                          />
-                        </div>
-
-                        {/* Email */}
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-[#444440] mb-1">
-                            Email Address <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="email"
-                            required
-                            value={applyForm.email}
-                            onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
-                            placeholder="maya.chen@example.com"
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-white text-sm text-[#0A0A0A] outline-none focus:border-[#0A0A0A] transition-colors"
-                          />
-                        </div>
-
-                        {/* Phone */}
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-[#444440] mb-1">
-                            Phone Number
-                          </label>
-                          <input
-                            type="tel"
-                            value={applyForm.phone}
-                            onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
-                            placeholder="+91 98765 43210"
-                            className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-white text-sm text-[#0A0A0A] outline-none focus:border-[#0A0A0A] transition-colors"
-                          />
-                        </div>
-
-                        {/* LinkedIn / GitHub */}
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
-                              LinkedIn Profile
-                            </label>
-                            <input
-                              type="url"
-                              value={applyForm.linkedin_url}
-                              onChange={(e) => setApplyForm({ ...applyForm, linkedin_url: e.target.value })}
-                              placeholder="https://linkedin.com/in/..."
-                              className="w-full px-3 py-2 rounded-xl border border-[#E5E5E0] bg-white text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
-                            />
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Send size={16} className="text-[#0A0A0A]" />
+                            <h3 className="font-extrabold text-lg text-[#0A0A0A]">Apply for this Position</h3>
                           </div>
-                          <div>
-                            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
-                              GitHub / Portfolio
-                            </label>
-                            <input
-                              type="url"
-                              value={applyForm.github_url}
-                              onChange={(e) => setApplyForm({ ...applyForm, github_url: e.target.value })}
-                              placeholder="https://github.com/..."
-                              className="w-full px-3 py-2 rounded-xl border border-[#E5E5E0] bg-white text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
-                            />
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                            <CheckCircle2 size={12} />
+                            Profile Ready
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#666660] mb-4">
+                          Submit your verified profile directly to <span className="font-semibold text-[#0A0A0A]">{selectedJob.company_name}</span>.
+                        </p>
+
+                        {submitError && (
+                          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
+                            <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                            <span>{submitError}</span>
+                          </div>
+                        )}
+
+                        {/* Saved Candidate Profile Card */}
+                        <div className="p-4 rounded-xl bg-white border border-[#E5E5E0] shadow-xs mb-4 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <span className="text-xs font-bold text-[#0A0A0A] block">{candidateUser?.candidate_name || applyForm.name}</span>
+                              <span className="text-[11px] text-[#666660]">{candidateUser?.candidate_email || applyForm.email}</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowSetupModal(true)}
+                              className="text-[11px] font-semibold text-[#0A0A0A] underline hover:text-emerald-700 bg-transparent border-none cursor-pointer p-0"
+                            >
+                              Edit Profile
+                            </button>
+                          </div>
+
+                          <div className="pt-2 border-t border-[#F0F0EC] flex items-center justify-between text-xs">
+                            <span className="text-[#666660]">Phone:</span>
+                            <span className="font-medium text-[#0A0A0A]">{candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || applyForm.phone || 'On file'}</span>
+                          </div>
+
+                          <div className="pt-2 border-t border-[#F0F0EC] flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <FileText size={14} className="text-emerald-600 shrink-0" />
+                              <span className="font-medium text-[#0A0A0A] truncate">{currentResumeName}</span>
+                            </div>
+                            <span className="inline-flex items-center text-[10.5px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                              Saved Resume
+                            </span>
                           </div>
                         </div>
 
-                        {/* Brief Note */}
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-[#444440] mb-1">
-                            Cover Note / Summary
-                          </label>
-                          <textarea
-                            rows="2"
-                            value={applyForm.cover_note}
-                            onChange={(e) => setApplyForm({ ...applyForm, cover_note: e.target.value })}
-                            placeholder="Briefly highlight your relevant technical experience..."
-                            className="w-full px-3.5 py-2 rounded-xl border border-[#E5E5E0] bg-white text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] resize-none"
-                          />
-                        </div>
+                        <form onSubmit={handleApplySubmit} className="space-y-4">
+                          {/* Cover Note / Summary */}
+                          <div>
+                            <label className="block text-xs font-bold uppercase tracking-wider text-[#444440] mb-1">
+                              Cover Note / Quick Pitch <span className="text-[10.5px] font-normal text-[#8A8A85] lowercase">(optional)</span>
+                            </label>
+                            <textarea
+                              rows="3"
+                              value={applyForm.cover_note}
+                              onChange={(e) => setApplyForm({ ...applyForm, cover_note: e.target.value })}
+                              placeholder={`Briefly highlight why you're a great fit for ${selectedJob.company_name}...`}
+                              className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-white text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] resize-none"
+                            />
+                          </div>
 
-                        {/* Resume File Dropzone */}
-                        <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-[#444440] mb-1">
-                            Resume (PDF / DOCX) <span className="text-red-500">*</span>
-                          </label>
-                          
-                          <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".pdf,.docx,.doc"
-                            onChange={handleFileChange}
-                            className="hidden"
-                          />
-
-                          {resumeFile ? (
-                            <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-[#E5E5E0] shadow-xs">
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <FileText size={18} className="text-[#0A0A0A] shrink-0" />
-                                <div className="min-w-0">
-                                  <span className="text-xs font-bold text-[#0A0A0A] truncate block">{resumeFile.name}</span>
-                                  <span className="text-[11px] text-[#8A8A85]">{(resumeFile.size / 1024).toFixed(0)} KB</span>
-                                </div>
-                              </div>
+                          {/* Optional Override: Upload Custom Resume */}
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
                               <button
                                 type="button"
-                                onClick={() => setResumeFile(null)}
-                                className="text-[#8A8A85] hover:text-red-600 border-none bg-transparent cursor-pointer p-1"
+                                onClick={() => {
+                                  setUseCustomResume(!useCustomResume);
+                                  if (useCustomResume) setResumeFile(null);
+                                }}
+                                className="text-[11px] text-[#666660] hover:text-[#0A0A0A] underline bg-transparent border-none cursor-pointer p-0"
                               >
-                                <X size={16} />
+                                {useCustomResume ? 'Use saved profile resume instead' : 'Upload a different resume for this role only'}
                               </button>
                             </div>
-                          ) : (
-                            <div
-                              onDragOver={handleDragOver}
-                              onDragLeave={handleDragLeave}
-                              onDrop={handleDrop}
-                              onClick={() => fileInputRef.current?.click()}
-                              className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
-                                isDragging 
-                                  ? 'border-[#0A0A0A] bg-[#F0F0EC]' 
-                                  : 'border-[#D5D5D0] bg-white hover:border-[#0A0A0A] hover:bg-[#FAFAF8]'
-                              }`}
-                            >
-                              <Upload size={20} className="mx-auto mb-1.5 text-[#8A8A85]" />
-                              <div className="text-xs font-bold text-[#0A0A0A]">
-                                Drop your resume here, or <span className="underline">browse</span>
-                              </div>
-                              <div className="text-[10.5px] text-[#8A8A85] mt-0.5">Supports PDF or DOCX (max 10MB)</div>
-                            </div>
-                          )}
-                        </div>
 
-                        {/* Submit Button */}
-                        <button
-                          type="submit"
-                          disabled={submitting}
-                          className="w-full mt-2 py-3 bg-[#0A0A0A] hover:bg-[#222220] text-white text-xs font-bold tracking-wide uppercase rounded-xl transition-all shadow-xs cursor-pointer border-none disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                          {submitting ? (
-                            <>
-                              <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                              <span>Analyzing Profile & Submitting...</span>
-                            </>
-                          ) : (
-                            <>
-                              <Send size={14} />
-                              <span>Submit Application</span>
-                            </>
-                          )}
-                        </button>
-                      </form>
-                    </div>
+                            {useCustomResume && (
+                              <div className="mt-2 p-3 bg-white rounded-xl border border-dashed border-[#D5D5D0]">
+                                <input
+                                  ref={fileInputRef}
+                                  type="file"
+                                  accept=".pdf,.docx,.doc"
+                                  onChange={handleFileChange}
+                                  className="hidden"
+                                />
+                                {resumeFile ? (
+                                  <div className="flex items-center justify-between text-xs">
+                                    <span className="font-bold text-[#0A0A0A] truncate">{resumeFile.name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setResumeFile(null)}
+                                      className="text-red-500 hover:text-red-700 bg-transparent border-none cursor-pointer"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full text-center text-xs text-[#0A0A0A] font-semibold py-2 bg-[#FAFAF8] hover:bg-[#F0F0EC] rounded-lg border border-[#E5E5E0] cursor-pointer"
+                                  >
+                                    Choose Custom PDF/DOCX
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 1-Click Submit Button */}
+                          <button
+                            type="submit"
+                            disabled={submitting}
+                            className="w-full mt-2 py-3.5 bg-[#0A0A0A] hover:bg-[#222220] text-white text-xs font-bold tracking-wide uppercase rounded-xl transition-all shadow-md cursor-pointer border-none disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            {submitting ? (
+                              <>
+                                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span>Submitting 1-Click Application...</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send size={14} />
+                                <span>Submit Application with Profile</span>
+                              </>
+                            )}
+                          </button>
+                        </form>
+                      </div>
+                    )}
 
                     <div className="mt-4 pt-3 border-t border-[#EAEAE6] text-center text-[11px] text-[#8A8A85]">
-                      🔒 Secure direct application to {selectedJob.company_name}.
+                      {isProfileComplete 
+                        ? '⚡ 1-Click Application powered by your verified candidate profile.' 
+                        : '🔒 Mandatory profile setup & resume upload required.'}
                     </div>
                   </div>
                 </div>
@@ -1214,6 +1472,326 @@ export default function PublicJobBoard({ onBackToHome }) {
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* CANDIDATE TALENT PROFILE SETUP MODAL                         */}
+      {/* ============================================================ */}
+      {showSetupModal && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-sm">
+          <div className="relative w-full max-w-[620px] bg-white rounded-3xl shadow-2xl border border-[#E5E5E0] flex flex-col max-h-[92vh] overflow-hidden">
+            {/* Modal Header */}
+            <div className="px-6 py-4.5 border-b border-[#EAEAE6] flex items-center justify-between bg-[#FAFAF8]">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-xl bg-[#0A0A0A] text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  <User size={18} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-[#0A0A0A] leading-tight">
+                    {hasResume ? 'Talent Profile & Master Resume' : 'Setup Your Talent Profile'}
+                  </h3>
+                  <p className="text-xs text-[#666660]">
+                    {hasResume
+                      ? 'Update your professional details or upload an updated resume'
+                      : 'Upload your mandatory resume once to enable 1-click applications across all roles'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowSetupModal(false);
+                  setSetupError(null);
+                }}
+                className="w-8 h-8 rounded-full border border-[#E5E5E0] text-[#666660] hover:text-[#0A0A0A] hover:bg-white flex items-center justify-center transition-colors cursor-pointer bg-transparent"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {setupSuccess ? (
+                <div className="text-center py-10 space-y-3">
+                  <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto">
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h4 className="font-extrabold text-lg text-[#0A0A0A]">Profile & Resume Saved!</h4>
+                  <p className="text-xs text-[#666660] max-w-sm mx-auto">
+                    Your candidate talent profile has been successfully saved. You can now apply to any open requisition with 1-click!
+                  </p>
+                </div>
+              ) : (
+                <form onSubmit={handleSetupSubmit} className="space-y-4">
+                  {setupError && (
+                    <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5">
+                      <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                      <span>{setupError}</span>
+                    </div>
+                  )}
+
+                  {/* Name & Email Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={setupForm.name}
+                        onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
+                        placeholder="e.g. Arjun Sharma"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        Email Address
+                      </label>
+                      <input
+                        type="email"
+                        disabled
+                        value={candidateUser?.candidate_email || ''}
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#F0F0EC] text-xs text-[#666660] cursor-not-allowed outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Phone & Title Row */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        Phone Number <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="tel"
+                        required
+                        value={setupForm.phone}
+                        onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
+                        placeholder="+91 98765 43210"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        Professional Title / Primary Role <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={setupForm.title}
+                        onChange={(e) => setSetupForm({ ...setupForm, title: e.target.value })}
+                        placeholder="e.g. Senior Frontend Engineer"
+                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Skills */}
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                      Key Technical Skills <span className="text-[10px] font-normal text-[#8A8A85] lowercase">(comma-separated)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={setupForm.skills}
+                      onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
+                      placeholder="React, TypeScript, Next.js, Node.js, Python..."
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                    />
+                  </div>
+
+                  {/* LinkedIn & GitHub */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        LinkedIn Profile
+                      </label>
+                      <input
+                        type="url"
+                        value={setupForm.linkedin_url}
+                        onChange={(e) => setSetupForm({ ...setupForm, linkedin_url: e.target.value })}
+                        placeholder="https://linkedin.com/in/..."
+                        className="w-full px-3.5 py-2 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        GitHub / Portfolio
+                      </label>
+                      <input
+                        type="url"
+                        value={setupForm.github_url}
+                        onChange={(e) => setSetupForm({ ...setupForm, github_url: e.target.value })}
+                        placeholder="https://github.com/..."
+                        className="w-full px-3.5 py-2 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {/* MANDATORY RESUME UPLOAD SECTION */}
+                  <div className="pt-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440]">
+                        Master Resume (PDF / DOCX) <span className="text-red-500 font-extrabold">* MANDATORY</span>
+                      </label>
+                      {hasResume && (
+                        <span className="text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-semibold">
+                          On file: {currentResumeName}
+                        </span>
+                      )}
+                    </div>
+
+                    <input
+                      ref={setupResumeInputRef}
+                      type="file"
+                      accept=".pdf,.docx,.doc"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setSetupResumeFile(file);
+                          setSetupError(null);
+                        }
+                      }}
+                      className="hidden"
+                    />
+
+                    {setupResumeFile ? (
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-50/50 border border-emerald-200">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <FileText size={20} className="text-emerald-700 shrink-0" />
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-[#0A0A0A] truncate block">{setupResumeFile.name}</span>
+                            <span className="text-[11px] text-[#666660]">{(setupResumeFile.size / 1024).toFixed(0)} KB • Ready to save</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSetupResumeFile(null)}
+                          className="text-[#888880] hover:text-red-600 bg-transparent border-none cursor-pointer p-1"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => setupResumeInputRef.current?.click()}
+                        className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${
+                          !hasResume
+                            ? 'border-amber-400 bg-amber-50/30 hover:border-[#0A0A0A] hover:bg-white'
+                            : 'border-[#D5D5D0] bg-[#FAFAF8] hover:border-[#0A0A0A] hover:bg-white'
+                        }`}
+                      >
+                        <Upload size={22} className={`mx-auto mb-1.5 ${!hasResume ? 'text-amber-600' : 'text-[#8A8A85]'}`} />
+                        <div className="text-xs font-bold text-[#0A0A0A]">
+                          {hasResume ? 'Click here to replace your resume with a new file' : 'Click to select or drop your resume (PDF or DOCX)'}
+                        </div>
+                        <div className="text-[10.5px] text-[#8A8A85] mt-0.5">
+                          {!hasResume ? 'Resume is strictly required to activate your profile and apply' : 'Supports PDF or DOCX up to 10MB'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="pt-3 border-t border-[#EAEAE6] flex items-center justify-end gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowSetupModal(false)}
+                      className="px-4 py-2.5 rounded-xl border border-[#E5E5E0] text-xs font-bold text-[#666660] hover:bg-[#F5F5F2] cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={setupSubmitting}
+                      className="px-6 py-2.5 rounded-xl bg-[#0A0A0A] hover:bg-[#222220] text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-2 border-none"
+                    >
+                      {setupSubmitting ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Saving Profile & Resume...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={14} className="text-emerald-400" />
+                          <span>{hasResume ? 'Save Changes' : 'Complete Profile & Unlock 1-Click Apply'}</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* My Applications Modal */}
+      {showMyAppsModal && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center px-4 bg-black/60 backdrop-blur-xs">
+          <div className="relative w-full max-w-2xl bg-white border border-[#E5E5E0] rounded-3xl p-6 sm:p-8 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-[#EAEAE6]">
+              <div>
+                <h3 className="text-xl font-extrabold text-[#0A0A0A]">My Applications</h3>
+                <p className="text-xs text-[#666660]">Review all positions you've applied to and track your screening progress</p>
+              </div>
+              <button
+                onClick={() => setShowMyAppsModal(false)}
+                className="w-8 h-8 rounded-full border border-[#E5E5E0] text-[#666660] hover:text-[#0A0A0A] flex items-center justify-center cursor-pointer bg-transparent"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-3">
+              {applications.length === 0 ? (
+                <div className="text-center py-10">
+                  <FileText className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-semibold text-[#0A0A0A]">No applications yet</p>
+                  <p className="text-xs text-[#888880] mt-1">Browse the active open roles below and apply with 1-click using your profile.</p>
+                </div>
+              ) : (
+                applications.map((app, idx) => (
+                  <div key={idx} className="p-4 rounded-xl border border-[#EAEAE6] bg-[#FAFAF8] flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h4 className="font-bold text-sm text-[#0A0A0A]">{app.requisition_title}</h4>
+                      <p className="text-xs text-[#666660] flex items-center gap-2 mt-0.5">
+                        <span>{app.company_name}</span>
+                        {app.created_at && <span>• Applied {app.created_at}</span>}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {app.match_score && (
+                        <span className="text-xs font-semibold px-2 py-1 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+                          {app.match_score}% Match
+                        </span>
+                      )}
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                        app.interview_status 
+                          ? 'bg-purple-100 text-purple-800 border border-purple-200' 
+                          : app.status === 'Shortlisted' 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          : 'bg-slate-100 text-slate-700 border border-slate-200'
+                      }`}>
+                        {app.interview_status ? `Interview: ${app.interview_status}` : app.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-[#EAEAE6] flex justify-end">
+              <button
+                onClick={() => setShowMyAppsModal(false)}
+                className="px-4 py-2 rounded-xl bg-[#0A0A0A] text-white text-xs font-bold hover:bg-[#222220] cursor-pointer border-none"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

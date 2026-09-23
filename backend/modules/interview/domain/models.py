@@ -148,6 +148,9 @@ class InterviewRound(Model):
         "room_id": "",
         "status": "Scheduled",
         "evaluation": dict,
+        "transcript": list,                     # list of {speaker, text, timestamp, duration_seconds}
+        "communication_metrics": dict,          # deterministic linguistic heuristics (WPM, fillers, diversity)
+        "communication_analysis": dict,         # structured AI communication evaluation
         "created_by": "",
         "created_at": _utcnow,
         "updated_at": _utcnow,
@@ -177,6 +180,9 @@ class InterviewRound(Model):
     room_id = Column("room_id")
     status = Column("status")
     evaluation = Column("evaluation")
+    transcript = Column("transcript")
+    communication_metrics = Column("communication_metrics")
+    communication_analysis = Column("communication_analysis")
     created_by = Column("created_by")
     created_at = Column("created_at")
     updated_at = Column("updated_at")
@@ -258,4 +264,22 @@ class SendChatMessageRequest(BaseModel):
     sender_identity: Optional[str] = None
     message: str
     message_id: Optional[str] = None
+
+
+class TranscriptTurn(BaseModel):
+    speaker: str = "candidate"  # "candidate" | "interviewer"
+    text: str
+    timestamp: Optional[str] = None
+    duration_seconds: Optional[float] = 0.0
+
+
+class AnalyzeCommunicationRequest(BaseModel):
+    transcript_turns: Optional[List[Dict[str, Any]]] = None
+    call_duration_seconds: Optional[int] = 0
+    candidate_name: Optional[str] = None
+    role_title: Optional[str] = None
+
+
+class SaveTranscriptRequest(BaseModel):
+    transcript_turns: List[Dict[str, Any]]
 

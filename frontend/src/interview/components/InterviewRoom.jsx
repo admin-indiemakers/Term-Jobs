@@ -15,10 +15,13 @@ import {
   ShieldCheck,
   CheckCircle2,
   Clock,
+  Captions,
+  Activity,
 } from 'lucide-react';
 import { useInterviewMedia } from '../hooks/useInterviewMedia';
 import { useInterviewRoom } from '../hooks/useInterviewRoom';
 import { useInterviewChat } from '../hooks/useInterviewChat';
+import { useSpeechTranscription } from '../hooks/useSpeechTranscription';
 import { EvaluationForm } from './EvaluationForm';
 import { interviewApi } from '../services/interviewApi';
 
@@ -36,6 +39,9 @@ export function InterviewRoom({
   const [chatInput, setChatInput] = useState('');
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [postCallEvaluation, setPostCallEvaluation] = useState(false);
+  const [showCaptions, setShowCaptions] = useState(true);
+  const [communicationAnalysis, setCommunicationAnalysis] = useState(round?.communication_analysis || null);
+  const [analyzingSpeech, setAnalyzingSpeech] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -118,6 +124,28 @@ export function InterviewRoom({
     isChatDrawerOpen: activeTab === 'chat',
   });
 
+  // Zero-cost Browser Speech Transcription hook for communication analysis
+  const {
+    isSupported: isSpeechSupported,
+    isListening: isSpeechListening,
+    liveTranscript,
+    transcriptTurns,
+    startListening: startSpeechRecognition,
+    stopListening: stopSpeechRecognition,
+  } = useSpeechTranscription({
+    speakerRole: currentUserRole,
+    speakerName: currentUserName,
+    enabled: true,
+    isMicMuted: !isMicOn,
+  });
+
+  // Auto-start speech recognition when microphone is active
+  useEffect(() => {
+    if (isSpeechSupported && isMicOn) {
+      startSpeechRecognition();
+    }
+  }, [isSpeechSupported, isMicOn, startSpeechRecognition]);
+
   const hasActiveScreenShare = isScreenSharing || isRemoteScreenSharing;
   const remoteParticipantName =
     currentUserRole === 'candidate'
@@ -167,8 +195,29 @@ export function InterviewRoom({
     setChatInput('');
   };
 
-  const handleEndCall = () => {
+  const handleEndCall = async () => {
     disconnect();
+    
+    // Automatically trigger communication analysis if candidate or interviewer turns were captured
+    if (transcriptTurns.length > 0 && round?.id) {
+      setAnalyzingSpeech(true);
+      try {
+        const res = await interviewApi.analyzeCommunication(round.id, {
+          transcript_turns: transcriptTurns,
+          call_duration_seconds: callDuration,
+          candidate_name: round?.candidate_name,
+          role_title: round?.requisition_title,
+        });
+        if (res && res.analysis) {
+          setCommunicationAnalysis(res.analysis);
+        }
+      } catch (err) {
+        console.warn('Spoken communication analysis notice:', err);
+      } finally {
+        setAnalyzingSpeech(false);
+      }
+    }
+
     if (currentUserRole === 'interviewer') {
       setPostCallEvaluation(true);
     } else {
@@ -383,6 +432,15 @@ export function InterviewRoom({
           </div>
         )}
 
+        {/* Real-time Subtitles / Spoken Captions Bar */}
+        {showCaptions && liveTranscript && (
+          <div className="absolute bottom-6 left-1/2 -translate-x-1/2 max-w-xl w-[90%] px-4 py-2.5 rounded-2xl bg-black/85 backdrop-blur-md border border-white/15 text-center text-sm font-medium text-white shadow-2xl z-30 pointer-events-none flex items-center justify-center gap-2.5 transition-all">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="text-zinc-400 text-xs font-semibold uppercase">{currentUserName}:</span>
+            <span className="text-zinc-100 italic font-mono text-xs sm:text-sm">{liveTranscript}</span>
+          </div>
+        )}
+
         {/* Sliding Right Drawer for Chat / Participants / Evaluation */}
         {activeTab && (
           <aside className="absolute top-4 right-4 bottom-4 w-80 sm:w-96 bg-zinc-900/95 backdrop-blur-xl border border-zinc-800 rounded-3xl shadow-2xl flex flex-col z-30 animate-in slide-in-from-right duration-200">
@@ -587,6 +645,20 @@ export function InterviewRoom({
             <Monitor size={18} />
           </button>
 
+          {/* Live Speech Captions Toggle */}
+          <button
+            type="button"
+            onClick={() => setShowCaptions(!showCaptions)}
+            title={showCaptions ? 'Hide Live Captions' : 'Show Live Captions'}
+            className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
+              showCaptions
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-400'
+            }`}
+          >
+            <Captions size={18} />
+          </button>
+
           <div className="w-[1px] h-6 bg-zinc-700 mx-1" />
 
           {/* Chat Drawer Toggle */}
@@ -689,7 +761,11 @@ export function InterviewRoom({
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
           <div className="max-w-2xl w-full my-8">
             <EvaluationForm
-              round={round}
+              round={{
+                ...round,
+                communication_analysis: communicationAnalysis || round?.communication_analysis,
+                transcript: transcriptTurns.length > 0 ? transcriptTurns : round?.transcript,
+              }}
               defaultEvaluator={currentUserName}
               onSuccess={(updated) => {
                 if (onEvaluationComplete) onEvaluationComplete(updated);

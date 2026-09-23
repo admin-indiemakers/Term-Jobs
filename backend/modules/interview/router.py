@@ -21,6 +21,8 @@ from modules.interview.domain.models import (
     UpdateRoundStatusRequest,
     LiveKitTokenRequest,
     SendChatMessageRequest,
+    AnalyzeCommunicationRequest,
+    SaveTranscriptRequest,
 )
 from modules.interview.services.interview_service import (
     create_interview_proposal,
@@ -41,6 +43,9 @@ from modules.interview.services.interview_service import (
     save_chat_message,
     get_chat_history,
     get_hiring_manager_summary,
+    record_round_transcript,
+    analyze_round_communication,
+    get_round_communication_analysis,
 )
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
@@ -255,6 +260,51 @@ def submit_evaluation_endpoint(
     if not updated:
         raise HTTPException(status_code=404, detail="Interview round not found")
     return updated
+
+
+@router.post("/rounds/{round_id}/transcript")
+def save_transcript_endpoint(
+    round_id: str,
+    body: SaveTranscriptRequest,
+):
+    """Appends or stores speech-to-text transcript turns for an interview round."""
+    updated = record_round_transcript(
+        round_id=round_id,
+        transcript_turns=body.transcript_turns,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return {"status": "success", "round_id": round_id, "turn_count": len(updated.get("transcript", []))}
+
+
+@router.post("/rounds/{round_id}/analyze-communication")
+async def analyze_communication_endpoint(
+    round_id: str,
+    body: AnalyzeCommunicationRequest,
+):
+    """
+    Evaluates candidate spoken communication skills using zero-token linguistic heuristics
+    and single-pass token-minimized LLM analysis on the recorded speech transcript.
+    """
+    analysis_result = await analyze_round_communication(
+        round_id=round_id,
+        transcript_turns=body.transcript_turns,
+        duration_seconds=body.call_duration_seconds or 0,
+        candidate_name=body.candidate_name,
+        role_title=body.role_title,
+    )
+    if not analysis_result:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return analysis_result
+
+
+@router.get("/rounds/{round_id}/communication-analysis")
+def get_communication_analysis_endpoint(round_id: str):
+    """Retrieve communication metrics, analysis results, and transcript for an interview round."""
+    report = get_round_communication_analysis(round_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Interview round not found")
+    return report
 
 
 @router.post("/livekit/token")

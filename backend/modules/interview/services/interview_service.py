@@ -577,6 +577,96 @@ def submit_round_evaluation(round_id: str, eval_data: dict, evaluator_identity: 
         return r.to_doc()
 
 
+def record_round_transcript(round_id: str, transcript_turns: list) -> Optional[dict]:
+    """Append or save speech transcript turns to the interview round."""
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+        existing_transcript = list(r.transcript or [])
+        # Merge or append new turns
+        existing_transcript.extend(transcript_turns)
+        r.transcript = existing_transcript
+        r.updated_at = datetime.now(timezone.utc)
+        session._track(r)
+        session.commit()
+        return r.to_doc()
+
+
+async def analyze_round_communication(
+    round_id: str,
+    transcript_turns: Optional[list] = None,
+    duration_seconds: int = 0,
+    candidate_name: Optional[str] = None,
+    role_title: Optional[str] = None,
+) -> Optional[dict]:
+    """
+    Executes spoken communication skills analysis (deterministic heuristics + single-pass Groq LLM).
+    Persists metrics, analysis results, and transcript to the round.
+    """
+    from modules.interview.services.communication_analyzer import CommunicationAnalyzer
+
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+
+        # Determine transcript turns to analyze
+        turns = transcript_turns if transcript_turns is not None else (r.transcript or [])
+        cand_name = candidate_name or r.candidate_name or "Candidate"
+        role = role_title or r.requisition_title or r.round_name or "Candidate Role"
+
+        # Execute communication evaluation
+        result = await CommunicationAnalyzer.evaluate_communication(
+            transcript_turns=turns,
+            call_duration_seconds=duration_seconds or (r.duration_minutes * 60 if r.duration_minutes else 0),
+            candidate_name=cand_name,
+            role_title=role,
+        )
+
+        r.transcript = turns
+        r.communication_metrics = result.get("metrics") or {}
+        r.communication_analysis = result.get("analysis") or {}
+
+        # If round already has evaluation, augment communication score
+        eval_dict = dict(r.evaluation or {})
+        scores = dict(eval_dict.get("scores") or {})
+        if "communication" not in scores and result.get("analysis"):
+            # Map 1-10 clarity/confidence to 1-5 scale
+            scores["communication"] = min(5, max(1, round((result["analysis"].get("clarity_score", 7.0) / 2.0))))
+            eval_dict["scores"] = scores
+            r.evaluation = eval_dict
+
+        r.updated_at = datetime.now(timezone.utc)
+        session._track(r)
+        session.commit()
+        return {
+            "round_id": r.id,
+            "metrics": r.communication_metrics,
+            "analysis": r.communication_analysis,
+            "token_usage": result.get("token_usage", {}),
+            "transcript_turn_count": len(turns),
+        }
+
+
+def get_round_communication_analysis(round_id: str) -> Optional[dict]:
+    """Retrieve communication metrics, analysis, and transcript for an interview round."""
+    with get_session() as session:
+        r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not r:
+            return None
+        return {
+            "round_id": r.id,
+            "candidate_name": r.candidate_name,
+            "requisition_title": r.requisition_title,
+            "round_name": r.round_name,
+            "metrics": r.communication_metrics or {},
+            "analysis": r.communication_analysis or {},
+            "transcript": r.transcript or [],
+            "status": r.status,
+        }
+
+
 def generate_livekit_token(
     room_name: str,
     identity: str,

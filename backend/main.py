@@ -54,6 +54,7 @@ from modules.hiring_manager_agent.router import router as hiring_manager_agent_r
 from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
 from modules.onboarding.offboarding_router import router as offboarding_router
+from modules.candidate_profile.router import router as candidate_profile_router
 
 
 app = FastAPI(
@@ -210,6 +211,7 @@ app.include_router(hiring_manager_agent_router)
 app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
+app.include_router(candidate_profile_router)
 
 # Reload trigger for interview module updates
 
@@ -1085,7 +1087,7 @@ async def apply_to_requisition(
     linkedin_url: str = Form(""),
     github_url: str = Form(""),
     cover_note: str = Form(""),
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
 ) -> dict:
     """Public candidate application submission for a published requisition."""
     import tempfile
@@ -1108,35 +1110,61 @@ async def apply_to_requisition(
         cp = session.get(models.CompanyProfile, req.company_profile_id) if req.company_profile_id else None
         comp_name = cp.name if cp and cp.name else "Partner Enterprise"
 
-    content = await resume.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
-
-    filename = resume.filename or "resume.pdf"
-    file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
-    pdf_base64 = base64.b64encode(content).decode("utf-8")
-
+    clean_email = email.strip().lower()
+    pdf_base64 = ""
+    filename = "resume.pdf"
     extracted_text = ""
-    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    try:
-        extracted_text = _extract_text_new(tmp_path, file_type)
-    except Exception as ex:
-        print(f"[RESUME EXTRACT ERROR] {ex}")
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
     profile = {}
-    if extracted_text:
+
+    if resume and resume.filename:
+        content = await resume.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+
+        filename = resume.filename
+        file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+        pdf_base64 = base64.b64encode(content).decode("utf-8")
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
         try:
-            profile = await extract_candidate_profile(extracted_text, filename)
+            extracted_text = _extract_text_new(tmp_path, file_type)
         except Exception as ex:
-            print(f"[PROFILE EXTRACT ERROR] {ex}")
+            print(f"[RESUME EXTRACT ERROR] {ex}")
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        if extracted_text:
+            try:
+                profile = await extract_candidate_profile(extracted_text, filename)
+            except Exception as ex:
+                print(f"[PROFILE EXTRACT ERROR] {ex}")
+    else:
+        # Candidate is applying using their saved profile resume
+        existing_cand = db["candidates"].find_one({"candidate_email": clean_email})
+        if not existing_cand or (not existing_cand.get("resume_pdf") and not existing_cand.get("extracted_text")):
+            raise HTTPException(
+                status_code=400,
+                detail="No resume on file found for your profile. Please complete your profile and upload your resume first."
+            )
+
+        pdf_base64 = existing_cand.get("resume_pdf", "")
+        filename = existing_cand.get("filename") or "resume.pdf"
+        extracted_text = existing_cand.get("extracted_text", "")
+        profile = existing_cand.get("details", {}) or {}
+        if not profile.get("skills"):
+            profile["skills"] = existing_cand.get("skills", [])
+        if not phone:
+            phone = existing_cand.get("candidate_phone") or profile.get("candidate_phone", "")
+        if not linkedin_url:
+            linkedin_url = profile.get("linkedin_url", "")
+        if not github_url:
+            github_url = profile.get("github_url", "")
 
     role = req.structured_role or {}
     must_have = role.get("must_have_skills") or []
@@ -1226,9 +1254,13 @@ async def apply_to_requisition(
     }
 
     try:
-        db["candidates"].insert_one(cand_doc)
+        db["candidates"].update_one(
+            {"candidate_email": email.strip().lower()},
+            {"$set": cand_doc},
+            upsert=True
+        )
     except Exception as err:
-        print(f"[DB CANDIDATE INSERT ERROR] {err}")
+        print(f"[DB CANDIDATE UPSERT ERROR] {err}")
 
     return {
         "status": "success",

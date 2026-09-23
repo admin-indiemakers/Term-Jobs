@@ -5,11 +5,15 @@ import App from './App.jsx'
 import { AuthProvider } from './context/AuthContext.jsx'
 import { Analytics } from '@vercel/analytics/react'
 
+import { ErrorBoundary } from './components/ErrorBoundary.jsx'
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AuthProvider>
-      <App />
-      <Analytics />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <App />
+        <Analytics />
+      </AuthProvider>
+    </ErrorBoundary>
   </StrictMode>,
 )

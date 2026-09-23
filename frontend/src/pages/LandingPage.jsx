@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import PublicJobBoard from '../components/PublicJobBoard';
+import CandidateProfileAuth from './CandidateProfileAuth';
 
 /* ============ GOOGLE SHEET & EMAIL INTEGRATION ============ */
 const WAITLIST_SHEET_URL = "https://script.google.com/macros/s/AKfycbwes1glJQAnCMds8Pdp_2kRWe-Om2oAdwrMHVlbpzhjn5_x5SLPh0LhlLkqjxxNgyiY/exec";
@@ -170,6 +172,7 @@ const DataCollectionModal = ({ isOpen, onClose }) => {
 /* ============ NAV ============ */
 const Nav = ({ currentRoute, setRoute, onOpenModal }) => {
   const { user } = useAuth();
+  const { candidateUser } = useCandidateAuth();
   const navRef = useRef(null);
 
   useEffect(() => {
@@ -205,7 +208,7 @@ const Nav = ({ currentRoute, setRoute, onOpenModal }) => {
             currentRoute === '#jobs' || currentRoute === '#roles' || currentRoute === '#careers' ? 'bg-mist text-ink font-bold' : 'text-grey hover:text-ink'
           }`}
         >
-          Open Roles
+          {candidateUser ? `Open Roles (👤 ${candidateUser.candidate_name?.split(' ')[0] || 'Profile'})` : 'Open Roles'}
         </a>
         <a
           href="#contact"
@@ -919,6 +922,7 @@ const Footer = () => (
 export default function LandingPage({ defaultRoute = null }) {
   const [route, setRoute] = useState(defaultRoute || window.location.hash || '#home');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { isAuthenticated, candidateUser, logout: logoutCandidate } = useCandidateAuth();
 
   useEffect(() => {
     if (defaultRoute) {
@@ -936,20 +940,38 @@ export default function LandingPage({ defaultRoute = null }) {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
+  const isOpenRolesRoute = route === '#jobs' || route === '#roles' || route === '#careers';
+
+  // If candidate is trying to access open roles and is not yet authenticated, render CandidateProfileAuth directly
+  if (isOpenRolesRoute && !isAuthenticated) {
+    return (
+      <CandidateProfileAuth
+        onLoginSuccess={() => {
+          window.location.hash = '#jobs';
+          setRoute('#jobs');
+        }}
+        onBackToHome={() => {
+          window.location.hash = '#home';
+          setRoute('#home');
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-paper text-ink-soft font-inter antialiased">
       <SEOHead
         title={
           route === '#contact'
             ? 'Contact Us | TermJobs'
-            : route === '#jobs' || route === '#roles' || route === '#careers'
+            : isOpenRolesRoute
             ? 'Open Requisitions & Careers | TermJobs'
             : 'TermJobs'
         }
         description={
           route === '#contact'
             ? 'Get in touch with Term Jobs for enterprise contractor hiring, waitlist priority, vendor partnerships, or flexible talent support.'
-            : route === '#jobs' || route === '#roles' || route === '#careers'
+            : isOpenRolesRoute
             ? 'Browse live open contractor positions across verified partner enterprises. Direct application with AI resume screening and match scoring.'
             : 'Term Jobs connects enterprise teams with verified contract professionals, trusted staffing vendors, automated timesheet tracking, and transparent billing.'
         }
@@ -965,11 +987,15 @@ export default function LandingPage({ defaultRoute = null }) {
       <main>
         {route === '#contact' ? (
           <ContactPage setRoute={setRoute} />
-        ) : route === '#jobs' || route === '#roles' || route === '#careers' ? (
-          <PublicJobBoard onBackToHome={() => {
-            window.location.hash = '#home';
-            setRoute('#home');
-          }} />
+        ) : isOpenRolesRoute ? (
+          <PublicJobBoard
+            candidateProfile={candidateUser}
+            onCandidateLogout={logoutCandidate}
+            onBackToHome={() => {
+              window.location.hash = '#home';
+              setRoute('#home');
+            }}
+          />
         ) : (
           <>
             <Hero setRoute={setRoute} onOpenModal={() => setIsModalOpen(true)} />

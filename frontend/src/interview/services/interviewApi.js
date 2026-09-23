@@ -97,4 +97,25 @@ export const interviewApi = {
       body: payload,
     });
   },
+
+  // Spoken Communication & Transcription Analysis
+  async analyzeCommunication(roundId, payload) {
+    return request(`/api/interviews/rounds/${roundId}/analyze-communication`, {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
+  async saveTranscript(roundId, transcriptTurns) {
+    return request(`/api/interviews/rounds/${roundId}/transcript`, {
+      method: 'POST',
+      body: { transcript_turns: transcriptTurns },
+    });
+  },
+
+  async getCommunicationAnalysis(roundId) {
+    return request(`/api/interviews/rounds/${roundId}/communication-analysis`, {
+      method: 'GET',
+    });
+  },
 };

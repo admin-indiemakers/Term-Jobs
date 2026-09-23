@@ -3,6 +3,7 @@ import VendorAgreements from './pages/recruiter/VendorAgreements';
 import VendorBilling from './pages/recruiter/VendorBilling';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
+import { CandidateAuthProvider } from './context/CandidateAuthContext';
 import AuthPage from './pages/AuthPage';
 import JoinHiringManager from './pages/JoinHiringManager';
 import JoinDirector from './pages/JoinDirector';
@@ -112,28 +113,33 @@ function CandidateRouteDispatcher() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<AuthPage />} />
-        <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
-        <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
-        <Route path="/join/director" element={<JoinDirector />} />
-        <Route path="/invite/director" element={<JoinDirector />} />
-        <Route path="/join/procurement" element={<JoinProcurement />} />
-        <Route path="/invite/procurement" element={<JoinProcurement />} />
-        <Route path="/join/finance" element={<JoinFinance />} />
-        <Route path="/invite/finance" element={<JoinFinance />} />
-        <Route path="/candidate/login" element={<Navigate to="/login" replace />} />
-        <Route path="/interview/login" element={<CandidateInterviewLogin />} />
-        <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
-        <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
-        <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
-        <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
-        <Route path="/admin/login" element={<SuperAdminLogin />} />
-        <Route path="/director/login" element={<DirectorLogin />} />
-        <Route path="/" element={<LandingPage />} />
-        <Route path="/jobs" element={<LandingPage defaultRoute="#jobs" />} />
-        <Route path="/careers" element={<LandingPage defaultRoute="#jobs" />} />
-        <Route path="/apply" element={<LandingPage defaultRoute="#jobs" />} />
+      <CandidateAuthProvider>
+        <Routes>
+          <Route path="/login" element={<AuthPage />} />
+          <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
+          <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
+          <Route path="/join/director" element={<JoinDirector />} />
+          <Route path="/invite/director" element={<JoinDirector />} />
+          <Route path="/join/procurement" element={<JoinProcurement />} />
+          <Route path="/invite/procurement" element={<JoinProcurement />} />
+          <Route path="/join/finance" element={<JoinFinance />} />
+          <Route path="/invite/finance" element={<JoinFinance />} />
+          <Route path="/candidate/login" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/candidate-login" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/candidate/profile-login" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/open-roles" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/openroles" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/interview/login" element={<CandidateInterviewLogin />} />
+          <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
+          <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
+          <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
+          <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
+          <Route path="/admin/login" element={<SuperAdminLogin />} />
+          <Route path="/director/login" element={<DirectorLogin />} />
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/jobs" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/careers" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/apply" element={<LandingPage defaultRoute="#jobs" />} />
         <Route
           path="/dashboard"
           element={
@@ -329,6 +335,7 @@ export default function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </BrowserRouter>
-  );
+    </CandidateAuthProvider>
+  </BrowserRouter>
+);
 }
