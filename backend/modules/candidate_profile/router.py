@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 import httpx
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from modules.identity.services.auth_service import (
     create_access_token,
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/api/candidate-profile", tags=["Candidate Profile"])
 # Schemas
 # -----------------------------------------------------------------------------
 class CandidateLoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
 
 
@@ -264,7 +264,7 @@ async def candidate_login(body: CandidateLoginRequest) -> dict:
 @router.post("/register")
 async def candidate_register(
     name: str = Form(...),
-    email: EmailStr = Form(...),
+    email: str = Form(...),
     password: str = Form(...),
     phone: str = Form(""),
     title: str = Form(""),

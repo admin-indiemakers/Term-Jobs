@@ -198,7 +198,16 @@ export function CandidateAuthProvider({ children }) {
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data.detail || data.message || 'Failed to complete profile setup.');
+      if (res.status === 404) {
+        throw new Error('Backend route not found (404). Please restart the backend server so the newly added candidate profile endpoints are loaded: "uvicorn main:app --reload"');
+      }
+      const errMsg =
+        (typeof data.detail === 'string' ? data.detail : null) ||
+        (Array.isArray(data.detail) ? data.detail.map((d) => d.msg || JSON.stringify(d)).join(', ') : null) ||
+        data.error ||
+        data.message ||
+        'Failed to complete profile setup.';
+      throw new Error(errMsg);
     }
 
     if (data.candidate) {
