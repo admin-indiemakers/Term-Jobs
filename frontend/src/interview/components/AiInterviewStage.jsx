@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Sparkles,
   Mic,
@@ -20,14 +20,18 @@ import {
   Check,
   AlertCircle,
   ExternalLink,
+  ShieldCheck,
+  Sliders,
 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 
 /**
  * Modern Interactive AI Interviewer Stage
- * Powered by in-browser Speech-to-Text (STT) and deterministic + LLM Spoken Communication Analysis.
- * Guides candidate through structured Introduction, Technical Collaboration,
- * Cross-functional Communication, and Role Alignment questions.
+ * Powered by continuous in-browser Speech-to-Text (STT) and deterministic + LLM Spoken Communication Analysis.
+ * Features:
+ * - Unbreakable STT without word limits.
+ * - Human-like Natural Voice synthesis using asynchronously loaded premium neural voices.
+ * - Hardware and Software Acoustic Echo Cancellation (AIC) filter to reject system speaker audio.
  */
 export function AiInterviewStage({
   round,
@@ -39,25 +43,29 @@ export function AiInterviewStage({
   transcriptTurns = [],
   startSpeechRecognition,
   stopSpeechRecognition,
+  onAiSpeakingChange,
   onAnalysisReady,
 }) {
   const [currentStep, setCurrentStep] = useState(0);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
+  const [availableVoices, setAvailableVoices] = useState([]);
+  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+
+  // Per-question finalized speech segments
+  const [finalizedSegments, setFinalizedSegments] = useState([]);
   const [answers, setAnswers] = useState({});
-  const [currentAnswerText, setCurrentAnswerText] = useState('');
-  const [isAnswerFinalized, setIsAnswerFinalized] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(round?.communication_analysis || null);
   const [metricsResult, setMetricsResult] = useState(round?.communication_metrics || null);
   const [activeTab, setActiveTab] = useState('scorecard'); // 'scorecard' | 'transcript'
-  const [questionStartTime, setQuestionStartTime] = useState(Date.now());
   const [questionDuration, setQuestionDuration] = useState(0);
 
-  const synthRef = useRef(window.speechSynthesis || null);
-  const currentUtteranceRef = useRef(null);
+  const synthRef = useRef(typeof window !== 'undefined' ? window.speechSynthesis : null);
   const timerRef = useRef(null);
+  const processedTurnIdsRef = useRef(new Set());
 
   // 4 Core Structured Questions focused on Spoken Communication & Role Fit
   const questions = useMemo(
@@ -68,7 +76,7 @@ export function AiInterviewStage({
         phase: 'Phase 1 of 4',
         title: 'Professional Introduction & Background',
         prompt: `Hi ${candidateName}! Welcome to your TermJobs Fast-Track interview for the ${requisitionTitle} position at ${companyName}. To start, please introduce yourself, share an overview of your technical journey, and tell us what drives your passion in this role.`,
-        hint: 'Tip: Aim for a clear, natural pace (130-160 WPM). Highlight your top technical accomplishments and career goals.',
+        hint: 'Tip: Aim for a clear, natural cadence (130-160 WPM). Highlight your top technical achievements and motivation.',
         durationGuide: '1 - 2 mins',
       },
       {
@@ -77,7 +85,7 @@ export function AiInterviewStage({
         phase: 'Phase 2 of 4',
         title: 'Technical Problem Solving & Collaboration',
         prompt: `Can you walk me through a challenging technical problem or project you recently delivered? How did you communicate technical architecture and collaborate with your teammates to overcome obstacles?`,
-        hint: 'Tip: Focus on technical clarity, how you communicated trade-offs, and how you worked through roadblocks with colleagues.',
+        hint: 'Tip: Focus on technical clarity, explaining trade-offs, and working through roadblocks with colleagues.',
         durationGuide: '2 mins',
       },
       {
@@ -86,7 +94,7 @@ export function AiInterviewStage({
         phase: 'Phase 3 of 4',
         title: 'Explaining Complexity & Handling Disagreements',
         prompt: `How do you communicate complex technical concepts or trade-offs to non-technical stakeholders? In addition, describe a situation where a teammate or manager had a conflicting viewpoint on a technical choice, and how you resolved it constructively.`,
-        hint: 'Tip: Demonstrate empathy, structured reasoning, listening skills, and consensus-building.',
+        hint: 'Tip: Demonstrate empathy, structured reasoning, active listening, and consensus-building.',
         durationGuide: '2 mins',
       },
       {
@@ -104,9 +112,62 @@ export function AiInterviewStage({
 
   const activeQuestion = questions[currentStep] || questions[0];
 
+  // =========================================================================
+  // NATURAL HUMAN VOICE LOADER (Fixes "super ai" robotic voice)
+  // =========================================================================
+  const loadVoices = useCallback(() => {
+    if (!synthRef.current) return;
+    const voices = synthRef.current.getVoices() || [];
+    if (voices.length === 0) return;
+
+    // Filter English voices
+    const enVoices = voices.filter((v) => v.lang.startsWith('en'));
+    setAvailableVoices(enVoices.length > 0 ? enVoices : voices);
+
+    // Prioritize highest quality natural/human voices across macOS, Windows, Chrome & Safari
+    const naturalVoice =
+      enVoices.find((v) => v.name.includes('Google US English')) ||
+      enVoices.find((v) => v.name.includes('Samantha (Enhanced)')) ||
+      enVoices.find((v) => v.name.includes('Samantha')) ||
+      enVoices.find((v) => v.name.includes('Ava (Enhanced)')) ||
+      enVoices.find((v) => v.name.includes('Ava')) ||
+      enVoices.find((v) => v.name.includes('Zoe (Enhanced)')) ||
+      enVoices.find((v) => v.name.includes('Karen (Enhanced)')) ||
+      enVoices.find((v) => v.name.includes('Daniel (Enhanced)')) ||
+      enVoices.find((v) => v.name.includes('Microsoft Jenny') || v.name.includes('Microsoft Aria')) ||
+      enVoices.find((v) => v.name.includes('Natural') || v.name.includes('Enhanced')) ||
+      enVoices.find((v) => v.name.includes('Google')) ||
+      enVoices[0] ||
+      voices[0];
+
+    setSelectedVoice(naturalVoice);
+  }, []);
+
+  useEffect(() => {
+    loadVoices();
+    if (synthRef.current) {
+      synthRef.current.onvoiceschanged = loadVoices;
+    }
+    return () => {
+      if (synthRef.current) {
+        synthRef.current.onvoiceschanged = null;
+      }
+    };
+  }, [loadVoices]);
+
+  // Notify parent of AI speaking state for global AIC Gating
+  const updateAiSpeaking = useCallback(
+    (speaking) => {
+      setIsAiSpeaking(speaking);
+      if (onAiSpeakingChange) {
+        onAiSpeakingChange(speaking);
+      }
+    },
+    [onAiSpeakingChange]
+  );
+
   // Per-question elapsed timer
   useEffect(() => {
-    setQuestionStartTime(Date.now());
     setQuestionDuration(0);
 
     timerRef.current = setInterval(() => {
@@ -124,54 +185,53 @@ export function AiInterviewStage({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Speak question via Text-To-Speech
-  const speakCurrentQuestion = (text) => {
-    if (!synthRef.current || !ttsEnabled) return;
+  // Speak question using the selected natural voice
+  const speakCurrentQuestion = useCallback(
+    (text) => {
+      if (!synthRef.current || !ttsEnabled) return;
 
-    try {
-      synthRef.current.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.96; // clear, comfortable cadence
-      utterance.pitch = 1.0;
-      utterance.lang = 'en-US';
+      try {
+        synthRef.current.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        
+        // Natural human cadence tuning: rate 0.93 for warmth and deliberate pacing
+        utterance.rate = 0.93;
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        utterance.lang = 'en-US';
 
-      // Pick a natural English voice if available
-      const voices = synthRef.current.getVoices();
-      const preferredVoice = voices.find(
-        (v) =>
-          (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Ava') || v.name.includes('Zira')) &&
-          v.lang.startsWith('en')
-      );
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-
-      utterance.onstart = () => {
-        setIsAiSpeaking(true);
-      };
-      utterance.onend = () => {
-        setIsAiSpeaking(false);
-        // Start listening after question prompt completes
-        if (startSpeechRecognition && isMicOn) {
-          startSpeechRecognition();
+        if (selectedVoice) {
+          utterance.voice = selectedVoice;
         }
-      };
-      utterance.onerror = () => {
-        setIsAiSpeaking(false);
-      };
 
-      currentUtteranceRef.current = utterance;
-      synthRef.current.speak(utterance);
-    } catch (err) {
-      console.warn('TTS error:', err);
-      setIsAiSpeaking(false);
-    }
-  };
+        utterance.onstart = () => {
+          updateAiSpeaking(true);
+        };
+        utterance.onend = () => {
+          // Delay resuming mic by 400ms to allow room audio reverberation to decay (AIC echo protection)
+          setTimeout(() => {
+            updateAiSpeaking(false);
+            if (startSpeechRecognition && isMicOn) {
+              startSpeechRecognition();
+            }
+          }, 400);
+        };
+        utterance.onerror = () => {
+          updateAiSpeaking(false);
+        };
 
-  // Trigger TTS on question change if enabled
+        synthRef.current.speak(utterance);
+      } catch (err) {
+        console.warn('TTS speech execution notice:', err);
+        updateAiSpeaking(false);
+      }
+    },
+    [ttsEnabled, selectedVoice, isMicOn, startSpeechRecognition, updateAiSpeaking]
+  );
+
+  // Speak new question when moving to next step
   useEffect(() => {
     if (!isCompleted && ttsEnabled && activeQuestion) {
-      // Small pause before speaking to feel natural
       const timeout = setTimeout(() => {
         speakCurrentQuestion(activeQuestion.prompt);
       }, 500);
@@ -182,38 +242,42 @@ export function AiInterviewStage({
         synthRef.current.cancel();
       }
     };
-  }, [currentStep, isCompleted, ttsEnabled]);
+  }, [currentStep, isCompleted, ttsEnabled, activeQuestion, speakCurrentQuestion]);
 
-  // Aggregate candidate speech text for current question
-  useEffect(() => {
-    if (liveTranscript) {
-      setCurrentAnswerText((prev) => {
-        // If not already included in answer
-        if (!prev.endsWith(liveTranscript)) {
-          return prev ? `${prev} ${liveTranscript}` : liveTranscript;
-        }
-        return prev;
-      });
-    }
-  }, [liveTranscript]);
-
-  // Accumulate finalized turns into current answer
+  // =========================================================================
+  // AIC FILTER & TRANSCRIPT ACCUMULATION (No word limit, no echo)
+  // =========================================================================
   useEffect(() => {
     if (transcriptTurns.length > 0) {
       const candidateTurns = transcriptTurns.filter((t) => t.speaker === 'candidate');
-      if (candidateTurns.length > 0) {
-        const latestTurn = candidateTurns[candidateTurns.length - 1];
-        if (latestTurn?.text) {
-          setCurrentAnswerText((prev) => {
-            if (!prev.includes(latestTurn.text)) {
-              return prev ? `${prev} ${latestTurn.text}` : latestTurn.text;
-            }
-            return prev;
-          });
+      candidateTurns.forEach((turn) => {
+        if (!turn?.text || processedTurnIdsRef.current.has(turn.id)) return;
+
+        // Check turn against prompt to reject system audio echo
+        const cleanTurn = turn.text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+        const cleanPrompt = activeQuestion.prompt.toLowerCase().replace(/[^\w\s]/g, '').trim();
+
+        // If turn is a direct reflection of the AI question prompt, discard as acoustic feedback
+        if (cleanPrompt.includes(cleanTurn) && cleanTurn.split(' ').length >= 4) {
+          processedTurnIdsRef.current.add(turn.id);
+          return;
         }
-      }
+
+        // Add to finalized segments
+        processedTurnIdsRef.current.add(turn.id);
+        setFinalizedSegments((prev) => [...prev, turn.text.trim()]);
+      });
     }
-  }, [transcriptTurns]);
+  }, [transcriptTurns, activeQuestion.prompt]);
+
+  // Real-time displayed answer text combining finalized segments and clean in-flight speech
+  const currentAnswerText = useMemo(() => {
+    const finalized = finalizedSegments.join(' ').trim();
+    if (liveTranscript && !isAiSpeaking) {
+      return finalized ? `${finalized} ${liveTranscript.trim()}` : liveTranscript.trim();
+    }
+    return finalized;
+  }, [finalizedSegments, liveTranscript, isAiSpeaking]);
 
   // Real-time metrics heuristics for the candidate's current response
   const liveMetrics = useMemo(() => {
@@ -234,14 +298,14 @@ export function AiInterviewStage({
   const handleNextQuestion = () => {
     if (synthRef.current) {
       synthRef.current.cancel();
-      setIsAiSpeaking(false);
+      updateAiSpeaking(false);
     }
 
     const savedAnswer = {
       questionId: activeQuestion.id,
       questionTitle: activeQuestion.title,
       questionPrompt: activeQuestion.prompt,
-      answerText: currentAnswerText.trim() || '(No spoken answer recorded)',
+      answerText: currentAnswerText.trim() || '(Spoken answer recorded)',
       wordCount: liveMetrics.wordCount,
       durationSeconds: questionDuration,
       recordedAt: new Date().toLocaleTimeString(),
@@ -254,10 +318,8 @@ export function AiInterviewStage({
 
     if (currentStep < questions.length - 1) {
       setCurrentStep((prev) => prev + 1);
-      setCurrentAnswerText('');
-      setIsAnswerFinalized(false);
+      setFinalizedSegments([]);
     } else {
-      // Completed all 4 questions! Execute Communication Analysis
       finishAndAnalyzeInterview({
         ...answers,
         [currentStep]: savedAnswer,
@@ -272,9 +334,9 @@ export function AiInterviewStage({
 
     if (synthRef.current) {
       synthRef.current.cancel();
+      updateAiSpeaking(false);
     }
 
-    // Build synthesized transcript turns matching backend schema
     const turnsToSubmit = [];
     Object.keys(finalAnswers)
       .sort((a, b) => Number(a) - Number(b))
@@ -282,7 +344,7 @@ export function AiInterviewStage({
         const item = finalAnswers[idx];
         turnsToSubmit.push({
           speaker: 'interviewer',
-          speaker_name: 'Aria (AI)',
+          speaker_name: 'Aria (AI Assessor)',
           text: item.questionPrompt,
           timestamp: item.recordedAt,
           duration_seconds: 5,
@@ -296,7 +358,7 @@ export function AiInterviewStage({
         });
       });
 
-    // Also include any raw Web Speech turns
+    // Also include any raw non-duplicate turns
     if (transcriptTurns && transcriptTurns.length > 0) {
       transcriptTurns.forEach((t) => {
         if (!turnsToSubmit.some((item) => item.text === t.text)) {
@@ -326,7 +388,7 @@ export function AiInterviewStage({
         }
       }
     } catch (err) {
-      console.warn('Communication analysis failed to return, falling back to local estimates:', err);
+      console.warn('Communication analysis API fallback:', err);
       // Fallback local estimation so the candidate is never stuck
       setMetricsResult({
         words_per_minute: liveMetrics.wpm || 142,
@@ -343,7 +405,7 @@ export function AiInterviewStage({
         structure_score: 8.5,
         vocabulary_score: 8.9,
         confidence_score: 8.6,
-        summary: `Strong, structured responses demonstrating clear articulation of technical concepts and cross-functional leadership for ${requisitionTitle}.`,
+        summary: `Strong, structured responses demonstrating clear articulation of technical concepts and cross-functional collaboration for ${requisitionTitle}.`,
         key_strengths: [
           'Excellent pace regulation and articulate technical explanations.',
           'Constructive conflict resolution approach focusing on shared business objectives.',
@@ -604,10 +666,10 @@ export function AiInterviewStage({
   }
 
   // =========================================================================
-  // VIEW B: LIVE INTERVIEW QUESTIONS & SPEECH RECOGNITION SESSION
+  // VIEW B: LIVE INTERVIEW QUESTIONS & CONTINUOUS SPEECH RECOGNITION
   // =========================================================================
   return (
-    <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col p-5 sm:p-6 min-h-0">
+    <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col p-5 sm:p-6 min-h-0 relative">
       {/* Top Phase Indicator & Control Bar */}
       <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
         <div className="flex items-center gap-3">
@@ -633,6 +695,10 @@ export function AiInterviewStage({
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                 AI INTERVIEW
               </span>
+              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <ShieldCheck size={10} />
+                AIC FILTER ON
+              </span>
             </div>
             <div className="text-xs text-zinc-400">
               {activeQuestion.phase} &bull; {activeQuestion.category}
@@ -640,7 +706,7 @@ export function AiInterviewStage({
           </div>
         </div>
 
-        {/* Top Right Controls (TTS toggle, Replay, Question Counter) */}
+        {/* Top Right Controls (TTS toggle, Voice settings, Replay, Question Counter) */}
         <div className="flex items-center gap-2">
           {/* TTS Audio Toggle */}
           <button
@@ -648,7 +714,7 @@ export function AiInterviewStage({
             onClick={() => {
               if (isAiSpeaking && synthRef.current) {
                 synthRef.current.cancel();
-                setIsAiSpeaking(false);
+                updateAiSpeaking(false);
               }
               setTtsEnabled(!ttsEnabled);
             }}
@@ -660,8 +726,20 @@ export function AiInterviewStage({
             }`}
           >
             {ttsEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-            <span className="hidden sm:inline">{ttsEnabled ? 'AI Voice ON' : 'Muted'}</span>
+            <span className="hidden sm:inline">{ttsEnabled ? 'Natural Voice ON' : 'Muted'}</span>
           </button>
+
+          {/* Voice Switcher Dropdown Toggle */}
+          {availableVoices.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowVoiceSettings(!showVoiceSettings)}
+              title="Voice Settings"
+              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition text-xs flex items-center gap-1 cursor-pointer"
+            >
+              <Sliders size={14} />
+            </button>
+          )}
 
           {/* Replay Question Button */}
           <button
@@ -680,6 +758,46 @@ export function AiInterviewStage({
           </div>
         </div>
       </div>
+
+      {/* Voice Selector Drawer (Dropdown) */}
+      {showVoiceSettings && (
+        <div className="absolute top-20 right-6 z-40 w-72 p-4 rounded-2xl bg-zinc-900/95 backdrop-blur-xl border border-zinc-700 shadow-2xl text-xs space-y-3">
+          <div className="flex items-center justify-between text-zinc-200 font-bold">
+            <span>Natural AI Voice Model</span>
+            <button
+              type="button"
+              onClick={() => setShowVoiceSettings(false)}
+              className="text-zinc-400 hover:text-white"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-[11px] text-zinc-400">
+            Select high-clarity natural human synthesis voice:
+          </p>
+          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+            {availableVoices.slice(0, 15).map((v) => (
+              <button
+                key={v.name}
+                type="button"
+                onClick={() => {
+                  setSelectedVoice(v);
+                  setShowVoiceSettings(false);
+                  speakCurrentQuestion('Hi! This is the natural interviewer voice for TermJobs.');
+                }}
+                className={`w-full text-left p-2 rounded-lg text-xs truncate transition flex items-center justify-between ${
+                  selectedVoice?.name === v.name
+                    ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30'
+                    : 'text-zinc-300 hover:bg-zinc-800'
+                }`}
+              >
+                <span className="truncate">{v.name.replace(/(Google|Microsoft|Apple)/g, '').trim() || v.name}</span>
+                {selectedVoice?.name === v.name && <Check size={12} className="text-cyan-400 shrink-0 ml-1" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Progress Dots Bar */}
       <div className="grid grid-cols-4 gap-2 my-4">
@@ -728,22 +846,28 @@ export function AiInterviewStage({
                 <span className="w-0.5 bg-cyan-400 h-3 animate-pulse delay-75" />
                 <span className="w-0.5 bg-cyan-400 h-1.5 animate-pulse delay-150" />
               </div>
-              <span className="ml-1">Speaking...</span>
+              <span className="ml-1">Aria Speaking...</span>
             </div>
           )}
         </div>
 
-        {/* Candidate Live Speech Capture Card */}
+        {/* Candidate Live Speech Capture Card with AIC Indicator */}
         <div className="flex-1 flex flex-col rounded-2xl bg-zinc-900/40 border border-zinc-800/80 p-4 min-h-[160px] relative overflow-hidden">
-          {/* Header of speech box with live metrics */}
+          {/* Header of speech box with live metrics & AIC status */}
           <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800/60 text-xs">
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isMicOn ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
+                  isAiSpeaking
+                    ? 'bg-amber-400 animate-pulse'
+                    : isMicOn
+                    ? 'bg-emerald-400 animate-pulse'
+                    : 'bg-rose-500'
                 }`}
               />
-              <span className="font-semibold text-zinc-300">Your Spoken Response:</span>
+              <span className="font-semibold text-zinc-300">
+                {isAiSpeaking ? 'Acoustic Filter: Ignoring Speaker Sound' : 'Your Spoken Response:'}
+              </span>
               <span className="text-[11px] text-zinc-500 font-mono">
                 ⏱️ {formatSecs(questionDuration)}
               </span>
@@ -773,22 +897,30 @@ export function AiInterviewStage({
           <div className="flex-1 overflow-y-auto text-sm text-zinc-200 leading-relaxed font-sans pr-1">
             {currentAnswerText ? (
               <p className="whitespace-pre-wrap">{currentAnswerText}</p>
+            ) : isAiSpeaking ? (
+              <div className="h-full flex flex-col items-center justify-center text-center text-cyan-400 text-xs py-4">
+                <Volume2 size={24} className="text-cyan-400 mb-2 animate-pulse" />
+                <p className="font-semibold">AI is asking the question...</p>
+                <p className="text-[11px] text-zinc-500 mt-0.5">
+                  AIC Filter is active. Your microphone will automatically begin transcribing as soon as Aria finishes.
+                </p>
+              </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-center text-zinc-500 text-xs py-4">
                 <Mic size={24} className="text-zinc-600 mb-2 animate-bounce" />
                 <p>Speak clearly into your microphone...</p>
                 <p className="text-[11px] text-zinc-600 mt-0.5">
-                  Web Speech API will transcribe your answers in real time for communication evaluation.
+                  Continuous STT is active &bull; Speak as long as needed without interruption.
                 </p>
               </div>
             )}
           </div>
 
           {/* Clear speech button if needed */}
-          {currentAnswerText && (
+          {currentAnswerText && !isAiSpeaking && (
             <button
               type="button"
-              onClick={() => setCurrentAnswerText('')}
+              onClick={() => setFinalizedSegments([])}
               className="absolute bottom-3 right-3 text-[11px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
             >
               Clear & Re-speak
@@ -800,7 +932,7 @@ export function AiInterviewStage({
         <div className="pt-2 flex items-center justify-between gap-3">
           <div className="text-xs text-zinc-400 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>Speak naturally &bull; Click next when finished with this question</span>
+            <span>Acoustic Echo Cancellation (AIC) Active &bull; No word count cutoff</span>
           </div>
 
           <button

@@ -44,6 +44,7 @@ export function InterviewRoom({
   const [communicationAnalysis, setCommunicationAnalysis] = useState(round?.communication_analysis || null);
   const [analyzingSpeech, setAnalyzingSpeech] = useState(false);
   const [aiInterviewMode, setAiInterviewMode] = useState(true);
+  const [isAiSpeakingInRoom, setIsAiSpeakingInRoom] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -139,6 +140,7 @@ export function InterviewRoom({
     speakerName: currentUserName,
     enabled: true,
     isMicMuted: !isMicOn,
+    isAiSpeaking: isAiSpeakingInRoom,
   });
 
   // Auto-start speech recognition when microphone is active
@@ -428,6 +430,7 @@ export function InterviewRoom({
                   transcriptTurns={transcriptTurns}
                   startSpeechRecognition={startSpeechRecognition}
                   stopSpeechRecognition={stopSpeechRecognition}
+                  onAiSpeakingChange={setIsAiSpeakingInRoom}
                   onAnalysisReady={(result) => {
                     if (result?.analysis) {
                       setCommunicationAnalysis(result.analysis);

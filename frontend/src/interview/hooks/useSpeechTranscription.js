@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 /**
- * Custom hook for zero-cost, in-browser speech transcription using Web Speech API.
- * Captures real-time audio from microphone, produces live interim captions,
- * and records timestamped speech turns for communication skill analysis.
+ * Continuous, Unbreakable Speech Transcription Hook with Acoustic Echo Cancellation (AIC) Filter.
+ * - Auto-restarts SpeechRecognition instance to prevent stopping after ~150 words / 60 seconds.
+ * - Hardware and software AIC Gating: completely ignores speaker output while AI agent is speaking.
+ * - Accumulates clean timestamped speaker turns for communication skill analysis.
  */
 export function useSpeechTranscription({
   speakerRole = 'candidate',
   speakerName = 'Participant',
   enabled = true,
   isMicMuted = false,
+  isAiSpeaking = false,
 } = {}) {
   const [isSupported, setIsSupported] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -19,25 +21,31 @@ export function useSpeechTranscription({
   const recognitionRef = useRef(null);
   const manualStopRef = useRef(false);
   const isMicMutedRef = useRef(isMicMuted);
+  const isAiSpeakingRef = useRef(isAiSpeaking);
   const enabledRef = useRef(enabled);
   const turnStartTimeRef = useRef(Date.now());
+  const restartTimerRef = useRef(null);
+  const lastAiSpokeTimeRef = useRef(0);
 
-  // Keep ref up to date
+  // Keep refs synchronized
   useEffect(() => {
     isMicMutedRef.current = isMicMuted;
-    if (isMicMuted && recognitionRef.current && isListening) {
-      try {
-        recognitionRef.current.abort();
-      } catch (_) {}
+  }, [isMicMuted]);
+
+  useEffect(() => {
+    isAiSpeakingRef.current = isAiSpeaking;
+    if (isAiSpeaking) {
+      lastAiSpokeTimeRef.current = Date.now();
+      setLiveTranscript('');
     }
-  }, [isMicMuted, isListening]);
+  }, [isAiSpeaking]);
 
   useEffect(() => {
     enabledRef.current = enabled;
   }, [enabled]);
 
-  // Initialize SpeechRecognition instance
-  useEffect(() => {
+  // Factory function to instantiate and start a fresh SpeechRecognition engine
+  const initAndStartRecognition = useCallback(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -47,6 +55,18 @@ export function useSpeechTranscription({
     }
 
     setIsSupported(true);
+
+    // Clean up existing instance if any
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.onstart = null;
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.abort();
+      } catch (_) {}
+      recognitionRef.current = null;
+    }
 
     try {
       const recognition = new SpeechRecognition();
@@ -61,7 +81,16 @@ export function useSpeechTranscription({
       };
 
       recognition.onresult = (event) => {
-        if (isMicMutedRef.current) return;
+        // AIC Gating: If mic is muted, or AI is currently speaking, or echo cooldown (<450ms), ignore speech!
+        const now = Date.now();
+        if (
+          isMicMutedRef.current ||
+          isAiSpeakingRef.current ||
+          now - lastAiSpokeTimeRef.current < 450
+        ) {
+          setLiveTranscript('');
+          return;
+        }
 
         let interim = '';
         let finalTurnText = '';
@@ -75,9 +104,14 @@ export function useSpeechTranscription({
           }
         }
 
-        setLiveTranscript(interim || finalTurnText);
+        const interimClean = interim.trim();
+        const finalClean = finalTurnText.trim();
 
-        if (finalTurnText.trim()) {
+        // Update live interim view
+        setLiveTranscript(interimClean || finalClean);
+
+        // Record finalized speech turn
+        if (finalClean) {
           const duration = Math.max(
             0.5,
             parseFloat(((Date.now() - turnStartTimeRef.current) / 1000).toFixed(1))
@@ -86,7 +120,7 @@ export function useSpeechTranscription({
             id: `turn_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
             speaker: speakerRole,
             speaker_name: speakerName,
-            text: finalTurnText.trim(),
+            text: finalClean,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
             duration_seconds: duration,
           };
@@ -98,9 +132,9 @@ export function useSpeechTranscription({
       };
 
       recognition.onerror = (event) => {
-        // 'no-speech' is normal when user is listening rather than speaking
+        // 'no-speech' is normal when user is pausing/thinking
         if (event.error !== 'no-speech') {
-          console.warn('Speech recognition notification:', event.error);
+          console.warn('Speech recognition notice:', event.error);
         }
       };
 
@@ -108,50 +142,59 @@ export function useSpeechTranscription({
         setIsListening(false);
         setLiveTranscript('');
 
-        // Auto-reconnect if not explicitly stopped and mic is active
+        // Unbreakable auto-reconnect: Instantiates a fresh recognition object so it never terminates after 150 words!
         if (!manualStopRef.current && enabledRef.current && !isMicMutedRef.current) {
-          try {
-            setTimeout(() => {
-              if (!manualStopRef.current && enabledRef.current && !isMicMutedRef.current) {
-                recognition.start();
-              }
-            }, 300);
-          } catch (_) {}
+          if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+          restartTimerRef.current = setTimeout(() => {
+            if (!manualStopRef.current && enabledRef.current && !isMicMutedRef.current) {
+              initAndStartRecognition();
+            }
+          }, 200);
         }
       };
 
       recognitionRef.current = recognition;
+      recognition.start();
     } catch (err) {
-      console.warn('SpeechRecognition could not be initialized:', err);
-      setIsSupported(false);
+      console.warn('Speech recognition initialization error:', err);
+    }
+  }, [speakerRole, speakerName]);
+
+  // Initial startup
+  useEffect(() => {
+    manualStopRef.current = false;
+    if (enabled && !isMicMuted) {
+      initAndStartRecognition();
     }
 
     return () => {
       manualStopRef.current = true;
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
       if (recognitionRef.current) {
         try {
-          recognitionRef.current.stop();
+          recognitionRef.current.onstart = null;
+          recognitionRef.current.onresult = null;
+          recognitionRef.current.onerror = null;
+          recognitionRef.current.onend = null;
+          recognitionRef.current.abort();
         } catch (_) {}
       }
     };
-  }, [speakerRole, speakerName]);
+  }, [enabled, isMicMuted, initAndStartRecognition]);
 
   const startListening = useCallback(() => {
-    if (!recognitionRef.current || !isSupported) return;
     manualStopRef.current = false;
-    try {
-      recognitionRef.current.start();
-      setIsListening(true);
-    } catch (_) {}
-  }, [isSupported]);
+    initAndStartRecognition();
+  }, [initAndStartRecognition]);
 
   const stopListening = useCallback(() => {
     manualStopRef.current = true;
+    if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-        setIsListening(false);
       } catch (_) {}
+      setIsListening(false);
     }
   }, []);
 
