@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { livekitService } from '../services/livekitService';
 
-export function useInterviewRoom({ roundId, participantName, role, livekitToken, livekitUrl }) {
+export function useInterviewRoom({ roundId, participantName, role, livekitToken, livekitUrl, isAiInterview = false }) {
   const [connectionState, setConnectionState] = useState('connecting'); // 'connecting' | 'connected' | 'fallback_preview' | 'permission_denied' | 'disconnected'
   const [participants, setParticipants] = useState([]);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
@@ -17,6 +17,7 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
       participantName,
       role,
       roundId,
+      isAiInterview,
     });
 
     if (result.mode === 'livekit') {
@@ -26,7 +27,7 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
     } else if (result.mode === 'denied') {
       setConnectionState('permission_denied');
     }
-  }, [livekitUrl, livekitToken, participantName, role, roundId]);
+  }, [livekitUrl, livekitToken, participantName, role, roundId, isAiInterview]);
 
   useEffect(() => {
     connectRoom();

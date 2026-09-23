@@ -38,6 +38,7 @@ export function AiInterviewStage({
   candidateName = 'Candidate',
   requisitionTitle = 'Position',
   companyName = 'Hiring Partner',
+  userRole = 'candidate',
   isMicOn = true,
   liveTranscript = '',
   transcriptTurns = [],
@@ -421,9 +422,102 @@ export function AiInterviewStage({
   };
 
   // =========================================================================
-  // VIEW A: INTERVIEW COMPLETED · EXECUTIVE COMMUNICATION SCORECARD
+  // VIEW A: INTERVIEW COMPLETED · CANDIDATE CONFIRMATION OR ADMIN SCORECARD
   // =========================================================================
   if (isCompleted) {
+    const isCandidate = userRole === 'candidate' || !['admin', 'interviewer', 'hiring_manager'].includes(userRole);
+
+    // 1. Loading state during transmission
+    if (isAnalyzing) {
+      return (
+        <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300">
+          <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mb-4" />
+          <div className="text-base font-bold text-white tracking-tight">Submitting Interview Responses...</div>
+          <p className="text-xs text-zinc-400 mt-1 max-w-sm">
+            Encrypting and securely delivering your spoken responses to the hiring team...
+          </p>
+        </div>
+      );
+    }
+
+    // 2. Candidate View: Reassuring Confirmation without Scores or Metrics
+    if (isCandidate) {
+      return (
+        <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center p-6 sm:p-10 text-center animate-in fade-in zoom-in-95 duration-300">
+          <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-emerald-500/20 to-teal-500/20 border-2 border-emerald-500/40 flex items-center justify-center text-emerald-400 mb-5 shadow-xl shadow-emerald-500/10">
+            <CheckCircle2 size={42} className="stroke-[2.5]" />
+          </div>
+
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
+            <Sparkles size={13} />
+            <span>Interview Submitted Successfully</span>
+          </div>
+
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Thank You, {candidateName}!
+          </h2>
+
+          <p className="text-zinc-400 text-xs sm:text-sm max-w-lg mt-2 leading-relaxed">
+            Your spoken responses for the <strong className="text-zinc-200">{requisitionTitle}</strong> role at{' '}
+            <strong className="text-zinc-200">{companyName}</strong> have been securely recorded and submitted to the hiring team.
+          </p>
+
+          {/* Submission Details Overview */}
+          <div className="w-full max-w-md bg-zinc-900/90 border border-zinc-800/80 rounded-2xl p-5 mt-6 text-left space-y-3 shadow-inner">
+            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
+              <span className="text-zinc-400 font-medium">Position</span>
+              <span className="font-semibold text-zinc-200">{requisitionTitle}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
+              <span className="text-zinc-400 font-medium">Interview Status</span>
+              <span className="font-semibold text-emerald-400 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                Submitted · Under Hiring Review
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs py-1 border-b border-zinc-800">
+              <span className="text-zinc-400 font-medium">Questions Completed</span>
+              <span className="font-semibold text-zinc-200">{questions.length} of {questions.length} Answered</span>
+            </div>
+            <div className="flex items-center justify-between text-xs py-1">
+              <span className="text-zinc-400 font-medium">Next Step</span>
+              <span className="font-semibold text-zinc-300">Recruiter will contact you with updates</span>
+            </div>
+          </div>
+
+          <p className="text-[11px] text-zinc-500 mt-6 max-w-md">
+            Our talent acquisition team and interviewers will review your session in the admin portal. You may now close this window or return to the candidate portal.
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = '/candidate/portal';
+              }}
+              className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition cursor-pointer shadow-lg shadow-emerald-500/20"
+            >
+              Return to Candidate Portal
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (window.opener) {
+                  window.close();
+                } else {
+                  window.location.href = '/';
+                }
+              }}
+              className="px-5 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 font-semibold text-xs transition cursor-pointer"
+            >
+              Close Window
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // 3. Admin / Recruiter / Hiring Manager View: Full Executive Communication Scorecard
     const score = analysisResult?.overall_score || 85;
     const scoreColor =
       score >= 80
@@ -444,7 +538,7 @@ export function AiInterviewStage({
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold text-white tracking-tight">AI Communication Assessment</h2>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  COMPLETED
+                  ADMIN VIEW
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
@@ -477,15 +571,7 @@ export function AiInterviewStage({
         </div>
 
         {/* Content Body */}
-        {isAnalyzing ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-            <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mb-4" />
-            <div className="text-base font-bold text-white">Analyzing Spoken Communication...</div>
-            <p className="text-xs text-zinc-400 mt-1 max-w-sm">
-              Evaluating speech cadence (WPM), filler frequency, lexical diversity, and logical structure...
-            </p>
-          </div>
-        ) : activeTab === 'scorecard' ? (
+        {activeTab === 'scorecard' ? (
           <div className="flex-1 overflow-y-auto pr-2 py-4 space-y-5">
             {/* Top Score Banner */}
             <div className="p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">

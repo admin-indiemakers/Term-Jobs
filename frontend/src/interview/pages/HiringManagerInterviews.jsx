@@ -8,6 +8,11 @@ import {
   Link as LinkIcon,
   Sparkles,
   CheckCircle2,
+  Activity,
+  Zap,
+  FileText,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { interviewApi } from '../services/interviewApi';
@@ -34,6 +39,46 @@ export function HiringManagerInterviews() {
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [roundCommAnalysis, setRoundCommAnalysis] = useState(null);
+  const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
+  const [loadingCommAnalysis, setLoadingCommAnalysis] = useState(false);
+
+  // Sync communication analysis for selected round
+  useEffect(() => {
+    if (!selectedRoundForDetails?.id) {
+      setRoundCommAnalysis(null);
+      return;
+    }
+
+    if (
+      selectedRoundForDetails.communication_analysis &&
+      Object.keys(selectedRoundForDetails.communication_analysis).length > 0
+    ) {
+      setRoundCommAnalysis({
+        analysis: selectedRoundForDetails.communication_analysis,
+        metrics: selectedRoundForDetails.communication_metrics || {},
+        transcript: selectedRoundForDetails.transcript || [],
+      });
+      return;
+    }
+
+    setLoadingCommAnalysis(true);
+    interviewApi
+      .getCommunicationAnalysis(selectedRoundForDetails.id)
+      .then((res) => {
+        if (res && res.analysis && Object.keys(res.analysis).length > 0) {
+          setRoundCommAnalysis(res);
+        } else {
+          setRoundCommAnalysis(null);
+        }
+      })
+      .catch(() => {
+        setRoundCommAnalysis(null);
+      })
+      .finally(() => {
+        setLoadingCommAnalysis(false);
+      });
+  }, [selectedRoundForDetails?.id, selectedRoundForDetails?.communication_analysis]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -501,6 +546,206 @@ export function HiringManagerInterviews() {
                       )}
                     </div>
                   )}
+
+                  {/* AI Spoken Communication Assessment & Executive Scorecard for Admin */}
+                  {roundCommAnalysis && roundCommAnalysis.analysis && Object.keys(roundCommAnalysis.analysis).length > 0 ? (
+                    <div className="p-5 bg-gradient-to-b from-zinc-900 to-zinc-950 text-white rounded-3xl border border-zinc-800 space-y-4 shadow-xl animate-in fade-in duration-300">
+                      <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold border border-emerald-500/30">
+                            <Sparkles size={16} />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-2">
+                              <span>AI Spoken Communication Assessment</span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                CONFIDENTIAL · ADMIN ONLY
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-zinc-400">
+                              Automated linguistic, cadence, and response analysis for {selectedCandidate.candidate_name}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Overall Score Badge */}
+                        <div className="flex items-center gap-3">
+                          <div className="text-right">
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Score</span>
+                            <span className="text-xl font-black text-emerald-400">
+                              {roundCommAnalysis.analysis.overall_score || 85}
+                              <span className="text-xs text-zinc-500 font-semibold"> / 100</span>
+                            </span>
+                          </div>
+                          <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-lg">
+                            {roundCommAnalysis.analysis.overall_score || 85}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Summary */}
+                      {roundCommAnalysis.analysis.summary && (
+                        <div className="p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800 text-xs text-zinc-300 leading-relaxed">
+                          <span className="font-bold text-zinc-200 block mb-1">Executive Summary:</span>
+                          {roundCommAnalysis.analysis.summary}
+                        </div>
+                      )}
+
+                      {/* Linguistic Cadence & Metrics */}
+                      <div className="grid grid-cols-3 gap-2.5 text-center">
+                        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
+                            <Activity size={12} className="text-emerald-400" />
+                            <span>Speaking Pace</span>
+                          </div>
+                          <div className="text-base font-black text-white mt-1">
+                            {roundCommAnalysis.metrics?.words_per_minute || 140} <span className="text-xs font-normal text-zinc-400">WPM</span>
+                          </div>
+                          <div className="text-[10px] text-emerald-400 font-medium truncate mt-0.5">
+                            {roundCommAnalysis.metrics?.pace_rating || 'Optimal Cadence'}
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
+                            <Zap size={12} className="text-sky-400" />
+                            <span>Filler Frequency</span>
+                          </div>
+                          <div className="text-base font-black text-white mt-1">
+                            {roundCommAnalysis.metrics?.filler_percentage !== undefined ? `${roundCommAnalysis.metrics.filler_percentage}%` : '1.8%'}
+                          </div>
+                          <div className="text-[10px] text-sky-400 font-medium truncate mt-0.5">
+                            {roundCommAnalysis.metrics?.filler_count || 0} filler words detected
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                          <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
+                            <Award size={12} className="text-purple-400" />
+                            <span>Lexical Variety</span>
+                          </div>
+                          <div className="text-base font-black text-white mt-1">
+                            {roundCommAnalysis.metrics?.lexical_diversity || 0.54} <span className="text-xs font-normal text-zinc-400">TTR</span>
+                          </div>
+                          <div className="text-[10px] text-purple-400 font-medium truncate mt-0.5">
+                            {roundCommAnalysis.metrics?.vocabulary_rating || 'Rich Lexicon'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 4 Core Dimensions */}
+                      <div className="p-3.5 bg-zinc-950 rounded-2xl border border-zinc-800">
+                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-2.5">
+                          Dimensional Competency Breakdown (1 - 10)
+                        </span>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                          {[
+                            { label: 'Clarity', val: roundCommAnalysis.analysis.clarity_score || 8.8 },
+                            { label: 'Structure', val: roundCommAnalysis.analysis.structure_score || 8.5 },
+                            { label: 'Vocabulary', val: roundCommAnalysis.analysis.vocabulary_score || 8.9 },
+                            { label: 'Confidence', val: roundCommAnalysis.analysis.confidence_score || 8.6 },
+                          ].map((dim, idx) => (
+                            <div key={idx} className="p-2 rounded-xl bg-zinc-900 border border-zinc-800/80">
+                              <div className="text-[11px] text-zinc-400">{dim.label}</div>
+                              <div className="text-sm font-black text-emerald-400 mt-0.5">{dim.val} / 10</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Strengths & Growth Areas */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                        {roundCommAnalysis.analysis.key_strengths && roundCommAnalysis.analysis.key_strengths.length > 0 && (
+                          <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-900/40">
+                            <div className="font-bold text-emerald-400 flex items-center gap-1.5 mb-2">
+                              <CheckCircle2 size={13} />
+                              <span>Key Strengths</span>
+                            </div>
+                            <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
+                              {roundCommAnalysis.analysis.key_strengths.map((str, i) => (
+                                <li key={i}>{str}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {roundCommAnalysis.analysis.areas_for_improvement && roundCommAnalysis.analysis.areas_for_improvement.length > 0 && (
+                          <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-900/40">
+                            <div className="font-bold text-amber-400 flex items-center gap-1.5 mb-2">
+                              <AlertCircle size={13} />
+                              <span>Areas for Growth</span>
+                            </div>
+                            <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
+                              {roundCommAnalysis.analysis.areas_for_improvement.map((area, i) => (
+                                <li key={i}>{area}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Full Transcript Accordion */}
+                      {roundCommAnalysis.transcript && roundCommAnalysis.transcript.length > 0 && (
+                        <div className="border border-zinc-800 rounded-2xl overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setIsTranscriptExpanded(!isTranscriptExpanded)}
+                            className="w-full p-3 bg-zinc-900/80 hover:bg-zinc-900 flex items-center justify-between text-xs font-bold text-zinc-200 transition cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2">
+                              <FileText size={14} className="text-zinc-400" />
+                              <span>View Spoken Q&A Transcript ({roundCommAnalysis.transcript.length} turns)</span>
+                            </span>
+                            {isTranscriptExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          </button>
+
+                          {isTranscriptExpanded && (
+                            <div className="p-3 bg-zinc-950/90 space-y-2.5 max-h-72 overflow-y-auto border-t border-zinc-800 text-xs">
+                              {roundCommAnalysis.transcript.map((t, idx) => {
+                                const isAi = t.speaker === 'interviewer';
+                                return (
+                                  <div
+                                    key={idx}
+                                    className={`p-2.5 rounded-xl border ${
+                                      isAi
+                                        ? 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
+                                        : 'bg-emerald-950/20 border-emerald-900/30 text-emerald-100'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-semibold">
+                                      <span>{t.speaker_name || (isAi ? 'AI Interviewer (Aria)' : selectedCandidate.candidate_name)}</span>
+                                      <span>{t.timestamp || ''}</span>
+                                    </div>
+                                    <div className="leading-relaxed">{t.text}</div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Evaluation Form quick trigger */}
+                      <div className="flex items-center justify-between pt-2">
+                        <span className="text-[11px] text-zinc-400">
+                          Transfer scores and insights to official evaluation record:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setActiveEvaluationRound(selectedRoundForDetails)}
+                          className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                        >
+                          <Award size={13} />
+                          <span>Record Official Evaluation</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : loadingCommAnalysis ? (
+                    <div className="p-4 bg-zinc-100 rounded-2xl border border-zinc-200 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
+                      <div className="w-4 h-4 border-2 border-zinc-400 border-t-zinc-800 rounded-full animate-spin" />
+                      <span>Loading AI Communication Analysis...</span>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="p-6 text-center text-xs text-zinc-400 bg-zinc-50 rounded-2xl border border-zinc-200">

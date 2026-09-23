@@ -59,11 +59,12 @@ export class LiveKitService {
     }
   }
 
-  async connect({ url, token, participantName, role, roundId }) {
+  async connect({ url, token, participantName, role, roundId, isAiInterview = false }) {
     this.currentRole = role;
     this.currentRoundId = roundId;
+    this.isAiInterview = isAiInterview;
 
-    // Try LiveKit SFU server connection first
+    // Try LiveKit SFU server connection first (only if valid external SFU configured)
     if (url && token && !url.includes('example.com') && !token.includes('mock') && !url.includes('termjobs-livekit.livekit.cloud')) {
       try {
         console.log('Connecting to LiveKit SFU room...', { url, role });
@@ -96,7 +97,7 @@ export class LiveKitService {
     }
 
     // Resilient Direct WebRTC P2P Fallback Mode
-    console.log('Initializing WebRTC direct P2P mode for interview room...', { roundId, role });
+    console.log('Initializing WebRTC direct P2P mode for interview room...', { roundId, role, isAiInterview });
     try {
       this.fallbackLocalStream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
@@ -118,8 +119,10 @@ export class LiveKitService {
         hasAudio: true,
       });
 
-      // Start P2P WebRTC Signaling via the room WebSocket
-      this.initP2PConnection(roundId, role, participantName);
+      // Start P2P WebRTC Signaling via WebSocket only if not an AI-conducted interview
+      if (!isAiInterview) {
+        this.initP2PConnection(roundId, role, participantName);
+      }
 
       return {
         mode: 'fallback',
@@ -136,7 +139,12 @@ export class LiveKitService {
   }
 
   initP2PConnection(roundId, role, participantName) {
-    if (!roundId) return;
+    if (!roundId || this.isAiInterview) return;
+    this._p2pReconnectAttempts = (this._p2pReconnectAttempts || 0) + 1;
+    if (this._p2pReconnectAttempts > 2) {
+      console.info('P2P signaling WebSocket unavailable in serverless environment; local camera & mic preview active.');
+      return;
+    }
     this._isDestroyed = false;
     this.closeP2PConnection();
     this._isDestroyed = false;
@@ -215,6 +223,7 @@ export class LiveKitService {
       };
 
       socket.onopen = () => {
+        this._p2pReconnectAttempts = 0;
         console.log('📡 P2P Signaling connected to room WebSocket');
         // Announce presence in room
         socket.send(JSON.stringify({
@@ -232,18 +241,20 @@ export class LiveKitService {
       };
 
       socket.onclose = () => {
-        console.warn('⚠️ P2P Signaling WebSocket disconnected.');
-        if (this._isDestroyed) return;
-        setTimeout(() => {
-          if (!this._isDestroyed && (!this.signalingSocket || this.signalingSocket.readyState === WebSocket.CLOSED)) {
-            console.log('🔄 Reconnecting P2P signaling WebSocket...');
-            this.initP2PConnection(roundId, role, participantName);
-          }
-        }, 2000);
+        if (this._isDestroyed || this.isAiInterview) return;
+        if (this._p2pReconnectAttempts < 2) {
+          setTimeout(() => {
+            if (!this._isDestroyed && (!this.signalingSocket || this.signalingSocket.readyState === WebSocket.CLOSED)) {
+              this.initP2PConnection(roundId, role, participantName);
+            }
+          }, 3000);
+        }
       };
 
       socket.onerror = (err) => {
-        console.warn('P2P Signaling WebSocket notice:', err);
+        if (this._p2pReconnectAttempts <= 1) {
+          console.info('P2P Signaling WebSocket notice (serverless mode active):', err);
+        }
       };
 
       socket.onmessage = async (event) => {

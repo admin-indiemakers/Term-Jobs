@@ -958,6 +958,10 @@ async def analyze_round_communication(
             eval_dict["scores"] = scores
             r.evaluation = eval_dict
 
+        # Mark round completed upon successful analysis
+        if r.status in ("Scheduled", "In Progress", None):
+            r.status = "Completed"
+
         r.updated_at = datetime.now(timezone.utc)
         session._track(r)
         session.commit()

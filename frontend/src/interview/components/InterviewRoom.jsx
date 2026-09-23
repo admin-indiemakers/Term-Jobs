@@ -117,14 +117,16 @@ export function InterviewRoom({
     role: currentUserRole,
     livekitToken,
     livekitUrl,
+    isAiInterview: aiInterviewMode,
   });
 
-  // Chat hook
+  // Chat hook (skips aggressive polling and WebSocket reconnects in AI mode)
   const { messages, unreadCount, sendMessage } = useInterviewChat({
     roundId: round?.id,
     senderName: currentUserName,
     senderRole: currentUserRole,
     isChatDrawerOpen: activeTab === 'chat',
+    isAiInterview: aiInterviewMode,
   });
 
   // Zero-cost Browser Speech Transcription hook for communication analysis
@@ -425,6 +427,7 @@ export function InterviewRoom({
                   candidateName={round?.candidate_name || currentUserName}
                   requisitionTitle={round?.requisition_title || 'Position'}
                   companyName={round?.company_name || 'Hiring Partner'}
+                  userRole={currentUserRole}
                   isMicOn={isMicOn}
                   liveTranscript={liveTranscript}
                   transcriptTurns={transcriptTurns}

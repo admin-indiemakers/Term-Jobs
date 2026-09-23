@@ -3,7 +3,7 @@ import { interviewApi } from '../services/interviewApi';
 import { livekitService } from '../services/livekitService';
 import { API_BASE_URL } from '../../api/client';
 
-export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawerOpen }) {
+export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawerOpen, isAiInterview = false }) {
   const [messages, setMessages] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const wsRef = useRef(null);
@@ -16,7 +16,7 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
     }
   }, [isChatDrawerOpen]);
 
-  // Load chat history on mount
+  // Load chat history on mount or when chat drawer is opened
   useEffect(() => {
     let isMounted = true;
     if (!roundId) return;
@@ -35,7 +35,7 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
     return () => {
       isMounted = false;
     };
-  }, [roundId]);
+  }, [roundId, isChatDrawerOpen]);
 
   const handleIncomingMessage = useCallback(
     (incoming) => {
@@ -82,11 +82,13 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
     [senderRole]
   );
 
-  // Real-time WebSocket connection with auto-reconnect
+  // Real-time WebSocket connection with capped reconnects
   useEffect(() => {
-    if (!roundId) return;
+    if (!roundId || isAiInterview) return;
     let isMounted = true;
     let reconnectTimer = null;
+    let reconnectAttempts = 0;
+    const maxWsReconnects = 2;
 
     // 1. Listen for incoming chat messages via livekitService signaling
     livekitService.on('chatMessageReceived', handleIncomingMessage);
@@ -101,7 +103,7 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
 
     // 3. Auxiliary WebSocket connection to room endpoint
     const connectWs = () => {
-      if (!isMounted || !roundId) return;
+      if (!isMounted || !roundId || isAiInterview) return;
 
       let wsBase = (API_BASE_URL || '').replace(/^http/, 'ws');
       if (!wsBase.startsWith('ws')) {
@@ -117,6 +119,10 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
         const socket = new WebSocket(wsUrl);
         wsRef.current = socket;
 
+        socket.onopen = () => {
+          reconnectAttempts = 0;
+        };
+
         socket.onmessage = (event) => {
           try {
             const payload = JSON.parse(event.data);
@@ -129,16 +135,21 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
         };
 
         socket.onclose = () => {
-          if (!isMounted) return;
-          reconnectTimer = setTimeout(connectWs, 2000);
+          if (!isMounted || isAiInterview) return;
+          reconnectAttempts += 1;
+          if (reconnectAttempts <= maxWsReconnects) {
+            reconnectTimer = setTimeout(connectWs, 3000);
+          }
         };
 
         socket.onerror = (err) => {
-          console.warn('Chat WebSocket notice:', err);
+          if (reconnectAttempts <= 1) {
+            console.info('Chat WebSocket notice (serverless fallback active):', err);
+          }
         };
       } catch (wsErr) {
-        console.warn('Could not open auxiliary chat WebSocket:', wsErr);
-        if (isMounted) {
+        reconnectAttempts += 1;
+        if (isMounted && reconnectAttempts <= maxWsReconnects) {
           reconnectTimer = setTimeout(connectWs, 3000);
         }
       }
@@ -159,11 +170,16 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
         wsRef.current = null;
       }
     };
-  }, [roundId, handleIncomingMessage]);
+  }, [roundId, handleIncomingMessage, isAiInterview]);
 
-  // Background polling fallback (guarantees zero-loss even if socket drops or browser sleeps)
+  // Background polling fallback (gentle interval when drawer is open, quiet when closed)
   useEffect(() => {
     if (!roundId) return;
+    // When in AI interview mode and drawer is closed, skip polling completely
+    if (isAiInterview && !isChatDrawerOpen) {
+      return;
+    }
+
     let isMounted = true;
 
     const pollChat = async () => {
@@ -226,12 +242,13 @@ export function useInterviewChat({ roundId, senderName, senderRole, isChatDrawer
       }
     };
 
-    const intervalId = setInterval(pollChat, 2500);
+    const pollInterval = isChatDrawerOpen ? 6000 : 30000;
+    const intervalId = setInterval(pollChat, pollInterval);
     return () => {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [roundId, senderRole]);
+  }, [roundId, senderRole, isChatDrawerOpen, isAiInterview]);
 
   const sendMessage = useCallback(
     async (text) => {
