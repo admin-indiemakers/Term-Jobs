@@ -506,30 +506,40 @@ export function AiInterviewStage({
       }
     } catch (err) {
       console.warn('Communication analysis API fallback:', err);
-      // Fallback local estimation so the candidate is never stuck
+      // Fallback calibrated estimation based on actual words spoken so candidate is never stuck with fake high scores
+      const totalWordsSpoken = Object.values(finalAnswers).reduce((acc, curr) => {
+        const words = (curr.answerText || '').trim().split(/\s+/).filter(Boolean);
+        return acc + words.length;
+      }, 0);
+
+      const lengthFactor = Math.min(1.0, Math.max(0.12, totalWordsSpoken / 180));
+      const fallbackScore = Math.max(5, Math.min(90, Math.round(75 * lengthFactor)));
+
       setMetricsResult({
-        words_per_minute: liveMetrics.wpm || 142,
-        pace_rating: 'Optimal / Clear Cadence',
-        filler_count: liveMetrics.fillerCount || 1,
-        filler_percentage: 1.8,
-        filler_rating: 'Minimal Fillers (Highly Articulate)',
-        lexical_diversity: 0.52,
-        vocabulary_rating: 'Rich & Varied Lexicon',
+        words_per_minute: liveMetrics.wpm || 135,
+        pace_rating: liveMetrics.wpm ? `${liveMetrics.wpm} WPM` : 'Measured Cadence',
+        filler_count: liveMetrics.fillerCount || 0,
+        filler_percentage: liveMetrics.wordCount ? Math.round(((liveMetrics.fillerCount || 0) / Math.max(liveMetrics.wordCount, 1)) * 100) : 0,
+        filler_rating: 'Standard Delivery',
+        lexical_diversity: 0.5,
+        vocabulary_rating: 'Professional Lexicon',
       });
       setAnalysisResult({
-        overall_score: 87,
-        clarity_score: 8.8,
-        structure_score: 8.5,
-        vocabulary_score: 8.9,
-        confidence_score: 8.6,
-        summary: `Strong, structured responses demonstrating clear articulation of technical concepts and cross-functional collaboration for ${requisitionTitle}.`,
+        relevance_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
+        substance_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
+        clarity_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
+        structure_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
+        vocabulary_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
+        confidence_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
+        overall_score: fallbackScore,
+        summary: totalWordsSpoken < 40
+          ? `Candidate responses were brief (${totalWordsSpoken} words total) and lacked detailed technical substance.`
+          : `Candidate completed the assessment with ${totalWordsSpoken} words spoken across questions.`,
         key_strengths: [
-          'Excellent pace regulation and articulate technical explanations.',
-          'Constructive conflict resolution approach focusing on shared business objectives.',
+          totalWordsSpoken > 80 ? 'Maintained an active speaking flow across questions' : 'Participated in the interview questions',
         ],
         areas_for_improvement: [
-          'Could incorporate more specific quantifiable metrics when detailing project outcomes.',
-          'Continue refining concise executive summaries for stakeholder communications.',
+          totalWordsSpoken < 100 ? 'Significantly elaborate answers with deeper technical examples' : 'Structure complex answers with STAR framework',
         ],
       });
     } finally {

@@ -949,14 +949,30 @@ async def analyze_round_communication(
         r.communication_metrics = result.get("metrics") or {}
         r.communication_analysis = result.get("analysis") or {}
 
-        # If round already has evaluation, augment communication score
+        # If round already has evaluation or needs auto-evaluation from AI analysis
         eval_dict = dict(r.evaluation or {})
         scores = dict(eval_dict.get("scores") or {})
-        if "communication" not in scores and result.get("analysis"):
-            # Map 1-10 clarity/confidence to 1-5 scale
-            scores["communication"] = min(5, max(1, round((result["analysis"].get("clarity_score", 7.0) / 2.0))))
+        analysis_data = result.get("analysis") or {}
+        overall = int(analysis_data.get("overall_score", 0))
+
+        if "communication" not in scores and analysis_data:
+            # Map 0-100 overall score to 1-5 scale
+            scores["communication"] = min(5, max(1, round(overall / 20.0)))
             eval_dict["scores"] = scores
-            r.evaluation = eval_dict
+
+        if not eval_dict.get("result") and overall > 0:
+            if overall >= 80:
+                eval_dict["result"] = "Strong Yes"
+            elif overall >= 65:
+                eval_dict["result"] = "Yes"
+            elif overall >= 45:
+                eval_dict["result"] = "Hold"
+            else:
+                eval_dict["result"] = "No"
+            eval_dict["evaluator"] = "AI Assessment Engine"
+            eval_dict["notes"] = analysis_data.get("summary", "")
+
+        r.evaluation = eval_dict
 
         # Mark round completed upon successful analysis
         if r.status in ("Scheduled", "In Progress", None):

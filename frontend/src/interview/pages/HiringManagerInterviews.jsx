@@ -628,17 +628,35 @@ export function HiringManagerInterviews() {
                           </div>
                         </div>
 
-                        {/* Overall Score Badge */}
+                        {/* Overall Score & Assessment Grade */}
                         <div className="flex items-center gap-3">
                           <div className="text-right">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Score</span>
-                            <span className="text-xl font-black text-emerald-400">
-                              {roundCommAnalysis.analysis.overall_score || 85}
+                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                              {roundCommAnalysis.analysis.assessment_grade || 'Overall Score'}
+                            </span>
+                            <span className={`text-xl font-black ${
+                              (roundCommAnalysis.analysis.overall_score ?? 0) >= 75
+                                ? 'text-emerald-400'
+                                : (roundCommAnalysis.analysis.overall_score ?? 0) >= 50
+                                ? 'text-sky-400'
+                                : (roundCommAnalysis.analysis.overall_score ?? 0) >= 30
+                                ? 'text-amber-400'
+                                : 'text-rose-400'
+                            }`}>
+                              {roundCommAnalysis.analysis.overall_score ?? 0}
                               <span className="text-xs text-zinc-500 font-semibold"> / 100</span>
                             </span>
                           </div>
-                          <div className="w-11 h-11 rounded-2xl bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center text-emerald-400 font-black text-lg">
-                            {roundCommAnalysis.analysis.overall_score || 85}
+                          <div className={`w-11 h-11 rounded-2xl border-2 flex items-center justify-center font-black text-lg ${
+                            (roundCommAnalysis.analysis.overall_score ?? 0) >= 75
+                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                              : (roundCommAnalysis.analysis.overall_score ?? 0) >= 50
+                              ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
+                              : (roundCommAnalysis.analysis.overall_score ?? 0) >= 30
+                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                              : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                          }`}>
+                            {roundCommAnalysis.analysis.overall_score ?? 0}
                           </div>
                         </div>
                       </div>
@@ -693,21 +711,27 @@ export function HiringManagerInterviews() {
                         </div>
                       </div>
 
-                      {/* 4 Core Dimensions */}
+                      {/* 6 Core Dimensions */}
                       <div className="p-3.5 bg-zinc-950 rounded-2xl border border-zinc-800">
                         <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-2.5">
                           Dimensional Competency Breakdown (1 - 10)
                         </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center text-xs">
                           {[
-                            { label: 'Clarity', val: roundCommAnalysis.analysis.clarity_score || 8.8 },
-                            { label: 'Structure', val: roundCommAnalysis.analysis.structure_score || 8.5 },
-                            { label: 'Vocabulary', val: roundCommAnalysis.analysis.vocabulary_score || 8.9 },
-                            { label: 'Confidence', val: roundCommAnalysis.analysis.confidence_score || 8.6 },
+                            { label: 'Relevance', val: roundCommAnalysis.analysis.relevance_score ?? 7.5 },
+                            { label: 'Substance', val: roundCommAnalysis.analysis.substance_score ?? 7.0 },
+                            { label: 'Clarity', val: roundCommAnalysis.analysis.clarity_score ?? 7.5 },
+                            { label: 'Structure', val: roundCommAnalysis.analysis.structure_score ?? 7.0 },
+                            { label: 'Vocabulary', val: roundCommAnalysis.analysis.vocabulary_score ?? 7.5 },
+                            { label: 'Confidence', val: roundCommAnalysis.analysis.confidence_score ?? 7.0 },
                           ].map((dim, idx) => (
                             <div key={idx} className="p-2 rounded-xl bg-zinc-900 border border-zinc-800/80">
                               <div className="text-[11px] text-zinc-400">{dim.label}</div>
-                              <div className="text-sm font-black text-emerald-400 mt-0.5">{dim.val} / 10</div>
+                              <div className={`text-sm font-black mt-0.5 ${
+                                dim.val >= 7 ? 'text-emerald-400' : dim.val >= 4 ? 'text-amber-400' : 'text-rose-400'
+                              }`}>
+                                {dim.val} / 10
+                              </div>
                             </div>
                           ))}
                         </div>

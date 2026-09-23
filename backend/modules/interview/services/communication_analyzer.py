@@ -128,6 +128,43 @@ class CommunicationAnalyzer:
         }
 
     @staticmethod
+    def extract_qa_pairs(transcript_turns: List[Dict[str, Any]]) -> List[Dict[str, str]]:
+        """Extracts structured (question, answer) pairs from transcript turns."""
+        pairs = []
+        current_q = ""
+        current_a_parts = []
+
+        for turn in transcript_turns:
+            speaker = str(turn.get("speaker", "")).lower()
+            text = str(turn.get("text", "")).strip()
+            if not text:
+                continue
+
+            if "interviewer" in speaker:
+                if current_q and current_a_parts:
+                    pairs.append({
+                        "question": current_q,
+                        "answer": " ".join(current_a_parts).strip(),
+                    })
+                    current_a_parts = []
+                current_q = text
+            elif "candidate" in speaker:
+                current_a_parts.append(text)
+
+        if current_q and current_a_parts:
+            pairs.append({
+                "question": current_q,
+                "answer": " ".join(current_a_parts).strip(),
+            })
+        elif current_a_parts and not pairs:
+            pairs.append({
+                "question": "General Interview Prompt",
+                "answer": " ".join(current_a_parts).strip(),
+            })
+
+        return pairs
+
+    @staticmethod
     def sanitize_and_compress_transcript(transcript_turns: List[Dict[str, Any]]) -> str:
         """
         Compresses conversation turns into a sanitized candidate monologue/dialogue excerpt.
@@ -142,11 +179,9 @@ class CommunicationAnalyzer:
             if "candidate" in speaker:
                 candidate_snippets.append(text)
             elif "interviewer" in speaker:
-                # Keep interviewer questions very brief for context
-                candidate_snippets.append(f"[Interviewer]: {text[:120]}")
+                candidate_snippets.append(f"[Interviewer]: {text[:140]}")
 
         combined = " ".join(candidate_snippets)
-        # Limit to 1,500 words to ensure minimal LLM token consumption (~500 input tokens max)
         words = combined.split()
         if len(words) > 1500:
             words = words[:1500]
@@ -162,118 +197,179 @@ class CommunicationAnalyzer:
         role_title: str = "Software Professional",
     ) -> Dict[str, Any]:
         """
-        Executes Tier 1 (heuristics) + Tier 3 (single-pass compact LLM call).
-        Returns complete communication scorecard with radar scores and bullet feedback.
+        Executes Tier 1 (heuristics) + Tier 3 (calibrated LLM call via HTTPX).
+        Returns an objective, uninflated communication scorecard (0-100 dynamic range).
         """
-        # Collect only candidate utterances for metric calculations
-        candidate_only_text = " ".join(
-            [
-                str(t.get("text", ""))
-                for t in transcript_turns
-                if "candidate" in str(t.get("speaker", "candidate")).lower()
-            ]
-        ).strip()
+        # Collect candidate-only utterances
+        candidate_only_snippets = []
+        for t in transcript_turns:
+            sp = str(t.get("speaker", "candidate")).lower()
+            tx = str(t.get("text", "")).strip()
+            if tx and "candidate" in sp:
+                candidate_only_snippets.append(tx)
 
-        # If no speaker labels were specified, use all text
+        candidate_only_text = " ".join(candidate_only_snippets).strip()
         if not candidate_only_text and transcript_turns:
             candidate_only_text = " ".join(
-                [str(t.get("text", "")) for t in transcript_turns]
+                [str(t.get("text", "")).strip() for t in transcript_turns if str(t.get("text", "")).strip()]
             ).strip()
 
         # Tier 1: Local Linguistic Metrics (0 Tokens)
-        metrics = cls.extract_linguistic_metrics(
-            candidate_only_text, call_duration_seconds
-        )
+        metrics = cls.extract_linguistic_metrics(candidate_only_text, call_duration_seconds)
+        total_words = metrics["total_words"]
 
-        # Prepare default fallback evaluation if text is very short or LLM fails
-        default_analysis = cls._generate_heuristic_assessment(
-            metrics, candidate_name, role_title
-        )
-
-        if metrics["total_words"] < 25:
-            # Not enough spoken content to justify an LLM call; return heuristic base
+        # -------------------------------------------------------------
+        # STRICT LENGTH & GIBBERISH PRE-GATING
+        # -------------------------------------------------------------
+        if total_words < 25:
+            # Under 25 words: Candidate said virtually nothing or 1 fragmented sentence
             return {
                 "metrics": metrics,
-                "analysis": default_analysis,
+                "analysis": {
+                    "relevance_score": 1.0,
+                    "substance_score": 1.0,
+                    "clarity_score": 2.0,
+                    "structure_score": 1.5,
+                    "vocabulary_score": 2.0,
+                    "confidence_score": 2.0,
+                    "overall_score": max(5, min(18, total_words)),
+                    "assessment_grade": "Incomplete / Non-Responsive",
+                    "key_strengths": ["Candidate initiated the interview session"],
+                    "areas_for_improvement": [
+                        "Provide full verbal responses; answering in fewer than 25 words is insufficient for evaluation",
+                        "Address each question directly with specific technical and career examples",
+                    ],
+                    "summary": f"{candidate_name} provided minimal or incomplete responses ({total_words} words recorded). This does not meet the minimum substance threshold for evaluation.",
+                },
                 "token_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                "analyzed_at": datetime.utcnow().isoformat(),
             }
 
-        # Tier 2: Sanitize & Compress transcript for compact LLM prompt
-        compressed_text = cls.sanitize_and_compress_transcript(transcript_turns)
-
-        # Tier 3: Single-Pass Minimal JSON LLM Call via Groq
-        token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+        qa_pairs = cls.extract_qa_pairs(transcript_turns)
+        default_analysis = cls._generate_heuristic_assessment(metrics, candidate_name, role_title)
         ai_scores = default_analysis
+        token_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
 
+        # Tier 2: Groq LLM Evaluation via Direct HTTPX (0 external client dependencies)
         try:
             from modules.shared.config import settings
             import os
+            import httpx
 
             groq_key = settings.groq_api_key or os.getenv("GROQ_API_KEY", "")
             if groq_key:
-                from openai import AsyncOpenAI
+                formatted_qa = ""
+                for idx, pair in enumerate(qa_pairs, 1):
+                    formatted_qa += f"--- QUESTION {idx} ---\nPrompt: {pair['question']}\nCandidate Answer: {pair['answer']}\n\n"
 
-                client = AsyncOpenAI(
-                    api_key=groq_key,
-                    base_url=settings.groq_base_url or "https://api.groq.com/openai/v1",
-                )
+                if not formatted_qa.strip():
+                    formatted_qa = f"Candidate Answer: {candidate_only_text}"
 
                 system_prompt = (
-                    "You are a strict, objective Communication Skills & Speech Assessor for technical/business interviews. "
-                    "Analyze the candidate's spoken speech transcript. Evaluate communication only (clarity, structure, vocabulary, confidence), NOT factual code correctness. "
+                    "You are a rigorous, calibrated Communication & Spoken Assessment Evaluator for engineering and corporate interviews.\n"
+                    "Your evaluation must be STRICT and OBJECTIVE based on the candidate's actual answers to the questions asked.\n\n"
+                    "SCORING ANCHORS (Overall Score 0-100):\n"
+                    "- 0-25: Gibberish, deflection, non-answers, 'I don't know', off-topic chatter, or fewer than 2 sentences per question.\n"
+                    "- 26-45: Superficial, excessively vague answers, evasive replies without technical substance, or major hesitation.\n"
+                    "- 46-65: Basic answer with partial relevance, but lacks technical depth, metrics, or clear STAR structure.\n"
+                    "- 66-84: Competent, articulate, relevant response with good vocabulary and clear examples.\n"
+                    "- 85-98: Exceptional, structured (STAR method), technical depth, fluent delivery with proactive trade-off articulation.\n\n"
+                    "MANDATORY EVALUATION RULES:\n"
+                    "1. If the candidate says something unrelated to the questions (e.g. casual chatter, test phrases, nonsense), RELEVANCE and SUBSTANCE MUST be 1-2, and OVERALL SCORE MUST BE UNDER 25.\n"
+                    "2. Do NOT give polite default scores of 60-75 for poor, brief, or evasive answers.\n"
+                    "3. Evaluate both Delivery (cadence, fluency) AND Substance (relevance to prompt, technical depth).\n\n"
                     "Return ONLY valid JSON matching this schema:\n"
                     "{\n"
-                    '  "clarity_score": <number 1-10>,\n'
-                    '  "structure_score": <number 1-10>,\n'
-                    '  "vocabulary_score": <number 1-10>,\n'
-                    '  "confidence_score": <number 1-10>,\n'
-                    '  "overall_score": <number 1-100>,\n'
+                    '  "relevance_score": <float 1.0 - 10.0>,\n'
+                    '  "substance_score": <float 1.0 - 10.0>,\n'
+                    '  "clarity_score": <float 1.0 - 10.0>,\n'
+                    '  "structure_score": <float 1.0 - 10.0>,\n'
+                    '  "vocabulary_score": <float 1.0 - 10.0>,\n'
+                    '  "confidence_score": <float 1.0 - 10.0>,\n'
+                    '  "overall_score": <integer 0 - 100>,\n'
+                    '  "assessment_grade": <"Exceptional" | "Competent" | "Needs Improvement" | "Unsatisfactory / Irrelevant">,\n'
                     '  "key_strengths": ["string", "string"],\n'
                     '  "areas_for_improvement": ["string", "string"],\n'
-                    '  "summary": "1-2 sentence executive assessment"\n'
+                    '  "summary": "2-sentence executive assessment detailing candidate substance and communication quality."\n'
                     "}"
                 )
 
                 user_prompt = (
-                    f"Candidate: {candidate_name} | Target Role: {role_title}\n"
-                    f"Observed Pace: {metrics['words_per_minute']} WPM ({metrics['pace_rating']})\n"
-                    f"Filler Words: {metrics['filler_count']} ({metrics['filler_percentage']}%) | Diversity: {metrics['lexical_diversity']}\n"
-                    f"Spoken Transcript Excerpt:\n\"\"\"{compressed_text}\"\"\""
+                    f"Candidate Name: {candidate_name}\n"
+                    f"Target Position: {role_title}\n"
+                    f"Speech Metrics: {metrics['total_words']} total words | {metrics['words_per_minute']} WPM | {metrics['filler_percentage']}% fillers | {metrics['lexical_diversity']} TTR\n\n"
+                    f"Interview Transcript Turns:\n{formatted_qa}"
                 )
 
-                response = await client.chat.completions.create(
-                    model=settings.groq_default_model or "openai/gpt-oss-20b",
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.2,
-                    max_tokens=250,
-                )
+                candidate_models = [
+                    settings.groq_default_model or "openai/gpt-oss-120b",
+                    "openai/gpt-oss-120b",
+                    "openai/gpt-oss-20b",
+                    "qwen/qwen3.8-27b",
+                ]
+                models_to_try = []
+                for m in candidate_models:
+                    if m and m not in models_to_try:
+                        models_to_try.append(m)
 
-                content = response.choices[0].message.content
-                parsed = json.loads(content)
-                if isinstance(parsed, dict) and "overall_score" in parsed:
-                    ai_scores = {
-                        "clarity_score": float(parsed.get("clarity_score", 7.0)),
-                        "structure_score": float(parsed.get("structure_score", 7.0)),
-                        "vocabulary_score": float(parsed.get("vocabulary_score", 7.0)),
-                        "confidence_score": float(parsed.get("confidence_score", 7.0)),
-                        "overall_score": int(parsed.get("overall_score", 70)),
-                        "key_strengths": parsed.get("key_strengths", default_analysis["key_strengths"])[:2],
-                        "areas_for_improvement": parsed.get("areas_for_improvement", default_analysis["areas_for_improvement"])[:2],
-                        "summary": parsed.get("summary", default_analysis["summary"]),
-                    }
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    for model_name in models_to_try:
+                        try:
+                            resp = await client.post(
+                                "https://api.groq.com/openai/v1/chat/completions",
+                                headers={
+                                    "Authorization": f"Bearer {groq_key}",
+                                    "Content-Type": "application/json",
+                                },
+                                json={
+                                    "model": model_name,
+                                    "messages": [
+                                        {"role": "system", "content": system_prompt},
+                                        {"role": "user", "content": user_prompt},
+                                    ],
+                                    "response_format": {"type": "json_object"},
+                                    "temperature": 0.1,
+                                    "max_tokens": 350,
+                                },
+                            )
+                            if resp.status_code == 200:
+                                data = resp.json()
+                                content = data["choices"][0]["message"]["content"]
+                                parsed = json.loads(content)
+                                if isinstance(parsed, dict) and "overall_score" in parsed:
+                                    llm_score = int(parsed.get("overall_score", 50))
+                                    # Enforce strict length caps as a safety guardrail
+                                    if total_words < 50:
+                                        llm_score = min(llm_score, 30)
+                                    elif total_words < 90:
+                                        llm_score = min(llm_score, 55)
 
-                if response.usage:
-                    token_usage = {
-                        "prompt_tokens": response.usage.prompt_tokens,
-                        "completion_tokens": response.usage.completion_tokens,
-                        "total_tokens": response.usage.total_tokens,
-                    }
+                                    ai_scores = {
+                                        "relevance_score": float(parsed.get("relevance_score", 5.0)),
+                                        "substance_score": float(parsed.get("substance_score", 5.0)),
+                                        "clarity_score": float(parsed.get("clarity_score", 5.0)),
+                                        "structure_score": float(parsed.get("structure_score", 5.0)),
+                                        "vocabulary_score": float(parsed.get("vocabulary_score", 5.0)),
+                                        "confidence_score": float(parsed.get("confidence_score", 5.0)),
+                                        "overall_score": llm_score,
+                                        "assessment_grade": parsed.get("assessment_grade", "Needs Improvement"),
+                                        "key_strengths": (parsed.get("key_strengths") or default_analysis["key_strengths"])[:2],
+                                        "areas_for_improvement": (parsed.get("areas_for_improvement") or default_analysis["areas_for_improvement"])[:2],
+                                        "summary": parsed.get("summary") or default_analysis["summary"],
+                                    }
+                                    usage = data.get("usage", {})
+                                    token_usage = {
+                                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                                        "completion_tokens": usage.get("completion_tokens", 0),
+                                        "total_tokens": usage.get("total_tokens", 0),
+                                    }
+                                    break
+                        except Exception as req_err:
+                            logger.warning(f"Groq model {model_name} attempt failed: {req_err}")
+                            continue
+
         except Exception as e:
-            logger.warning(f"Groq single-pass communication evaluation failed or skipped: {e}. Utilizing linguistic heuristics.")
+            logger.warning(f"Groq communication evaluation fallback: {e}")
 
         return {
             "metrics": metrics,
@@ -286,50 +382,80 @@ class CommunicationAnalyzer:
     def _generate_heuristic_assessment(
         metrics: Dict[str, Any], candidate_name: str, role_title: str
     ) -> Dict[str, Any]:
-        """Provides a robust, zero-token communication assessment based on heuristic metrics."""
+        """
+        Calibrated, realistic heuristic assessment without artificial floors.
+        Scores strictly reflect substance, length, pace, and clarity (0-100 dynamic range).
+        """
+        total_words = metrics.get("total_words", 0)
         filler_pct = metrics.get("filler_percentage", 0.0)
         wpm = metrics.get("words_per_minute", 130)
         ttr = metrics.get("lexical_diversity", 0.5)
 
-        # Baseline scores derived from speech signals
-        clarity = 8.5 if filler_pct <= 2.5 else (7.0 if filler_pct <= 5.0 else 5.5)
-        pace_score = 9.0 if 120 <= wpm <= 165 else (7.5 if 100 <= wpm <= 185 else 6.0)
-        vocab_score = 8.5 if ttr >= 0.50 else (7.0 if ttr >= 0.35 else 5.5)
+        # Dynamic length scaling (0.1 to 1.0)
+        # Expected interview length for 4 questions: ~180-250 words
+        length_factor = min(1.0, max(0.12, total_words / 180.0))
+
+        # Delivery metrics
+        clarity = 8.5 if filler_pct <= 2.5 else (6.5 if filler_pct <= 5.0 else 4.0)
+        pace_score = 8.5 if 120 <= wpm <= 165 else (6.5 if 100 <= wpm <= 185 else 4.0)
+        vocab_score = 8.0 if ttr >= 0.50 else (6.0 if ttr >= 0.35 else 3.5)
         confidence = round((clarity + pace_score) / 2.0, 1)
 
-        overall = int(round((clarity * 0.3 + pace_score * 0.25 + vocab_score * 0.25 + confidence * 0.2) * 10))
+        # Substance & relevance are bounded by length
+        substance = round(min(9.0, max(1.0, (total_words / 22.0))), 1)
+        relevance = round(min(9.0, max(1.0, substance * 0.9)), 1)
+
+        # Raw points out of 100
+        raw_delivery = (clarity * 0.2 + pace_score * 0.15 + vocab_score * 0.15 + confidence * 0.15 + substance * 0.2 + relevance * 0.15) * 10
+        overall = int(round(raw_delivery * length_factor))
+        overall = max(5, min(95, overall))
+
+        if overall >= 80:
+            grade = "Competent / Strong"
+        elif overall >= 55:
+            grade = "Adequate"
+        elif overall >= 35:
+            grade = "Needs Improvement"
+        else:
+            grade = "Unsatisfactory / Lacks Substance"
 
         strengths = []
         improvements = []
 
+        if total_words >= 120:
+            strengths.append(f"Delivered a substantive verbal response ({total_words} words recorded).")
         if 115 <= wpm <= 165:
-            strengths.append(f"Maintained an optimal speech tempo ({wpm} WPM) ensuring clear comprehension.")
-        else:
-            improvements.append(f"Regulate speaking pace (currently {wpm} WPM) to stay in the ideal 130-160 WPM cadence.")
+            strengths.append(f"Maintained an optimal conversational speech tempo ({wpm} WPM).")
+        if filler_pct <= 3.0 and total_words >= 50:
+            strengths.append(f"Low filler word usage ({filler_pct}%), demonstrating deliberate delivery.")
 
-        if filler_pct <= 3.0:
-            strengths.append(f"Articulate delivery with low filler word frequency ({filler_pct}%).")
-        else:
-            top_filler_str = ", ".join(list(metrics.get("top_fillers", {}).keys())[:3])
-            improvements.append(f"Reduce reliance on filler crutches ({filler_pct}%), notably '{top_filler_str}'.")
-
-        if ttr >= 0.45:
-            strengths.append("Demonstrated rich lexical variety and professional domain vocabulary.")
-        elif len(improvements) < 2:
-            improvements.append("Incorporate more varied professional terminology to strengthen technical explanations.")
+        if total_words < 80:
+            improvements.append(f"Significantly expand verbal detail (only {total_words} words provided across questions).")
+        if filler_pct > 4.0:
+            improvements.append(f"Reduce reliance on filler phrases ({filler_pct}% of spoken words).")
+        if total_words < 120:
+            improvements.append("Use the STAR framework (Situation, Task, Action, Result) to structure answers.")
 
         if not strengths:
-            strengths = ["Participated actively in the dialogue", "Demonstrated willingness to communicate ideas"]
+            strengths = ["Participated in the interview dialogue", "Attempted the spoken assessment"]
         if not improvements:
-            improvements = ["Continue practicing structured responses (Situation-Task-Action-Result format)"]
+            improvements = ["Continue expanding technical depth and detailing measurable impact"]
+
+        summary = (
+            f"{candidate_name} scored {overall}/100 ({grade}) with {total_words} total words spoken. "
+            f"Cadence was {metrics.get('pace_rating', 'measured').lower()} with {metrics.get('filler_rating', 'natural delivery').lower()}."
+        )
 
         return {
+            "relevance_score": relevance,
+            "substance_score": substance,
             "clarity_score": clarity,
             "structure_score": pace_score,
             "vocabulary_score": vocab_score,
             "confidence_score": confidence,
             "overall_score": overall,
+            "assessment_grade": grade,
             "key_strengths": strengths[:2],
             "areas_for_improvement": improvements[:2],
-            "summary": f"{candidate_name} demonstrated {metrics['pace_rating'].lower()} with {metrics['filler_rating'].lower()}.",
+            "summary": summary,
         }
