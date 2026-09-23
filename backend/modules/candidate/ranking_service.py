@@ -296,12 +296,23 @@ def rank_candidates_for_requisition(
                 tg_chat_id = tg_link.get("chat_id")
                 tg_user = tg_link.get("username")
 
+        cand_name = c.get("candidate_name") or "Candidate"
+        cand_email = (c.get("candidate_email") or "").strip()
+        cand_phone = c.get("candidate_phone") or (c.get("details") or {}).get("candidate_phone") or ""
+        cand_title = c.get("candidate_title") or (c.get("details") or {}).get("candidate_title") or "Candidate"
+        has_res = bool(c.get("resume_pdf") or c.get("filename") or c.get("extracted_text"))
+
         cand_map[key] = {
             "id": cid,
-            "candidate_name": c.get("candidate_name") or "Candidate",
-            "candidate_email": (c.get("candidate_email") or "").strip(),
-            "candidate_phone": c.get("candidate_phone") or (c.get("details") or {}).get("candidate_phone") or "",
-            "candidate_title": c.get("candidate_title") or (c.get("details") or {}).get("candidate_title") or "Candidate",
+            "candidate_id": cid,
+            "name": cand_name,
+            "candidate_name": cand_name,
+            "email": cand_email,
+            "candidate_email": cand_email,
+            "phone": cand_phone,
+            "candidate_phone": cand_phone,
+            "title": cand_title,
+            "candidate_title": cand_title,
             "vendor_name": v_name,
             "is_direct_applicant": is_direct,
             "skills": skills,
@@ -310,8 +321,9 @@ def rank_candidates_for_requisition(
             "summary": c.get("summary") or "",
             "details": c.get("details") or {},
             "availability": c.get("availability") or "available",
-            "has_resume": bool(c.get("resume_pdf") or c.get("filename") or c.get("extracted_text")),
-            "filename": c.get("filename") or f"{c.get('candidate_name', 'resume')}.pdf",
+            "has_resume": has_res,
+            "resume_url": f"/api/candidates/{cid}/resume" if has_res else None,
+            "filename": c.get("filename") or f"{cand_name}.pdf",
             "created_at": c.get("created_at"),
         }
 
@@ -324,19 +336,30 @@ def rank_candidates_for_requisition(
         v_name = (s.get("vendor_name") or "Direct Applicant").strip()
         is_direct = v_name.lower() in ["direct applicant", "portal registration", "portal applicant"]
 
+        cand_name = s.get("candidate_name") or "Candidate"
+        cand_email = (s.get("candidate_email") or "").strip()
+        cand_phone = (s.get("details") or {}).get("candidate_phone") or ""
+        cand_title = (s.get("details") or {}).get("candidate_title") or "Candidate"
+
         if key in cand_map:
             # Augment existing candidate with any missing skills or info
             if not cand_map[key]["skills"] and s.get("matched_skills"):
                 cand_map[key]["skills"] = s.get("matched_skills")
             if not cand_map[key]["candidate_phone"]:
-                cand_map[key]["candidate_phone"] = (s.get("details") or {}).get("candidate_phone") or ""
+                cand_map[key]["candidate_phone"] = cand_phone
+                cand_map[key]["phone"] = cand_phone
         else:
             cand_map[key] = {
                 "id": sub_id,
-                "candidate_name": s.get("candidate_name") or "Candidate",
-                "candidate_email": (s.get("candidate_email") or "").strip(),
-                "candidate_phone": (s.get("details") or {}).get("candidate_phone") or "",
-                "candidate_title": (s.get("details") or {}).get("candidate_title") or "Candidate",
+                "candidate_id": sub_id,
+                "name": cand_name,
+                "candidate_name": cand_name,
+                "email": cand_email,
+                "candidate_email": cand_email,
+                "phone": cand_phone,
+                "candidate_phone": cand_phone,
+                "title": cand_title,
+                "candidate_title": cand_title,
                 "vendor_name": v_name,
                 "is_direct_applicant": is_direct,
                 "skills": s.get("matched_skills") or (s.get("details") or {}).get("skills") or [],
@@ -344,7 +367,8 @@ def rank_candidates_for_requisition(
                 "details": s.get("details") or {},
                 "availability": s.get("availability") or "available",
                 "has_resume": True,
-                "filename": s.get("filename") or f"{s.get('candidate_name', 'resume')}.pdf",
+                "resume_url": f"/api/candidates/{sub_id}/resume",
+                "filename": s.get("filename") or f"{cand_name}.pdf",
                 "created_at": s.get("created_at"),
             }
 

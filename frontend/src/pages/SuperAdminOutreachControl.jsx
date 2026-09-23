@@ -183,9 +183,9 @@ export default function SuperAdminOutreachControl() {
       // Text search
       if (searchCandidate) {
         const query = searchCandidate.toLowerCase();
-        const nameMatch = c.name?.toLowerCase().includes(query);
-        const emailMatch = c.email?.toLowerCase().includes(query);
-        const titleMatch = c.title?.toLowerCase().includes(query);
+        const nameMatch = (c.name || c.candidate_name || '').toLowerCase().includes(query);
+        const emailMatch = (c.email || c.candidate_email || '').toLowerCase().includes(query);
+        const titleMatch = (c.title || c.candidate_title || '').toLowerCase().includes(query);
         const skillMatch = (c.skills || []).some((s) => s.toLowerCase().includes(query));
         return nameMatch || emailMatch || titleMatch || skillMatch;
       }
@@ -591,7 +591,7 @@ export default function SuperAdminOutreachControl() {
                       const isTop3 = c.rank <= 3;
 
                       return (
-                        <tr key={c.candidate_id} className="hover:bg-gray-50/80 transition-colors">
+                        <tr key={c.candidate_id || c.id} className="hover:bg-gray-50/80 transition-colors">
                           {/* Rank */}
                           <td className="py-3 px-4 text-center">
                             <span
@@ -611,8 +611,8 @@ export default function SuperAdminOutreachControl() {
 
                           {/* Candidate & Contact */}
                           <td className="py-3 px-4">
-                            <div className="font-bold text-gray-900 text-xs">{c.name}</div>
-                            <div className="text-[11px] text-gray-500 font-mono">{c.email}</div>
+                            <div className="font-bold text-gray-900 text-xs">{c.name || c.candidate_name || 'Candidate'}</div>
+                            <div className="text-[11px] text-gray-500 font-mono">{c.email || c.candidate_email}</div>
                             <div className="mt-1 flex flex-wrap items-center gap-1.5">
                               <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 text-[10px] font-medium border border-gray-200">
                                 {c.vendor_name || 'Direct Applicant'}
@@ -669,7 +669,7 @@ export default function SuperAdminOutreachControl() {
 
                           {/* Skills */}
                           <td className="py-3 px-4">
-                            <div className="text-xs font-semibold text-gray-800">{c.title || 'Candidate'}</div>
+                            <div className="text-xs font-semibold text-gray-800">{c.title || c.candidate_title || 'Candidate'}</div>
                             <div className="flex flex-wrap gap-1 mt-1 max-w-xs">
                               {(c.skills || []).slice(0, 4).map((s, idx) => (
                                 <span

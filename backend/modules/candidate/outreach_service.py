@@ -9,6 +9,7 @@ import secrets
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
+from bson import ObjectId
 from modules.shared.db import db
 from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
 from modules.candidate.ranking_service import rank_candidates_for_requisition, get_requisition_data
@@ -17,6 +18,23 @@ logger = logging.getLogger(__name__)
 
 # Public URL used in email buttons
 API_PUBLIC_BASE_URL = os.getenv("API_PUBLIC_BASE_URL") or os.getenv("CALENDAR_REDIRECT_BASE") or "http://localhost:8000"
+
+
+def clean_bson(obj: Any) -> Any:
+    """Recursively converts BSON ObjectId and Mongo-specific non-serializable objects to JSON-safe types."""
+    if isinstance(obj, list):
+        return [clean_bson(x) for x in obj]
+    if isinstance(obj, dict):
+        cleaned = {}
+        for k, v in obj.items():
+            if k == "_id" or isinstance(v, ObjectId):
+                cleaned[k] = str(v)
+            else:
+                cleaned[k] = clean_bson(v)
+        return cleaned
+    if isinstance(obj, ObjectId):
+        return str(obj)
+    return obj
 
 
 def _utcnow_iso() -> str:
@@ -336,7 +354,7 @@ def dispatch_outreach_to_top_candidates(
     except Exception as e:
         logger.warning(f"Failed to update requisition outreach metadata: {e}")
 
-    return {
+    return clean_bson({
         "requisition_id": requisition_id,
         "requisition_title": req_data["title"],
         "company_name": req_data["company_name"],
@@ -344,7 +362,7 @@ def dispatch_outreach_to_top_candidates(
         "outreach_dispatched": sent_count,
         "outreach_skipped": skipped_count,
         "top_candidates": outreach_results
-    }
+    })
 
 
 def handle_candidate_rsvp(token: str, action: str) -> Dict[str, Any]:
@@ -522,9 +540,9 @@ def get_requisition_outreach_details(requisition_id: str) -> Dict[str, Any]:
             cand["telegram_sent"] = False
             cand["outreach"] = None
 
-    return {
+    return clean_bson({
         "requisition": req_data,
         "top_candidates": ranked,
         "total_ranked": len(ranked),
         "dispatched_count": len(outreach_records),
-    }
+    })
