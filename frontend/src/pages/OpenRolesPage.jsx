@@ -23,6 +23,9 @@ import {
   LogOut,
   ShieldCheck,
   Lock,
+  Mail,
+  Eye,
+  EyeOff,
   Edit3,
   Check,
   LogIn,
@@ -35,6 +38,19 @@ import SEOHead from '../components/SEOHead';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
 
+const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
+
+function GoogleIcon({ className = "w-4 h-4" }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.66v3.05h3.87c2.26-2.09 3.67-5.17 3.67-9.15z" />
+      <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.87-3.05c-1.08.72-2.45 1.16-4.06 1.16-3.13 0-5.78-2.11-6.73-4.96H1.27v3.15C3.25 21.36 7.31 24 12 24z" />
+      <path fill="#FBBC05" d="M5.27 14.24c-.25-.72-.38-1.49-.38-2.24s.13-1.52.38-2.24V6.61H1.27C.46 8.23 0 10.06 0 12s.46 3.77 1.27 5.39l4-3.15z" />
+      <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.25 2.64 1.27 6.61l4 3.15c.95-2.85 3.6-4.96 6.73-4.96z" />
+    </svg>
+  );
+}
+
 export default function OpenRolesPage() {
   const navigate = useNavigate();
   const candidateAuth = useCandidateAuth();
@@ -43,6 +59,9 @@ export default function OpenRolesPage() {
   const logout = candidateAuth?.logout;
   const refreshProfile = candidateAuth?.refreshProfile;
   const setupProfile = candidateAuth?.setupProfile;
+  const loginWithGoogle = candidateAuth?.loginWithGoogle;
+  const login = candidateAuth?.login;
+  const register = candidateAuth?.register;
 
   // Job search & filters
   const [requisitions, setRequisitions] = useState([]);
@@ -105,6 +124,191 @@ export default function OpenRolesPage() {
   const [poolSubmitting, setPoolSubmitting] = useState(false);
   const [poolSuccess, setPoolSuccess] = useState(null);
   const [poolError, setPoolError] = useState(null);
+
+  // Candidate Auth Modal state (Google & Email)
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalTab, setAuthModalTab] = useState('login'); // 'login' | 'register'
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState(null);
+  const [authSuccessMsg, setAuthSuccessMsg] = useState('');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [showAuthPassword, setShowAuthPassword] = useState(false);
+  const [regName, setRegName] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regTitle, setRegTitle] = useState('');
+  const [regSkills, setRegSkills] = useState('');
+  const [regResume, setRegResume] = useState(null);
+
+  // Load Google Identity Services SDK on mount
+  useEffect(() => {
+    if (document.getElementById('google-jssdk')) return;
+    const script = document.createElement('script');
+    script.id = 'google-jssdk';
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+  }, []);
+
+  // Listen for query params, hash, or candidate path opening candidate auth
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const path = window.location.pathname.toLowerCase();
+    if (
+      params.get('auth') || 
+      params.get('login') || 
+      window.location.hash === '#login' || 
+      window.location.hash === '#candidate-login' ||
+      path.includes('/candidate')
+    ) {
+      setShowAuthModal(true);
+      if (params.get('auth') === 'register' || window.location.hash === '#register') {
+        setAuthModalTab('register');
+      }
+    }
+  }, []);
+
+  // Trigger Google OAuth popup
+  const handleGoogleSignIn = (onSuccess) => {
+    setAuthError(null);
+
+    if (!GOOGLE_CLIENT_ID) {
+      setAuthError('Google OAuth Client ID is not configured.');
+      return;
+    }
+
+    if (!window.google?.accounts?.oauth2) {
+      setAuthError('Google Sign-In SDK is loading. Please try again in a few moments.');
+      return;
+    }
+
+    try {
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: 'email profile openid',
+        callback: async (tokenResponse) => {
+          if (tokenResponse.error) {
+            setAuthError(`Google Sign-In error: ${tokenResponse.error_description || tokenResponse.error}`);
+            return;
+          }
+
+          if (tokenResponse.access_token) {
+            setAuthLoading(true);
+            try {
+              let userInfo = {};
+              try {
+                const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                  headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
+                });
+                if (userRes.ok) {
+                  userInfo = await userRes.json();
+                }
+              } catch (userErr) {
+                console.warn('Could not fetch userinfo directly from Google:', userErr);
+              }
+
+              const data = await loginWithGoogle({
+                access_token: tokenResponse.access_token,
+                email: userInfo.email,
+                name: userInfo.name,
+                picture: userInfo.picture,
+                sub: userInfo.sub,
+              });
+
+              setAuthSuccessMsg('Signed in with Google successfully!');
+              setTimeout(() => {
+                setShowAuthModal(false);
+                setAuthSuccessMsg('');
+              }, 600);
+
+              if (onSuccess && typeof onSuccess === 'function') {
+                onSuccess(data?.candidate || userInfo);
+              }
+            } catch (err) {
+              setAuthError(err.message || 'Google authentication failed.');
+            } finally {
+              setAuthLoading(false);
+            }
+          }
+        },
+        error_callback: (err) => {
+          console.warn('Google OAuth token client error:', err);
+          const currentOrigin = window.location.origin;
+          setAuthError(
+            `Google OAuth Error: "${currentOrigin}" is not registered in Google Cloud Console. Please add "${currentOrigin}" to Authorized JavaScript origins.`
+          );
+        },
+      });
+
+      client.requestAccessToken();
+    } catch (err) {
+      console.error('Google OAuth trigger error:', err);
+      setAuthError('Could not open Google Sign-In popup. Please check your browser popup blocker.');
+    }
+  };
+
+  // Handle Candidate Email Login
+  const handleEmailLogin = async (e) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword) {
+      setAuthError('Please enter your email and password.');
+      return;
+    }
+    setAuthError(null);
+    setAuthLoading(true);
+    try {
+      await login(authEmail.trim(), authPassword);
+      setAuthSuccessMsg('Welcome back! Loading candidate profile...');
+      setTimeout(() => {
+        setShowAuthModal(false);
+        setAuthSuccessMsg('');
+      }, 600);
+    } catch (err) {
+      setAuthError(err.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // Handle Candidate Profile Registration
+  const handleRegisterSubmit = async (e) => {
+    e.preventDefault();
+    if (!regName.trim() || !regEmail.trim() || !regPassword) {
+      setAuthError('Full name, email, and password (min 6 chars) are required.');
+      return;
+    }
+    if (regPassword.length < 6) {
+      setAuthError('Password must be at least 6 characters long.');
+      return;
+    }
+    setAuthError(null);
+    setAuthLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', regName.trim());
+      formData.append('email', regEmail.trim().toLowerCase());
+      formData.append('password', regPassword);
+      formData.append('phone', regPhone.trim());
+      formData.append('title', regTitle.trim());
+      formData.append('skills', regSkills.trim());
+      if (regResume) {
+        formData.append('resume', regResume);
+      }
+      await register(formData);
+      setAuthSuccessMsg('Candidate Profile created successfully!');
+      setTimeout(() => {
+        setShowAuthModal(false);
+        setAuthSuccessMsg('');
+      }, 600);
+    } catch (err) {
+      setAuthError(err.message || 'Registration failed. Please check your details.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
 
   // Derive candidate profile state
   const hasResume = Boolean(
@@ -456,18 +660,30 @@ export default function OpenRolesPage() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-2.5">
-                <Link
-                  to="/candidate/login"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-paper/10 hover:bg-paper/15 border border-paper/15 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-paper transition cursor-pointer"
+              <div className="flex items-center gap-2 sm:gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => handleGoogleSignIn()}
+                  disabled={authLoading}
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-neutral-100 text-neutral-900 text-[0.68rem] font-bold tracking-wide transition shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
+                  title="Sign in with Google"
+                >
+                  <GoogleIcon className="w-3.5 h-3.5" />
+                  <span>{authLoading ? 'Signing in...' : 'Sign in with Google'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-paper/10 hover:bg-paper/15 border border-paper/15 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-paper transition cursor-pointer"
                 >
                   <User size={12} />
                   <span>Candidate Sign In</span>
-                </Link>
+                </button>
 
                 <Link
                   to="/login"
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-paper text-ink hover:bg-paper/90 text-[0.68rem] font-bold tracking-[0.14em] uppercase transition cursor-pointer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-paper text-ink hover:bg-paper/90 text-[0.68rem] font-bold tracking-[0.14em] uppercase transition cursor-pointer"
                 >
                   <LogIn size={12} />
                   <span>Staff Portal</span>
@@ -516,6 +732,46 @@ export default function OpenRolesPage() {
             </div>
           </div>
         </div>
+
+        {/* Unauthenticated Candidate Fast-Track Google Banner */}
+        {!candidateUser && (
+          <div className="mt-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-paper/[0.03] to-blue-950/30 border border-emerald-500/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                <Sparkles size={20} className="text-emerald-400" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>Fast-Track Candidate Access</span>
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-extrabold uppercase tracking-wider">
+                    Google 1-Click
+                  </span>
+                </div>
+                <p className="text-[11px] text-paper/60 mt-0.5 max-w-xl">
+                  Sign in with Google to 1-click apply across all enterprise requisitions, attach your master resume once, and track your interview invitations live.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => handleGoogleSignIn()}
+                disabled={authLoading}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
+              >
+                <GoogleIcon className="w-4 h-4" />
+                <span>Continue with Google</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-paper/10 hover:bg-paper/15 border border-paper/15 text-xs font-semibold text-paper transition cursor-pointer"
+              >
+                <span>Candidate Sign In</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Search & Filters Controls Bar */}
         <div className="mt-8 p-3 sm:p-4 rounded-2xl bg-paper/[0.03] border border-paper/10 backdrop-blur-md flex flex-col md:flex-row items-center gap-3">
@@ -871,6 +1127,69 @@ export default function OpenRolesPage() {
                         Submit Your Application
                       </h4>
                     </div>
+
+                    {/* Google 1-Click Fast-Track Apply Callout */}
+                    {!candidateUser ? (
+                      <div className="mb-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-zinc-900/60 to-blue-950/30 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                            <GoogleIcon className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                              <span>Fast-Track Apply with Google</span>
+                              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                1-Click
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">
+                              Autofill with your verified profile and save your master resume.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleGoogleSignIn((usr) => {
+                            if (usr) {
+                              setApplyForm((prev) => ({
+                                ...prev,
+                                name: usr.candidate_name || usr.name || prev.name,
+                                email: usr.candidate_email || usr.email || prev.email,
+                                phone: usr.candidate_phone || prev.phone,
+                              }));
+                            }
+                          })}
+                          disabled={authLoading}
+                          className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-xs shadow-sm transition active:scale-95 cursor-pointer shrink-0 disabled:opacity-50"
+                        >
+                          <GoogleIcon className="w-3.5 h-3.5" />
+                          <span>{authLoading ? 'Signing in...' : 'Continue with Google'}</span>
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mb-4 p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/25 flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold border border-emerald-500/30">
+                            {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
+                          </div>
+                          <div>
+                            <div className="text-xs font-semibold text-white">
+                              Applying as <span className="font-bold text-emerald-400">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                            </div>
+                            <div className="text-[10px] text-zinc-400">
+                              {hasResume ? '✓ Master resume attached' : 'Upload your resume below to complete'}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={logout}
+                          className="text-[11px] text-zinc-400 hover:text-rose-400 transition cursor-pointer"
+                        >
+                          Sign out
+                        </button>
+                      </div>
+                    )}
 
                     {submitError && (
                       <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
@@ -1315,6 +1634,263 @@ export default function OpenRolesPage() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-md font-sans">
+          <div className="bg-[#0e0f14] border border-paper/15 rounded-2xl max-w-md w-full shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowAuthModal(false);
+                setAuthError(null);
+                setAuthSuccessMsg('');
+              }}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-paper/40 hover:text-white bg-paper/[0.04] hover:bg-paper/10 transition cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+
+            {/* Brand Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-paper/[0.06] border border-paper/10 text-[0.65rem] font-bold tracking-[0.2em] text-paper/70 uppercase mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Candidate Talent Portal</span>
+              </div>
+              <h3 className="font-display text-xl font-extrabold text-paper tracking-tight">
+                {authModalTab === 'login' ? 'Sign In to Open Roles' : 'Create Talent Profile'}
+              </h3>
+              <p className="text-xs text-paper/60 mt-1">
+                {authModalTab === 'login'
+                  ? 'Access verified partner requisitions and 1-click apply.'
+                  : 'Join the verified talent network to browse and apply for roles.'}
+              </p>
+            </div>
+
+            {/* 1-Click Google OAuth (Primary Action) */}
+            <button
+              type="button"
+              onClick={() => handleGoogleSignIn()}
+              disabled={authLoading}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-xs tracking-wide shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
+            >
+              <GoogleIcon className="w-4 h-4" />
+              <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
+            </button>
+
+            {/* Divider */}
+            <div className="relative flex items-center justify-center mb-5">
+              <div className="border-t border-paper/10 w-full" />
+              <span className="bg-[#0e0f14] px-3 text-[10px] font-bold uppercase tracking-wider text-paper/40 absolute">
+                or use candidate credentials
+              </span>
+            </div>
+
+            {/* Tab Switcher */}
+            <div className="flex p-1 bg-paper/[0.04] border border-paper/10 rounded-xl mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalTab('login');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  authModalTab === 'login'
+                    ? 'bg-paper text-ink shadow-xs'
+                    : 'text-paper/60 hover:text-white'
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalTab('register');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+                  authModalTab === 'register'
+                    ? 'bg-paper text-ink shadow-xs'
+                    : 'text-paper/60 hover:text-white'
+                }`}
+              >
+                Create Profile
+              </button>
+            </div>
+
+            {/* Alerts */}
+            {authError && (
+              <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-start gap-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span className="flex-1">{authError}</span>
+              </div>
+            )}
+
+            {authSuccessMsg && (
+              <div className="p-3 mb-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs flex items-center gap-2">
+                <CheckCircle2 size={15} className="shrink-0" />
+                <span>{authSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* TAB 1: LOGIN FORM */}
+            {authModalTab === 'login' && (
+              <form onSubmit={handleEmailLogin} className="space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-paper/60 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-paper/40" />
+                    <input
+                      type="email"
+                      required
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="you@domain.com"
+                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-paper/60 uppercase tracking-wider mb-1">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-paper/40" />
+                    <input
+                      type={showAuthPassword ? 'text' : 'password'}
+                      required
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthPassword(!showAuthPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-paper/40 hover:text-white cursor-pointer"
+                    >
+                      {showAuthPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition cursor-pointer mt-2 disabled:opacity-50"
+                >
+                  {authLoading ? 'Signing In…' : 'Sign In to Candidate Profile'}
+                </button>
+              </form>
+            )}
+
+            {/* TAB 2: REGISTER FORM */}
+            {authModalTab === 'register' && (
+              <form onSubmit={handleRegisterSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Alex Johnson"
+                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="alex@example.com"
+                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Password *</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Professional Title</label>
+                  <input
+                    type="text"
+                    value={regTitle}
+                    onChange={(e) => setRegTitle(e.target.value)}
+                    placeholder="e.g. Senior Fullstack Engineer"
+                    className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={regSkills}
+                    onChange={(e) => setRegSkills(e.target.value)}
+                    placeholder="React, TypeScript, Python, Node.js"
+                    className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc"
+                    onChange={(e) => setRegResume(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-paper/60 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-paper/10 file:text-paper hover:file:bg-paper/20 cursor-pointer"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition cursor-pointer mt-2 disabled:opacity-50"
+                >
+                  {authLoading ? 'Creating Profile…' : 'Create Profile & Access Roles'}
+                </button>
+              </form>
+            )}
+
+            {/* Footer Security Note */}
+            <div className="mt-5 pt-3 border-t border-paper/10 flex items-center justify-center gap-1.5 text-[11px] text-paper/40">
+              <ShieldCheck size={13} className="text-emerald-400" />
+              <span>Verified candidate session · Encrypted data</span>
+            </div>
           </div>
         </div>
       )}
