@@ -23,7 +23,8 @@ import {
   ShieldCheck,
   Lock,
   Edit3,
-  Check
+  Check,
+} from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';

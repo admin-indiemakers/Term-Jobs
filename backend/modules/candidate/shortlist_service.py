@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from modules.shared.db import get_session, db
 from modules.candidate.domain.models import CandidateSubmission
+from modules.interview.domain.models import InterviewRound
 from modules.requisition.domain.models import Requisition, CompanyProfile
 from modules.identity.domain.models import User
 from modules.notifications.services.notification_service import notify_shortlist_dispatched
@@ -189,7 +190,6 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
         )
         
         # Fetch all interview rounds for this requisition to get latest AI scores
-        from modules.interview.domain.models import InterviewRound
         interview_rounds = (
             session.query(InterviewRound)
             .filter(InterviewRound.requisition_id == requisition_id)

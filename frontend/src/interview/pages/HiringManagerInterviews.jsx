@@ -15,7 +15,6 @@ import {
   ChevronUp,
   Clock,
   RefreshCw,
-  Send,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { interviewApi } from '../services/interviewApi';

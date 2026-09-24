@@ -5,14 +5,12 @@ import {
   Briefcase,
   MapPin,
   Clock,
-  Building2,
   Calendar,
   ChevronRight,
   X,
   Upload,
   CheckCircle2,
   AlertCircle,
-  ExternalLink,
   Filter,
   ArrowLeft,
   Sparkles,
@@ -29,7 +27,6 @@ import {
   Edit3,
   Check,
   LogIn,
-  SlidersHorizontal,
 } from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
