@@ -437,6 +437,12 @@ export default function OpenRolesPage() {
     e.preventDefault();
     if (!selectedJob) return;
 
+    if (!candidateUser) {
+      setSubmitError('Candidate sign-in or registration is mandatory to submit an application. Please sign in or create your profile.');
+      setShowAuthModal(true);
+      return;
+    }
+
     if (!isProfileComplete && !useCustomResume && !resumeFile) {
       setShowSetupModal(true);
       return;
@@ -1128,77 +1134,124 @@ export default function OpenRolesPage() {
                       </h4>
                     </div>
 
-                    {/* Google 1-Click Fast-Track Apply Callout */}
                     {!candidateUser ? (
-                      <div className="mb-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/40 via-zinc-900/60 to-blue-950/30 border border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-                            <GoogleIcon className="w-4 h-4" />
+                      /* Mandatory Candidate Authentication Gateway */
+                      <div className="p-6 sm:p-7 rounded-2xl bg-gradient-to-b from-zinc-900/90 to-zinc-950 border border-zinc-800 text-center space-y-4 shadow-xl">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+                          <Lock size={22} className="text-emerald-400" />
+                        </div>
+
+                        <div className="max-w-md mx-auto space-y-1.5">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase tracking-wider">
+                            <span>Sign-Up Mandatory</span>
                           </div>
-                          <div>
-                            <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                              <span>Fast-Track Apply with Google</span>
-                              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">
-                                1-Click
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-zinc-400 mt-0.5">
-                              Autofill with your verified profile and save your master resume.
-                            </p>
+                          <h3 className="font-display text-base sm:text-lg font-bold text-white tracking-tight">
+                            Candidate Profile Required to Apply
+                          </h3>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            To ensure verified talent evaluation, direct partner communication, and live ATS tracking, all applicants must have a verified candidate profile before applying.
+                          </p>
+                        </div>
+
+                        {/* Primary Action: Google 1-Click */}
+                        <div className="pt-1 max-w-sm mx-auto space-y-2.5">
+                          <button
+                            type="button"
+                            onClick={() => handleGoogleSignIn((usr) => {
+                              if (usr) {
+                                setApplyForm((prev) => ({
+                                  ...prev,
+                                  name: usr.candidate_name || usr.name || prev.name,
+                                  email: usr.candidate_email || usr.email || prev.email,
+                                  phone: usr.candidate_phone || prev.phone,
+                                }));
+                              }
+                            })}
+                            disabled={authLoading}
+                            className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-100 text-neutral-950 font-bold text-xs tracking-wide shadow-md transition active:scale-[0.99] cursor-pointer disabled:opacity-50"
+                          >
+                            <GoogleIcon className="w-4 h-4" />
+                            <span>{authLoading ? 'Connecting Google Account…' : 'Sign Up / Sign In with Google'}</span>
+                          </button>
+
+                          {/* Secondary Action: Email Sign Up / Sign In */}
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthModalTab('register');
+                                setShowAuthModal(true);
+                              }}
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:text-white transition cursor-pointer"
+                            >
+                              Create Talent Profile
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthModalTab('login');
+                                setShowAuthModal(true);
+                              }}
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+                            >
+                              Candidate Sign In
+                            </button>
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => handleGoogleSignIn((usr) => {
-                            if (usr) {
-                              setApplyForm((prev) => ({
-                                ...prev,
-                                name: usr.candidate_name || usr.name || prev.name,
-                                email: usr.candidate_email || usr.email || prev.email,
-                                phone: usr.candidate_phone || prev.phone,
-                              }));
-                            }
-                          })}
-                          disabled={authLoading}
-                          className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-xs shadow-sm transition active:scale-95 cursor-pointer shrink-0 disabled:opacity-50"
-                        >
-                          <GoogleIcon className="w-3.5 h-3.5" />
-                          <span>{authLoading ? 'Signing in...' : 'Continue with Google'}</span>
-                        </button>
+
+                        {/* Reassurance pills */}
+                        <div className="pt-4 border-t border-zinc-800/80 flex flex-wrap items-center justify-center gap-4 text-[11px] text-zinc-500">
+                          <span className="flex items-center gap-1.5">
+                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            1-Click Verified Apply
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <ShieldCheck size={13} className="text-emerald-400" />
+                            Direct Partner Review
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Sparkles size={13} className="text-emerald-400" />
+                            Live Interview Status
+                          </span>
+                        </div>
                       </div>
                     ) : (
-                      <div className="mb-4 p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/25 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold border border-emerald-500/30">
-                            {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-white">
-                              Applying as <span className="font-bold text-emerald-400">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                      /* Authenticated Application Form */
+                      <form onSubmit={handleApplySubmit} className="space-y-4">
+                        {/* Verified Candidate Header */}
+                        <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/25 flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold border border-emerald-500/30">
+                              {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
                             </div>
-                            <div className="text-[10px] text-zinc-400">
-                              {hasResume ? '✓ Master resume attached' : 'Upload your resume below to complete'}
+                            <div>
+                              <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                                <span>Applying as</span>
+                                <span className="font-bold text-emerald-400">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                                <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-1.5 py-0.2 rounded-full">
+                                  Verified
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-zinc-400 mt-0.5">
+                                {hasResume ? '✓ Master resume ready for 1-click submission' : 'Upload your resume below to complete'}
+                              </div>
                             </div>
                           </div>
+                          <button
+                            type="button"
+                            onClick={logout}
+                            className="text-[11px] text-zinc-400 hover:text-rose-400 transition cursor-pointer"
+                          >
+                            Sign out
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={logout}
-                          className="text-[11px] text-zinc-400 hover:text-rose-400 transition cursor-pointer"
-                        >
-                          Sign out
-                        </button>
-                      </div>
-                    )}
 
-                    {submitError && (
-                      <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                        <AlertCircle size={15} className="shrink-0" />
-                        <span>{submitError}</span>
-                      </div>
-                    )}
-
-                    <form onSubmit={handleApplySubmit} className="space-y-4">
+                        {submitError && (
+                          <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                            <AlertCircle size={15} className="shrink-0" />
+                            <span>{submitError}</span>
+                          </div>
+                        )}
                       {/* Name & Email Row */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
@@ -1375,7 +1428,8 @@ export default function OpenRolesPage() {
                         )}
                       </button>
                     </form>
-                  </div>
+                  )}
+                </div>
                 </>
               )}
             </div>
