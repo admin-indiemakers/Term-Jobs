@@ -51,6 +51,7 @@ import TimesheetApprovals from './pages/workforce/TimesheetApprovals';
 import ExpenseApprovals from './pages/workforce/ExpenseApprovals';
 import Workers from './pages/workforce/Workers';
 import LandingPage from './pages/LandingPage';
+import OpenRolesPage from './pages/OpenRolesPage';
 import AdminAccounts from './pages/AdminAccounts';
 import SuperAdminCandidatePool from './pages/SuperAdminCandidatePool';
 import SuperAdminOutreachControl from './pages/SuperAdminOutreachControl';
@@ -124,11 +125,14 @@ export default function App() {
           <Route path="/invite/procurement" element={<JoinProcurement />} />
           <Route path="/join/finance" element={<JoinFinance />} />
           <Route path="/invite/finance" element={<JoinFinance />} />
-          <Route path="/candidate/login" element={<LandingPage defaultRoute="#jobs" />} />
-          <Route path="/candidate-login" element={<LandingPage defaultRoute="#jobs" />} />
-          <Route path="/candidate/profile-login" element={<LandingPage defaultRoute="#jobs" />} />
-          <Route path="/open-roles" element={<LandingPage defaultRoute="#jobs" />} />
-          <Route path="/openroles" element={<LandingPage defaultRoute="#jobs" />} />
+          <Route path="/candidate/login" element={<OpenRolesPage />} />
+          <Route path="/candidate-login" element={<OpenRolesPage />} />
+          <Route path="/candidate/profile-login" element={<OpenRolesPage />} />
+          <Route path="/open-roles" element={<OpenRolesPage />} />
+          <Route path="/openroles" element={<OpenRolesPage />} />
+          <Route path="/jobs" element={<OpenRolesPage />} />
+          <Route path="/careers" element={<OpenRolesPage />} />
+          <Route path="/apply" element={<OpenRolesPage />} />
           <Route path="/interview/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
@@ -137,9 +141,6 @@ export default function App() {
           <Route path="/admin/login" element={<SuperAdminLogin />} />
           <Route path="/director/login" element={<DirectorLogin />} />
           <Route path="/" element={<LandingPage />} />
-          <Route path="/jobs" element={<LandingPage defaultRoute="#jobs" />} />
-          <Route path="/careers" element={<LandingPage defaultRoute="#jobs" />} />
-          <Route path="/apply" element={<LandingPage defaultRoute="#jobs" />} />
         <Route
           path="/dashboard"
           element={
