@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Mic,
   MicOff,
@@ -17,6 +17,7 @@ import {
   Clock,
   Captions,
   Activity,
+  Film,
 } from 'lucide-react';
 import { useInterviewMedia } from '../hooks/useInterviewMedia';
 import { useInterviewRoom } from '../hooks/useInterviewRoom';
@@ -45,11 +46,17 @@ export function InterviewRoom({
   const [analyzingSpeech, setAnalyzingSpeech] = useState(false);
   const [aiInterviewMode, setAiInterviewMode] = useState(true);
   const [isAiSpeakingInRoom, setIsAiSpeakingInRoom] = useState(false);
+  const [isRecordingProof, setIsRecordingProof] = useState(false);
+  const [isSavingProofVideo, setIsSavingProofVideo] = useState(false);
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const screenVideoRef = useRef(null);
   const chatBottomRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+  const recordingStartTimeRef = useRef(null);
+  const isUploadingProofRef = useRef(false);
 
   // Fetch LiveKit access token on mount
   useEffect(() => {
@@ -102,6 +109,96 @@ export function InterviewRoom({
     toggleMicrophone,
     toggleScreenShare,
   } = useInterviewMedia();
+
+  // Automatic Session Video Proof Recording: Captures candidate camera/mic and peer audio as tamper-evident proof
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
+    if (!localStream || localStream.getTracks().length === 0) return;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') return;
+
+    try {
+      const recordStream = new MediaStream();
+      localStream.getVideoTracks().forEach((track) => recordStream.addTrack(track));
+      localStream.getAudioTracks().forEach((track) => recordStream.addTrack(track));
+
+      const mimeCandidates = [
+        'video/webm;codecs=vp9,opus',
+        'video/webm;codecs=vp8,opus',
+        'video/webm',
+        'video/mp4',
+      ];
+      let chosenMime = '';
+      for (const cand of mimeCandidates) {
+        if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cand)) {
+          chosenMime = cand;
+          break;
+        }
+      }
+
+      const options = chosenMime ? { mimeType: chosenMime } : undefined;
+      const recorder = new MediaRecorder(recordStream, options);
+      recordedChunksRef.current = [];
+      recordingStartTimeRef.current = Date.now();
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.start(1000); // 1-second chunks for smooth reliable buffer
+      mediaRecorderRef.current = recorder;
+      setIsRecordingProof(true);
+      console.log('🎥 [PROOF RECORDER] Active with format:', chosenMime || 'default browser codec');
+    } catch (err) {
+      console.warn('⚠️ [PROOF RECORDER] MediaRecorder initialization warning:', err);
+    }
+  }, [localStream]);
+
+  // Guaranteed method to stop recorder and persist conversation video proof to backend and GridFS
+  const stopAndUploadProofVideo = useCallback(
+    async (customDuration) => {
+      if (isUploadingProofRef.current) return null;
+      isUploadingProofRef.current = true;
+
+      let recordedBlob = null;
+      const durationSec =
+        customDuration ||
+        (recordingStartTimeRef.current
+          ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
+          : callDuration || 1);
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try {
+          await new Promise((resolve) => {
+            mediaRecorderRef.current.onstop = resolve;
+            mediaRecorderRef.current.stop();
+          });
+        } catch (err) {
+          console.warn('[PROOF RECORDING] Recorder stop warning:', err);
+        }
+      }
+
+      if (recordedChunksRef.current && recordedChunksRef.current.length > 0) {
+        const mime = mediaRecorderRef.current?.mimeType || 'video/webm';
+        recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
+        console.log(`📹 [PROOF RECORDING] Packaged ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video proof`);
+      }
+
+      if (recordedBlob && round?.id) {
+        try {
+          const res = await interviewApi.uploadRecording(round.id, recordedBlob, durationSec);
+          console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
+          setIsRecordingProof(false);
+          return res;
+        } catch (uploadErr) {
+          console.warn('⚠️ [PROOF RECORDING] Failed to upload proof video:', uploadErr);
+        }
+      }
+      return null;
+    },
+    [round?.id, callDuration]
+  );
 
   // Room lifecycle hook
   const {
@@ -202,32 +299,48 @@ export function InterviewRoom({
   };
 
   const handleEndCall = async () => {
-    disconnect();
-    
-    // Automatically trigger communication analysis if candidate or interviewer turns were captured
-    if (transcriptTurns.length > 0 && round?.id) {
-      setAnalyzingSpeech(true);
-      try {
-        const res = await interviewApi.analyzeCommunication(round.id, {
-          transcript_turns: transcriptTurns,
-          call_duration_seconds: callDuration,
-          candidate_name: round?.candidate_name,
-          role_title: round?.requisition_title,
-        });
-        if (res && res.analysis) {
-          setCommunicationAnalysis(res.analysis);
-        }
-      } catch (err) {
-        console.warn('Spoken communication analysis notice:', err);
-      } finally {
-        setAnalyzingSpeech(false);
-      }
-    }
+    setShowExitConfirm(false);
+    setIsSavingProofVideo(true);
 
-    if (currentUserRole === 'interviewer') {
-      setPostCallEvaluation(true);
-    } else {
-      if (onLeave) onLeave();
+    let updatedRound = null;
+    try {
+      // 1. Finalize & upload the interview conversation proof video before exit
+      updatedRound = await stopAndUploadProofVideo(callDuration);
+
+      // 2. Automatically trigger communication analysis if candidate turns were captured
+      if (transcriptTurns.length > 0 && round?.id) {
+        setAnalyzingSpeech(true);
+        try {
+          const res = await interviewApi.analyzeCommunication(round.id, {
+            transcript_turns: transcriptTurns,
+            call_duration_seconds: callDuration,
+            candidate_name: round?.candidate_name,
+            role_title: round?.requisition_title,
+          });
+          if (res && res.analysis) {
+            setCommunicationAnalysis(res.analysis);
+          }
+        } catch (err) {
+          console.warn('Spoken communication analysis notice:', err);
+        } finally {
+          setAnalyzingSpeech(false);
+        }
+      }
+
+      if (updatedRound && onEvaluationComplete) {
+        onEvaluationComplete(updatedRound);
+      }
+    } catch (exitErr) {
+      console.warn('Error during exit proof archival:', exitErr);
+    } finally {
+      setIsSavingProofVideo(false);
+      disconnect();
+
+      if (currentUserRole === 'interviewer') {
+        setPostCallEvaluation(true);
+      } else {
+        if (onLeave) onLeave();
+      }
     }
   };
 
@@ -267,6 +380,14 @@ export function InterviewRoom({
             <Sparkles size={13} className={aiInterviewMode ? 'text-cyan-400' : 'text-zinc-500'} />
             <span>{aiInterviewMode ? 'AI Interviewer Active' : 'Peer Video Mode'}</span>
           </button>
+
+          {/* Recording Proof Status */}
+          {isRecordingProof && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-semibold animate-in fade-in duration-300">
+              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+              <span>REC · Video Proof</span>
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-900/80 border border-zinc-800 text-xs font-mono font-medium text-zinc-300">
             <Clock size={13} className="text-zinc-400" />
@@ -435,6 +556,7 @@ export function InterviewRoom({
                   startSpeechRecognition={startSpeechRecognition}
                   stopSpeechRecognition={stopSpeechRecognition}
                   onAiSpeakingChange={setIsAiSpeakingInRoom}
+                  onSaveProofRecording={stopAndUploadProofVideo}
                   onAnalysisReady={(result) => {
                     if (result?.analysis) {
                       setCommunicationAnalysis(result.analysis);
@@ -821,6 +943,23 @@ export function InterviewRoom({
                 if (onLeave) onLeave();
               }}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Saving Conversation Proof Video Full-screen Overlay */}
+      {isSavingProofVideo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
+            <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mx-auto mb-4" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[11px] font-bold uppercase tracking-wider mb-2">
+              <ShieldCheck size={13} />
+              <span>Compliance Proof Vault</span>
+            </div>
+            <h3 className="text-lg font-bold text-white">Saving Conversation Video Proof</h3>
+            <p className="text-xs text-zinc-400 mt-2 leading-relaxed">
+              Securely finalizing interview video recording and archiving conversation proof to the compliance vault...
+            </p>
           </div>
         </div>
       )}

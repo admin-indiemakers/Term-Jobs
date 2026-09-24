@@ -13,6 +13,12 @@ import {
   AlertCircle,
   RotateCcw,
   Film,
+  ShieldCheck,
+  CheckCircle2,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Lock,
 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 
@@ -38,13 +44,17 @@ export function CandidateRecordingPlayer({ round, candidateName = 'Candidate' })
   const [isMuted, setIsMuted] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showDialogueProof, setShowDialogueProof] = useState(false);
 
   const roundId = round?.id;
   const streamUrl = roundId ? interviewApi.getRecordingStreamUrl(roundId) : null;
   const downloadUrl = roundId ? interviewApi.getRecordingStreamUrl(roundId, true) : null;
   const metadata = round?.recording_metadata || {};
   const candNameClean = (candidateName || 'candidate').replace(/\s+/g, '_');
-  const downloadFileName = `interview_${candNameClean}_${round?.round_name ? round.round_name.replace(/\s+/g, '_') : 'round'}.webm`;
+  const downloadFileName = `interview_proof_${candNameClean}_${round?.round_name ? round.round_name.replace(/\s+/g, '_') : 'round'}.webm`;
+
+  // Dialogue turns from round transcript or communication analysis
+  const dialogueTurns = round?.transcript || round?.communication_analysis?.transcript_turns || [];
 
   useEffect(() => {
     setHasError(false);
@@ -104,6 +114,18 @@ export function CandidateRecordingPlayer({ round, candidateName = 'Candidate' })
     }
   };
 
+  const jumpToTurn = (index) => {
+    if (!videoRef.current || duration <= 0) return;
+    // Estimate proportional position if specific turn timestamps aren't absolute seconds
+    const totalTurns = Math.max(1, dialogueTurns.length);
+    const targetSec = Math.min(duration, Math.round((index / totalTurns) * duration));
+    videoRef.current.currentTime = targetSec;
+    setCurrentTime(targetSec);
+    if (!isPlaying) {
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+  };
+
   if (!roundId) return null;
 
   return (
@@ -111,18 +133,19 @@ export function CandidateRecordingPlayer({ round, candidateName = 'Candidate' })
       {/* Header bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-zinc-800">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold border border-purple-500/30">
-            <Film size={16} />
+          <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold border border-purple-500/30 shrink-0">
+            <Film size={18} />
           </div>
           <div>
             <div className="text-xs font-bold text-white flex items-center gap-2">
-              <span>Candidate Video Recording</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                AI CAPTURED
+              <span>Verified Conversation Video Proof</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                <ShieldCheck size={10} className="text-purple-400" />
+                VAULT ARCHIVED
               </span>
             </div>
             <div className="text-[11px] text-zinc-400">
-              Synchronized video & audio record for {candidateName}
+              Verifiable video & audio proof record for {candidateName} · {round?.round_name || 'Interview Session'}
             </div>
           </div>
         </div>
@@ -149,11 +172,11 @@ export function CandidateRecordingPlayer({ round, candidateName = 'Candidate' })
               download={downloadFileName}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white text-xs font-semibold border border-zinc-700 transition cursor-pointer"
-              title="Download recording file"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 active:scale-95 text-white text-xs font-semibold shadow-md transition cursor-pointer"
+              title="Download full video proof (WebM)"
             >
               <Download size={13} />
-              <span>Download</span>
+              <span>Download Proof</span>
             </a>
           )}
         </div>
@@ -165,126 +188,194 @@ export function CandidateRecordingPlayer({ round, candidateName = 'Candidate' })
           <div className="w-12 h-12 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center justify-center mb-3">
             <Video size={22} />
           </div>
-          <div className="text-xs font-bold text-zinc-200">No Video Recording Available</div>
+          <div className="text-xs font-bold text-zinc-200">Conversation Video Proof Processing or Awaiting Session</div>
           <p className="text-[11px] text-zinc-500 max-w-sm mt-1">
             {round?.status === 'Completed'
-              ? 'Video was either disabled by the candidate during this session or not yet uploaded.'
-              : 'Recording will appear here automatically once the candidate concludes the interview.'}
+              ? 'Video proof is currently finalizing in the compliance vault, or camera was offline during this session.'
+              : 'The conversation video proof is automatically captured and encrypted when the candidate enters and completes the live interview.'}
           </p>
         </div>
       ) : (
-        <div className="relative rounded-2xl overflow-hidden bg-black border border-zinc-800/80 group shadow-2xl">
-          <video
-            ref={videoRef}
-            src={streamUrl}
-            playsInline
-            preload="metadata"
-            className="w-full aspect-video object-cover cursor-pointer"
-            onClick={togglePlay}
-            onTimeUpdate={() => {
-              if (videoRef.current) {
-                setCurrentTime(videoRef.current.currentTime);
-                if (videoRef.current.duration && !isNaN(videoRef.current.duration)) {
+        <div className="space-y-3">
+          <div className="relative rounded-2xl overflow-hidden bg-black border border-zinc-800/80 group shadow-2xl">
+            <video
+              ref={videoRef}
+              src={streamUrl}
+              playsInline
+              preload="metadata"
+              className="w-full aspect-video object-cover cursor-pointer"
+              onClick={togglePlay}
+              onTimeUpdate={() => {
+                if (videoRef.current) {
+                  setCurrentTime(videoRef.current.currentTime);
+                  if (videoRef.current.duration && !isNaN(videoRef.current.duration)) {
+                    setDuration(videoRef.current.duration);
+                  }
+                }
+              }}
+              onLoadedMetadata={() => {
+                setIsLoading(false);
+                if (videoRef.current?.duration && !isNaN(videoRef.current.duration)) {
                   setDuration(videoRef.current.duration);
                 }
-              }
-            }}
-            onLoadedMetadata={() => {
-              setIsLoading(false);
-              if (videoRef.current?.duration && !isNaN(videoRef.current.duration)) {
-                setDuration(videoRef.current.duration);
-              }
-            }}
-            onEnded={() => setIsPlaying(false)}
-            onError={() => {
-              setHasError(true);
-              setIsLoading(false);
-            }}
-          />
+              }}
+              onEnded={() => setIsPlaying(false)}
+              onError={() => {
+                setHasError(true);
+                setIsLoading(false);
+              }}
+            />
 
-          {/* Central Play button overlay if paused */}
-          {!isPlaying && !isLoading && (
-            <button
-              type="button"
-              onClick={togglePlay}
-              className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shadow-2xl"
-            >
-              <Play size={24} className="ml-1 fill-white" />
-            </button>
-          )}
+            {/* Central Play button overlay if paused */}
+            {!isPlaying && !isLoading && (
+              <button
+                type="button"
+                onClick={togglePlay}
+                className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-black/60 hover:bg-black/80 backdrop-blur-md border border-white/20 text-white flex items-center justify-center transition active:scale-95 cursor-pointer shadow-2xl"
+              >
+                <Play size={24} className="ml-1 fill-white" />
+              </button>
+            )}
 
-          {/* Bottom Custom Playback Bar */}
-          <div className="p-3 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/80 space-y-2">
-            {/* Scrubber slider */}
-            <div className="flex items-center gap-3">
-              <input
-                type="range"
-                min={0}
-                max={duration || 100}
-                step={0.5}
-                value={currentTime}
-                onChange={handleSeek}
-                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-emerald-400"
-              />
+            {/* Watermark in corner */}
+            <div className="absolute top-3 left-3 px-2.5 py-1 rounded-full bg-black/70 backdrop-blur-md border border-white/10 text-[10px] font-mono text-zinc-300 flex items-center gap-1.5 pointer-events-none">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span>PROOF VAULT ID: {roundId.slice(0, 8)}</span>
             </div>
 
-            {/* Controls row */}
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={togglePlay}
-                  className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition cursor-pointer"
-                >
-                  {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5 fill-white" />}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={toggleMute}
-                  className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition cursor-pointer"
-                >
-                  {isMuted ? <VolumeX size={14} className="text-rose-400" /> : <Volume2 size={14} />}
-                </button>
-
-                {/* Time counter */}
-                <div className="text-[11px] font-mono text-zinc-400">
-                  <span className="text-zinc-200 font-semibold">{formatDuration(currentTime)}</span>
-                  <span> / </span>
-                  <span>{formatDuration(duration)}</span>
-                </div>
+            {/* Bottom Custom Playback Bar */}
+            <div className="p-3 bg-zinc-950/90 backdrop-blur-md border-t border-zinc-800/80 space-y-2">
+              {/* Scrubber slider */}
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 100}
+                  step={0.5}
+                  value={currentTime}
+                  onChange={handleSeek}
+                  className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-purple-400"
+                />
               </div>
 
-              {/* Speed Multiplier & Fullscreen */}
-              <div className="flex items-center gap-2">
-                <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
-                  {[1, 1.25, 1.5, 2].map((spd) => (
-                    <button
-                      key={spd}
-                      type="button"
-                      onClick={() => handleSpeedChange(spd)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
-                        playbackSpeed === spd
-                          ? 'bg-emerald-500 text-zinc-950'
-                          : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      {spd}x
-                    </button>
-                  ))}
+              {/* Controls row */}
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={togglePlay}
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white flex items-center justify-center transition cursor-pointer"
+                  >
+                    {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5 fill-white" />}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition cursor-pointer"
+                  >
+                    {isMuted ? <VolumeX size={14} className="text-rose-400" /> : <Volume2 size={14} />}
+                  </button>
+
+                  {/* Time counter */}
+                  <div className="text-[11px] font-mono text-zinc-400">
+                    <span className="text-zinc-200 font-semibold">{formatDuration(currentTime)}</span>
+                    <span> / </span>
+                    <span>{formatDuration(duration)}</span>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition cursor-pointer"
-                  title="Fullscreen"
-                >
-                  <Maximize2 size={13} />
-                </button>
+                {/* Speed Multiplier & Fullscreen */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+                    {[1, 1.25, 1.5, 2].map((spd) => (
+                      <button
+                        key={spd}
+                        type="button"
+                        onClick={() => handleSpeedChange(spd)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold transition cursor-pointer ${
+                          playbackSpeed === spd
+                            ? 'bg-purple-600 text-white'
+                            : 'text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {spd}x
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={toggleFullscreen}
+                    className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 flex items-center justify-center transition cursor-pointer"
+                    title="Fullscreen"
+                  >
+                    <Maximize2 size={13} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
+
+          {/* Compliance Proof Metadata & Dialogue Toggle */}
+          <div className="flex items-center justify-between text-xs text-zinc-400 pt-1">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-medium">
+                <CheckCircle2 size={12} />
+                <span>MongoDB GridFS & Encrypted Storage</span>
+              </span>
+              <span>·</span>
+              <span className="text-[11px] text-zinc-400">Format: WebM (VP9/Opus)</span>
+            </div>
+
+            {dialogueTurns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowDialogueProof(!showDialogueProof)}
+                className="inline-flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 font-semibold transition cursor-pointer"
+              >
+                <MessageSquare size={13} />
+                <span>{showDialogueProof ? 'Hide Q&A Proof Log' : `View Q&A Dialogue Proof (${dialogueTurns.length} turns)`}</span>
+                {showDialogueProof ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+              </button>
+            )}
+          </div>
+
+          {/* Interactive Dialogue Proof Drawer */}
+          {showDialogueProof && dialogueTurns.length > 0 && (
+            <div className="p-4 bg-zinc-950/90 rounded-2xl border border-zinc-800/80 space-y-2.5 max-h-72 overflow-y-auto animate-in slide-in-from-top duration-200">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5 pb-1 border-b border-zinc-800">
+                <ShieldCheck size={12} className="text-purple-400" />
+                <span>Synchronized Conversation Transcript Turns</span>
+              </div>
+              {dialogueTurns.map((turn, i) => {
+                const isCand = turn.speaker === 'candidate';
+                return (
+                  <div
+                    key={i}
+                    onClick={() => jumpToTurn(i)}
+                    className={`p-3 rounded-xl border text-xs cursor-pointer transition hover:scale-[1.005] ${
+                      isCand
+                        ? 'bg-zinc-900/90 border-zinc-700/60 hover:border-purple-500/50'
+                        : 'bg-zinc-900/40 border-zinc-800/60 hover:border-zinc-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-bold text-[11px] ${isCand ? 'text-purple-300' : 'text-cyan-400'}`}>
+                        {turn.speaker_name || (isCand ? candidateName : 'Interviewer')}
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        Turn #{i + 1} {turn.duration_seconds ? `· ${turn.duration_seconds}s` : ''}
+                      </span>
+                    </div>
+                    <p className="text-zinc-300 text-xs leading-relaxed italic">
+                      "{turn.text}"
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

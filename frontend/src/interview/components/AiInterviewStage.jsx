@@ -46,6 +46,7 @@ export function AiInterviewStage({
   stopSpeechRecognition,
   onAiSpeakingChange,
   onAnalysisReady,
+  onSaveProofRecording,
   localStream = null,
 }) {
   const [currentStep, setCurrentStep] = useState(0);
@@ -75,8 +76,9 @@ export function AiInterviewStage({
   const recordingStartTimeRef = useRef(null);
   const internalStreamRef = useRef(null);
 
-  // Auto-record candidate video/audio stream using MediaRecorder
+  // Auto-record candidate video/audio stream using MediaRecorder (if not handled centrally by parent InterviewRoom)
   useEffect(() => {
+    if (onSaveProofRecording) return;
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
 
     let isCancelled = false;
@@ -418,14 +420,19 @@ export function AiInterviewStage({
       updateAiSpeaking(false);
     }
 
-    // 1. Stop MediaRecorder and package recorded video
-    let recordedBlob = null;
+    // 1. Finalize & upload the interview conversation proof video to backend & MongoDB GridFS
+    setIsUploadingRecording(true);
     const callSeconds = recordingStartTimeRef.current
       ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
       : 30;
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      try {
+    try {
+      if (onSaveProofRecording) {
+        console.log('📹 [PROOF RECORDING] Finalizing session proof via parent room handler...');
+        await onSaveProofRecording(callSeconds);
+        setRecordingUploaded(true);
+      } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        let recordedBlob = null;
         await new Promise((resolve) => {
           mediaRecorderRef.current.onstop = resolve;
           mediaRecorderRef.current.stop();
@@ -435,23 +442,16 @@ export function AiInterviewStage({
           recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
           console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
         }
-      } catch (recErr) {
-        console.warn('MediaRecorder stop warning:', recErr);
+        if (recordedBlob && round?.id) {
+          await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
+          setRecordingUploaded(true);
+          console.log('✅ [RECORDING] Video successfully uploaded to backend');
+        }
       }
-    }
-
-    // 2. Upload video recording to backend & MongoDB GridFS
-    if (recordedBlob && round?.id) {
-      setIsUploadingRecording(true);
-      try {
-        await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
-        setRecordingUploaded(true);
-        console.log('✅ [RECORDING] Video successfully uploaded to backend');
-      } catch (uploadErr) {
-        console.warn('⚠️ [RECORDING] Video upload warning:', uploadErr);
-      } finally {
-        setIsUploadingRecording(false);
-      }
+    } catch (recErr) {
+      console.warn('⚠️ [RECORDING] Video proof storage warning:', recErr);
+    } finally {
+      setIsUploadingRecording(false);
     }
 
     const turnsToSubmit = [];
