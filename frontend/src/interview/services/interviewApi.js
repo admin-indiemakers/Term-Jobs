@@ -133,4 +133,27 @@ export const interviewApi = {
   getRecordingStreamUrl(roundId, download = false) {
     return `/api/interviews/rounds/${roundId}/recording${download ? '?download=true' : ''}`;
   },
+
+  // 48-Hour Shortlist Automation & Instant Send
+  async getShortlistStatus(requisitionId, token) {
+    return request(`/api/requisitions/${requisitionId}/shortlist/status`, {
+      method: 'GET',
+      token,
+    });
+  },
+
+  async sendShortlistInstant(requisitionId, notes = '', token) {
+    return request(`/api/requisitions/${requisitionId}/shortlist/send-now`, {
+      method: 'POST',
+      body: { notes },
+      token,
+    });
+  },
+
+  async generateShortlist(requisitionId, token) {
+    return request(`/api/requisitions/${requisitionId}/shortlist/generate`, {
+      method: 'POST',
+      token,
+    });
+  },
 };

@@ -156,6 +156,178 @@ def get_requisition_shortlist_status(requisition_id: str) -> Dict[str, Any]:
     }
 
 
+def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, Any]:
+    """Algorithmic Candidate Shortlist Generator.
+    Triggered when an AI score is created or updated, or on demand.
+    
+    1. Collects all candidates under this requisition.
+    2. Incorporates AI Spoken Communication Score / Evaluation Verdicts and Resume Match Scores.
+       Algorithmic weighted formula:
+         Composite Score = (0.6 * AI Interview Score) + (0.4 * Resume Match Score) [if interview exists]
+         Composite Score = Resume Match Score [if no interview completed yet]
+    3. Ranks candidates descending by Composite Score.
+    4. Automatically qualifies & promotes eligible candidates to "Shortlisted" status.
+    5. Sets / resets the 48-hour shortlist dispatch deadline (now + 48 hours) so it will automatically
+       deliver to the company once 48h has elapsed.
+    6. Persists the ranked shortlist and returns full status.
+    """
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    logger.info(f"[SHORTLIST ALGORITHM] Generating candidate shortlist for requisition {requisition_id}...")
+
+    with get_session() as session:
+        req = session.get(Requisition, requisition_id)
+        if not req:
+            logger.warning(f"generate_and_rank_requisition_shortlist: req {requisition_id} not found")
+            return {"error": "Requisition not found"}
+
+        # Fetch all candidate submissions for this req
+        sqlite_subs = (
+            session.query(CandidateSubmission)
+            .filter(CandidateSubmission.requisition_id == requisition_id)
+            .all()
+        )
+        
+        # Fetch all interview rounds for this requisition to get latest AI scores
+        from modules.interview.domain.models import InterviewRound
+        interview_rounds = (
+            session.query(InterviewRound)
+            .filter(InterviewRound.requisition_id == requisition_id)
+            .all()
+        )
+        
+        # Map rounds by candidate email or submission id
+        rounds_by_sub = {}
+        rounds_by_email = {}
+        for ir in interview_rounds:
+            if ir.candidate_submission_id:
+                rounds_by_sub.setdefault(ir.candidate_submission_id, []).append(ir)
+            if ir.candidate_email:
+                rounds_by_email.setdefault(ir.candidate_email.strip().lower(), []).append(ir)
+
+        ranked_candidates = []
+        shortlisted_count = 0
+
+        # Score SQLite candidates
+        for sub in sqlite_subs:
+            sub_id = sub.id
+            email = (sub.candidate_email or "").strip().lower()
+            
+            c_rounds = rounds_by_sub.get(sub_id) or rounds_by_email.get(email) or []
+            # Find best completed interview score
+            best_interview_score = None
+            has_passed_round = False
+            for r in c_rounds:
+                ca = r.communication_analysis or {}
+                sc = ca.get("overall_score")
+                if sc is not None and str(sc).isdigit():
+                    sc_int = int(sc)
+                    if best_interview_score is None or sc_int > best_interview_score:
+                        best_interview_score = sc_int
+                
+                ev = r.evaluation or {}
+                if ev.get("result") in ("Strong Yes", "Yes"):
+                    has_passed_round = True
+                    if best_interview_score is None or best_interview_score < 75:
+                        best_interview_score = 80
+
+            # Algorithm Weighting
+            resume_score = float(sub.match_score) if sub.match_score is not None else 70.0
+            if best_interview_score is not None:
+                composite_score = round(0.6 * best_interview_score + 0.4 * resume_score, 1)
+            else:
+                composite_score = round(resume_score, 1)
+
+            # Update candidate match_score to reflect composite algorithmic score
+            sub.match_score = composite_score
+
+            # Shortlist threshold: composite >= 50 or has passed round or already shortlisted
+            is_qualified = (
+                composite_score >= 50
+                or has_passed_round
+                or sub.status in ("Shortlisted", "Accepted", "Under Review")
+            )
+
+            if is_qualified:
+                if sub.status in ("Screened", "Applied", "New", "Pending", None):
+                    sub.status = "Shortlisted"
+                shortlisted_count += 1
+            
+            sub.updated_at = now
+            session._track(sub)
+
+            ranked_candidates.append({
+                "submission_id": sub_id,
+                "candidate_name": sub.candidate_name,
+                "candidate_email": sub.candidate_email,
+                "match_score": composite_score,
+                "interview_score": best_interview_score,
+                "status": sub.status,
+                "is_shortlisted": is_qualified,
+            })
+
+            # Update MongoDB submission as well
+            try:
+                db["candidate_submissions"].update_one(
+                    {"id": sub_id},
+                    {"$set": {
+                        "match_score": composite_score,
+                        "interview_score": best_interview_score,
+                        "status": sub.status,
+                        "updated_at": now_iso,
+                    }}
+                )
+            except Exception:
+                pass
+
+        # Sort descending by composite score
+        ranked_candidates.sort(key=lambda x: x["match_score"], reverse=True)
+        for idx, item in enumerate(ranked_candidates, 1):
+            item["rank"] = idx
+
+        # Set or maintain 48h deadline
+        current_deadline = _parse_datetime(getattr(req, "shortlist_deadline", None))
+        # If deadline is missing or already expired, set a fresh 48-hour delivery window
+        if not current_deadline or current_deadline <= now:
+            new_deadline = now + timedelta(hours=48)
+            req.shortlist_deadline = new_deadline.isoformat()
+            deadline_str = new_deadline.isoformat()
+        else:
+            deadline_str = current_deadline.isoformat()
+
+        req.shortlist_candidate_count = shortlisted_count
+        req.updated_at = now
+        session._track(req)
+        session.commit()
+
+        # Update MongoDB Requisition
+        try:
+            db["requisitions"].update_one(
+                {"id": requisition_id},
+                {"$set": {
+                    "shortlist_deadline": deadline_str,
+                    "shortlist_candidate_count": shortlisted_count,
+                    "shortlist_generated_at": now_iso,
+                    "updated_at": now_iso,
+                }}
+            )
+        except Exception:
+            pass
+
+        logger.info(
+            f"[SHORTLIST ALGORITHM] Successfully generated shortlist for {requisition_id}: "
+            f"{shortlisted_count} shortlisted candidates. 48h deadline: {deadline_str}"
+        )
+
+        return {
+            "requisition_id": requisition_id,
+            "shortlisted_count": shortlisted_count,
+            "shortlist_deadline": deadline_str,
+            "candidates": ranked_candidates,
+            "generated_at": now_iso,
+        }
+
+
 def dispatch_requisition_shortlist(
     requisition_id: str,
     dispatched_by: str = "48h Automated Sourcing Window",

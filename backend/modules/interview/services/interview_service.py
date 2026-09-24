@@ -895,6 +895,16 @@ def submit_round_evaluation(round_id: str, eval_data: dict, evaluator_identity: 
                 session._track(sub)
                 
         session.commit()
+
+        # Trigger Shortlist Algorithm for the Requisition
+        req_id = r.requisition_id
+        if req_id:
+            try:
+                from modules.candidate.shortlist_service import generate_and_rank_requisition_shortlist
+                generate_and_rank_requisition_shortlist(req_id)
+            except Exception as auto_sl_err:
+                logger.warning("Auto shortlist generation failed for %s: %s", req_id, auto_sl_err)
+
         return r.to_doc()
 
 
@@ -981,6 +991,16 @@ async def analyze_round_communication(
         r.updated_at = datetime.now(timezone.utc)
         session._track(r)
         session.commit()
+
+        # Trigger Shortlist Algorithm for the Requisition
+        req_id = r.requisition_id
+        if req_id:
+            try:
+                from modules.candidate.shortlist_service import generate_and_rank_requisition_shortlist
+                generate_and_rank_requisition_shortlist(req_id)
+            except Exception as auto_sl_err:
+                logger.warning("Auto shortlist generation failed for %s: %s", req_id, auto_sl_err)
+
         return {
             "round_id": r.id,
             "metrics": r.communication_metrics,

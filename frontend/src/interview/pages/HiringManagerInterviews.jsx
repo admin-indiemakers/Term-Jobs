@@ -13,6 +13,9 @@ import {
   FileText,
   ChevronDown,
   ChevronUp,
+  Clock,
+  RefreshCw,
+  Send,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { interviewApi } from '../services/interviewApi';
@@ -43,6 +46,79 @@ export function HiringManagerInterviews() {
   const [roundCommAnalysis, setRoundCommAnalysis] = useState(null);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [loadingCommAnalysis, setLoadingCommAnalysis] = useState(false);
+
+  // Shortlist dispatch & 48h countdown state
+  const [shortlistStatus, setShortlistStatus] = useState(null);
+  const [loadingShortlist, setLoadingShortlist] = useState(false);
+  const [sendingShortlist, setSendingShortlist] = useState(false);
+  const [shortlistSuccessMsg, setShortlistSuccessMsg] = useState('');
+  const [generatingShortlist, setGeneratingShortlist] = useState(false);
+
+  // Fetch 48h shortlist status for requisition
+  const fetchShortlistStatus = useCallback(async (reqId) => {
+    if (!reqId) {
+      setShortlistStatus(null);
+      return;
+    }
+    setLoadingShortlist(true);
+    try {
+      const res = await interviewApi.getShortlistStatus(reqId, token);
+      if (res && !res.error) {
+        setShortlistStatus(res);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingShortlist(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (selectedCandidate?.requisition_id) {
+      fetchShortlistStatus(selectedCandidate.requisition_id);
+    } else {
+      setShortlistStatus(null);
+    }
+    setShortlistSuccessMsg('');
+  }, [selectedCandidate?.requisition_id, fetchShortlistStatus]);
+
+  const handleInstantSendShortlist = async () => {
+    if (!selectedCandidate?.requisition_id) return;
+    setSendingShortlist(true);
+    setShortlistSuccessMsg('');
+    setErrorMsg('');
+    try {
+      const res = await interviewApi.sendShortlistInstant(
+        selectedCandidate.requisition_id,
+        'Instant dispatch requested from Interviews & AI Scores dashboard',
+        token
+      );
+      setShortlistSuccessMsg(
+        res?.message || 'Candidate shortlist successfully sent to company hiring stakeholders!'
+      );
+      await fetchShortlistStatus(selectedCandidate.requisition_id);
+      loadData();
+    } catch (err) {
+      setErrorMsg(err?.message || 'Failed to dispatch shortlist to company.');
+    } finally {
+      setSendingShortlist(false);
+    }
+  };
+
+  const handleGenerateShortlist = async () => {
+    if (!selectedCandidate?.requisition_id) return;
+    setGeneratingShortlist(true);
+    setErrorMsg('');
+    try {
+      await interviewApi.generateShortlist(selectedCandidate.requisition_id, token);
+      await fetchShortlistStatus(selectedCandidate.requisition_id);
+      loadData();
+    } catch (err) {
+      setErrorMsg(err?.message || 'Failed to re-generate candidate shortlist.');
+    } finally {
+      setGeneratingShortlist(false);
+    }
+  };
 
   // Sync communication analysis for selected round
   useEffect(() => {
@@ -454,6 +530,102 @@ export function HiringManagerInterviews() {
                   </div>
                 );
               })()}
+
+              {/* Company Shortlist & 48-Hour Delivery Hub */}
+              {selectedCandidate.requisition_id && (
+                <div className="p-5 rounded-3xl bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 border border-zinc-800 text-white shadow-xl space-y-4">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    {/* Status & Shortlist Count */}
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {shortlistStatus?.shortlist_dispatched ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider">
+                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            <span>Shortlist Delivered to Company</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
+                            <Clock size={13} className="text-amber-400 animate-pulse" />
+                            <span>48h Automated Sourcing Window Active</span>
+                          </span>
+                        )}
+                        <span className="text-[11px] text-zinc-400 font-mono truncate">
+                          {selectedCandidate.requisition_title}
+                        </span>
+                      </div>
+
+                      <h3 className="text-lg font-extrabold tracking-tight text-white flex items-center gap-2">
+                        <span>Company Shortlist (Algorithm Powered)</span>
+                        <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono font-bold">
+                          {shortlistStatus?.shortlist_candidate_count ?? 1} Ranked
+                        </span>
+                      </h3>
+
+                      <p className="text-xs text-zinc-300 leading-relaxed max-w-2xl">
+                        {shortlistStatus?.shortlist_dispatched ? (
+                          <span>
+                            ✓ Ranked candidate list has been delivered to the hiring company stakeholders{' '}
+                            <strong className="text-white">
+                              {shortlistStatus.shortlist_dispatched_at ? `on ${new Date(shortlistStatus.shortlist_dispatched_at).toLocaleString()}` : ''}
+                            </strong>{' '}
+                            via {shortlistStatus.shortlist_dispatched_by || 'Auto Window'}.
+                          </span>
+                        ) : (
+                          <span>
+                            Shortlisted candidates are auto-generated using our AI scoring algorithm.{' '}
+                            <strong className="text-amber-300 font-bold">
+                              Automatically sends to company after 48hrs
+                            </strong>{' '}
+                            ({shortlistStatus?.hours_remaining ? `${shortlistStatus.hours_remaining} hrs left` : 'Timer active'}).
+                            Click Instant Send to deliver immediately.
+                          </span>
+                        )}
+                      </p>
+                    </div>
+
+                    {/* Instant Send Action Button */}
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleInstantSendShortlist}
+                        disabled={sendingShortlist || shortlistStatus?.shortlist_dispatched}
+                        className={`px-5 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg ${
+                          shortlistStatus?.shortlist_dispatched
+                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
+                            : 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 text-zinc-950 shadow-amber-500/20 hover:scale-102 active:scale-98'
+                        }`}
+                      >
+                        <Zap size={16} className={shortlistStatus?.shortlist_dispatched ? 'text-zinc-500' : 'text-zinc-950 fill-current'} />
+                        <span>
+                          {sendingShortlist
+                            ? 'Sending Shortlist...'
+                            : shortlistStatus?.shortlist_dispatched
+                            ? 'Shortlist Already Sent'
+                            : '⚡ Instant Send Shortlist to Company'}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleGenerateShortlist}
+                        disabled={generatingShortlist}
+                        title="Re-run algorithm to update candidate rankings from latest interview scores"
+                        className="p-3 rounded-2xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white transition cursor-pointer border border-zinc-700/80"
+                      >
+                        <RefreshCw size={15} className={generatingShortlist ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Instant Send Success Banner */}
+                  {shortlistSuccessMsg && (
+                    <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2.5 animate-fadeIn">
+                      <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                      <span className="font-semibold">{shortlistSuccessMsg}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Ready For Round 1 Banner (Shortlisted Candidates) */}
               {selectedCandidate.total_rounds === 0 && (

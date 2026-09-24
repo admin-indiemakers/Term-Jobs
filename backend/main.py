@@ -2619,6 +2619,19 @@ def send_requisition_shortlist_now_endpoint(
     return res
 
 
+@app.post("/requisitions/{requisition_id}/shortlist/generate")
+@app.post("/api/requisitions/{requisition_id}/shortlist/generate")
+def generate_requisition_shortlist_endpoint(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Generate or update the shortlisted candidate list using our ranking algorithm."""
+    from modules.candidate.shortlist_service import generate_and_rank_requisition_shortlist
+    res = generate_and_rank_requisition_shortlist(requisition_id)
+    _cache.clear()
+    return res
+
+
 
 @app.post("/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
