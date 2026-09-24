@@ -23,6 +23,7 @@ LINK_TEMPLATES = {
     "requisition.published": "/dashboard/recruiter/requisitions",
     "candidate.shortlisted": "/dashboard/requisitions/{requisition_id}/candidates",
     "candidate.rejected": "/dashboard/requisitions/{requisition_id}/candidates",
+    "shortlist.dispatched": "/dashboard/requisitions/{requisition_id}/candidates",
 }
 
 
@@ -222,3 +223,47 @@ def notify_candidate_status(requisition_id: str, candidate_name: str, new_status
                 )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"notify_candidate_status failed: {e}")
+
+
+def notify_shortlist_dispatched(requisition_id: str, candidate_count: int, dispatched_by: str, is_auto: bool) -> None:
+    """Notify the company side (Hiring Manager, HR, Admin, Director) that the candidate shortlist has been dispatched."""
+    from modules.shared.db import get_session
+
+    try:
+        with get_session() as session:
+            ctx = _requisition_context(session, requisition_id)
+            if not ctx:
+                return
+            company_users = _company_users(session, ctx["company_tenant_id"])
+            if is_auto:
+                title = f"48h Shortlist Delivered ({candidate_count} Candidates)"
+                body = (
+                    f"The 48-hour sourcing window for {ctx['title']} ({ctx['ref']}) has closed. "
+                    f"A total of {candidate_count} candidate(s) have been compiled and delivered to the Hiring Manager for review."
+                )
+            else:
+                title = f"⚡ Instant Shortlist Dispatched ({candidate_count} Candidates)"
+                body = (
+                    f"{dispatched_by or 'A recruiter'} dispatched the candidate shortlist "
+                    f"({candidate_count} candidate{'' if candidate_count == 1 else 's'}) for {ctx['title']} ({ctx['ref']}) before the 48-hour window."
+                )
+            data = {
+                "requisition_id": ctx["id"],
+                "requisition_ref": ctx["ref"],
+                "requisition_title": ctx["title"],
+                "candidate_count": candidate_count,
+                "dispatched_by": dispatched_by,
+                "is_auto": is_auto,
+                "link": LINK_TEMPLATES["shortlist.dispatched"].format(requisition_id=ctx["id"]),
+            }
+            for u in company_users:
+                create_notification(
+                    user_id=u.id,
+                    tenant_id=ctx["company_tenant_id"],
+                    ntype="shortlist.dispatched",
+                    title=title,
+                    body=body,
+                    data=data,
+                )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"notify_shortlist_dispatched failed: {e}")

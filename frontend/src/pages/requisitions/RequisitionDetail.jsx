@@ -311,6 +311,27 @@ export default function RequisitionDetail() {
     }
   };
 
+  const handleInstantDispatchFromDetail = async () => {
+    if (!window.confirm('⚡ Send Shortlist Now: Dispatch current candidate list to the Hiring Manager immediately before the 48-hour window expires?')) return;
+    setBusy('instant-shortlist');
+    setError('');
+    setInfo('');
+    try {
+      const res = await request(`/requisitions/${id}/shortlist/send-now`, {
+        method: 'POST',
+        token,
+        body: { notes: 'Instant dispatch triggered from Requisition details panel' },
+      });
+      setInfo(res.message || 'Candidate shortlist instantly dispatched to the Hiring Manager!');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to dispatch shortlist');
+    } finally {
+      setBusy('');
+    }
+  };
+
+
   if (loading) {
     return (
       <div className="w-full py-20 text-center text-xs text-gray-400">
@@ -932,20 +953,72 @@ export default function RequisitionDetail() {
               )}
 
               {status === 'Published' && (
-                <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                      <Building size={14} className="text-amber-700" />
-                      Engaged Vendor Consultancies (3)
+                <>
+                  <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                        <Building size={14} className="text-amber-700" />
+                        Engaged Vendor Consultancies (3)
+                      </div>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
+                        Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
+                      </span>
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
-                      Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
-                    </span>
+                    <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                      3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
+                    </p>
                   </div>
-                  <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                    3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
-                  </p>
-                </div>
+
+                  {/* 48-Hour Auto-Shortlist & Instant Dispatch Card */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white space-y-3 shadow-md border border-slate-700">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-400 text-sm">⏱</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                          48h Shortlist Delivery
+                        </span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${req?.shortlist_dispatched ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'}`}>
+                        {req?.shortlist_dispatched ? '✓ Dispatched' : 'Active Window'}
+                      </span>
+                    </div>
+
+                    {req?.shortlist_dispatched ? (
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-emerald-200 leading-relaxed font-medium">
+                          ✓ Shortlist of {req.shortlist_candidate_count || shortlisted.length || 0} candidates delivered to Hiring Manager {req.shortlist_dispatched_by ? `by ${req.shortlist_dispatched_by}` : ''} {req.shortlist_dispatched_at ? `on ${formatDate(req.shortlist_dispatched_at)}` : ''}.
+                        </p>
+                        <Link
+                          to={`/dashboard/requisitions/${id}/candidates`}
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 mt-1"
+                        >
+                          <span>Review Candidates & Interviews →</span>
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-slate-300 leading-relaxed font-normal">
+                          Screened candidates are automatically compiled and delivered to the Hiring Manager when the 48-hour window closes.
+                        </p>
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-700/60">
+                          <span>Auto-Deadline:</span>
+                          <span className="font-mono text-white font-bold">{formatDate(req?.shortlist_deadline)}</span>
+                        </div>
+                        <div className="pt-1">
+                          <button
+                            type="button"
+                            onClick={handleInstantDispatchFromDetail}
+                            disabled={Boolean(busy)}
+                            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                          >
+                            <span>⚡</span>
+                            <span>{busy === 'instant-shortlist' ? 'Dispatching...' : 'Send Shortlist Now (Instant)'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
 

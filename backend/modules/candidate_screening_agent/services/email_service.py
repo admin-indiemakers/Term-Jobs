@@ -101,3 +101,80 @@ def send_rejection_notification(
     </div>
     """
     return send_email_via_gmail(candidate_email, subject, html)
+
+
+def send_shortlist_dispatch_to_hiring_manager(
+    hm_email: str,
+    hm_name: str,
+    job_title: str,
+    req_ref: str,
+    candidate_count: int,
+    candidates: list,
+    dispatched_by: str,
+    is_auto: bool,
+    notes: Optional[str] = None
+) -> Dict[str, Any]:
+    """Send candidate shortlist delivery email to the Hiring Manager."""
+    dispatch_type = "48h Sourcing Window Complete" if is_auto else f"Instant Dispatch by {dispatched_by}"
+    subject = f"[{'Automated 48h Shortlist' if is_auto else '⚡ Instant Shortlist'}] {candidate_count} Candidates for {job_title} ({req_ref})"
+
+    rows_html = ""
+    for c in (candidates or [])[:10]:
+        score_val = f"{round(c.get('match_score'))}%" if c.get("match_score") is not None else "Screened"
+        skills_val = ", ".join((c.get("matched_skills") or [])[:4]) or "—"
+        rows_html += f"""
+        <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 8px; font-weight: bold; color: #0f172a;">{c.get('name', 'Candidate')}</td>
+            <td style="padding: 10px 8px; color: #475569;">{c.get('vendor', 'Direct')}</td>
+            <td style="padding: 10px 8px; color: #059669; font-weight: bold;">{score_val}</td>
+            <td style="padding: 10px 8px; color: #64748b; font-size: 12px;">{skills_val}</td>
+        </tr>
+        """
+
+    html = f"""
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 28px; color: #1e293b; max-width: 650px; border: 1px solid #e2e8f0; border-radius: 16px; background: #ffffff;">
+        <div style="margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+            <span style="background: {'#f0fdf4' if is_auto else '#eff6ff'}; color: {'#16a34a' if is_auto else '#2563eb'}; border: 1px solid {'#bbf7d0' if is_auto else '#bfdbfe'}; font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 20px; text-transform: uppercase;">
+                {'⏱ ' if is_auto else '⚡ '}{dispatch_type}
+            </span>
+            <span style="font-size: 12px; color: #94a3b8; font-weight: bold;">{req_ref}</span>
+        </div>
+        
+        <h2 style="color: #0f172a; margin: 8px 0 12px 0; font-size: 20px;">Candidate Shortlist Delivered</h2>
+        <p style="font-size: 14px; line-height: 1.5; color: #334155;">
+            Dear <strong>{hm_name or 'Hiring Manager'}</strong>,
+        </p>
+        <p style="font-size: 14px; line-height: 1.5; color: #334155;">
+            The candidate shortlist for <strong>{job_title}</strong> has been dispatched. 
+            There {'is' if candidate_count == 1 else 'are'} <strong>{candidate_count} qualified candidate{'s' if candidate_count != 1 else ''}</strong> ready for your interview scheduling and review.
+        </p>
+
+        {f'<div style="background: #f8fafc; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 6px; margin: 16px 0; font-size: 13px; color: #1e293b;"><strong>Notes:</strong> {notes}</div>' if notes else ''}
+
+        <div style="margin: 20px 0; overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px; text-align: left;">
+                <thead>
+                    <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">
+                        <th style="padding: 8px;">Candidate</th>
+                        <th style="padding: 8px;">Vendor</th>
+                        <th style="padding: 8px;">Score</th>
+                        <th style="padding: 8px;">Matched Skills</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows_html if rows_html else '<tr><td colspan="4" style="padding: 12px; text-align: center; color: #94a3b8;">No candidates in this batch</td></tr>'}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="margin-top: 24px; text-align: center;">
+            <a href="http://localhost:5173/dashboard" style="background: #0f172a; color: #ffffff; text-decoration: none; font-size: 13px; font-weight: bold; padding: 12px 24px; border-radius: 8px; display: inline-block;">
+                Review Candidates in TermJobs →
+            </a>
+        </div>
+        <p style="font-size: 11px; color: #94a3b8; text-align: center; margin-top: 20px;">
+            TermJobs AI Talent Matching & Workflow Automation
+        </p>
+    </div>
+    """
+    return send_email_via_gmail(hm_email, subject, html)

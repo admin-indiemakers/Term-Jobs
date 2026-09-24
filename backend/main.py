@@ -19,6 +19,8 @@ import os
 import sys
 import uuid
 import base64
+import asyncio
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -357,6 +359,25 @@ def _format_datetime(val: Any) -> str | None:
     return str(val)
 
 
+def _add_48h(dt_val: Any) -> str | None:
+    if not dt_val:
+        return None
+    if isinstance(dt_val, str):
+        try:
+            s = dt_val.strip()
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            dt_val = datetime.fromisoformat(s)
+        except Exception:
+            return None
+    try:
+        if dt_val.tzinfo is None:
+            dt_val = dt_val.replace(tzinfo=timezone.utc)
+        return (dt_val + timedelta(hours=48)).isoformat()
+    except Exception:
+        return None
+
+
 def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
     with get_session() as session:
         req = session.get(models.Requisition, requisition_id)
@@ -434,6 +455,14 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "approved_by": req.approved_by,
             "approved_at": _format_datetime(req.approved_at),
             "created_at": _format_datetime(req.created_at),
+            "shortlist_window_hours": getattr(req, "shortlist_window_hours", 48) or 48,
+            "shortlist_deadline": _format_datetime(getattr(req, "shortlist_deadline", None)) or _add_48h(req.approved_at or req.created_at),
+            "shortlist_dispatched": bool(getattr(req, "shortlist_dispatched", False)),
+            "shortlist_dispatched_at": _format_datetime(getattr(req, "shortlist_dispatched_at", None)),
+            "shortlist_dispatched_by": getattr(req, "shortlist_dispatched_by", None),
+            "shortlist_auto_sent": bool(getattr(req, "shortlist_auto_sent", False)),
+            "shortlist_instant_sent": bool(getattr(req, "shortlist_instant_sent", False)),
+            "shortlist_candidate_count": getattr(req, "shortlist_candidate_count", 0) or 0,
         }
 
 
@@ -551,6 +580,15 @@ def _auto_close_expired() -> None:
                     req.status = schemas.RequisitionStatus.CLOSED.value
                 session.commit()
                 req = None  # release for next iteration
+
+
+def _auto_check_shortlists_48h() -> None:
+    """Auto-dispatch 48h candidate shortlists for requisitions whose sourcing window has passed."""
+    try:
+        from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
+        auto_check_and_dispatch_48h_shortlists()
+    except Exception as e:
+        pass
 
 
 
@@ -887,6 +925,7 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         return _cached
 
     _auto_close_expired()
+    _auto_check_shortlists_48h()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
         if current_user.role == "Super Admin":
@@ -2092,6 +2131,20 @@ async def on_app_startup():
     except Exception as exc:
         print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
 
+    # Launch 48-Hour Shortlist auto-dispatch background worker
+    async def _shortlist_worker():
+        while True:
+            try:
+                await asyncio.sleep(60)
+                from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
+                auto_check_and_dispatch_48h_shortlists()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+    asyncio.create_task(_shortlist_worker())
+
+
 
 @app.on_event("shutdown")
 async def on_app_shutdown():
@@ -2164,6 +2217,7 @@ async def telegram_send_test_endpoint(payload: dict, current_user: User = Depend
 @app.get("/api/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _auto_close_expired()
+    _auto_check_shortlists_48h()
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
     is_vendor = current_user.role == "Recruiter"
@@ -2392,11 +2446,19 @@ def publish_requisition(
     # Sync status to MongoDB
     try:
         from modules.shared.db import db
-        now_iso = _utcnow().isoformat()
+        now_dt = _utcnow()
+        deadline_dt = now_dt + timedelta(hours=48)
+        now_iso = now_dt.isoformat()
         db["requisitions"].update_one(
             {"id": requisition_id},
             {"$set": {
                 "status": schemas.RequisitionStatus.PUBLISHED.value,
+                "shortlist_window_hours": 48,
+                "shortlist_deadline": deadline_dt.isoformat(),
+                "shortlist_dispatched": False,
+                "shortlist_auto_sent": False,
+                "shortlist_instant_sent": False,
+                "shortlist_candidate_count": 0,
                 "updated_at": now_iso,
             }}
         )
@@ -2406,6 +2468,42 @@ def publish_requisition(
     _cache.clear()
     background_tasks.add_task(_async_trigger_top_candidate_outreach, requisition_id)
     return _requisition_dict(requisition_id)
+
+
+# --- 48-Hour Shortlist & Instant Send Endpoints ---
+
+@app.get("/requisitions/{requisition_id}/shortlist/status")
+@app.get("/api/requisitions/{requisition_id}/shortlist/status")
+def get_requisition_shortlist_status_endpoint(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return real-time 48-hour sourcing window countdown and shortlist status."""
+    from modules.candidate.shortlist_service import get_requisition_shortlist_status
+    return get_requisition_shortlist_status(requisition_id)
+
+
+@app.post("/requisitions/{requisition_id}/shortlist/send-now")
+@app.post("/api/requisitions/{requisition_id}/shortlist/send-now")
+def send_requisition_shortlist_now_endpoint(
+    requisition_id: str,
+    body: dict | None = None,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Instantly dispatch the current candidate shortlist to the Hiring Manager before 48h."""
+    from modules.candidate.shortlist_service import dispatch_requisition_shortlist
+    notes = (body or {}).get("notes")
+    actor_name = current_user.name or current_user.email or "Recruiter"
+    actor_label = f"{actor_name} ({current_user.role})"
+    res = dispatch_requisition_shortlist(
+        requisition_id=requisition_id,
+        dispatched_by=actor_label,
+        is_auto=False,
+        notes=notes,
+    )
+    _cache.clear()
+    return res
+
 
 
 @app.post("/requisitions/{requisition_id}/close")

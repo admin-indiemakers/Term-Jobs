@@ -60,6 +60,14 @@ class Requisition(Model):
         "rejected_at": None,
         "approved_by": None,
         "approved_at": None,
+        "shortlist_window_hours": 48,
+        "shortlist_deadline": None,
+        "shortlist_dispatched": False,
+        "shortlist_dispatched_at": None,
+        "shortlist_dispatched_by": None,
+        "shortlist_auto_sent": False,
+        "shortlist_instant_sent": False,
+        "shortlist_candidate_count": 0,
         "created_at": _utcnow,
         "updated_at": _utcnow,
     }
@@ -74,7 +82,6 @@ class Requisition(Model):
     intake_answers = Column("intake_answers")
     pending_question = Column("pending_question")
     structured_role = Column("structured_role")
-    vendor_candidate_limit = Column("vendor_candidate_limit")
     generated_jd_markdown = Column("generated_jd_markdown")
     coverage_result = Column("coverage_result")
     refinement_log = Column("refinement_log")
@@ -88,6 +95,14 @@ class Requisition(Model):
     rejected_at = Column("rejected_at")
     approved_by = Column("approved_by")
     approved_at = Column("approved_at")
+    shortlist_window_hours = Column("shortlist_window_hours")
+    shortlist_deadline = Column("shortlist_deadline")
+    shortlist_dispatched = Column("shortlist_dispatched")
+    shortlist_dispatched_at = Column("shortlist_dispatched_at")
+    shortlist_dispatched_by = Column("shortlist_dispatched_by")
+    shortlist_auto_sent = Column("shortlist_auto_sent")
+    shortlist_instant_sent = Column("shortlist_instant_sent")
+    shortlist_candidate_count = Column("shortlist_candidate_count")
     created_at = Column("created_at")
     updated_at = Column("updated_at")
 

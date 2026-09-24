@@ -1525,3 +1525,33 @@ def shortlist_candidate(
             "message": f"Candidate {candidate_name} shortlisted and saved to candidate_submissions",
             "submission_id": sub_id
         }
+
+
+@router.get("/shortlist-status/{requisition_id}")
+def get_candidate_shortlist_status(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Return real-time 48-hour sourcing window countdown and shortlist status."""
+    from modules.candidate.shortlist_service import get_requisition_shortlist_status
+    return get_requisition_shortlist_status(requisition_id)
+
+
+@router.post("/shortlist-send-now/{requisition_id}")
+def send_candidate_shortlist_now(
+    requisition_id: str,
+    body: dict | None = None,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Instantly dispatch the current candidate shortlist to the Hiring Manager before 48h."""
+    from modules.candidate.shortlist_service import dispatch_requisition_shortlist
+    notes = (body or {}).get("notes")
+    actor_name = current_user.name or current_user.email or "Recruiter"
+    actor_label = f"{actor_name} ({current_user.role})"
+    return dispatch_requisition_shortlist(
+        requisition_id=requisition_id,
+        dispatched_by=actor_label,
+        is_auto=False,
+        notes=notes,
+    )
+
