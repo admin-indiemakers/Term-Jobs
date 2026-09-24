@@ -118,7 +118,7 @@ export async function request(path, { method = 'GET', body, data: requestData, t
       } else if (typeof resData.message === 'string') {
         detail = resData.message;
       } else if (typeof resData.error === 'string') {
-        detail = resData.error;
+        detail = resData.error === 'Route Not Found' ? `Route Not Found (${method} ${path})` : resData.error;
       }
     }
 
