@@ -579,6 +579,14 @@ def _auto_close_expired() -> None:
                 except Exception:
                     req.status = schemas.RequisitionStatus.CLOSED.value
                 session.commit()
+                try:
+                    from modules.shared.db import db
+                    db["requisitions"].update_one(
+                        {"id": req.id},
+                        {"$set": {"status": schemas.RequisitionStatus.CLOSED.value, "updated_at": _dt.datetime.now(_dt.timezone.utc).isoformat()}}
+                    )
+                except Exception:
+                    pass
                 req = None  # release for next iteration
 
 
@@ -1024,7 +1032,11 @@ def list_public_requisitions() -> list[dict]:
             }
 
         result = []
+        now_utc = datetime.now(timezone.utc)
         for r in rows:
+            if r.status != schemas.RequisitionStatus.PUBLISHED.value:
+                continue
+
             cp = profiles.get(r.company_profile_id)
             tn = tenants.get(r.tenant_id)
             comp_name = (
@@ -1033,6 +1045,34 @@ def list_public_requisitions() -> list[dict]:
                 else (tn.name if tn and tn.name else "Partner Enterprise")
             )
             role = r.structured_role or {}
+
+            # Calculate application due date / submission deadline
+            due_date = (
+                role.get("submission_deadline")
+                or _format_datetime(getattr(r, "shortlist_deadline", None))
+                or _add_48h(r.approved_at or r.created_at)
+            )
+
+            # Do not show closed or expired roles
+            if due_date:
+                try:
+                    due_dt = None
+                    if isinstance(due_date, str):
+                        s = due_date.strip()
+                        if s.endswith("Z"):
+                            s = s[:-1] + "+00:00"
+                        if len(s) == 10:
+                            due_dt = datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                        else:
+                            due_dt = datetime.fromisoformat(s)
+                            if due_dt.tzinfo is None:
+                                due_dt = due_dt.replace(tzinfo=timezone.utc)
+                    elif isinstance(due_date, datetime):
+                        due_dt = due_date if due_date.tzinfo else due_date.replace(tzinfo=timezone.utc)
+                    if due_dt and due_dt < now_utc:
+                        continue  # Deadline passed, don't show closed/expired role
+                except Exception:
+                    pass
 
             # Sanitize role: public fields only, omit internal pricing/margin variances
             public_role = {
@@ -1049,7 +1089,9 @@ def list_public_requisitions() -> list[dict]:
                 "duration": role.get("duration") or "6 months",
                 "currency": role.get("currency") or "INR",
                 "weekly_hours": role.get("weekly_hours") or 40,
-                "submission_deadline": role.get("submission_deadline") or None,
+                "submission_deadline": due_date,
+                "due_date": due_date,
+                "application_due_date": due_date,
                 "range_min": role.get("range_vendor_min") or role.get("target_rate_min") or None,
                 "range_max": role.get("range_vendor_max") or role.get("target_rate_max") or None,
             }
@@ -1062,6 +1104,10 @@ def list_public_requisitions() -> list[dict]:
                 "company_industry": getattr(cp, "industry", None) or "Technology",
                 "company_location": getattr(cp, "location", None) or "India",
                 "company_logo_url": getattr(cp, "logo_url", None) or getattr(tn, "logo_url", None) or "",
+                "status": r.status,
+                "due_date": due_date,
+                "submission_deadline": due_date,
+                "application_due_date": due_date,
                 "structured_role": public_role,
                 "generated_jd_markdown": r.generated_jd_markdown or "",
                 "created_at": _format_datetime(r.created_at),
@@ -1078,6 +1124,37 @@ def get_public_requisition(requisition_id: str) -> dict:
         if not r or r.status != schemas.RequisitionStatus.PUBLISHED.value:
             raise HTTPException(status_code=404, detail="Published job requisition not found.")
 
+        role = r.structured_role or {}
+
+        # Check deadline - do not show closed or expired roles
+        due_date = (
+            role.get("submission_deadline")
+            or _format_datetime(getattr(r, "shortlist_deadline", None))
+            or _add_48h(r.approved_at or r.created_at)
+        )
+        if due_date:
+            try:
+                now_utc = datetime.now(timezone.utc)
+                due_dt = None
+                if isinstance(due_date, str):
+                    s = due_date.strip()
+                    if s.endswith("Z"):
+                        s = s[:-1] + "+00:00"
+                    if len(s) == 10:
+                        due_dt = datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    else:
+                        due_dt = datetime.fromisoformat(s)
+                        if due_dt.tzinfo is None:
+                            due_dt = due_dt.replace(tzinfo=timezone.utc)
+                elif isinstance(due_date, datetime):
+                    due_dt = due_date if due_date.tzinfo else due_date.replace(tzinfo=timezone.utc)
+                if due_dt and due_dt < now_utc:
+                    raise HTTPException(status_code=404, detail="This role has reached its application deadline and is closed.")
+            except HTTPException:
+                raise
+            except Exception:
+                pass
+
         cp = session.get(models.CompanyProfile, r.company_profile_id) if r.company_profile_id else None
         tn = session.get(Tenant, r.tenant_id) if r.tenant_id else None
         comp_name = (
@@ -1085,7 +1162,6 @@ def get_public_requisition(requisition_id: str) -> dict:
             if cp and cp.name
             else (tn.name if tn and tn.name else "Partner Enterprise")
         )
-        role = r.structured_role or {}
 
         public_role = {
             "title": role.get("title") or r.title,
@@ -1101,6 +1177,9 @@ def get_public_requisition(requisition_id: str) -> dict:
             "duration": role.get("duration") or "6 months",
             "currency": role.get("currency") or "INR",
             "weekly_hours": role.get("weekly_hours") or 40,
+            "submission_deadline": due_date,
+            "due_date": due_date,
+            "application_due_date": due_date,
             "range_min": role.get("range_vendor_min") or role.get("target_rate_min") or None,
             "range_max": role.get("range_vendor_max") or role.get("target_rate_max") or None,
         }
@@ -1113,10 +1192,15 @@ def get_public_requisition(requisition_id: str) -> dict:
             "company_industry": getattr(cp, "industry", None) or "Technology",
             "company_location": getattr(cp, "location", None) or "India",
             "company_logo_url": getattr(cp, "logo_url", None) or getattr(tn, "logo_url", None) or "",
+            "status": r.status,
+            "due_date": due_date,
+            "submission_deadline": due_date,
+            "application_due_date": due_date,
             "structured_role": public_role,
             "generated_jd_markdown": r.generated_jd_markdown or "",
             "created_at": _format_datetime(r.created_at),
         }
+
 
 
 @app.post("/api/public/requisitions/{requisition_id}/apply")
@@ -1147,6 +1231,36 @@ async def apply_to_requisition(
                 status_code=400,
                 detail="This requisition is not currently open for public applications."
             )
+
+        # Verify application deadline has not passed
+        s_role = req.structured_role or {}
+        due_date = (
+            s_role.get("submission_deadline")
+            or _format_datetime(getattr(req, "shortlist_deadline", None))
+            or _add_48h(req.approved_at or req.created_at)
+        )
+        if due_date:
+            try:
+                now_utc = datetime.now(timezone.utc)
+                due_dt = None
+                if isinstance(due_date, str):
+                    s = due_date.strip()
+                    if s.endswith("Z"):
+                        s = s[:-1] + "+00:00"
+                    if len(s) == 10:
+                        due_dt = datetime.fromisoformat(s).replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+                    else:
+                        due_dt = datetime.fromisoformat(s)
+                        if due_dt.tzinfo is None:
+                            due_dt = due_dt.replace(tzinfo=timezone.utc)
+                elif isinstance(due_date, datetime):
+                    due_dt = due_date if due_date.tzinfo else due_date.replace(tzinfo=timezone.utc)
+                if due_dt and due_dt < now_utc:
+                    raise HTTPException(status_code=400, detail="The application deadline for this position has passed. Applications are closed.")
+            except HTTPException:
+                raise
+            except Exception:
+                pass
 
         cp = session.get(models.CompanyProfile, req.company_profile_id) if req.company_profile_id else None
         comp_name = cp.name if cp and cp.name else "Partner Enterprise"

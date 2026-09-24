@@ -37,6 +37,7 @@ import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
+import { formatDueDate } from '../utils/dateUtils';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
 
@@ -394,6 +395,15 @@ export default function OpenRolesPage() {
   // Filtered job list
   const filteredJobs = useMemo(() => {
     return requisitions.filter((job) => {
+      // 1. Exclude closed roles (only Published roles are displayed)
+      const status = (job.status || '').toLowerCase();
+      if (status && status !== 'published') return false;
+
+      // 2. Exclude expired roles whose application due date has passed
+      const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || job.structured_role?.submission_deadline;
+      const dueInfo = formatDueDate(dueDateVal);
+      if (dueInfo && dueInfo.isExpired) return false;
+
       const role = job.structured_role || {};
       const title = (job.title || '').toLowerCase();
       const comp = (job.company_name || '').toLowerCase();
@@ -899,6 +909,8 @@ export default function OpenRolesPage() {
               const skills = (role.must_have_skills || []).slice(0, 5);
               const workMode = role.work_mode || 'Remote';
               const isRemote = workMode.toLowerCase() === 'remote';
+              const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
+              const dueInfo = formatDueDate(dueDateVal);
 
               return (
                 <article
@@ -934,8 +946,8 @@ export default function OpenRolesPage() {
                       {job.title}
                     </h2>
 
-                    {/* Meta Info: Family, Duration, Experience */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-paper/60 mt-2 font-medium">
+                    {/* Meta Info: Family, Duration, Experience, Due Date */}
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-paper/60 mt-2 font-medium">
                       {role.job_family && (
                         <div className="flex items-center gap-1.5">
                           <Layers size={13} className="text-paper/40" />
@@ -952,6 +964,18 @@ export default function OpenRolesPage() {
                         <div className="flex items-center gap-1.5">
                           <Briefcase size={13} className="text-paper/40" />
                           <span>{role.experience}</span>
+                        </div>
+                      )}
+                      {dueInfo && (
+                        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${
+                          dueInfo.isUrgent
+                            ? 'bg-amber-500/10 text-amber-300 border border-amber-500/25'
+                            : 'bg-paper/[0.06] text-paper/80 border border-paper/10'
+                        }`}>
+                          <Calendar size={12} className={dueInfo.isUrgent ? 'text-amber-400' : 'text-emerald-400'} />
+                          <span>Apply by <strong>{dueInfo.text}</strong></span>
+                          <span className="opacity-50">•</span>
+                          <span className="font-semibold">{dueInfo.daysLeft}</span>
                         </div>
                       )}
                     </div>
@@ -1056,6 +1080,20 @@ export default function OpenRolesPage() {
                   <span>{selectedJob.structured_role?.duration || '6 Months'}</span>
                   <span>·</span>
                   <span>{selectedJob.structured_role?.experience || 'Experienced'}</span>
+                  {(() => {
+                    const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
+                    const dInfo = formatDueDate(dVal);
+                    if (!dInfo) return null;
+                    return (
+                      <>
+                        <span>·</span>
+                        <span className={`inline-flex items-center gap-1 font-medium ${dInfo.isUrgent ? 'text-amber-400' : 'text-emerald-400'}`}>
+                          <Calendar size={13} />
+                          <span>Apply by: {dInfo.text} ({dInfo.daysLeft})</span>
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1090,6 +1128,30 @@ export default function OpenRolesPage() {
                 </div>
               ) : (
                 <>
+                  {/* Deadline Notification Banner */}
+                  {(() => {
+                    const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
+                    const dInfo = formatDueDate(dVal);
+                    if (!dInfo) return null;
+                    return (
+                      <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
+                        dInfo.isUrgent
+                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      }`}>
+                        <div className="flex items-center gap-2 font-medium">
+                          <Calendar size={15} className="shrink-0" />
+                          <span>Application Due Date: <strong className="font-semibold underline decoration-current/40">{dInfo.text}</strong></span>
+                        </div>
+                        <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider ${
+                          dInfo.isUrgent ? 'bg-amber-500/20 text-amber-200' : 'bg-emerald-500/20 text-emerald-200'
+                        }`}>
+                          {dInfo.daysLeft}
+                        </span>
+                      </div>
+                    );
+                  })()}
+
                   {/* Job Overview / Markdown */}
                   <div className="space-y-4">
                     <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Position Overview</h4>

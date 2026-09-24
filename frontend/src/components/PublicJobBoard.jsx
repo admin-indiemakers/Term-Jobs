@@ -24,10 +24,10 @@ import {
   Lock,
   Edit3,
   Check
-} from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
+import { formatDueDate } from '../utils/dateUtils';
 
 export default function PublicJobBoard({ onBackToHome, candidateProfile: propCandidate, onCandidateLogout }) {
   const candidateAuth = useCandidateAuth();
@@ -213,6 +213,15 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
   // Filtered requisitions
   const filteredJobs = useMemo(() => {
     return requisitions.filter(job => {
+      // 1. Exclude closed roles (only Published roles are displayed)
+      const status = (job.status || '').toLowerCase();
+      if (status && status !== 'published') return false;
+
+      // 2. Exclude expired roles whose application due date has passed
+      const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || job.structured_role?.submission_deadline;
+      const dueInfo = formatDueDate(dueDateVal);
+      if (dueInfo && dueInfo.isExpired) return false;
+
       const role = job.structured_role || {};
       const title = (job.title || role.title || '').toLowerCase();
       const comp = (job.company_name || '').toLowerCase();
@@ -223,7 +232,7 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       const matchesSearch = !query || 
         title.includes(query) || 
         comp.includes(query) || 
-        desc.includes(query) ||
+        desc.includes(query) || 
         skills.some(s => s.includes(query));
 
       const matchesCompany = selectedCompany === 'ALL' || job.company_name === selectedCompany;
@@ -826,14 +835,31 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
 
                 {/* Card Footer Actions */}
                 <div className="pt-4 border-t border-[#F0F0EC] flex items-center justify-between gap-3">
-                  <div className="text-[11.5px] text-[#8A8A85] flex items-center gap-1.5">
-                    <Calendar size={12} className="text-emerald-600" />
-                    <span>
-                      {role.submission_deadline
-                        ? `Deadline: ${new Date(role.submission_deadline).toLocaleDateString()}`
-                        : `Verified ${job.created_at ? new Date(job.created_at).toLocaleDateString() : 'Active'}`}
-                    </span>
-                  </div>
+                  {(() => {
+                    const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
+                    const dueInfo = formatDueDate(dueDateVal);
+                    if (dueInfo) {
+                      return (
+                        <div className={`text-[11.5px] flex items-center gap-1.5 font-medium ${
+                          dueInfo.isUrgent ? 'text-amber-700' : 'text-[#555550]'
+                        }`}>
+                          <Calendar size={13} className={dueInfo.isUrgent ? 'text-amber-600' : 'text-emerald-600'} />
+                          <span>Apply by <strong>{dueInfo.text}</strong></span>
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-bold tracking-wider ${
+                            dueInfo.isUrgent ? 'bg-amber-100 text-amber-800' : 'bg-[#EAEAE6] text-[#444440]'
+                          }`}>
+                            {dueInfo.daysLeft}
+                          </span>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="text-[11.5px] text-[#8A8A85] flex items-center gap-1.5">
+                        <Calendar size={12} className="text-emerald-600" />
+                        <span>Verified Active</span>
+                      </div>
+                    );
+                  })()}
 
                   <button
                     onClick={() => handleOpenJob(job)}
@@ -898,6 +924,22 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                     <span className="font-mono">{selectedJob.ref}</span>
                     <span>•</span>
                     <span>{selectedJob.structured_role?.work_mode || 'Remote'}</span>
+                    {(() => {
+                      const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
+                      const dInfo = formatDueDate(dVal);
+                      if (!dInfo) return null;
+                      return (
+                        <>
+                          <span>•</span>
+                          <span className={`inline-flex items-center gap-1 font-semibold ${
+                            dInfo.isUrgent ? 'text-amber-700' : 'text-emerald-700'
+                          }`}>
+                            <Calendar size={12} />
+                            <span>Deadline: {dInfo.text} ({dInfo.daysLeft})</span>
+                          </span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -979,6 +1021,30 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
                   {/* Left Column: Job Description & Criteria */}
                   <div className="lg:col-span-7 space-y-6">
+                    {/* Application Due Date Alert Banner */}
+                    {(() => {
+                      const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
+                      const dInfo = formatDueDate(dVal);
+                      if (!dInfo) return null;
+                      return (
+                        <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
+                          dInfo.isUrgent
+                            ? 'bg-amber-50 border-amber-200 text-amber-900'
+                            : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                        }`}>
+                          <div className="flex items-center gap-2 font-medium">
+                            <Calendar size={15} className={dInfo.isUrgent ? 'text-amber-600' : 'text-emerald-600'} />
+                            <span>Application Due Date: <strong className="font-bold">{dInfo.text}</strong></span>
+                          </div>
+                          <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider ${
+                            dInfo.isUrgent ? 'bg-amber-200 text-amber-900' : 'bg-emerald-200 text-emerald-900'
+                          }`}>
+                            {dInfo.daysLeft}
+                          </span>
+                        </div>
+                      );
+                    })()}
+
                     {/* Quick Specs Grid */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-[#F9F9F7] p-4 rounded-2xl border border-[#EAEAE6]">
                       <div>
