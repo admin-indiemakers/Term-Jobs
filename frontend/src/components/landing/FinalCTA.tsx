@@ -55,16 +55,16 @@ export function FinalCTA({ active }: { active: boolean }) {
         >
           <Link
             to="/login"
-            className="group inline-flex items-center gap-3 rounded-full bg-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] text-ink uppercase transition-transform duration-300 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-paper focus-visible:ring-offset-2 focus-visible:ring-offset-ink focus-visible:outline-none cursor-pointer"
+            className="group inline-flex items-center gap-3 rounded-full bg-paper/90 hover:bg-paper text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/25 shadow-[0_8px_30px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.4)] active:scale-95 cursor-pointer"
           >
             For Companies & Teams
             <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
           </Link>
           <Link
             to="/open-roles"
-            className="group inline-flex items-center gap-3 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 shadow-md shadow-emerald-950/20"
+            className="group inline-flex items-center gap-3 rounded-full bg-white/10 hover:bg-white/18 text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)] active:scale-95 cursor-pointer"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-paper/85 animate-pulse" />
             <span>Explore Open Roles</span>
             <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
           </Link>

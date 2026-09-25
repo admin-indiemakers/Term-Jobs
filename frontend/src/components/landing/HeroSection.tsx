@@ -90,16 +90,16 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
           >
             <Link
               to="/open-roles"
-              className="group inline-flex items-center gap-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 shadow-md shadow-emerald-950/20"
+              className="group inline-flex items-center gap-2.5 rounded-full bg-ink/90 hover:bg-ink text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span className="w-1.5 h-1.5 rounded-full bg-paper/90 animate-pulse" />
               <span>Explore Open Roles</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </Link>
             <button
               type="button"
               onClick={onNext}
-              className="group inline-flex items-center gap-3 rounded-full bg-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] text-paper uppercase transition-transform duration-300 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-paper focus-visible:outline-none cursor-pointer"
+              className="group inline-flex items-center gap-3 rounded-full bg-white/70 hover:bg-white/90 text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-ink/15 hover:border-ink/30 shadow-[0_8px_25px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] active:scale-95 cursor-pointer"
             >
               Get started
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
@@ -107,7 +107,7 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
             <button
               type="button"
               onClick={onNext}
-              className="group inline-flex items-center gap-3 rounded-full border border-ink/20 px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] text-ink uppercase transition-colors duration-300 hover:border-ink/50 focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:outline-none cursor-pointer"
+              className="group inline-flex items-center gap-3 rounded-full bg-white/35 hover:bg-white/60 text-ink/80 hover:text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-md border border-ink/10 hover:border-ink/25 shadow-[0_4px_16px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.6)] active:scale-95 cursor-pointer"
             >
               How it works
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>

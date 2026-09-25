@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import SEOHead from '../components/SEOHead';
 import { LandingPage as LaunchpadLanding } from '../components/landing/LandingPage';
 
-export default function LandingPage({ defaultRoute = '' }) {
+export default function LandingPage({ defaultRoute = '', enabled = true }) {
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,12 +15,14 @@ export default function LandingPage({ defaultRoute = '' }) {
 
   return (
     <>
-      <SEOHead
-        title="TermJobs — The future of contract work is flexible"
-        description="TermJobs is a contract workforce platform bringing hiring, verified talent, AI screening, onboarding, timesheets, and billing into one connected view."
-        canonicalUrl="https://termjobs.vercel.app/"
-      />
-      <LaunchpadLanding />
+      {enabled && (
+        <SEOHead
+          title="TermJobs — The future of contract work is flexible"
+          description="TermJobs is a contract workforce platform bringing hiring, verified talent, AI screening, onboarding, timesheets, and billing into one connected view."
+          canonicalUrl="https://termjobs.vercel.app/"
+        />
+      )}
+      <LaunchpadLanding enabled={enabled} />
     </>
   );
 }

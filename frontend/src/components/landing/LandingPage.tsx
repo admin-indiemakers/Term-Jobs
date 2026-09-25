@@ -14,17 +14,18 @@ import { WorkflowSection } from "./WorkflowSection";
 const TOTAL = 6;
 const DARK_SECTIONS = new Set([1, 5]);
 
-export function LandingPage() {
-  const { index, goTo, step } = useHorizontalPanels(TOTAL);
+export function LandingPage({ enabled = true }: { enabled?: boolean }) {
+  const { index, goTo, step } = useHorizontalPanels(TOTAL, enabled);
   const dark = DARK_SECTIONS.has(index);
 
   useEffect(() => {
+    if (!enabled) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = previous;
     };
-  }, []);
+  }, [enabled]);
 
   const isLast = index === TOTAL - 1;
 
@@ -39,20 +40,24 @@ export function LandingPage() {
         <FinalCTA active={index === 5} />
       </HorizontalScroller>
 
-      <div
-        aria-hidden="true"
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-30 h-28 transition-opacity duration-700 md:h-24"
-        style={{
-          background: dark
-            ? "linear-gradient(to top, oklch(0.13 0.004 260) 22%, transparent)"
-            : "linear-gradient(to top, oklch(0.975 0.002 100) 22%, transparent)",
-        }}
-      />
+      {enabled && (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-30 h-28 transition-opacity duration-700 md:h-24"
+            style={{
+              background: dark
+                ? "linear-gradient(to top, oklch(0.13 0.004 260) 22%, transparent)"
+                : "linear-gradient(to top, oklch(0.975 0.002 100) 22%, transparent)",
+            }}
+          />
 
-      <BrandMark dark={dark} onHomeClick={() => goTo(0)} />
-      <PageProgress index={index} total={TOTAL} dark={dark} />
-      <SectionNavigation index={index} dark={dark} onSelect={goTo} />
-      <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
+          <BrandMark dark={dark} onHomeClick={() => goTo(0)} />
+          <PageProgress index={index} total={TOTAL} dark={dark} />
+          <SectionNavigation index={index} dark={dark} onSelect={goTo} />
+          <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
+        </>
+      )}
     </main>
   );
 }

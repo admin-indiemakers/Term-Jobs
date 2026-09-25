@@ -1,7 +1,9 @@
 import InterviewRequests from './pages/recruiter/InterviewRequests';
 import VendorAgreements from './pages/recruiter/VendorAgreements';
 import VendorBilling from './pages/recruiter/VendorBilling';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useRef, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';
 import AuthPage from './pages/AuthPage';
@@ -112,12 +114,69 @@ function CandidateRouteDispatcher() {
   return <ShortlistedCandidates />;
 }
 
+function HorizontalTransitionLayout() {
+  const location = useLocation();
+  const isLanding = location.pathname === '/';
+  const isLogin = location.pathname === '/login' || location.pathname === '/signin';
+  const isRoles = !isLanding && !isLogin;
+  const rolesScrollRef = useRef(null);
+  const authScrollRef = useRef(null);
+
+  // When returning to Landing page, reset subpage scrolls to top so they are clean on return
+  useEffect(() => {
+    if (isLanding) {
+      if (rolesScrollRef.current) {
+        rolesScrollRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      }
+      if (authScrollRef.current) {
+        authScrollRef.current.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    }
+  }, [isLanding]);
+
+  const targetX = isLogin ? '100vw' : isLanding ? '0vw' : '-100vw';
+
+  return (
+    <div className="fixed inset-0 overflow-hidden bg-[#08090b]">
+      <motion.div
+        className="relative h-dvh w-screen"
+        initial={{ x: targetX }}
+        animate={{ x: targetX }}
+        transition={{
+          duration: 1.15,
+          ease: [0.16, 1, 0.3, 1],
+        }}
+      >
+        {/* Left Slot: Sign In / Auth Page (at -100vw, slides in from the left) */}
+        <div
+          ref={authScrollRef}
+          className="absolute inset-0 -left-[100vw] w-screen h-dvh overflow-y-auto overflow-x-hidden"
+        >
+          <AuthPage />
+        </div>
+
+        {/* Center Slot: Landing Page (at 0vw) */}
+        <div className="absolute inset-0 w-screen h-dvh overflow-hidden">
+          <LandingPage enabled={isLanding} />
+        </div>
+
+        {/* Right Slot: Open Roles Page (at +100vw, slides in from the right) */}
+        <div
+          ref={rolesScrollRef}
+          className="absolute inset-0 left-[100vw] w-screen h-dvh overflow-y-auto overflow-x-hidden"
+        >
+          <OpenRolesPage enabled={isRoles} />
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <CandidateAuthProvider>
         <Routes>
-          <Route path="/login" element={<AuthPage />} />
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/invite/hiring-manager" element={<JoinHiringManager />} />
           <Route path="/join/director" element={<JoinDirector />} />
@@ -126,14 +185,19 @@ export default function App() {
           <Route path="/invite/procurement" element={<JoinProcurement />} />
           <Route path="/join/finance" element={<JoinFinance />} />
           <Route path="/invite/finance" element={<JoinFinance />} />
-          <Route path="/candidate/login" element={<OpenRolesPage />} />
-          <Route path="/candidate-login" element={<OpenRolesPage />} />
-          <Route path="/candidate/profile-login" element={<OpenRolesPage />} />
-          <Route path="/open-roles" element={<OpenRolesPage />} />
-          <Route path="/openroles" element={<OpenRolesPage />} />
-          <Route path="/jobs" element={<OpenRolesPage />} />
-          <Route path="/careers" element={<OpenRolesPage />} />
-          <Route path="/apply" element={<OpenRolesPage />} />
+          <Route element={<HorizontalTransitionLayout />}>
+            <Route path="/" element={null} />
+            <Route path="/open-roles" element={null} />
+            <Route path="/openroles" element={null} />
+            <Route path="/jobs" element={null} />
+            <Route path="/careers" element={null} />
+            <Route path="/apply" element={null} />
+            <Route path="/candidate/login" element={null} />
+            <Route path="/candidate-login" element={null} />
+            <Route path="/candidate/profile-login" element={null} />
+            <Route path="/login" element={null} />
+            <Route path="/signin" element={null} />
+          </Route>
           <Route path="/interview/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
@@ -142,206 +206,206 @@ export default function App() {
           <Route path="/admin/login" element={<SuperAdminLogin />} />
           <Route path="/director/login" element={<DirectorLogin />} />
           <Route path="/" element={<LandingPage />} />
-        <Route
-          path="/dashboard"
-          element={
-            <RequireAuth>
-              <DashboardLayout />
-            </RequireAuth>
-          }
-        >
-          <Route index element={<DashboardIndex />} />
-          <Route path="interviews" element={<HiringManagerInterviews />} />
-          <Route path="hiring-manager" element={<HiringManagerDashboard />} />
-          <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
-          <Route path="requisitions" element={<RequisitionOverview />} />
-          <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
-          <Route path="requisitions/pending-approval" element={<RequisitionOverview section="pending_approval" />} />
-          <Route path="requisitions/pending" element={<RequisitionOverview section="pending_approval" />} />
-          <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
-          <Route path="requisitions/completed" element={<RequisitionOverview section="completed" />} />
-          <Route path="requisitions/history" element={<RequisitionOverview section="history" />} />
-          <Route path="requisitions/new" element={<NewRequisition />} />
-          <Route path="requisitions/:id" element={<RequisitionDetail />} />
-          <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
-          <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
-          <Route path="candidates/accepted" element={<AcceptedCandidates />} />
-          <Route path="candidates/onboarding" element={<OnboardingManagement />} />
-          <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />
-          <Route path="candidates/issues" element={<ReportedIssues />} />
-          <Route path="candidates" element={<CandidateRouteDispatcher />} />
-          <Route path="candidatepool" element={<SuperAdminCandidatePool />} />
-          <Route path="candidate-pool" element={<SuperAdminCandidatePool />} />
-          <Route path="candidatespool" element={<SuperAdminCandidatePool />} />
-          <Route path="candidates-pool" element={<SuperAdminCandidatePool />} />
-          <Route path="outreach" element={<SuperAdminOutreachControl />} />
-          <Route path="candidate-outreach" element={<SuperAdminOutreachControl />} />
-          <Route path="workforce/team" element={<TeamOverview />} />
-          <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
-          <Route path="workforce/expenses" element={<ExpenseApprovals />} />
-          <Route path="workforce/workers" element={<Workers />} />
-          <Route path="recruiter/workers" element={<Workers />} />
-          <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
-          <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
-          <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
-          <Route path="recruiter/shortlisted" element={<RecruiterDashboard view="shortlisted" />} />
-          <Route path="recruiter/interviews" element={<InterviewRequests />} />
-          <Route path="recruiter/agreements" element={<VendorAgreements />} />
-          <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
-          <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
-          <Route path="recruiter/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
-          <Route path="admin" element={<AdminDashboard />} />
-          <Route path="admin/directors" element={<ManageDirectors />} />
-          <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
-          <Route path="admin/procurement" element={<ManageProcurement />} />
-          <Route path="admin/finance" element={<ManageFinance />} />
-          <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
-          <Route path="admin/vendors" element={<ManagePartnerVendors />} />
-          <Route path="director" element={<DirectorDashboard view="overview" />} />
-          <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
-          <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
-          <Route path="director/work-orders" element={<DirectorWorkOrders />} />
-          <Route path="director/agreements" element={<DirectorAgreements />} />
-          <Route path="procurement" element={<ProcurementDashboard />} />
-          <Route path="procurement/sow" element={<ProcurementDashboard />} />
-          <Route path="finance" element={<FinanceDashboard />} />
-          <Route path="finance/work-orders" element={<FinanceDashboard />} />
-          <Route path="superadmin" element={<SuperAdminDashboard />} />
-          <Route path="superadmin/chat" element={<AiChat />} />
-          <Route path="superadmin/onboard" element={<OnboardCompany />} />
-          <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
-          <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
-          <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
-          <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
-          <Route path="superadmin/admins" element={<AdminAccounts />} />
-          <Route path="superadmin/candidate-management" element={<SuperAdminCandidateManagement />} />
-          <Route path="candidate-management" element={<SuperAdminCandidateManagement />} />
-          <Route path="superadmin/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
-          <Route path="superadmin/candidate-billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
-          <Route path="superadmin/candidates" element={<SuperAdminCandidatePool />} />
-          <Route path="superadmin/candidate-pool" element={<SuperAdminCandidatePool />} />
-          <Route path="superadmin/candidatepool" element={<SuperAdminCandidatePool />} />
-          <Route path="superadmin/candidates-pool" element={<SuperAdminCandidatePool />} />
-          <Route path="superadmin/outreach" element={<SuperAdminOutreachControl />} />
-          <Route path="superadmin/candidate-outreach" element={<SuperAdminOutreachControl />} />
-          <Route path="superadmin/archives" element={<Navigate to="/dashboard/superadmin" replace />} />
-          <Route path="hr" element={<HRDashboard />} />
-        </Route>
-        <Route
-          path="/dashboard/candidate"
-          element={
-            <RequireAuth>
-              <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/onboarding"
-          element={
-            <RequireAuth>
-              <CandidateOnboarding />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/portal"
-          element={
-            <RequireAuth>
-              <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/dashboard"
-          element={
-            <RequireAuth>
-              <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/assignment"
-          element={
-            <RequireAuth>
-              <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/timesheet"
-          element={
-            <RequireAuth>
-              <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate/attendance"
-          element={
-            <RequireAuth>
-              <CandidatePortal />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidatepool"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidate-pool"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidatespool"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/candidates-pool"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/superadmin/candidates"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/superadmin/candidate-pool"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route
-          path="/superadmin/candidatepool"
-          element={
-            <RequireAuth>
-              <Navigate to="/dashboard/superadmin/candidates" replace />
-            </RequireAuth>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </CandidateAuthProvider>
-  </BrowserRouter>
-);
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <DashboardLayout />
+              </RequireAuth>
+            }
+          >
+            <Route index element={<DashboardIndex />} />
+            <Route path="interviews" element={<HiringManagerInterviews />} />
+            <Route path="hiring-manager" element={<HiringManagerDashboard />} />
+            <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
+            <Route path="requisitions" element={<RequisitionOverview />} />
+            <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
+            <Route path="requisitions/pending-approval" element={<RequisitionOverview section="pending_approval" />} />
+            <Route path="requisitions/pending" element={<RequisitionOverview section="pending_approval" />} />
+            <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
+            <Route path="requisitions/completed" element={<RequisitionOverview section="completed" />} />
+            <Route path="requisitions/history" element={<RequisitionOverview section="history" />} />
+            <Route path="requisitions/new" element={<NewRequisition />} />
+            <Route path="requisitions/:id" element={<RequisitionDetail />} />
+            <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
+            <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
+            <Route path="candidates/accepted" element={<AcceptedCandidates />} />
+            <Route path="candidates/onboarding" element={<OnboardingManagement />} />
+            <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />
+            <Route path="candidates/issues" element={<ReportedIssues />} />
+            <Route path="candidates" element={<CandidateRouteDispatcher />} />
+            <Route path="candidatepool" element={<SuperAdminCandidatePool />} />
+            <Route path="candidate-pool" element={<SuperAdminCandidatePool />} />
+            <Route path="candidatespool" element={<SuperAdminCandidatePool />} />
+            <Route path="candidates-pool" element={<SuperAdminCandidatePool />} />
+            <Route path="outreach" element={<SuperAdminOutreachControl />} />
+            <Route path="candidate-outreach" element={<SuperAdminOutreachControl />} />
+            <Route path="workforce/team" element={<TeamOverview />} />
+            <Route path="workforce/timesheets" element={<TimesheetApprovals />} />
+            <Route path="workforce/expenses" element={<ExpenseApprovals />} />
+            <Route path="workforce/workers" element={<Workers />} />
+            <Route path="recruiter/workers" element={<Workers />} />
+            <Route path="recruiter" element={<RecruiterDashboard view="dashboard" />} />
+            <Route path="recruiter/requisitions" element={<RecruiterDashboard view="requisitions" />} />
+            <Route path="recruiter/candidates" element={<RecruiterDashboard view="candidates" />} />
+            <Route path="recruiter/shortlisted" element={<RecruiterDashboard view="shortlisted" />} />
+            <Route path="recruiter/interviews" element={<InterviewRequests />} />
+            <Route path="recruiter/agreements" element={<VendorAgreements />} />
+            <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
+            <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
+            <Route path="recruiter/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
+            <Route path="admin" element={<AdminDashboard />} />
+            <Route path="admin/directors" element={<ManageDirectors />} />
+            <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
+            <Route path="admin/procurement" element={<ManageProcurement />} />
+            <Route path="admin/finance" element={<ManageFinance />} />
+            <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
+            <Route path="admin/vendors" element={<ManagePartnerVendors />} />
+            <Route path="director" element={<DirectorDashboard view="overview" />} />
+            <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
+            <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
+            <Route path="director/work-orders" element={<DirectorWorkOrders />} />
+            <Route path="director/agreements" element={<DirectorAgreements />} />
+            <Route path="procurement" element={<ProcurementDashboard />} />
+            <Route path="procurement/sow" element={<ProcurementDashboard />} />
+            <Route path="finance" element={<FinanceDashboard />} />
+            <Route path="finance/work-orders" element={<FinanceDashboard />} />
+            <Route path="superadmin" element={<SuperAdminDashboard />} />
+            <Route path="superadmin/chat" element={<AiChat />} />
+            <Route path="superadmin/onboard" element={<OnboardCompany />} />
+            <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
+            <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
+            <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
+            <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
+            <Route path="superadmin/admins" element={<AdminAccounts />} />
+            <Route path="superadmin/candidate-management" element={<SuperAdminCandidateManagement />} />
+            <Route path="candidate-management" element={<SuperAdminCandidateManagement />} />
+            <Route path="superadmin/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
+            <Route path="superadmin/candidate-billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
+            <Route path="superadmin/candidates" element={<SuperAdminCandidatePool />} />
+            <Route path="superadmin/candidate-pool" element={<SuperAdminCandidatePool />} />
+            <Route path="superadmin/candidatepool" element={<SuperAdminCandidatePool />} />
+            <Route path="superadmin/candidates-pool" element={<SuperAdminCandidatePool />} />
+            <Route path="superadmin/outreach" element={<SuperAdminOutreachControl />} />
+            <Route path="superadmin/candidate-outreach" element={<SuperAdminOutreachControl />} />
+            <Route path="superadmin/archives" element={<Navigate to="/dashboard/superadmin" replace />} />
+            <Route path="hr" element={<HRDashboard />} />
+          </Route>
+          <Route
+            path="/dashboard/candidate"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/onboarding"
+            element={
+              <RequireAuth>
+                <CandidateOnboarding />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/portal"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/dashboard"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/assignment"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/timesheet"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate/attendance"
+            element={
+              <RequireAuth>
+                <CandidatePortal />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidatepool"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidate-pool"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidatespool"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/candidates-pool"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/superadmin/candidates"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/superadmin/candidate-pool"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/superadmin/candidatepool"
+            element={
+              <RequireAuth>
+                <Navigate to="/dashboard/superadmin/candidates" replace />
+              </RequireAuth>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </CandidateAuthProvider>
+    </BrowserRouter>
+  );
 }

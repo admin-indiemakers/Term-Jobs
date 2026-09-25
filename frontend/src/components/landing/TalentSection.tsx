@@ -61,10 +61,10 @@ export function TalentSection({ active }: { active: boolean }) {
           >
             <Link
               to="/open-roles"
-              className="inline-flex items-center gap-3 rounded-full bg-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] text-paper uppercase transition-transform duration-300 hover:-translate-y-0.5 shadow-md hover:bg-ink/90 cursor-pointer"
+              className="group inline-flex items-center gap-3 rounded-full bg-ink/90 hover:bg-ink text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
             >
               Browse Open Positions
-              <span>→</span>
+              <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </Link>
           </motion.div>
         </div>
