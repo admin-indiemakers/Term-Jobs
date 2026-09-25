@@ -35,6 +35,7 @@ import {
   Edit3,
   Check,
   LogIn,
+  Home,
 } from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
@@ -105,6 +106,8 @@ export default function OpenRolesPage({ enabled = true }) {
   const [showMyAppsModal, setShowMyAppsModal] = useState(false);
   const [showSetupModal, setShowSetupModal] = useState(false);
   const [showGeneralPoolModal, setShowGeneralPoolModal] = useState(false);
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [activeNavTab, setActiveNavTab] = useState('home');
 
   // Application form state
   const [applyForm, setApplyForm] = useState({
@@ -724,38 +727,39 @@ export default function OpenRolesPage({ enabled = true }) {
 
       {/* ============================================================ */}
       {/* LEFT PANEL: LIGHT EDITORIAL COLUMN                          */}
-      <aside className="w-full lg:w-[360px] xl:w-[410px] 2xl:w-[440px] shrink-0 bg-paper text-ink p-8 sm:p-10 xl:p-12 border-b lg:border-b-0 lg:border-r border-ink/10 flex flex-col justify-between relative overflow-hidden lg:min-h-screen lg:sticky lg:top-0">
+      <aside className="w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" />
 
-        <div className="relative z-10 flex flex-col justify-between flex-1">
+        {/* Zone 1: Main Scrollable Editorial Content (takes remaining height, never pushes bottom) */}
+        <div className="relative z-10 flex-1 min-h-0 lg:overflow-y-auto custom-scrollbar-none p-6 sm:p-7 xl:p-8 pb-2 flex flex-col justify-between">
           <div>
             {/* Brand Mark with overlapping rectangles */}
-            <Link to="/" className="inline-flex items-center gap-3 group cursor-pointer">
-              <svg className="w-8 h-8 text-neutral-900 shrink-0" viewBox="0 0 32 32" fill="none">
+            <Link to="/" className="inline-flex items-center gap-2.5 group cursor-pointer">
+              <svg className="w-7 h-7 text-neutral-900 shrink-0" viewBox="0 0 32 32" fill="none">
                 <rect x="3" y="6" width="16" height="20" rx="4.5" stroke="currentColor" strokeWidth="2.4" />
                 <rect x="13" y="6" width="16" height="20" rx="4.5" stroke="currentColor" strokeWidth="2.4" />
               </svg>
               <div>
-                <span className="text-sm font-extrabold tracking-[0.22em] text-neutral-900 block leading-none">
+                <span className="text-[13px] font-extrabold tracking-[0.2em] text-neutral-900 block leading-none">
                   TERMJOBS
                 </span>
-                <span className="text-[0.6rem] font-bold tracking-[0.16em] text-neutral-400 uppercase block mt-1">
+                <span className="text-[0.58rem] font-bold tracking-[0.15em] text-neutral-400 uppercase block mt-0.5">
                   Contract Workforce Platform
                 </span>
               </div>
             </Link>
 
             {/* Accent vertical separator */}
-            <div className="w-[2px] h-9 bg-neutral-400 my-8" />
+            <div className="w-[2px] h-7 bg-neutral-400 my-5 sm:my-6" />
 
             {/* Eyebrow */}
-            <div className="text-[0.66rem] font-bold tracking-[0.2em] text-neutral-400 uppercase mb-4">
+            <div className="text-[0.62rem] font-bold tracking-[0.18em] text-neutral-400 uppercase mb-2.5 sm:mb-3">
               Contract Workforce Platform
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-[-0.03em] leading-[1.06] text-neutral-950">
+            <h1 className="text-3xl sm:text-4xl xl:text-[42px] font-extrabold tracking-[-0.03em] leading-[1.08] text-neutral-950">
               Explore<br />
               Open Roles.<br />
               <span className="text-neutral-400 font-bold block mt-1">
@@ -765,71 +769,71 @@ export default function OpenRolesPage({ enabled = true }) {
             </h1>
 
             {/* Subtext */}
-            <p className="mt-6 text-xs sm:text-sm text-neutral-500 leading-relaxed max-w-sm font-normal">
+            <p className="mt-4 sm:mt-5 text-xs text-neutral-500 leading-relaxed max-w-sm font-normal">
               Browse live contract opportunities from verified enterprise partners. Apply directly with 1-click
               resume parsing, instant skill matching, and verified compliance.
             </p>
 
             {/* Pure Transparent Glass Platform Metrics */}
-            <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-2.5 relative z-10 max-w-sm">
+            <div className="mt-4 sm:mt-5 grid grid-cols-3 gap-2 relative z-10 max-w-sm">
               {/* Card 1: Open Roles */}
-              <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
-                <Briefcase size={14} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
-                <div className="text-base sm:text-lg font-extrabold text-neutral-900 tracking-tight leading-none my-1.5">
+              <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
                   {requisitions.length > 0 ? requisitions.length : '24'}
                 </div>
-                <div className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Open Roles
                 </div>
               </div>
 
               {/* Card 2: Enterprise Partners */}
-              <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
-                <Building2 size={14} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
-                <div className="text-base sm:text-lg font-extrabold text-neutral-900 tracking-tight leading-none my-1.5">
+              <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                <Building2 size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
                   {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || '36'}
                 </div>
-                <div className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Partners
                 </div>
               </div>
 
               {/* Card 3: Avg Review Time */}
-              <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
-                <Zap size={14} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
-                <div className="text-base sm:text-lg font-extrabold text-neutral-900 tracking-tight leading-none my-1.5">
+              <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                <Zap size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
                   &lt; 24h
                 </div>
-                <div className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Review Time
                 </div>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Bottom Talent Pool Callout with Left Accent Line */}
-          <div className="mt-8 pt-4">
-            <div className="flex items-stretch gap-3.5 max-w-sm">
-              {/* Vertical Accent Line running alongside sentence and button */}
-              <div className="w-[2px] bg-neutral-400 rounded-full shrink-0" />
+        {/* Zone 2: Bottom Talent Pool Callout - Pinned & Fixed at Bottom */}
+        <div className="relative z-20 shrink-0 px-6 sm:px-7 xl:px-8 pt-2.5 pb-6 sm:pb-7 xl:pb-8 bg-transparent">
+          <div className="flex items-stretch gap-3 max-w-sm">
+            {/* Vertical Accent Line running alongside sentence and button */}
+            <div className="w-[2px] bg-neutral-400 rounded-full shrink-0" />
 
-              <div className="flex flex-col gap-2.5">
-                <div className="flex items-center gap-2 text-neutral-700">
-                  <Sparkles size={14} className="text-neutral-900 shrink-0" />
-                  <span className="text-xs sm:text-[13px] font-medium text-neutral-700 leading-snug">
-                    Don't see your role? Join the verified talent pool.
-                  </span>
-                </div>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => setShowGeneralPoolModal(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs tracking-tight transition cursor-pointer active:scale-95 shadow-md shadow-neutral-900/10"
-                  >
-                    <span>Join Talent Pool</span>
-                    <ArrowRight size={13} />
-                  </button>
-                </div>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-1.5 text-neutral-700">
+                <Sparkles size={13} className="text-neutral-900 shrink-0" />
+                <span className="text-[11.5px] sm:text-xs font-medium text-neutral-700 leading-snug">
+                  Don't see your role? Join the verified talent pool.
+                </span>
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowGeneralPoolModal(true)}
+                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-[11px] tracking-tight transition cursor-pointer active:scale-95 shadow-md shadow-neutral-900/10"
+                >
+                  <span>Join Talent Pool</span>
+                  <ArrowRight size={12} />
+                </button>
               </div>
             </div>
           </div>
@@ -839,94 +843,69 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
       {/* ============================================================ */}
-      <div className="flex-1 min-w-0 bg-ink text-paper p-5 sm:p-7 xl:p-10 flex flex-col relative overflow-hidden">
+      <div className="flex-1 min-w-0 bg-ink text-paper p-4 sm:p-5 xl:p-7 flex flex-col relative overflow-hidden">
         {/* Atmospheric Background Layer */}
         <Backdrop tone="dark" />
 
         <div className="relative z-10 flex flex-col flex-1">
           {/* Top Header Navigation */}
-          <header className="flex items-center justify-between gap-4 mb-6">
+          <header className="flex items-center justify-between gap-4 mb-4 sm:mb-5">
             <Link
               to="/"
-              className="inline-flex items-center gap-1.5 text-xs text-paper/60 hover:text-white transition font-medium cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs text-paper/60 hover:text-white transition font-medium cursor-pointer"
             >
-              <ArrowLeft size={14} />
+              <ArrowLeft size={13} />
               <span>Platform Overview</span>
             </Link>
 
             {/* Right Action Buttons */}
-            <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+            <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
               {candidateUser ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
-                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center border border-emerald-500/30">
-                      {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
-                    </div>
-                    <span className="text-xs font-semibold text-white max-w-[120px] truncate">
-                      {candidateUser.candidate_name || candidateUser.candidate_email}
-                    </span>
-                    {hasResume && (
-                      <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
-                        <CheckCircle2 size={10} />
-                        Resume on File
-                      </span>
-                    )}
+                <div className="flex items-center gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
+                  <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20">
+                    {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
                   </div>
-
-                  <div className="h-3 w-px bg-paper/20 mx-1" />
-
+                  <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[120px] truncate">
+                    {candidateUser.candidate_name || candidateUser.candidate_email}
+                  </span>
+                  <div className="h-3 w-px bg-paper/20 mx-0.5" />
                   <button
                     type="button"
                     onClick={() => setShowSetupModal(true)}
-                    className="px-2.5 py-1 text-[11px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
-                    title="Edit candidate profile & resume"
+                    className="px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
                   >
                     Edit Profile
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setShowMyAppsModal(true)}
-                    className="px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition rounded-lg hover:bg-emerald-500/10 cursor-pointer"
+                    className="px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
                   >
                     Applications ({applications.length})
                   </button>
-
                   <a
                     href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#229ED9] hover:text-[#1E88E5] transition rounded-lg hover:bg-sky-500/10 text-decoration-none"
-                    title="Link your Telegram to get 1-tap alerts"
+                    className="px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer inline-flex items-center gap-1.5 text-decoration-none"
+                    title="Connect Telegram for instant interview alerts & notifications"
                   >
                     <Send size={11} />
-                    <span>Start Bot</span>
+                    <span className="hidden sm:inline">Bot</span>
                   </a>
-
                   <button
                     type="button"
                     onClick={logout}
-                    className="p-1 text-paper/50 hover:text-rose-400 transition cursor-pointer"
+                    className="p-1 text-paper/50 hover:text-white transition cursor-pointer"
                     title="Sign out"
                   >
-                    <LogOut size={13} />
+                    <LogOut size={12} />
                   </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2 sm:gap-2.5">
-                  <a
-                    href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-[#229ED9] transition cursor-pointer text-decoration-none"
-                    title="Start Telegram Bot for Instant Job Matches"
-                  >
-                    <Send size={12} className="text-[#229ED9]" />
-                    <span>Start Bot</span>
-                  </a>
-
                   {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
-                  <div className="inline-flex items-center px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:border-white/30 backdrop-blur-md transition-all">
+                  <div className="inline-flex items-center px-2.5 py-0.5 rounded-full border border-white/15 bg-white/[0.03] hover:border-white/30 backdrop-blur-md transition-all">
                     {/* Google Sign In Trigger */}
                     <button
                       type="button"
@@ -939,15 +918,15 @@ export default function OpenRolesPage({ enabled = true }) {
                     </button>
 
                     {/* Vertical Divider */}
-                    <div className="h-3 w-px bg-white/20 mx-2" />
+                    <div className="h-3 w-px bg-white/20 mx-1.5" />
 
                     {/* Candidate Email/Password Login Trigger */}
                     <button
                       type="button"
                       onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                      className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-white/90 hover:text-white transition cursor-pointer"
+                      className="inline-flex items-center gap-1.5 text-[10.5px] sm:text-[11px] font-medium text-white/90 hover:text-white transition cursor-pointer"
                     >
-                      <User size={13} className="text-white/70" />
+                      <User size={12} className="text-white/70" />
                       <span>Candidate Sign In</span>
                     </button>
                   </div>
@@ -955,57 +934,57 @@ export default function OpenRolesPage({ enabled = true }) {
                   {/* Staff Portal Link (Border-only Transparent Pill) */}
                   <Link
                     to="/login"
-                    className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[11px] sm:text-xs font-medium transition backdrop-blur-md active:scale-95"
+                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10.5px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95"
                   >
-                    <Users size={13} className="text-white/70" />
+                    <Users size={12} className="text-white/70" />
                     <span>Staff Portal</span>
-                    <ArrowRight size={12} className="text-white/60" />
+                    <ArrowRight size={11} className="text-white/60" />
                   </Link>
                 </div>
               )}
             </div>
-      </header>
+          </header>
 
           {/* Glass Search & Filter Control Console */}
-          <div className="mt-4 mb-9 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="w-full max-w-4xl p-2 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2.5 transition-all">
+          <div className="mt-2 mb-4 sm:mb-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="w-full max-w-4xl p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2 transition-all">
               {/* Keyword Search Input */}
               <div className="relative flex-1 w-full min-w-[150px]">
-                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search roles, skills, company..."
-                  className="w-full bg-transparent pl-9 pr-7 py-2 text-xs sm:text-sm text-white placeholder-white/40 focus:outline-none font-sans"
+                  className="w-full bg-transparent pl-8 pr-6 py-1.5 text-xs text-white placeholder-white/40 focus:outline-none font-sans"
                 />
                 {searchQuery && (
                   <button
                     type="button"
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
                   >
-                    <X size={13} />
+                    <X size={12} />
                   </button>
                 )}
               </div>
 
               {/* Filter Dropdowns & Glass Action Button */}
-              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
+              <div className="flex items-center gap-1.5 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
                 {/* Work Mode Filter */}
                 <div className="relative flex-1 sm:flex-initial">
                   <select
                     value={selectedWorkMode}
                     onChange={(e) => setSelectedWorkMode(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-6 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg pl-5.5 pr-5.5 py-1 text-[10.5px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Modes</option>
                     <option value="Remote" className="bg-zinc-950 text-white">Remote</option>
                     <option value="Hybrid" className="bg-zinc-950 text-white">Hybrid</option>
                     <option value="Onsite" className="bg-zinc-950 text-white">Onsite</option>
                   </select>
-                  <Briefcase size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <Briefcase size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
                 {/* Department Filter */}
@@ -1013,7 +992,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   <select
                     value={selectedFamily}
                     onChange={(e) => setSelectedFamily(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-6 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[130px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg pl-5.5 pr-5.5 py-1 text-[10.5px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[125px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Depts</option>
                     {availableFamilies.map((fam) => (
@@ -1022,8 +1001,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       </option>
                     ))}
                   </select>
-                  <Building2 size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <Building2 size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
                 {/* Location Filter */}
@@ -1031,7 +1010,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   <select
                     value={selectedLocation}
                     onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-6 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[120px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg pl-5.5 pr-5.5 py-1 text-[10.5px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[115px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Locations</option>
                     {availableLocations.map((loc) => (
@@ -1040,8 +1019,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       </option>
                     ))}
                   </select>
-                  <MapPin size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
-                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <MapPin size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
                 {/* Glass Search Action Button (No Green) */}
@@ -1050,18 +1029,18 @@ export default function OpenRolesPage({ enabled = true }) {
                   onClick={() => {
                     document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="w-8 h-8 rounded-xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
+                  className="w-7 h-7 rounded-lg bg-white/[0.08] hover:bg-white/[0.16] border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
                   title="Search Roles"
                 >
-                  <ArrowRight size={14} />
+                  <ArrowRight size={13} />
                 </button>
               </div>
             </div>
           </div>
 
           {/* Section Title Header */}
-          <div className="flex items-center justify-between mb-4 pt-1">
-            <h2 className="font-display text-lg sm:text-xl font-extrabold tracking-[-0.03em] text-white">
+          <div className="flex items-center justify-between mb-3 pt-0.5">
+            <h2 className="font-display text-base sm:text-lg font-extrabold tracking-[-0.03em] text-white">
               Latest Opportunities
             </h2>
             <button
@@ -1072,15 +1051,15 @@ export default function OpenRolesPage({ enabled = true }) {
                 setSelectedFamily('ALL');
                 setSelectedLocation('ALL');
               }}
-              className="text-xs font-semibold text-paper/60 hover:text-paper transition inline-flex items-center gap-1.5 cursor-pointer"
+              className="text-[11px] sm:text-xs font-semibold text-paper/60 hover:text-paper transition inline-flex items-center gap-1.5 cursor-pointer"
             >
               <span>View All Roles</span>
-              <ArrowRight size={13} />
+              <ArrowRight size={12} />
             </button>
           </div>
 
           {/* Opportunities Grid Section */}
-          <main id="roles-grid-section" className="flex-1 w-full flex flex-col pb-32">
+          <main id="roles-grid-section" className="flex-1 w-full flex flex-col pb-20 sm:pb-24">
             {loading ? (
               <div className="py-24 text-center space-y-3">
                 <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
@@ -1133,7 +1112,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-3.5">
                 {filteredJobs.map((job) => {
                   const role = job.structured_role || {};
                   const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
@@ -1152,19 +1131,19 @@ export default function OpenRolesPage({ enabled = true }) {
                     <article
                       key={job.id}
                       onClick={() => handleOpenJob(job)}
-                      className="group relative rounded-xl sm:rounded-2xl bg-paper/[0.04] hover:bg-paper/[0.08] border border-paper/10 hover:border-white/25 hover:shadow-[0_4px_24px_rgba(255,255,255,0.06)] p-4 sm:p-4.5 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 shadow-md backdrop-blur-md cursor-pointer"
+                      className="group relative rounded-xl sm:rounded-2xl bg-paper/[0.04] hover:bg-paper/[0.08] border border-paper/10 hover:border-white/25 hover:shadow-[0_4px_24px_rgba(255,255,255,0.06)] p-3.5 sm:p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 shadow-md backdrop-blur-md cursor-pointer"
                     >
                       <div>
                         {/* Top Row: Company Initial, Name, Work Mode Badge, Bookmark */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
-                            <div className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-[10.5px] sm:text-[11px] shadow-sm shrink-0">
+                            <div className="w-6 h-6 rounded-md bg-white text-black font-extrabold flex items-center justify-center text-[10px] shadow-sm shrink-0">
                               {companyInitial}
                             </div>
-                            <span className="text-[11px] font-bold text-paper tracking-wider uppercase truncate max-w-[130px]">
+                            <span className="text-[10.5px] font-bold text-paper tracking-wider uppercase truncate max-w-[130px]">
                               {job.company_name || 'Enterprise'}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-paper/10 text-paper/90 border border-paper/15">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-semibold bg-paper/10 text-paper/90 border border-paper/15">
                               {isRemote ? (
                                 <>
                                   <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
@@ -1183,7 +1162,7 @@ export default function OpenRolesPage({ enabled = true }) {
                               )}
                             </span>
                             {isApplied && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white/10 text-white border border-white/20">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-semibold bg-white/10 text-white border border-white/20">
                                 <Check size={9} className="text-white" />
                                 <span>Applied</span>
                               </span>
@@ -1196,45 +1175,45 @@ export default function OpenRolesPage({ enabled = true }) {
                             className="p-1 text-paper/40 hover:text-white transition cursor-pointer"
                             title={isSaved ? 'Remove Bookmark' : 'Save Role'}
                           >
-                            <Bookmark size={14} className={isSaved ? 'text-white fill-white' : ''} />
+                            <Bookmark size={13} className={isSaved ? 'text-white fill-white' : ''} />
                           </button>
                         </div>
 
                         {/* Role Title */}
-                        <h3 className="text-sm sm:text-[15px] font-bold text-paper mt-2.5 tracking-tight group-hover:text-white transition-colors line-clamp-1">
+                        <h3 className="text-[13px] sm:text-sm font-bold text-paper mt-2 tracking-tight group-hover:text-white transition-colors line-clamp-1">
                           {job.title}
                         </h3>
 
                         {/* Meta Information Row */}
-                        <div className="flex items-center gap-2.5 text-[10px] sm:text-[10.5px] text-paper/60 mt-1.5 font-medium">
+                        <div className="flex items-center gap-2 text-[9.5px] sm:text-[10px] text-paper/60 mt-1 font-medium">
                           <div className="flex items-center gap-1 truncate max-w-[110px]" title={locDisplay}>
-                            <MapPin size={11} className="text-paper/40 shrink-0" />
+                            <MapPin size={10} className="text-paper/40 shrink-0" />
                             <span className="truncate">{locDisplay}</span>
                           </div>
                           <span className="text-paper/20">|</span>
                           <div className="flex items-center gap-1 shrink-0">
-                            <Clock size={11} className="text-paper/40 shrink-0" />
+                            <Clock size={10} className="text-paper/40 shrink-0" />
                             <span>{role.duration || '6 Months'}</span>
                           </div>
                           <span className="text-paper/20">|</span>
                           <div className="flex items-center gap-1 shrink-0">
-                            <Users size={11} className="text-paper/40 shrink-0" />
+                            <Users size={10} className="text-paper/40 shrink-0" />
                             <span>{role.experience || '3+ years'}</span>
                           </div>
                         </div>
 
                         {/* Skill Tags */}
-                        <div className="mt-3 flex flex-wrap gap-1">
+                        <div className="mt-2.5 flex flex-wrap gap-1">
                           {skills.slice(0, 4).map((skill) => (
                             <span
                               key={skill}
-                              className="px-2 py-0.5 rounded-md bg-paper/[0.06] border border-paper/10 text-[10px] font-medium text-paper/80"
+                              className="px-1.5 py-0.5 rounded-md bg-paper/[0.06] border border-paper/10 text-[9px] font-medium text-paper/80"
                             >
                               {skill}
                             </span>
                           ))}
                           {skills.length > 4 && (
-                            <span className="px-1.5 py-0.5 rounded-md bg-paper/[0.04] border border-paper/10 text-[9.5px] text-paper/50 font-mono">
+                            <span className="px-1.5 py-0.5 rounded-md bg-paper/[0.04] border border-paper/10 text-[9px] text-paper/50 font-mono">
                               +{skills.length - 4}
                             </span>
                           )}
@@ -1242,9 +1221,9 @@ export default function OpenRolesPage({ enabled = true }) {
                       </div>
 
                       {/* Card Footer: Due Date & Apply Button */}
-                      <div className="mt-3.5 pt-2.5 border-t border-paper/10 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 text-[10px] sm:text-[10.5px] text-paper/60 font-medium">
-                          <Calendar size={12} className="text-paper/40 shrink-0" />
+                      <div className="mt-3 pt-2 border-t border-paper/10 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[9.5px] sm:text-[10px] text-paper/60 font-medium">
+                          <Calendar size={11} className="text-paper/40 shrink-0" />
                           <span>Apply by {dueInfo ? dueInfo.text : 'Sep 27, 2026'}</span>
                           {dueInfo?.daysLeft && (
                             <>
@@ -1254,46 +1233,32 @@ export default function OpenRolesPage({ enabled = true }) {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${job.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[10px] font-bold text-[#229ED9] transition text-decoration-none"
-                            title="Start bot & receive 1-tap alerts for this role"
+                        {isApplied ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenJob(job);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[10px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
+                            title="Application Submitted · Click to view application status"
                           >
-                            <Send size={10} />
-                            <span>Bot</span>
-                          </a>
-
-                          {isApplied ? (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenJob(job);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
-                              title="Application Submitted · Click to view application status"
-                            >
-                              <Check size={12} className="text-white" />
-                              <span>Applied</span>
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenJob(job);
-                              }}
-                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-bold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0 active:scale-95"
-                            >
-                              <span>Apply Now</span>
-                              <ArrowRight size={12} />
-                            </button>
-                          )}
-                        </div>
+                            <Check size={11} className="text-white" />
+                            <span>Applied</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenJob(job);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white hover:bg-neutral-200 text-black font-bold text-[10px] tracking-tight transition shadow-sm cursor-pointer shrink-0 active:scale-95"
+                          >
+                            <span>Apply Now</span>
+                            <ArrowRight size={11} />
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -1301,172 +1266,174 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
             )}
 
-            {/* Unified Candidate Perks Tab (Fixed to Bottom) */}
-            {typeof document !== 'undefined' && createPortal(
-              <div className="fixed bottom-3 sm:bottom-4 z-40 left-0 lg:left-[360px] xl:left-[410px] 2xl:left-[440px] right-0 flex justify-center px-4 pointer-events-none">
-                <div className="w-full max-w-xl mx-auto rounded-2xl sm:rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_16px_50px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden transition-all pointer-events-auto">
-                  {/* 3-Feature Highlights */}
-                  <div className="px-5 py-2.5 sm:py-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-                        <Rocket size={14} className="text-white" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Instant Matching</h4>
-                        <p className="text-[10px] text-white/50 leading-tight truncate">
-                          Auto-matched with relevant roles
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-                        <ShieldCheck size={14} className="text-white" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Verified Opportunities</h4>
-                        <p className="text-[10px] text-white/50 leading-tight truncate">
-                          Direct enterprise requisitions
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-                        <Users size={14} className="text-white" />
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">One Profile, Many Roles</h4>
-                        <p className="text-[10px] text-white/50 leading-tight truncate">
-                          Apply to multiple roles in 1 click
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>,
+            {/* Candidate Navigation (matching landing page SectionNavigation style, visible when signed in) */}
+            {enabled && candidateUser && typeof document !== 'undefined' && createPortal(
+              <nav
+                aria-label="Candidate Navigation"
+                className="fixed right-5 bottom-5 z-40 md:right-10 md:bottom-8 pointer-events-auto"
+              >
+                <ul className="flex flex-col items-end gap-2 md:gap-2.5">
+                  {[
+                    {
+                      id: 'home',
+                      label: 'HOME',
+                      onClick: () => {
+                        setActiveNavTab('home');
+                        setShowAgreementModal(false);
+                        setShowSetupModal(false);
+                        setShowMyAppsModal(false);
+                        document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
+                      },
+                    },
+                    {
+                      id: 'agreement',
+                      label: 'AGREEMENT',
+                      onClick: () => {
+                        setActiveNavTab('agreement');
+                        setShowAgreementModal(true);
+                      },
+                    },
+                    {
+                      id: 'profile',
+                      label: 'PROFILE',
+                      onClick: () => {
+                        setActiveNavTab('profile');
+                        if (candidateUser) {
+                          setShowSetupModal(true);
+                        } else {
+                          setShowAuthModal(true);
+                        }
+                      },
+                    },
+                  ].map((item) => {
+                    const isActive = activeNavTab === item.id;
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={item.onClick}
+                          aria-current={isActive ? 'true' : undefined}
+                          className="text-[0.58rem] md:text-[0.62rem] font-semibold tracking-[0.2em] uppercase transition-opacity duration-300 hover:opacity-100 focus-visible:ring-1 focus-visible:ring-current focus-visible:outline-none text-white cursor-pointer"
+                          style={{ opacity: isActive ? 1 : 0.4 }}
+                        >
+                          {item.label}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </nav>,
               document.body
             )}
           </main>
         </div>
       </div>
 
-  {/* ============================================================ */ }
-{/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */ }
-{/* ============================================================ */ }
-{
-  selectedJob && typeof document !== 'undefined' && createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
-      <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto">
-        {/* Modal Header */}
-        <div className="p-5 sm:p-6 border-b border-white/10 flex items-start justify-between gap-4 bg-white/[0.02]">
-          <div>
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/70">
-                {selectedJob.company_name || 'Enterprise Client'}
-              </span>
-              <span className="text-[10px] text-white/40 font-mono">
-                {selectedJob.ref || `REQ-${selectedJob.id.slice(0, 6).toUpperCase()}`}
-              </span>
-            </div>
-            <h2 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
-              {selectedJob.title}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/60 mt-2">
-              <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/80 font-medium">
-                {selectedJob.structured_role?.work_mode || 'Remote'}
-              </span>
-              <span className="text-white/30">·</span>
-              <span>{selectedJob.structured_role?.duration || '6 Months'}</span>
-              <span className="text-white/30">·</span>
-              <span>{selectedJob.structured_role?.experience || 'Experienced'}</span>
-              {isSelectedJobApplied && (
-                <>
-                  <span className="text-white/30">·</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white border border-white/20">
-                    <Check size={11} className="text-white" />
-                    <span>Application Submitted</span>
+      {/* ============================================================ */}
+      {/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */}
+      {/* ============================================================ */}
+      {selectedJob && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+          <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto">
+            {/* Modal Header */}
+            <div className="p-5 sm:p-6 border-b border-white/10 flex items-start justify-between gap-4 bg-white/[0.02]">
+              <div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/70">
+                    {selectedJob.company_name || 'Enterprise Client'}
                   </span>
-                </>
-              )}
-              {(() => {
-                const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
-                const dInfo = formatDueDate(dVal);
-                if (!dInfo) return null;
-                return (
-                  <>
-                    <span className="text-white/30">·</span>
-                    <span className="inline-flex items-center gap-1 font-medium text-white/80">
-                      <Calendar size={13} className="text-white/50" />
-                      <span>Apply by: {dInfo.text} ({dInfo.daysLeft})</span>
-                    </span>
-                  </>
-                );
-              })()}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setSelectedJob(null)}
-            className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
-          >
-            <X size={16} />
-          </button>
-        </div>
-
-        {/* Modal Scrollable Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-white/80 leading-relaxed font-sans">
-          {submitSuccess ? (
-            <div className="py-8 text-center space-y-4">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
-                <CheckCircle2 size={32} />
-              </div>
-              <div className="space-y-1">
-                <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
-                <p className="text-xs text-white/70 max-w-md mx-auto">
-                  Your profile and resume have been submitted directly to the hiring partner for <strong>{selectedJob?.title || 'this role'}</strong>.
-                </p>
-              </div>
-
-              {/* Connect Telegram / Start Bot Callout */}
-              <div className="p-4 sm:p-5 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-lg mx-auto shadow-lg shadow-sky-950/40">
-                <div className="flex items-center gap-2 text-sky-300 font-bold text-xs sm:text-sm mb-1.5">
-                  <Send size={16} className="text-[#229ED9]" />
-                  <span>Start Bot to Receive 1-Tap Interview & Match Updates</span>
+                  <span className="text-[10px] text-white/40 font-mono">
+                    {selectedJob.ref || `REQ-${selectedJob.id.slice(0, 6).toUpperCase()}`}
+                  </span>
                 </div>
-                <p className="text-xs text-white/70 leading-relaxed mb-3">
-                  Never miss an update from hiring managers. Start our official Telegram Bot now to receive instant interview schedules, video room links, and status updates directly on your phone with 1-tap RSVP buttons.
-                </p>
-                <div className="p-2.5 bg-black/40 rounded-xl border border-sky-500/20 text-[11px] font-mono text-sky-200 mb-3 flex items-center justify-between">
-                  <span>Application Ref: <strong>{submitSuccess.application_ref || submitSuccess.candidate_id}</strong></span>
-                  <span className="text-emerald-400 font-sans font-semibold">Match: {submitSuccess.match_score || 85}%</span>
+                <h2 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
+                  {selectedJob.title}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/60 mt-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/80 font-medium">
+                    {selectedJob.structured_role?.work_mode || 'Remote'}
+                  </span>
+                  <span className="text-white/30">·</span>
+                  <span>{selectedJob.structured_role?.duration || '6 Months'}</span>
+                  <span className="text-white/30">·</span>
+                  <span>{selectedJob.structured_role?.experience || 'Experienced'}</span>
+                  {isSelectedJobApplied && (
+                    <>
+                      <span className="text-white/30">·</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white border border-white/20">
+                        <Check size={11} className="text-white" />
+                        <span>Application Submitted</span>
+                      </span>
+                    </>
+                  )}
+                  {(() => {
+                    const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
+                    const dInfo = formatDueDate(dVal);
+                    if (!dInfo) return null;
+                    return (
+                      <>
+                        <span className="text-white/30">·</span>
+                        <span className="inline-flex items-center gap-1 font-medium text-white/80">
+                          <Calendar size={13} className="text-white/50" />
+                          <span>Apply by: {dInfo.text} ({dInfo.daysLeft})</span>
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
-                <a
-                  href={submitSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${submitSuccess.candidate_id || submitSuccess.application_ref || ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs shadow-md transition text-decoration-none cursor-pointer active:scale-[0.99]"
-                >
-                  <Send size={15} />
-                  <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
-                </a>
               </div>
 
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedJob(null);
-                    setSubmitSuccess(null);
-                  }}
-                  className="px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs transition hover:bg-neutral-200 cursor-pointer shadow-sm"
-                >
-                  Done / Browse More Roles
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedJob(null)}
+                className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
+              >
+                <X size={16} />
+              </button>
             </div>
-          ) : (
+
+            {/* Modal Scrollable Body */}
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-white/80 leading-relaxed font-sans">
+              {submitSuccess ? (
+                <div className="py-10 text-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
+                    <CheckCircle2 size={32} />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
+                  <p className="text-xs text-white/60 max-w-md mx-auto">
+                    Your profile and resume have been submitted directly to the hiring partner. You will receive an interview
+                    invite via email as soon as matching is verified.
+                  </p>
+
+                  {/* Start Telegram Bot Callout */}
+                  <div className="p-4 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-sm mx-auto shadow mt-4">
+                    <div className="flex items-center gap-2 text-sky-300 font-bold text-xs mb-1">
+                      <Send size={14} className="text-[#229ED9]" />
+                      <span>Get Real-time Updates on Telegram</span>
+                    </div>
+                    <p className="text-[11px] text-zinc-300 leading-relaxed mb-3">
+                      Connect with <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive interview scheduling alerts, scores, and status updates directly in Telegram.
+                    </p>
+                    <a
+                      href={submitSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${submitSuccess.candidate_id || submitSuccess.application_ref || ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs transition text-decoration-none cursor-pointer"
+                    >
+                      <Send size={13} />
+                      <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+                    </a>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedJob(null)}
+                    className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs transition hover:bg-neutral-200 cursor-pointer shadow-sm"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
                 <>
                   {/* Deadline Notification Banner */}
                   {(() => {
@@ -1657,35 +1624,6 @@ export default function OpenRolesPage({ enabled = true }) {
                             >
                               Candidate Sign In
                             </button>
-                          </div>
-
-                          {/* Alternative: Start Telegram Bot */}
-                          <div className="pt-2 text-left">
-                            <div className="p-3.5 rounded-xl bg-sky-950/40 border border-sky-500/25 flex flex-col sm:flex-row items-center justify-between gap-3">
-                              <div className="flex items-center gap-2.5">
-                                <div className="w-8 h-8 rounded-lg bg-[#229ED9]/20 text-[#229ED9] flex items-center justify-center shrink-0">
-                                  <Send size={15} />
-                                </div>
-                                <div>
-                                  <div className="text-[11px] font-bold text-white flex items-center gap-1.5">
-                                    <span>Prefer Mobile? Start Bot</span>
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#229ED9]/20 text-[#229ED9] font-mono">@{TELEGRAM_BOT_USERNAME}</span>
-                                  </div>
-                                  <p className="text-[10.5px] text-zinc-400 mt-0.5">
-                                    Get 1-tap alerts & video interview invites in Telegram.
-                                  </p>
-                                </div>
-                              </div>
-                              <a
-                                href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${selectedJob?.id || 'open_roles'}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#229ED9] hover:bg-[#1E88E5] text-white text-[11px] font-bold transition text-decoration-none cursor-pointer"
-                              >
-                                <Send size={12} />
-                                <span>Start Bot</span>
-                              </a>
-                            </div>
                           </div>
                         </div>
 
@@ -1943,691 +1881,751 @@ export default function OpenRolesPage({ enabled = true }) {
                   </div>
                 </>
               )}
-              </div>
             </div>
+          </div>
         </div>,
         document.body
       )}
 
-        {/* ============================================================ */}
-        {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
-        {/* ============================================================ */}
-        {showMyAppsModal && typeof document !== 'undefined' && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
-            <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                <h3 className="text-base font-bold text-white">Your Submitted Applications</h3>
-                <button
-                  type="button"
-                  onClick={() => setShowMyAppsModal(false)}
-                  className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
-                {applications.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-white/50">
-                    You haven't submitted any applications yet.
-                  </div>
-                ) : (
-                  applications.map((app, i) => (
-                    <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
-                      <div>
-                        <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
-                        <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'}</div>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
-                        {app.status || 'Under Review'}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
+      {/* ============================================================ */}
+      {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
+      {/* ============================================================ */}
+      {showMyAppsModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <h3 className="text-base font-bold text-white">Your Submitted Applications</h3>
+              <button
+                type="button"
+                onClick={() => setShowMyAppsModal(false)}
+                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
             </div>
-          </div>,
-          document.body
-        )}
 
-        {/* ============================================================ */}
-        {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
-        {/* ============================================================ */}
-        {showSetupModal && typeof document !== 'undefined' && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
-            <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
-              <div className="flex items-center justify-between pb-4 border-b border-white/10">
-                <div>
-                  <h3 className="text-base font-bold text-white">Candidate Profile & Resume</h3>
-                  <p className="text-xs text-white/50">Keep your details up to date for instant 1-click applications.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowSetupModal(false)}
-                  className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              {setupSuccess ? (
-                <div className="py-8 text-center space-y-2">
-                  <CheckCircle2 size={32} className="text-white mx-auto" />
-                  <h4 className="text-sm font-bold text-white">Profile Updated Successfully</h4>
+            <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
+              {applications.length === 0 ? (
+                <div className="py-8 text-center text-xs text-white/50">
+                  You haven't submitted any applications yet.
                 </div>
               ) : (
-                <form onSubmit={handleSetupSubmit} className="mt-4 space-y-3.5 text-xs">
-                  {setupError && (
-                    <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
-                      {setupError}
+                applications.map((app, i) => (
+                  <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
+                      <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'}</div>
                     </div>
-                  )}
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
+                      {app.status || 'Under Review'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
+      {/* ============================================================ */}
+      {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
+      {/* ============================================================ */}
+      {showSetupModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div>
+                <h3 className="text-base font-bold text-white">Candidate Profile & Resume</h3>
+                <p className="text-xs text-white/50">Keep your details up to date for instant 1-click applications.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSetupModal(false);
+                  setActiveNavTab('home');
+                }}
+                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {setupSuccess ? (
+              <div className="py-8 text-center space-y-2">
+                <CheckCircle2 size={32} className="text-white mx-auto" />
+                <h4 className="text-sm font-bold text-white">Profile Updated Successfully</h4>
+              </div>
+            ) : (
+              <form onSubmit={handleSetupSubmit} className="mt-4 space-y-3.5 text-xs">
+                {setupError && (
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                    {setupError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={setupForm.name}
+                    onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-white/35"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Phone Number *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={setupForm.phone}
+                    onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Professional Title</label>
+                  <input
+                    type="text"
+                    value={setupForm.title}
+                    onChange={(e) => setSetupForm({ ...setupForm, title: e.target.value })}
+                    placeholder="e.g. Senior Frontend Engineer"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Skills (comma separated)</label>
+                  <input
+                    type="text"
+                    value={setupForm.skills}
+                    onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
+                    placeholder="React, TypeScript, Node.js, Next.js"
+                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Resume File (PDF/DOCX)</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc"
+                    onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700"
+                  />
+                  {hasResume && !setupResumeFile && (
+                    <div className="text-[10px] text-white/60 mt-1">Existing resume: {currentResumeName}</div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={setupSubmitting}
+                  className="w-full py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-sm"
+                >
+                  {setupSubmitting ? 'Saving Profile...' : 'Save Profile Details'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 4: GENERAL TALENT POOL                                 */}
+      {/* ============================================================ */}
+      {showGeneralPoolModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+          <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all">
+            <div className="flex items-start justify-between pb-4 border-b border-white/10">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50 mb-1">
+                  Candidate Talent Network
+                </div>
+                <h3 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
+                  Join General Talent Pool
+                </h3>
+                <p className="text-xs text-white/50 mt-1">
+                  Get auto-matched with upcoming enterprise contract roles and verified hiring partners.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowGeneralPoolModal(false)}
+                className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {poolSuccess ? (
+              <div className="py-8 text-center space-y-3">
+                <div className="w-14 h-14 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
+                  <CheckCircle2 size={30} />
+                </div>
+                <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
+                <p className="text-xs text-white/60 max-w-xs mx-auto">
+                  We will notify you via email as soon as an enterprise requisition matching your skillset is published.
+                </p>
+
+                {/* Start Telegram Bot Callout */}
+                <div className="p-4 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-sm mx-auto shadow mt-4">
+                  <div className="flex items-center gap-2 text-sky-300 font-bold text-xs mb-1">
+                    <Send size={14} className="text-[#229ED9]" />
+                    <span>Start Bot for 1-Tap Matching Alerts</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed mb-3">
+                    Connect <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive notifications directly in Telegram with 1-tap RSVP buttons.
+                  </p>
+                  <a
+                    href={poolSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${poolSuccess.candidate_id || ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs transition text-decoration-none cursor-pointer"
+                  >
+                    <Send size={13} />
+                    <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+                  </a>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowGeneralPoolModal(false);
+                    setPoolSuccess(null);
+                  }}
+                  className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition shadow-sm cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handlePoolSubmit} className="mt-5 space-y-4 text-xs">
+                {candidateUser && (
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center text-[11px] font-bold border border-white/20">
+                        {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                          <span>Joining as</span>
+                          <span className="font-bold text-white">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                          <span className="text-[10px] font-bold bg-white/10 text-white/90 border border-white/20 px-1.5 py-0.2 rounded-full">
+                            Verified
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-white/50 mt-0.5">
+                          {hasResume ? '✓ Master resume on profile ready' : 'Upload your resume below to complete'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {poolError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0" />
+                    <span>{poolError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Full Name *</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
-                      value={setupForm.name}
-                      onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-white/35"
+                      value={poolForm.name}
+                      onChange={(e) => setPoolForm({ ...poolForm, name: e.target.value })}
+                      placeholder="e.g. Alex Johnson"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Phone Number *</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email Address *</label>
+                    <input
+                      type="email"
+                      required
+                      value={poolForm.email}
+                      onChange={(e) => setPoolForm({ ...poolForm, email: e.target.value })}
+                      placeholder="alex@example.com"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone Number *</label>
                     <input
                       type="tel"
                       required
-                      value={setupForm.phone}
-                      onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                      value={poolForm.phone}
+                      onChange={(e) => setPoolForm({ ...poolForm, phone: e.target.value })}
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
-
                   <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Professional Title</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Target Title / Role *</label>
                     <input
                       type="text"
-                      value={setupForm.title}
-                      onChange={(e) => setSetupForm({ ...setupForm, title: e.target.value })}
-                      placeholder="e.g. Senior Frontend Engineer"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                      required
+                      value={poolForm.title}
+                      onChange={(e) => setPoolForm({ ...poolForm, title: e.target.value })}
+                      placeholder="e.g. Senior Frontend Lead"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Skills (comma separated)</label>
-                    <input
-                      type="text"
-                      value={setupForm.skills}
-                      onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
-                      placeholder="React, TypeScript, Node.js, Next.js"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Resume File (PDF/DOCX)</label>
-                    <input
-                      type="file"
-                      accept=".pdf,.docx,.doc"
-                      onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
-                      className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700"
-                    />
-                    {hasResume && !setupResumeFile && (
-                      <div className="text-[10px] text-white/60 mt-1">Existing resume: {currentResumeName}</div>
-                    )}
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={setupSubmitting}
-                    className="w-full py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-sm"
-                  >
-                    {setupSubmitting ? 'Saving Profile...' : 'Save Profile Details'}
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>,
-          document.body
-        )}
-
-        {/* ============================================================ */}
-        {/* MODAL 4: GENERAL TALENT POOL                                 */}
-        {/* ============================================================ */}
-        {showGeneralPoolModal && typeof document !== 'undefined' && createPortal(
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
-            <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all">
-              <div className="flex items-start justify-between pb-4 border-b border-white/10">
-                <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50 mb-1">
-                    Candidate Talent Network
-                  </div>
-                  <h3 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
-                    Join General Talent Pool
-                  </h3>
-                  <p className="text-xs text-white/50 mt-1">
-                    Get auto-matched with upcoming enterprise contract roles and verified hiring partners.
-                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowGeneralPoolModal(false)}
-                  className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
-                >
-                  <X size={16} />
-                </button>
-              </div>
 
-              {poolSuccess ? (
-                <div className="py-8 text-center space-y-4">
-                  <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
-                    <CheckCircle2 size={30} />
-                  </div>
-                  <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
-                  <p className="text-xs text-white/60 max-w-sm mx-auto">
-                    We will notify you via email and Telegram as soon as an enterprise requisition matching your skillset is published.
-                  </p>
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Core Skills (Optional)</label>
+                  <input
+                    type="text"
+                    value={poolForm.skills}
+                    onChange={(e) => setPoolForm({ ...poolForm, skills: e.target.value })}
+                    placeholder="e.g. React, TypeScript, Node.js, AWS"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                  />
+                </div>
 
-                  {/* Start Telegram Bot Callout */}
-                  <div className="p-4 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-sm mx-auto shadow">
-                    <div className="flex items-center gap-2 text-sky-300 font-bold text-xs mb-1">
-                      <Send size={14} className="text-[#229ED9]" />
-                      <span>Start Bot for 1-Tap Matching Alerts</span>
+                {/* Resume Dropzone */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
+                    Resume Document *
+                  </label>
+
+                  {hasResume && !poolUseCustomResume ? (
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <FileText size={18} className="text-white/70" />
+                        <div>
+                          <div className="text-xs font-semibold text-white">{currentResumeName}</div>
+                          <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPoolUseCustomResume(true)}
+                        className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
+                      >
+                        Upload different file
+                      </button>
                     </div>
-                    <p className="text-[11px] text-white/70 leading-relaxed mb-3">
-                      Connect <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive notifications directly in Telegram with 1-tap RSVP buttons.
-                    </p>
-                    <a
-                      href={poolSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${poolSuccess.candidate_id || ''}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs transition text-decoration-none cursor-pointer"
+                  ) : (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setPoolIsDragging(true);
+                      }}
+                      onDragLeave={() => setPoolIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setPoolIsDragging(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          setPoolResume(file);
+                          setPoolError(null);
+                        }
+                      }}
+                      onClick={() => poolFileInputRef.current?.click()}
+                      className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
+                          ? 'border-white bg-white/[0.08]'
+                          : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                        }`}
                     >
-                      <Send size={13} />
-                      <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
-                    </a>
-                  </div>
+                      <input
+                        type="file"
+                        ref={poolFileInputRef}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setPoolResume(file);
+                            setPoolError(null);
+                          }
+                        }}
+                        accept=".pdf,.docx,.doc"
+                        className="hidden"
+                      />
+                      <Upload size={22} className="text-white/40 mx-auto mb-2" />
+                      {poolResume ? (
+                        <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
+                          <Check size={14} className="text-white" />
+                          <span>{poolResume.name} ({(poolResume.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-xs font-semibold text-white/90">
+                            Drop resume here or click to browse
+                          </div>
+                          <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
+                        </>
+                      )}
+                    </div>
+                  )}
 
-                  <div>
+                  {poolUseCustomResume && hasResume && (
                     <button
                       type="button"
                       onClick={() => {
-                        setShowGeneralPoolModal(false);
-                        setPoolSuccess(null);
+                        setPoolUseCustomResume(false);
+                        setPoolResume(null);
                       }}
-                      className="mt-2 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition shadow-sm cursor-pointer"
+                      className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
                     >
-                      Done
+                      ← Use saved profile resume instead
                     </button>
-                  </div>
+                  )}
                 </div>
-              ) : (
-                  <form onSubmit={handlePoolSubmit} className="mt-5 space-y-4 text-xs">
-                    {candidateUser && (
-                      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center text-[11px] font-bold border border-white/20">
-                            {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="text-xs font-semibold text-white flex items-center gap-1.5">
-                              <span>Joining as</span>
-                              <span className="font-bold text-white">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
-                              <span className="text-[10px] font-bold bg-white/10 text-white/90 border border-white/20 px-1.5 py-0.2 rounded-full">
-                                Verified
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-white/50 mt-0.5">
-                              {hasResume ? '✓ Master resume on profile ready' : 'Upload your resume below to complete'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
 
-                    {poolError && (
-                      <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                        <AlertCircle size={15} className="shrink-0" />
-                        <span>{poolError}</span>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
-                        <input
-                          type="text"
-                          required
-                          value={poolForm.name}
-                          onChange={(e) => setPoolForm({ ...poolForm, name: e.target.value })}
-                          placeholder="e.g. Alex Johnson"
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email Address *</label>
-                        <input
-                          type="email"
-                          required
-                          value={poolForm.email}
-                          onChange={(e) => setPoolForm({ ...poolForm, email: e.target.value })}
-                          placeholder="alex@example.com"
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone Number *</label>
-                        <input
-                          type="tel"
-                          required
-                          value={poolForm.phone}
-                          onChange={(e) => setPoolForm({ ...poolForm, phone: e.target.value })}
-                          placeholder="+1 (555) 000-0000"
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Target Title / Role *</label>
-                        <input
-                          type="text"
-                          required
-                          value={poolForm.title}
-                          onChange={(e) => setPoolForm({ ...poolForm, title: e.target.value })}
-                          placeholder="e.g. Senior Frontend Lead"
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Core Skills (Optional)</label>
-                      <input
-                        type="text"
-                        value={poolForm.skills}
-                        onChange={(e) => setPoolForm({ ...poolForm, skills: e.target.value })}
-                        placeholder="e.g. React, TypeScript, Node.js, AWS"
-                        className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                      />
-                    </div>
-
-                    {/* Resume Dropzone */}
-                    <div>
-                      <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
-                        Resume Document *
-                      </label>
-
-                      {hasResume && !poolUseCustomResume ? (
-                        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <FileText size={18} className="text-white/70" />
-                            <div>
-                              <div className="text-xs font-semibold text-white">{currentResumeName}</div>
-                              <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPoolUseCustomResume(true)}
-                            className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
-                          >
-                            Upload different file
-                          </button>
-                        </div>
-                      ) : (
-                        <div
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            setPoolIsDragging(true);
-                          }}
-                          onDragLeave={() => setPoolIsDragging(false)}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            setPoolIsDragging(false);
-                            const file = e.dataTransfer.files?.[0];
-                            if (file) {
-                              setPoolResume(file);
-                              setPoolError(null);
-                            }
-                          }}
-                          onClick={() => poolFileInputRef.current?.click()}
-                          className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
-                              ? 'border-white bg-white/[0.08]'
-                              : 'border-white/15 bg-white/[0.02] hover:border-white/30'
-                            }`}
-                        >
-                          <input
-                            type="file"
-                            ref={poolFileInputRef}
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) {
-                                setPoolResume(file);
-                                setPoolError(null);
-                              }
-                            }}
-                            accept=".pdf,.docx,.doc"
-                            className="hidden"
-                          />
-                          <Upload size={22} className="text-white/40 mx-auto mb-2" />
-                          {poolResume ? (
-                            <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
-                              <Check size={14} className="text-white" />
-                              <span>{poolResume.name} ({(poolResume.size / 1024 / 1024).toFixed(2)} MB)</span>
-                            </div>
-                          ) : (
-                            <>
-                              <div className="text-xs font-semibold text-white/90">
-                                Drop resume here or click to browse
-                              </div>
-                              <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {poolUseCustomResume && hasResume && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setPoolUseCustomResume(false);
-                            setPoolResume(null);
-                          }}
-                          className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
-                        >
-                          ← Use saved profile resume instead
-                        </button>
-                      )}
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={poolSubmitting}
-                      className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3"
-                    >
-                      {poolSubmitting ? 'Submitting Profile...' : 'Join Talent Network'}
-                    </button>
-                  </form>
+                <button
+                  type="submit"
+                  disabled={poolSubmitting}
+                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3"
+                >
+                  {poolSubmitting ? 'Submitting Profile...' : 'Join Talent Network'}
+                </button>
+              </form>
             )}
-                </div>
+          </div>
         </div>,
         document.body
       )}
 
-            {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
-            {showAuthModal && typeof document !== 'undefined' && createPortal(
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
-                <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-md w-full shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
-                  {/* Close button */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowAuthModal(false);
-                      setAuthError(null);
-                      setAuthSuccessMsg('');
-                    }}
-                    className="absolute top-5 right-5 p-2 rounded-full text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition cursor-pointer"
-                  >
-                    <X size={16} />
-                  </button>
+      {/* ============================================================ */}
+      {/* MODAL 5: CANDIDATE AGREEMENTS & CONTRACT TERMS                */}
+      {/* ============================================================ */}
+      {showAgreementModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-white/[0.08] border border-white/10 flex items-center justify-center text-white shrink-0">
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white leading-tight">Agreements & Contracts</h3>
+                  <p className="text-[11px] text-white/50">Master Services Agreements & Compliance</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAgreementModal(false);
+                  setActiveNavTab('home');
+                }}
+                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
 
-                  {/* Brand Header */}
-                  <div className="text-center mb-6">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.06] border border-white/10 text-[0.65rem] font-bold tracking-[0.2em] text-white/70 uppercase mb-3">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
-                      <span>Candidate Talent Portal</span>
-                    </div>
-                    <h3 className="font-display text-xl font-extrabold text-white tracking-tight">
-                      {authModalTab === 'login' ? 'Sign In to Open Roles' : 'Create Talent Profile'}
-                    </h3>
-                    <p className="text-xs text-white/60 mt-1">
-                      {authModalTab === 'login'
-                        ? 'Access verified partner requisitions and 1-click apply.'
-                        : 'Join the verified talent network to browse and apply for roles.'}
-                    </p>
+            <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
+              {applications.length === 0 ? (
+                <div className="py-8 text-center space-y-2">
+                  <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-white/50 mx-auto mb-2">
+                    <FileText size={20} />
                   </div>
-
-                  {/* 1-Click Google OAuth (Primary Action) */}
-                  <button
-                    type="button"
-                    onClick={() => handleGoogleSignIn()}
-                    disabled={authLoading}
-                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-200 text-neutral-900 font-bold text-xs tracking-wide shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
-                  >
-                    <GoogleIcon className="w-4 h-4" />
-                    <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
-                  </button>
-
-                  {/* Divider */}
-                  <div className="relative flex items-center justify-center mb-5">
-                    <div className="border-t border-white/10 w-full" />
-                    <span className="bg-[#0a0b10] px-3 text-[10px] font-bold uppercase tracking-wider text-white/40 absolute">
-                      or use candidate credentials
+                  <h4 className="text-sm font-bold text-white">No Active Agreements Pending</h4>
+                  <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
+                    Once an enterprise partner approves your application, your Master Services Agreement (MSA) and Statement of Work (SOW) will appear here for digital review and signing.
+                  </p>
+                </div>
+              ) : (
+                applications.map((app, i) => (
+                  <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
+                      <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'} · MSA Linked</div>
+                    </div>
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
+                      Standard Terms
                     </span>
                   </div>
+                ))
+              )}
+            </div>
 
-                  {/* Tab Switcher */}
-                  <div className="flex p-1 bg-white/[0.04] border border-white/10 rounded-xl mb-4">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthModalTab('login');
-                        setAuthError(null);
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
-                          ? 'bg-white text-black shadow-xs'
-                          : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                      Sign In
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuthModalTab('register');
-                        setAuthError(null);
-                      }}
-                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
-                          ? 'bg-white text-black shadow-xs'
-                          : 'text-white/60 hover:text-white'
-                        }`}
-                    >
-                      Create Profile
-                    </button>
-                  </div>
+            <div className="mt-5 pt-3 border-t border-white/10 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAgreementModal(false);
+                  setActiveNavTab('home');
+                }}
+                className="px-4 py-1.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition cursor-pointer shadow-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
-                  {/* Alerts */}
-                  {authError && (
-                    <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-start gap-2">
-                      <AlertCircle size={15} className="shrink-0 mt-0.5" />
-                      <span className="flex-1">{authError}</span>
-                    </div>
-                  )}
+      {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
+      {showAuthModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-md w-full shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowAuthModal(false);
+                setAuthError(null);
+                setAuthSuccessMsg('');
+                setActiveNavTab('home');
+              }}
+              className="absolute top-5 right-5 p-2 rounded-full text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition cursor-pointer"
+            >
+              <X size={16} />
+            </button>
 
-                  {authSuccessMsg && (
-                    <div className="p-3 mb-4 rounded-xl bg-white/[0.06] border border-white/15 text-white text-xs flex items-center gap-2">
-                      <CheckCircle2 size={15} className="shrink-0 text-white" />
-                      <span>{authSuccessMsg}</span>
-                    </div>
-                  )}
+            {/* Brand Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.06] border border-white/10 text-[0.65rem] font-bold tracking-[0.2em] text-white/70 uppercase mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
+                <span>Candidate Talent Portal</span>
+              </div>
+              <h3 className="font-display text-xl font-extrabold text-white tracking-tight">
+                {authModalTab === 'login' ? 'Sign In to Open Roles' : 'Create Talent Profile'}
+              </h3>
+              <p className="text-xs text-white/60 mt-1">
+                {authModalTab === 'login'
+                  ? 'Access verified partner requisitions and 1-click apply.'
+                  : 'Join the verified talent network to browse and apply for roles.'}
+              </p>
+            </div>
 
-                  {/* TAB 1: LOGIN FORM */}
-                  {authModalTab === 'login' && (
-                    <form onSubmit={handleEmailLogin} className="space-y-3.5">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                          Email Address
-                        </label>
-                        <div className="relative">
-                          <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
-                          <input
-                            type="email"
-                            required
-                            value={authEmail}
-                            onChange={(e) => setAuthEmail(e.target.value)}
-                            placeholder="you@domain.com"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                      </div>
+            {/* 1-Click Google OAuth (Primary Action) */}
+            <button
+              type="button"
+              onClick={() => handleGoogleSignIn()}
+              disabled={authLoading}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-200 text-neutral-900 font-bold text-xs tracking-wide shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
+            >
+              <GoogleIcon className="w-4 h-4" />
+              <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
+            </button>
 
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                          Password
-                        </label>
-                        <div className="relative">
-                          <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
-                          <input
-                            type={showAuthPassword ? 'text' : 'password'}
-                            required
-                            value={authPassword}
-                            onChange={(e) => setAuthPassword(e.target.value)}
-                            placeholder="••••••••"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowAuthPassword(!showAuthPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
-                          >
-                            {showAuthPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                          </button>
-                        </div>
-                      </div>
+            {/* Divider */}
+            <div className="relative flex items-center justify-center mb-5">
+              <div className="border-t border-white/10 w-full" />
+              <span className="bg-[#0a0b10] px-3 text-[10px] font-bold uppercase tracking-wider text-white/40 absolute">
+                or use candidate credentials
+              </span>
+            </div>
 
-                      <button
-                        type="submit"
-                        disabled={authLoading}
-                        className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
-                      >
-                        {authLoading ? 'Signing In…' : 'Sign In to Candidate Profile'}
-                      </button>
-                    </form>
-                  )}
+            {/* Tab Switcher */}
+            <div className="flex p-1 bg-white/[0.04] border border-white/10 rounded-xl mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalTab('login');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
+                    ? 'bg-white text-black shadow-xs'
+                    : 'text-white/60 hover:text-white'
+                  }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthModalTab('register');
+                  setAuthError(null);
+                }}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
+                    ? 'bg-white text-black shadow-xs'
+                    : 'text-white/60 hover:text-white'
+                  }`}
+              >
+                Create Profile
+              </button>
+            </div>
 
-                  {/* TAB 2: REGISTER FORM */}
-                  {authModalTab === 'register' && (
-                    <form onSubmit={handleRegisterSubmit} className="space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
-                          <input
-                            type="text"
-                            required
-                            value={regName}
-                            onChange={(e) => setRegName(e.target.value)}
-                            placeholder="Alex Johnson"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email *</label>
-                          <input
-                            type="email"
-                            required
-                            value={regEmail}
-                            onChange={(e) => setRegEmail(e.target.value)}
-                            placeholder="alex@example.com"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                        <div>
-                          <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Password *</label>
-                          <input
-                            type="password"
-                            required
-                            minLength={6}
-                            value={regPassword}
-                            onChange={(e) => setRegPassword(e.target.value)}
-                            placeholder="Min 6 characters"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone</label>
-                          <input
-                            type="tel"
-                            value={regPhone}
-                            onChange={(e) => setRegPhone(e.target.value)}
-                            placeholder="+1 (555) 000-0000"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Professional Title</label>
-                        <input
-                          type="text"
-                          value={regTitle}
-                          onChange={(e) => setRegTitle(e.target.value)}
-                          placeholder="e.g. Senior Fullstack Engineer"
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
-                        <input
-                          type="text"
-                          value={regSkills}
-                          onChange={(e) => setRegSkills(e.target.value)}
-                          placeholder="React, TypeScript, Python, Node.js"
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
-                        <input
-                          type="file"
-                          accept=".pdf,.docx,.doc"
-                          onChange={(e) => setRegResume(e.target.files?.[0] || null)}
-                          className="w-full text-xs text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-white/15 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 file:transition cursor-pointer"
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={authLoading}
-                        className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
-                      >
-                        {authLoading ? 'Creating Profile…' : 'Create Profile & Access Roles'}
-                      </button>
-                    </form>
-                  )}
-
-                  {/* Telegram Bot Direct Option */}
-                  <div className="mt-4 pt-3 border-t border-paper/10 text-center">
-                    <a
-                      href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 text-xs text-[#229ED9] hover:underline font-semibold text-decoration-none"
-                    >
-                      <Send size={12} />
-                      <span>Prefer instant mobile alerts? Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
-                    </a>
-                  </div>
-
-                  {/* Footer Security Note */}
-                  <div className="mt-3 pt-2 border-t border-paper/10 flex items-center justify-center gap-1.5 text-[11px] text-paper/40">
-                    <ShieldCheck size={13} className="text-emerald-400" />
-                    <span>Verified candidate session · Encrypted data</span>
-                  </div>
-                </div>
-              </div>,
-              document.body
+            {/* Alerts */}
+            {authError && (
+              <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-start gap-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                <span className="flex-1">{authError}</span>
+              </div>
             )}
 
+            {authSuccessMsg && (
+              <div className="p-3 mb-4 rounded-xl bg-white/[0.06] border border-white/15 text-white text-xs flex items-center gap-2">
+                <CheckCircle2 size={15} className="shrink-0 text-white" />
+                <span>{authSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* TAB 1: LOGIN FORM */}
+            {authModalTab === 'login' && (
+              <form onSubmit={handleEmailLogin} className="space-y-3.5">
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+                    <input
+                      type="email"
+                      required
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="you@domain.com"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+                    <input
+                      type={showAuthPassword ? 'text' : 'password'}
+                      required
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthPassword(!showAuthPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                    >
+                      {showAuthPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
+                >
+                  {authLoading ? 'Signing In…' : 'Sign In to Candidate Profile'}
+                </button>
+              </form>
+            )}
+
+            {/* TAB 2: REGISTER FORM */}
+            {authModalTab === 'register' && (
+              <form onSubmit={handleRegisterSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Alex Johnson"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="alex@example.com"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Password *</label>
+                    <input
+                      type="password"
+                      required
+                      minLength={6}
+                      value={regPassword}
+                      onChange={(e) => setRegPassword(e.target.value)}
+                      placeholder="Min 6 characters"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone</label>
+                    <input
+                      type="tel"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Professional Title</label>
+                  <input
+                    type="text"
+                    value={regTitle}
+                    onChange={(e) => setRegTitle(e.target.value)}
+                    placeholder="e.g. Senior Fullstack Engineer"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={regSkills}
+                    onChange={(e) => setRegSkills(e.target.value)}
+                    placeholder="React, TypeScript, Python, Node.js"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
+                  <input
+                    type="file"
+                    accept=".pdf,.docx,.doc"
+                    onChange={(e) => setRegResume(e.target.files?.[0] || null)}
+                    className="w-full text-xs text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-white/15 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 file:transition cursor-pointer"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
+                >
+                  {authLoading ? 'Creating Profile…' : 'Create Profile & Access Roles'}
+                </button>
+              </form>
+            )}
+
+            {/* Footer Security Note */}
+            <div className="mt-4 pt-3 border-t border-paper/10 flex items-center justify-center gap-1.5 text-[11px] text-paper/40">
+              <ShieldCheck size={13} className="text-emerald-400" />
+              <span>Verified candidate session · Encrypted data</span>
+            </div>
           </div>
-        );
+        </div>,
+        document.body
+      )}
+
+    </div>
+  );
 }
