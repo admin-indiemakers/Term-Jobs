@@ -11,7 +11,11 @@ import asyncio
 import uuid
 from typing import AsyncGenerator
 
-from loguru import logger
+try:
+    from loguru import logger
+except ImportError:
+    import logging
+    logger = logging.getLogger(__name__)
 from openai import RateLimitError, AuthenticationError, NotFoundError
 
 from pipecat.frames.frames import Frame, TTSSpeakFrame

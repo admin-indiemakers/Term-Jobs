@@ -23,6 +23,9 @@ import asyncio
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -59,11 +62,49 @@ from modules.onboarding.offboarding_router import router as offboarding_router
 from modules.candidate_profile.router import router as candidate_profile_router
 
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Modern lifespan context manager for startup & shutdown tasks."""
+    try:
+        from modules.candidate.telegram_service import start_telegram_polling
+        start_telegram_polling()
+        print("[APP STARTUP] Telegram Bot long-polling initialized successfully.")
+    except Exception as exc:
+        print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
+
+    # Launch 48-Hour Shortlist auto-dispatch background worker
+    worker_task = None
+    async def _shortlist_worker():
+        while True:
+            try:
+                await asyncio.sleep(60)
+                from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
+                auto_check_and_dispatch_48h_shortlists()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                pass
+    worker_task = asyncio.create_task(_shortlist_worker())
+
+    yield
+
+    # Shutdown
+    if worker_task:
+        worker_task.cancel()
+    try:
+        from modules.candidate.telegram_service import stop_telegram_polling
+        stop_telegram_polling()
+    except Exception:
+        pass
+
+
 app = FastAPI(
     title="TermJobs Requisition API",
     description="Intake and structure job requisitions using AI agents.",
-    
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
@@ -738,7 +779,7 @@ def _normalize_template(payload: dict) -> dict:
 
     certs_raw = role_src.get("certifications") or ""
     certifications = (
-        [c.strip() for c in str(certs_raw).split(",") if c.strip()]
+        [c.strip() for c in certs_raw.split(",") if c.strip()]
         if isinstance(certs_raw, str) and certs_raw
         else (certs_raw or [])
     )
@@ -905,8 +946,8 @@ def create_requisition(
     req = service.create(
         company_profile_id=body.company_profile_id,
         intent=intent,
-        created_by=body.created_by or current_user.id,
-        tenant_id=current_user.tenant_id,
+        created_by=str(body.created_by or current_user.id or ""),
+        tenant_id=str(current_user.tenant_id or ""),
         intake_meta={
             "intake_mode": body.intake_mode,
             "background_profile_id": body.background_profile_id,
@@ -916,9 +957,40 @@ def create_requisition(
             "prefill": body.prefill or {},
         },
     )
+    # Sync requisition document to MongoDB
+    try:
+        from modules.shared.db import db
+        now_iso = _utcnow().isoformat()
+        comp_name = getattr(prof, "name", "") if prof else ""
+        structured = req.structured_role or {}
+        req_skills = []
+        if isinstance(structured, dict):
+            req_skills = structured.get("skills") or structured.get("must_have_skills") or []
+        db["requisitions"].update_one(
+            {"id": req.id},
+            {"$set": {
+                "id": req.id,
+                "title": req.title,
+                "status": req.status,
+                "tenant_id": req.tenant_id,
+                "company_profile_id": req.company_profile_id,
+                "company_name": comp_name,
+                "client_name": comp_name,
+                "description": body.description or body.prompt or "",
+                "structured_role": structured,
+                "skills": req_skills,
+                "created_by": req.created_by,
+                "created_at": now_iso,
+                "updated_at": now_iso,
+            }},
+            upsert=True
+        )
+    except Exception as db_sync_err:
+        logger.warning(f"Failed to sync created requisition to MongoDB: {db_sync_err}")
+
     _cache.clear()
-    background_tasks.add_task(_async_trigger_top_candidate_outreach, req.id)
-    return _requisition_dict(req.id)
+    background_tasks.add_task(_async_trigger_top_candidate_outreach, str(req.id))
+    return _requisition_dict(str(req.id))
 
 
 @app.get("/requisitions")
@@ -1827,6 +1899,12 @@ async def add_superadmin_candidate(
                     pass
 
     cand_skills = [s.strip() for s in skills.split(",") if s.strip()]
+    if not cand_skills and extracted_text:
+        try:
+            from modules.candidate.extractor import _build_fallback_profile
+            cand_skills = _build_fallback_profile(extracted_text, filename).get("skills", [])
+        except Exception:
+            pass
     now_utc = datetime.now(timezone.utc)
     cand_id = f"CND-ADM-{uuid.uuid4().hex[:8]}"
 
@@ -2173,8 +2251,9 @@ try:
         t.start()
 
     bus.on("requisition.published", _on_requisition_published_bus)
+    bus.on("requisition.created", _on_requisition_published_bus)
 except Exception as bus_err:
-    logger.warning(f"Could not bind requisition.published to outreach: {bus_err}")
+    logger.warning(f"Could not bind requisition lifecycle to outreach: {bus_err}")
 
 
 
@@ -2508,39 +2587,7 @@ def get_superadmin_outreach_activity(current_user: User = Depends(get_current_us
 
 # --- Telegram Bot Endpoints & Lifecycle ---
 
-@app.on_event("startup")
-async def on_app_startup():
-    """Start background services on app launch."""
-    try:
-        from modules.candidate.telegram_service import start_telegram_polling
-        start_telegram_polling()
-        print("[APP STARTUP] Telegram Bot long-polling initialized successfully.")
-    except Exception as exc:
-        print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
 
-    # Launch 48-Hour Shortlist auto-dispatch background worker
-    async def _shortlist_worker():
-        while True:
-            try:
-                await asyncio.sleep(60)
-                from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
-                auto_check_and_dispatch_48h_shortlists()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                pass
-    asyncio.create_task(_shortlist_worker())
-
-
-
-@app.on_event("shutdown")
-async def on_app_shutdown():
-    """Cleanly tear down background tasks."""
-    try:
-        from modules.candidate.telegram_service import stop_telegram_polling
-        stop_telegram_polling()
-    except Exception:
-        pass
 
 
 @app.get("/api/telegram/status")
@@ -2607,7 +2654,7 @@ def get_requisition(requisition_id: str, current_user: User = Depends(get_curren
     _auto_check_shortlists_48h()
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
-    is_vendor = current_user.role == "Recruiter"
+    is_vendor = str(getattr(current_user, "role", "") or "") == "Recruiter"
     if is_vendor and req.status != schemas.RequisitionStatus.PUBLISHED.value:
         raise HTTPException(status_code=403, detail="This requisition is not published to vendors yet.")
     return _requisition_dict(requisition_id, for_vendor=is_vendor)
@@ -2847,7 +2894,8 @@ def publish_requisition(
                 "shortlist_instant_sent": False,
                 "shortlist_candidate_count": 0,
                 "updated_at": now_iso,
-            }}
+            }},
+            upsert=True
         )
     except Exception:
         pass
@@ -3054,13 +3102,39 @@ def _extract_structured_fields(text: str) -> dict:
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
-    """Extract text from PDF bytes."""
+    """Extract text from PDF bytes with resilient multi-library fallback."""
     try:
-        from pypdf import PdfReader
-        import io
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        extracted_text = "\n".join(page.extract_text() or "" for page in reader.pages)
-        return extracted_text
+        # 1. Prefer pymupdf / fitz if available (fastest and most accurate)
+        try:
+            import fitz  # type: ignore
+            doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+            text = "\n".join(str(page.get_text() or "") for page in doc)
+            if text.strip():
+                return text
+        except (ImportError, Exception):
+            pass
+
+        # 2. Try pypdf dynamically
+        try:
+            pypdf = __import__("pypdf")
+            import io
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            text = "\n".join(str(page.extract_text() or "") for page in reader.pages)
+            if text.strip():
+                return text
+        except (ImportError, Exception):
+            pass
+
+        # 3. Try pdfplumber dynamically
+        try:
+            pdfplumber = __import__("pdfplumber")
+            import io
+            with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
+                return "\n".join(str(page.extract_text() or "") for page in pdf.pages)
+        except (ImportError, Exception):
+            pass
+
+        return ""
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF parsing failed: {e}")
 

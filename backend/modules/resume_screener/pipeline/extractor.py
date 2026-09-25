@@ -77,17 +77,13 @@ def extract_pdf(file_path: str) -> str:
         import pypdf
         reader = pypdf.PdfReader(file_path)
         pages_text = [page.extract_text() for page in reader.pages if page.extract_text()]
-        if pages_text:
-            return "\n".join(pages_text)
+        if pages_text and sum(len(p.strip()) for p in pages_text) > 30:
+            return normalize_text("\n\n".join(pages_text))
     except Exception as err:
         logger.info(f"pypdf extraction skipped: {err}")
 
     try:
         import fitz
-        try:
-            import pdfplumber
-        except ImportError:
-            pdfplumber = None
 
         all_pages_text: List[str] = []
 
@@ -96,39 +92,17 @@ def extract_pdf(file_path: str) -> str:
         except Exception as e:
             raise RuntimeError(f"Failed to open PDF: {e}")
 
-        try:
-            plumber_doc = pdfplumber.open(file_path) if pdfplumber else None
-        except Exception:
-            plumber_doc = None
-
         for page_idx in range(len(doc)):
             page = doc[page_idx]
             page_text = page.get_text("text")
 
             if is_image_page(page_text):
                 ocr_text = _ocr_page(page)
-                if plumber_doc:
-                    table_text = _extract_tables_plumber(plumber_doc, page_idx)
-                    combined = dedupe_lines(table_text.splitlines(), ocr_text.splitlines())
-                    all_pages_text.append("\n".join(combined))
-                else:
-                    all_pages_text.append(ocr_text)
+                all_pages_text.append(ocr_text)
             else:
-                base_lines = page_text.splitlines()
-                if plumber_doc:
-                    table_text = _extract_tables_plumber(plumber_doc, page_idx)
-                    if table_text.strip():
-                        merged = dedupe_lines(base_lines, table_text.splitlines())
-                        all_pages_text.append("\n".join(merged))
-                    else:
-                        all_pages_text.append(page_text)
-                else:
-                    all_pages_text.append(page_text)
+                all_pages_text.append(page_text)
 
         doc.close()
-        if plumber_doc:
-            plumber_doc.close()
-
         raw = "\n\n".join(all_pages_text)
         return normalize_text(raw)
     except Exception as e:

@@ -182,12 +182,40 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
             logger.warning(f"generate_and_rank_requisition_shortlist: req {requisition_id} not found")
             return {"error": "Requisition not found"}
 
-        # Fetch all candidate submissions for this req
+        # Fetch all candidate submissions for this req from SQLite
         sqlite_subs = (
             session.query(CandidateSubmission)
             .filter(CandidateSubmission.requisition_id == requisition_id)
             .all()
         )
+        existing_sqlite_emails = {(s.candidate_email or "").strip().lower() for s in sqlite_subs if s.candidate_email}
+        existing_sqlite_ids = {s.id for s in sqlite_subs if s.id}
+
+        # Also sync any MongoDB candidate submissions for this req that aren't yet in SQLite
+        try:
+            mongo_subs = list(db["candidate_submissions"].find({"requisition_id": requisition_id}))
+            for ms in mongo_subs:
+                m_email = (ms.get("candidate_email") or "").strip().lower()
+                m_id = ms.get("id") or str(ms.get("_id"))
+                if m_email not in existing_sqlite_emails and m_id not in existing_sqlite_ids:
+                    new_sub = CandidateSubmission(
+                        id=m_id,
+                        requisition_id=requisition_id,
+                        candidate_name=ms.get("candidate_name") or "Candidate",
+                        candidate_email=m_email,
+                        vendor_name=ms.get("vendor_name") or "Direct Applicant",
+                        match_score=ms.get("match_score"),
+                        status=ms.get("status") or "Screened",
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    session.add(new_sub)
+                    session.commit()
+                    sqlite_subs.append(new_sub)
+                    existing_sqlite_emails.add(m_email)
+                    existing_sqlite_ids.add(m_id)
+        except Exception as sync_err:
+            logger.warning(f"Error syncing MongoDB submissions to SQLite for {requisition_id}: {sync_err}")
         
         # Fetch all interview rounds for this requisition to get latest AI scores
         interview_rounds = (
@@ -196,14 +224,17 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
             .all()
         )
         
-        # Map rounds by candidate email or submission id
+        # Map rounds by candidate email, submission id, or candidate name
         rounds_by_sub = {}
         rounds_by_email = {}
+        rounds_by_name = {}
         for ir in interview_rounds:
             if ir.candidate_submission_id:
                 rounds_by_sub.setdefault(ir.candidate_submission_id, []).append(ir)
             if ir.candidate_email:
                 rounds_by_email.setdefault(ir.candidate_email.strip().lower(), []).append(ir)
+            if ir.candidate_name:
+                rounds_by_name.setdefault(ir.candidate_name.strip().lower(), []).append(ir)
 
         ranked_candidates = []
         shortlisted_count = 0
@@ -212,11 +243,13 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
         for sub in sqlite_subs:
             sub_id = sub.id
             email = (sub.candidate_email or "").strip().lower()
+            name = (sub.candidate_name or "").strip().lower()
             
-            c_rounds = rounds_by_sub.get(sub_id) or rounds_by_email.get(email) or []
+            c_rounds = rounds_by_sub.get(sub_id) or rounds_by_email.get(email) or rounds_by_name.get(name) or []
             # Find best completed interview score
             best_interview_score = None
             has_passed_round = False
+            has_completed_interview = any(r.status == "Completed" for r in c_rounds)
             for r in c_rounds:
                 ca = r.communication_analysis or {}
                 sc = ca.get("overall_score")
@@ -226,7 +259,7 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                         best_interview_score = sc_int
                 
                 ev = r.evaluation or {}
-                if ev.get("result") in ("Strong Yes", "Yes"):
+                if ev.get("result") in ("Strong Yes", "Yes", "Hold"):
                     has_passed_round = True
                     if best_interview_score is None or best_interview_score < 75:
                         best_interview_score = 80
@@ -241,15 +274,17 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
             # Update candidate match_score to reflect composite algorithmic score
             sub.match_score = composite_score
 
-            # Shortlist threshold: composite >= 50 or has passed round or already shortlisted
+            # Shortlist threshold: completed interview round or composite >= 40 or interview passed or already shortlisted
             is_qualified = (
-                composite_score >= 50
+                has_completed_interview
+                or (best_interview_score is not None and best_interview_score >= 35)
+                or composite_score >= 40
                 or has_passed_round
-                or sub.status in ("Shortlisted", "Accepted", "Under Review")
+                or sub.status in ("Shortlisted", "Accepted", "Under Review", "Hired")
             )
 
             if is_qualified:
-                if sub.status in ("Screened", "Applied", "New", "Pending", None):
+                if sub.status not in ("Hired", "Rejected"):
                     sub.status = "Shortlisted"
                 shortlisted_count += 1
             
@@ -269,11 +304,12 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
             # Update MongoDB submission as well
             try:
                 db["candidate_submissions"].update_one(
-                    {"id": sub_id},
+                    {"$or": [{"id": sub_id}, {"candidate_email": email, "requisition_id": requisition_id}]},
                     {"$set": {
                         "match_score": composite_score,
                         "interview_score": best_interview_score,
                         "status": sub.status,
+                        "shortlisted_at": now_iso,
                         "updated_at": now_iso,
                     }}
                 )
@@ -354,7 +390,7 @@ def dispatch_requisition_shortlist(
             .all()
         )
         for s in sqlite_subs:
-            if s.status == "Screened":
+            if s.status not in ("Shortlisted", "Accepted", "Under Review", "Hired", "Rejected"):
                 s.status = "Shortlisted"
                 s.updated_at = now
                 session.add(s)
@@ -362,8 +398,11 @@ def dispatch_requisition_shortlist(
         # In MongoDB:
         try:
             db["candidate_submissions"].update_many(
-                {"requisition_id": requisition_id, "status": "Screened"},
-                {"$set": {"status": "Shortlisted", "updated_at": now_iso}}
+                {
+                    "requisition_id": requisition_id,
+                    "status": {"$nin": ["Shortlisted", "Accepted", "Under Review", "Hired", "Rejected"]}
+                },
+                {"$set": {"status": "Shortlisted", "shortlisted_at": now_iso, "updated_at": now_iso}}
             )
         except Exception as e:
             logger.warning(f"Error updating MongoDB candidate submissions: {e}")

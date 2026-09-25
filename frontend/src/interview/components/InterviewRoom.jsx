@@ -112,6 +112,7 @@ export function InterviewRoom({
 
   // Automatic Session Video Proof Recording: Captures candidate camera/mic and peer audio as tamper-evident proof
   useEffect(() => {
+    if (round?.status === 'Completed') return;
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
     if (!localStream || localStream.getTracks().length === 0) return;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') return;
@@ -161,41 +162,62 @@ export function InterviewRoom({
       if (isUploadingProofRef.current) return null;
       isUploadingProofRef.current = true;
 
-      let recordedBlob = null;
-      const durationSec =
-        customDuration ||
-        (recordingStartTimeRef.current
-          ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
-          : callDuration || 1);
+      try {
+        let recordedBlob = null;
+        const durationSec =
+          customDuration ||
+          (recordingStartTimeRef.current
+            ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
+            : callDuration || 1);
 
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        try {
-          await new Promise((resolve) => {
-            mediaRecorderRef.current.onstop = resolve;
-            mediaRecorderRef.current.stop();
-          });
-        } catch (err) {
-          console.warn('[PROOF RECORDING] Recorder stop warning:', err);
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          try {
+            await new Promise((resolve) => {
+              const timer = setTimeout(() => {
+                console.warn('[PROOF RECORDING] onstop timed out after 1.5s, proceeding');
+                resolve();
+              }, 1500);
+              mediaRecorderRef.current.onstop = () => {
+                clearTimeout(timer);
+                resolve();
+              };
+              try {
+                mediaRecorderRef.current.stop();
+              } catch (err) {
+                clearTimeout(timer);
+                resolve();
+              }
+            });
+          } catch (err) {
+            console.warn('[PROOF RECORDING] Recorder stop warning:', err);
+          }
         }
-      }
 
-      if (recordedChunksRef.current && recordedChunksRef.current.length > 0) {
-        const mime = mediaRecorderRef.current?.mimeType || 'video/webm';
-        recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
-        console.log(`📹 [PROOF RECORDING] Packaged ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video proof`);
-      }
-
-      if (recordedBlob && round?.id) {
-        try {
-          const res = await interviewApi.uploadRecording(round.id, recordedBlob, durationSec);
-          console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
-          setIsRecordingProof(false);
-          return res;
-        } catch (uploadErr) {
-          console.warn('⚠️ [PROOF RECORDING] Failed to upload proof video:', uploadErr);
+        if (recordedChunksRef.current && recordedChunksRef.current.length > 0) {
+          const mime = mediaRecorderRef.current?.mimeType || 'video/webm';
+          recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
+          console.log(`📹 [PROOF RECORDING] Packaged ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video proof`);
         }
+
+        if (recordedBlob && round?.id) {
+          try {
+            const uploadPromise = interviewApi.uploadRecording(round.id, recordedBlob, durationSec);
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Upload timeout after 5s')), 5000)
+            );
+            const res = await Promise.race([uploadPromise, timeoutPromise]);
+            console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
+            setIsRecordingProof(false);
+            return res;
+          } catch (uploadErr) {
+            console.warn('⚠️ [PROOF RECORDING] Failed to upload proof video:', uploadErr);
+          }
+        }
+        return null;
+      } finally {
+        isUploadingProofRef.current = false;
+        setIsRecordingProof(false);
       }
-      return null;
     },
     [round?.id, callDuration]
   );

@@ -71,6 +71,10 @@ export function CandidateInterviewPortal() {
 
   const handleJoinMeeting = (round) => {
     if (!round) return;
+    if (round.status === 'Completed') {
+      setErrorMsg('You have already attended and submitted this interview. Multiple attempts are not permitted.');
+      return;
+    }
     if (round.is_expired && round.status !== 'Completed') {
       setErrorMsg('This AI interview link has expired after 10 hours. Please contact your recruiter to request a new link.');
       return;
@@ -208,9 +212,12 @@ export function CandidateInterviewPortal() {
               {/* Join Interview Button */}
               <div className="shrink-0">
                 {selectedRound.status === 'Completed' ? (
-                  <div className="px-5 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2">
-                    <CheckCircle2 size={18} className="text-emerald-600" />
-                    <span>Round Completed</span>
+                  <div className="px-5 py-3 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2.5">
+                    <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                    <div>
+                      <div>Interview Completed</div>
+                      <div className="text-[10px] font-medium text-emerald-600">Single attempt submitted & locked</div>
+                    </div>
                   </div>
                 ) : selectedRound.is_expired ? (
                   <div className="px-5 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2.5">

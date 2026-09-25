@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -856,261 +857,115 @@ export default function OpenRolesPage({ enabled = true }) {
             {/* Right Action Buttons */}
             <div className="flex items-center gap-2 sm:gap-3 ml-auto">
               {candidateUser ? (
-                <div className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
-                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center border border-emerald-500/30">
-                    {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
-                  </div>
-                  <span className="text-xs font-semibold text-white max-w-[120px] truncate">
-                    {candidateUser.candidate_name || candidateUser.candidate_email}
-                  </span>
-                  {hasResume && (
-                    <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
-                      <CheckCircle2 size={10} />
-                      Resume on File
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
+                    <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center border border-emerald-500/30">
+                      {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="text-xs font-semibold text-white max-w-[120px] truncate">
+                      {candidateUser.candidate_name || candidateUser.candidate_email}
                     </span>
-                  )}
+                    {hasResume && (
+                      <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
+                        <CheckCircle2 size={10} />
+                        Resume on File
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="h-3 w-px bg-paper/20 mx-1" />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSetupModal(true)}
+                    className="px-2.5 py-1 text-[11px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                    title="Edit candidate profile & resume"
+                  >
+                    Edit Profile
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowMyAppsModal(true)}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition rounded-lg hover:bg-emerald-500/10 cursor-pointer"
+                  >
+                    Applications ({applications.length})
+                  </button>
+
+                  <a
+                    href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#229ED9] hover:text-[#1E88E5] transition rounded-lg hover:bg-sky-500/10 text-decoration-none"
+                    title="Link your Telegram to get 1-tap alerts"
+                  >
+                    <Send size={11} />
+                    <span>Start Bot</span>
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="p-1 text-paper/50 hover:text-rose-400 transition cursor-pointer"
+                    title="Sign out"
+                  >
+                    <LogOut size={13} />
+                  </button>
                 </div>
+              ) : (
+                <div className="flex items-center gap-2 sm:gap-2.5">
+                  <a
+                    href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-[#229ED9] transition cursor-pointer text-decoration-none"
+                    title="Start Telegram Bot for Instant Job Matches"
+                  >
+                    <Send size={12} className="text-[#229ED9]" />
+                    <span>Start Bot</span>
+                  </a>
 
-                <div className="h-3 w-px bg-paper/20 mx-1" />
+                  {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
+                  <div className="inline-flex items-center px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:border-white/30 backdrop-blur-md transition-all">
+                    {/* Google Sign In Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => handleGoogleSignIn()}
+                      disabled={authLoading}
+                      className="p-0.5 text-white hover:opacity-85 transition-opacity cursor-pointer disabled:opacity-50 flex items-center justify-center"
+                      title={authLoading ? 'Signing in...' : 'Sign in with Google'}
+                    >
+                      <GoogleIcon className="w-3.5 h-3.5" />
+                    </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowSetupModal(true)}
-                  className="px-2.5 py-1 text-[11px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
-                  title="Edit candidate profile & resume"
-                >
-                  Edit Profile
-                </button>
+                    {/* Vertical Divider */}
+                    <div className="h-3 w-px bg-white/20 mx-2" />
 
-                <button
-                  type="button"
-                  onClick={() => setShowMyAppsModal(true)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition rounded-lg hover:bg-emerald-500/10 cursor-pointer"
-                >
-                  Applications ({applications.length})
-                </button>
+                    {/* Candidate Email/Password Login Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                      className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-white/90 hover:text-white transition cursor-pointer"
+                    >
+                      <User size={13} className="text-white/70" />
+                      <span>Candidate Sign In</span>
+                    </button>
+                  </div>
 
-                <a
-                  href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#229ED9] hover:text-[#1E88E5] transition rounded-lg hover:bg-sky-500/10 text-decoration-none"
-                  title="Link your Telegram to get 1-tap alerts"
-                >
-                  <Send size={11} />
-                  <span>Start Bot</span>
-                </a>
-
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="p-1 text-paper/50 hover:text-rose-400 transition cursor-pointer"
-                  title="Sign out"
-                >
-                  <LogOut size={13} />
-                </button>
-              </div>
-            ) : (
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              <a
-                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-[#229ED9] transition cursor-pointer text-decoration-none"
-                title="Start Telegram Bot for Instant Job Matches"
-              >
-                <Send size={12} className="text-[#229ED9]" />
-                <span>Start Bot</span>
-              </a>
-
-              <button
-                type="button"
-                onClick={() => handleGoogleSignIn()}
-                disabled={authLoading}
-                className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-neutral-100 text-neutral-900 text-[0.68rem] font-bold tracking-wide transition shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
-                title="Sign in with Google"
-              >
-                <GoogleIcon className="w-3.5 h-3.5" />
-                <span>{authLoading ? 'Signing in...' : 'Sign in with Google'}</span>
-              </button>
-              <div className="h-3 w-px bg-paper/20 mx-1" />
-              <button
-                type="button"
-                onClick={() => setShowSetupModal(true)}
-                className="px-2.5 py-1 text-[11px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
-              >
-                Edit Profile
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowMyAppsModal(true)}
-                className="px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition rounded-lg hover:bg-emerald-500/10 cursor-pointer"
-              >
-                Applications ({applications.length})
-              </button>
-              <button
-                type="button"
-                onClick={logout}
-                className="p-1 text-paper/50 hover:text-rose-400 transition cursor-pointer"
-                title="Sign out"
-              >
-                <LogOut size={13} />
-              </button>
-            </div>
-            ) : (
-            <div className="flex items-center gap-2 sm:gap-2.5">
-              {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
-              <div className="inline-flex items-center px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:border-white/30 backdrop-blur-md transition-all">
-                {/* Google Sign In Trigger */}
-                <button
-                  type="button"
-                  onClick={() => handleGoogleSignIn()}
-                  disabled={authLoading}
-                  className="p-0.5 text-white hover:opacity-85 transition-opacity cursor-pointer disabled:opacity-50 flex items-center justify-center"
-                  title={authLoading ? 'Signing in...' : 'Sign in with Google'}
-                >
-                  <GoogleIcon className="w-3.5 h-3.5" />
-                </button>
-
-                {/* Vertical Divider */}
-                <div className="h-3 w-px bg-white/20 mx-2" />
-
-                {/* Candidate Email/Password Login Trigger */}
-                <button
-                  type="button"
-                  onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                  className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-white/90 hover:text-white transition cursor-pointer"
-                >
-                  <User size={13} className="text-white/70" />
-                  <span>Candidate Sign In</span>
-                </button>
-              </div>
-
-              {/* Staff Portal Link (Border-only Transparent Pill) */}
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[11px] sm:text-xs font-medium transition backdrop-blur-md active:scale-95"
-              >
-                <Users size={13} className="text-white/70" />
-                <span>Staff Portal</span>
-                <ArrowRight size={12} className="text-white/60" />
-              </Link>
-            </div>
+                  {/* Staff Portal Link (Border-only Transparent Pill) */}
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[11px] sm:text-xs font-medium transition backdrop-blur-md active:scale-95"
+                  >
+                    <Users size={13} className="text-white/70" />
+                    <span>Staff Portal</span>
+                    <ArrowRight size={12} className="text-white/60" />
+                  </Link>
+                </div>
               )}
-        </div>
+            </div>
       </header>
 
-      {/* Hero Header Section */}
-      <section className="relative z-10 pt-12 pb-8 px-6 md:px-12 max-w-7xl mx-auto w-full">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-8 border-b border-paper/10">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-paper/[0.06] border border-paper/15 text-[0.65rem] font-bold tracking-[0.24em] text-paper/70 uppercase mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>01 — Active Requisitions</span>
-            </div>
-
-            <h1 className="font-display text-[clamp(2rem,4.8vw,3.8rem)] leading-[0.98] font-extrabold tracking-[-0.03em] text-paper">
-              EXPLORE OPEN ROLES.
-              <span className="block text-haze">DIRECT WITH HIRING PARTNERS.</span>
-            </h1>
-
-            <p className="mt-4 max-w-2xl text-sm md:text-base leading-relaxed text-paper/60">
-              Browse live contract opportunities published by verified enterprise partners. Apply directly with 1-click
-              resume parsing, instant skill matching, and verified compliance review.
-            </p>
-          </div>
-
-          {/* Quick Metrics Ticker */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <div className="px-3.5 py-2 rounded-xl bg-paper/[0.04] border border-paper/10 backdrop-blur-sm text-center">
-              <div className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-paper/40">Open Roles</div>
-              <div className="text-xl font-extrabold tabular-nums text-paper mt-0.5">{requisitions.length}</div>
-            </div>
-            <div className="px-3.5 py-2 rounded-xl bg-paper/[0.04] border border-paper/10 backdrop-blur-sm text-center">
-              <div className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-paper/40">Enterprises</div>
-              <div className="text-xl font-extrabold tabular-nums text-emerald-400 mt-0.5">
-                {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || 1}
-              </div>
-            </div>
-            <div className="px-3.5 py-2 rounded-xl bg-paper/[0.04] border border-paper/10 backdrop-blur-sm text-center">
-              <div className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-paper/40">Review Speed</div>
-              <div className="text-xl font-extrabold tabular-nums text-paper mt-0.5">&lt; 24h</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Unauthenticated Candidate Fast-Track Google Banner */}
-        {!candidateUser && (
-          <div className="mt-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-paper/[0.03] to-blue-950/30 border border-emerald-500/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0">
-                <Sparkles size={20} className="text-emerald-400" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <span>Fast-Track Candidate Access</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-extrabold uppercase tracking-wider">
-                    Google 1-Click
-                  </span>
-                </div>
-                <p className="text-[11px] text-paper/60 mt-0.5 max-w-xl">
-                  Sign in with Google or start our Telegram Bot to 1-click apply across all enterprise requisitions and track your interview invitations live.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full sm:w-auto">
-              <a
-                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer text-decoration-none"
-                title="Connect Telegram Bot for 1-Tap Job Matches & RSVPs"
-              >
-                <Send size={13} />
-                <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
-              </a>
-              <button
-                type="button"
-                onClick={() => handleGoogleSignIn()}
-                disabled={authLoading}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                <GoogleIcon className="w-4 h-4" />
-                <span>Continue with Google</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-paper/10 hover:bg-paper/15 border border-paper/15 text-xs font-semibold text-paper transition cursor-pointer"
-              >
-                <span>Candidate Sign In</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Search & Filters Controls Bar */}
-        <div className="mt-8 p-3 sm:p-4 rounded-2xl bg-paper/[0.03] border border-paper/10 backdrop-blur-md flex flex-col md:flex-row items-center gap-3">
-          {/* Keyword Search Input */}
-          <div className="relative flex-1 w-full">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-paper/40" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by role title, technology (React, Python, AWS), or company..."
-              className="w-full bg-paper/[0.05] hover:bg-paper/[0.08] focus:bg-paper/[0.1] border border-paper/10 focus:border-paper/30 rounded-xl pl-10 pr-4 py-2.5 text-xs text-paper placeholder-paper/40 transition-colors focus:outline-none font-sans"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper cursor-pointer"
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
           {/* Glass Search & Filter Control Console */}
           <div className="mt-4 mb-9 flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="w-full max-w-4xl p-2 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2.5 transition-all">
@@ -1399,151 +1254,109 @@ export default function OpenRolesPage({ enabled = true }) {
                           )}
                         </div>
 
-                        {/* Card Bottom CTA Bar */}
-                        <div className="mt-7 pt-5 border-t border-paper/10 flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${job.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[10px] font-bold text-[#229ED9] transition text-decoration-none"
+                            title="Start bot & receive 1-tap alerts for this role"
+                          >
+                            <Send size={10} />
+                            <span>Bot</span>
+                          </a>
+
+                          {isApplied ? (
                             <button
                               type="button"
-                              onClick={() => handleOpenJob(job)}
-                              className="text-xs font-bold text-paper/60 hover:text-paper transition inline-flex items-center gap-1 cursor-pointer"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenJob(job);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
+                              title="Application Submitted · Click to view application status"
                             >
-                              <span>View Full JD</span>
-                              <ChevronRight size={14} />
+                              <Check size={12} className="text-white" />
+                              <span>Applied</span>
                             </button>
-                            <a
-                              href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${job.id}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-[#229ED9] hover:underline"
-                              title="Start bot & receive 1-tap alerts for this role"
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenJob(job);
+                              }}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-bold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0 active:scale-95"
                             >
-                              <Send size={11} />
-                              <span>Bot Alert</span>
-                            </a>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleOpenJob(job)}
-                            className="inline-flex items-center gap-2 rounded-full bg-paper hover:bg-paper/90 text-ink px-5 py-2.5 text-[0.7rem] font-bold tracking-[0.14em] uppercase transition-all duration-300 hover:scale-102 active:scale-95 cursor-pointer shadow-md shadow-black/50"
-                          >
-                            <span>Apply Now</span>
-                            <span>→</span>
-                          </button>
+                              <span>Apply Now</span>
+                              <ArrowRight size={12} />
+                            </button>
+                          )}
                         </div>
+                      </div>
                     </article>
                   );
                 })}
               </div>
             )}
-            {isApplied ? (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenJob(job);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
-                title="Application Submitted · Click to view application status"
-              >
-                <Check size={12} className="text-white" />
-                <span>Applied</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleOpenJob(job);
-                }}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-bold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0 active:scale-95"
-              >
-                <span>Apply Now</span>
-                <ArrowRight size={12} />
-              </button>
+
+            {/* Unified Candidate Perks Tab (Fixed to Bottom) */}
+            {typeof document !== 'undefined' && createPortal(
+              <div className="fixed bottom-3 sm:bottom-4 z-40 left-0 lg:left-[360px] xl:left-[410px] 2xl:left-[440px] right-0 flex justify-center px-4 pointer-events-none">
+                <div className="w-full max-w-xl mx-auto rounded-2xl sm:rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_16px_50px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden transition-all pointer-events-auto">
+                  {/* 3-Feature Highlights */}
+                  <div className="px-5 py-2.5 sm:py-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                        <Rocket size={14} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Instant Matching</h4>
+                        <p className="text-[10px] text-white/50 leading-tight truncate">
+                          Auto-matched with relevant roles
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                        <ShieldCheck size={14} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Verified Opportunities</h4>
+                        <p className="text-[10px] text-white/50 leading-tight truncate">
+                          Direct enterprise requisitions
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                        <Users size={14} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">One Profile, Many Roles</h4>
+                        <p className="text-[10px] text-white/50 leading-tight truncate">
+                          Apply to multiple roles in 1 click
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>,
+              document.body
             )}
-        </div>
-      </article>
-      );
-                })}
-    </div>
-  )
-}
-
-{/* Unified Candidate Perks Tab (Fixed to Bottom) */ }
-<div className="fixed bottom-3 sm:bottom-4 z-40 right-0 left-[100vw] lg:left-[calc(100vw+360px)] xl:left-[calc(100vw+410px)] 2xl:left-[calc(100vw+440px)] flex justify-center px-4 pointer-events-none">
-  <div className="w-full max-w-xl mx-auto rounded-2xl sm:rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_16px_50px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden transition-all pointer-events-auto">
-    {/* 3-Feature Highlights */}
-    <div className="px-5 py-2.5 sm:py-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
-      <div className="flex items-center gap-2">
-        <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-          <Rocket size={14} className="text-white" />
-        </div>
-        <div className="min-w-0">
-          <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Instant Matching</h4>
-          <p className="text-[10px] text-white/50 leading-tight truncate">
-            Auto-matched with relevant roles
-          </p>
+          </main>
         </div>
       </div>
-
-      <div className="flex flex-wrap items-center gap-3 shrink-0">
-        <a
-          href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-5 py-3.5 rounded-full bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs tracking-[0.14em] uppercase transition-all hover:-translate-y-0.5 shadow-lg shadow-sky-950/50 cursor-pointer text-decoration-none inline-flex items-center gap-2"
-          title="Start Telegram Bot for Live Opportunities"
-        >
-          <Send size={14} />
-          <span>Start Bot</span>
-        </a>
-        <button
-          type="button"
-          onClick={() => setShowGeneralPoolModal(true)}
-          className="px-6 py-3.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-[0.14em] uppercase transition-all hover:-translate-y-0.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
-        >
-          Join General Talent Pool →
-        </button>
-      </div>
-    </div>
-  </main>
-  <div className="flex items-center gap-2">
-    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-      <ShieldCheck size={14} className="text-white" />
-    </div>
-    <div className="min-w-0">
-      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Verified Opportunities</h4>
-      <p className="text-[10px] text-white/50 leading-tight truncate">
-        Direct enterprise requisitions
-      </p>
-    </div>
-  </div>
-
-  <div className="flex items-center gap-2">
-    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-      <Users size={14} className="text-white" />
-    </div>
-    <div className="min-w-0">
-      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">One Profile, Many Roles</h4>
-      <p className="text-[10px] text-white/50 leading-tight truncate">
-        Apply to multiple roles in 1 click
-      </p>
-    </div>
-  </div>
-</div>
-              </div >
-            </div >
-          </main >
-        </div >
-      </div >
 
   {/* ============================================================ */ }
 {/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */ }
 {/* ============================================================ */ }
 {
-  selectedJob && (
-    <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+  selectedJob && typeof document !== 'undefined' && createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
       <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto">
         {/* Modal Header */}
         <div className="p-5 sm:p-6 border-b border-white/10 flex items-start justify-between gap-4 bg-white/[0.02]">
@@ -1607,67 +1420,53 @@ export default function OpenRolesPage({ enabled = true }) {
           {submitSuccess ? (
             <div className="py-8 text-center space-y-4">
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
-                <div className="py-10 text-center space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
-                    <CheckCircle2 size={32} />
-                  </div>
-                  <div className="space-y-1">
-                    <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
-                    <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                      Your profile and resume have been submitted directly to the hiring partner for <strong>{selectedJob?.title || 'this role'}</strong>.
-                    </p>
-                  </div>
+                <CheckCircle2 size={32} />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
+                <p className="text-xs text-white/70 max-w-md mx-auto">
+                  Your profile and resume have been submitted directly to the hiring partner for <strong>{selectedJob?.title || 'this role'}</strong>.
+                </p>
+              </div>
 
-                  {/* Connect Telegram / Start Bot Callout */}
-                  <div className="p-4 sm:p-5 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-lg mx-auto shadow-lg shadow-sky-950/40">
-                    <div className="flex items-center gap-2 text-sky-300 font-bold text-xs sm:text-sm mb-1.5">
-                      <Send size={16} className="text-[#229ED9]" />
-                      <span>Start Bot to Receive 1-Tap Interview & Match Updates</span>
-                    </div>
-                    <p className="text-xs text-zinc-300 leading-relaxed mb-3">
-                      Never miss an update from hiring managers. Start our official Telegram Bot now to receive instant interview schedules, video room links, and status updates directly on your phone with 1-tap RSVP buttons.
-                    </p>
-                    <div className="p-2.5 bg-black/40 rounded-xl border border-sky-500/20 text-[11px] font-mono text-sky-200 mb-3 flex items-center justify-between">
-                      <span>Application Ref: <strong>{submitSuccess.application_ref || submitSuccess.candidate_id}</strong></span>
-                      <span className="text-emerald-400 font-sans font-semibold">Match: {submitSuccess.match_score || 85}%</span>
-                    </div>
-                    <a
-                      href={submitSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${submitSuccess.candidate_id || submitSuccess.application_ref || ''}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs shadow-md transition text-decoration-none cursor-pointer active:scale-[0.99]"
-                    >
-                      <Send size={15} />
-                      <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
-                    </a>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedJob(null);
-                        setSubmitSuccess(null);
-                      }}
-                      className="px-6 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs transition cursor-pointer"
-                    >
-                      Done / Browse More Roles
-                    </button>
-                  </div>
-                  <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
-                  <p className="text-xs text-white/60 max-w-md mx-auto">
-                    Your profile and resume have been submitted directly to the hiring partner. You will receive an interview
-                    invite via email as soon as matching is verified.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedJob(null)}
-                    className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs transition hover:bg-neutral-200 cursor-pointer shadow-sm"
-                  >
-                    Done
-                  </button>
+              {/* Connect Telegram / Start Bot Callout */}
+              <div className="p-4 sm:p-5 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-lg mx-auto shadow-lg shadow-sky-950/40">
+                <div className="flex items-center gap-2 text-sky-300 font-bold text-xs sm:text-sm mb-1.5">
+                  <Send size={16} className="text-[#229ED9]" />
+                  <span>Start Bot to Receive 1-Tap Interview & Match Updates</span>
                 </div>
-                ) : (
+                <p className="text-xs text-white/70 leading-relaxed mb-3">
+                  Never miss an update from hiring managers. Start our official Telegram Bot now to receive instant interview schedules, video room links, and status updates directly on your phone with 1-tap RSVP buttons.
+                </p>
+                <div className="p-2.5 bg-black/40 rounded-xl border border-sky-500/20 text-[11px] font-mono text-sky-200 mb-3 flex items-center justify-between">
+                  <span>Application Ref: <strong>{submitSuccess.application_ref || submitSuccess.candidate_id}</strong></span>
+                  <span className="text-emerald-400 font-sans font-semibold">Match: {submitSuccess.match_score || 85}%</span>
+                </div>
+                <a
+                  href={submitSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${submitSuccess.candidate_id || submitSuccess.application_ref || ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs shadow-md transition text-decoration-none cursor-pointer active:scale-[0.99]"
+                >
+                  <Send size={15} />
+                  <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+                </a>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedJob(null);
+                    setSubmitSuccess(null);
+                  }}
+                  className="px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs transition hover:bg-neutral-200 cursor-pointer shadow-sm"
+                >
+                  Done / Browse More Roles
+                </button>
+              </div>
+            </div>
+          ) : (
                 <>
                   {/* Deadline Notification Banner */}
                   {(() => {
@@ -2146,17 +1945,15 @@ export default function OpenRolesPage({ enabled = true }) {
               )}
               </div>
             </div>
-        </div>
+        </div>,
+        document.body
       )}
 
         {/* ============================================================ */}
         {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
         {/* ============================================================ */}
-        {/* ============================================================ */}
-        {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
-        {/* ============================================================ */}
-        {showMyAppsModal && (
-          <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl">
+        {showMyAppsModal && typeof document !== 'undefined' && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
             <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
               <div className="flex items-center justify-between pb-4 border-b border-white/10">
                 <h3 className="text-base font-bold text-white">Your Submitted Applications</h3>
@@ -2189,14 +1986,15 @@ export default function OpenRolesPage({ enabled = true }) {
                 )}
               </div>
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* ============================================================ */}
         {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
         {/* ============================================================ */}
-        {showSetupModal && (
-          <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto">
+        {showSetupModal && typeof document !== 'undefined' && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
             <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
               <div className="flex items-center justify-between pb-4 border-b border-white/10">
                 <div>
@@ -2292,14 +2090,15 @@ export default function OpenRolesPage({ enabled = true }) {
                 </form>
               )}
             </div>
-          </div>
+          </div>,
+          document.body
         )}
 
         {/* ============================================================ */}
         {/* MODAL 4: GENERAL TALENT POOL                                 */}
         {/* ============================================================ */}
-        {showGeneralPoolModal && (
-          <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+        {showGeneralPoolModal && typeof document !== 'undefined' && createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
             <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all">
               <div className="flex items-start justify-between pb-4 border-b border-white/10">
                 <div>
@@ -2324,9 +2123,13 @@ export default function OpenRolesPage({ enabled = true }) {
 
               {poolSuccess ? (
                 <div className="py-8 text-center space-y-4">
-                  <CheckCircle2 size={32} className="text-emerald-400 mx-auto" />
+                  <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
+                    <CheckCircle2 size={30} />
+                  </div>
                   <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
-                  <p className="text-xs text-zinc-400">We will notify you when a matching role is published.</p>
+                  <p className="text-xs text-white/60 max-w-sm mx-auto">
+                    We will notify you via email and Telegram as soon as an enterprise requisition matching your skillset is published.
+                  </p>
 
                   {/* Start Telegram Bot Callout */}
                   <div className="p-4 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-sm mx-auto shadow">
@@ -2334,7 +2137,7 @@ export default function OpenRolesPage({ enabled = true }) {
                       <Send size={14} className="text-[#229ED9]" />
                       <span>Start Bot for 1-Tap Matching Alerts</span>
                     </div>
-                    <p className="text-[11px] text-zinc-300 leading-relaxed mb-3">
+                    <p className="text-[11px] text-white/70 leading-relaxed mb-3">
                       Connect <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive notifications directly in Telegram with 1-tap RSVP buttons.
                     </p>
                     <a
@@ -2351,32 +2154,17 @@ export default function OpenRolesPage({ enabled = true }) {
                   <div>
                     <button
                       type="button"
-                      onClick={() => setShowGeneralPoolModal(false)}
-                      className="mt-2 px-6 py-2 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs transition cursor-pointer"
-                    >
-                      Done
-                    </button>
-                  </div>
-                  <div className="py-8 text-center space-y-3">
-                    <div className="w-14 h-14 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
-                      <CheckCircle2 size={30} />
-                    </div>
-                    <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
-                    <p className="text-xs text-white/60 max-w-xs mx-auto">
-                      We will notify you via email as soon as an enterprise requisition matching your skillset is published.
-                    </p>
-                    <button
-                      type="button"
                       onClick={() => {
                         setShowGeneralPoolModal(false);
                         setPoolSuccess(null);
                       }}
-                      className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition shadow-sm cursor-pointer"
+                      className="mt-2 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition shadow-sm cursor-pointer"
                     >
                       Done
                     </button>
                   </div>
-                  ) : (
+                </div>
+              ) : (
                   <form onSubmit={handlePoolSubmit} className="mt-5 space-y-4 text-xs">
                     {candidateUser && (
                       <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
@@ -2567,12 +2355,13 @@ export default function OpenRolesPage({ enabled = true }) {
                   </form>
             )}
                 </div>
-        </div>
+        </div>,
+        document.body
       )}
 
             {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
-            {showAuthModal && (
-              <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
+            {showAuthModal && typeof document !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
                 <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-md w-full shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
                   {/* Close button */}
                   <button
@@ -2835,7 +2624,8 @@ export default function OpenRolesPage({ enabled = true }) {
                     <span>Verified candidate session · Encrypted data</span>
                   </div>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
 
           </div>

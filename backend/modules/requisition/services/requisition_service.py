@@ -165,7 +165,7 @@ def _structured_role_from_prefill(intent: RoleIntent, prefill: dict | None) -> d
 
 
 class RequisitionService:
-    def __init__(self, llm: LLMClient | None = None, session_factory=None, checkpointer=None) -> None:
+    def __init__(self, llm: Any = None, session_factory=None, checkpointer=None) -> None:
         self.session_factory = session_factory or get_session
         self.llm = llm or MockLLM()
         self.checkpointer = checkpointer
