@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 from modules.shared.db import get_session, db
 from modules.candidate.domain.models import CandidateSubmission
 from modules.interview.domain.models import InterviewRound
-from modules.requisition.domain.models import Requisition, CompanyProfile
+from modules.requisition.domain.models import Requisition
 from modules.identity.domain.models import User
 from modules.notifications.services.notification_service import notify_shortlist_dispatched
 from modules.candidate_screening_agent.services.email_service import (
@@ -254,7 +254,7 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                 shortlisted_count += 1
             
             sub.updated_at = now
-            session._track(sub)
+            session.add(sub)
 
             ranked_candidates.append({
                 "submission_id": sub_id,
@@ -297,7 +297,7 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
 
         req.shortlist_candidate_count = shortlisted_count
         req.updated_at = now
-        session._track(req)
+        session.add(req)
         session.commit()
 
         # Update MongoDB Requisition

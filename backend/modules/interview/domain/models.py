@@ -171,6 +171,7 @@ class InterviewRound(Model):
         "communication_analysis": dict,         # structured AI communication evaluation
         "recording_url": "",                    # streaming/download URL for interview video recording
         "recording_metadata": dict,             # {size_bytes, duration_seconds, format, uploaded_at}
+        "expires_at": None,                     # Link expiration timestamp (10 hours from creation)
         "created_by": "",
         "created_at": _utcnow,
         "updated_at": _utcnow,
@@ -205,6 +206,7 @@ class InterviewRound(Model):
     communication_analysis = Column("communication_analysis")
     recording_url = Column("recording_url")
     recording_metadata = Column("recording_metadata")
+    expires_at = Column("expires_at")
     created_by = Column("created_by")
     created_at = Column("created_at")
     updated_at = Column("updated_at")

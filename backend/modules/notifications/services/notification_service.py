@@ -24,6 +24,7 @@ LINK_TEMPLATES = {
     "candidate.shortlisted": "/dashboard/requisitions/{requisition_id}/candidates",
     "candidate.rejected": "/dashboard/requisitions/{requisition_id}/candidates",
     "shortlist.dispatched": "/dashboard/requisitions/{requisition_id}/candidates",
+    "candidate.selected": "/dashboard/superadmin/candidate-management",
 }
 
 
@@ -267,3 +268,122 @@ def notify_shortlist_dispatched(requisition_id: str, candidate_count: int, dispa
                 )
     except Exception as e:  # noqa: BLE001
         logger.warning(f"notify_shortlist_dispatched failed: {e}")
+
+
+def _super_admin_users(session) -> list:
+    """Return all active Super Admin users across the system."""
+    from modules.identity.domain.models import User
+
+    return [
+        u
+        for u in session.query(User).all()
+        if u.is_active and (u.role == "Super Admin" or (u.email and u.email.upper() == "ADMIN"))
+    ]
+
+
+def notify_candidate_selected_by_hm(
+    requisition_id: str,
+    candidate_name: str,
+    company_name: str | None = None,
+    hiring_manager_name: str | None = None,
+    hiring_manager_email: str | None = None,
+    candidate_email: str | None = None,
+    candidate_id: str | None = None,
+    submission_id: str | None = None,
+    match_score: float | None = None,
+    notes: str | None = None,
+) -> dict:
+    """Notify all Super Admins when a candidate is shortlisted and selected by the Hiring Manager.
+
+    Persists a selection record in MongoDB `candidate_selections` and delivers an
+    in-app notification to all Super Admin user accounts.
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from modules.shared.db import get_session, db
+
+    try:
+        with get_session() as session:
+            ctx = _requisition_context(session, requisition_id) or {}
+            resolved_company = (company_name or ctx.get("company_name") or "Enterprise Partner").strip()
+            req_title = ctx.get("title") or "Open Requisition"
+            req_ref = ctx.get("ref") or f"REQ-{(requisition_id or '')[:6].upper()}"
+            tenant_id = ctx.get("company_tenant_id") or ""
+
+            # 1. Record selection in MongoDB candidate_selections collection
+            selection_id = str(uuid.uuid4())
+            now_iso = datetime.now(timezone.utc).isoformat()
+            notification_msg = f"Candidate {candidate_name} has been selected by {resolved_company}"
+
+            selection_doc = {
+                "id": selection_id,
+                "selection_id": selection_id,
+                "requisition_id": requisition_id,
+                "requisition_ref": req_ref,
+                "requisition_title": req_title,
+                "candidate_name": candidate_name,
+                "candidate_email": candidate_email or "",
+                "candidate_id": candidate_id or "",
+                "submission_id": submission_id or "",
+                "company_name": resolved_company,
+                "company_tenant_id": tenant_id,
+                "hiring_manager_name": hiring_manager_name or "Hiring Manager",
+                "hiring_manager_email": hiring_manager_email or "",
+                "match_score": match_score,
+                "notes": notes or "",
+                "status": "Selected",
+                "selected_at": now_iso,
+                "created_at": now_iso,
+                "message": notification_msg,
+            }
+
+            try:
+                db["candidate_selections"].update_one(
+                    {
+                        "$or": [
+                            {"submission_id": submission_id},
+                            {"candidate_name": candidate_name, "requisition_id": requisition_id},
+                        ]
+                    } if (submission_id or (candidate_name and requisition_id)) else {"id": selection_id},
+                    {"$set": selection_doc},
+                    upsert=True,
+                )
+            except Exception as db_err:
+                logger.warning(f"Failed to persist candidate_selections doc: {db_err}")
+
+            # 2. Dispatch notifications to all Super Admin accounts
+            super_admins = _super_admin_users(session)
+            title = "Candidate Selected"
+            body = notification_msg
+            data = {
+                "requisition_id": requisition_id,
+                "requisition_ref": req_ref,
+                "requisition_title": req_title,
+                "candidate_name": candidate_name,
+                "candidate_email": candidate_email or "",
+                "candidate_id": candidate_id or "",
+                "submission_id": submission_id or "",
+                "company_name": resolved_company,
+                "hiring_manager_name": hiring_manager_name or "Hiring Manager",
+                "match_score": match_score,
+                "selected_at": now_iso,
+                "link": LINK_TEMPLATES["candidate.selected"],
+            }
+
+            for sa in super_admins:
+                create_notification(
+                    user_id=sa.id,
+                    tenant_id=sa.tenant_id or tenant_id,
+                    ntype="candidate.selected",
+                    title=title,
+                    body=body,
+                    data=data,
+                )
+
+            logger.info(
+                f"[SUPERADMIN NOTIFICATION SENT] Candidate '{candidate_name}' selected by '{resolved_company}' for req '{req_title}'. Notified {len(super_admins)} Super Admins."
+            )
+            return selection_doc
+    except Exception as e:
+        logger.warning(f"notify_candidate_selected_by_hm failed: {e}")
+        return {}

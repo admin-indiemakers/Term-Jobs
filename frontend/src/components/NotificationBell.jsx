@@ -7,6 +7,8 @@ const TYPE_ICON = {
   'requisition.published': '📢',
   'candidate.shortlisted': '⭐',
   'candidate.rejected': '🚫',
+  'candidate.selected': '🎉',
+  'shortlist.dispatched': '⚡',
 };
 
 function timeAgo(iso) {

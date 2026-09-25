@@ -216,9 +216,9 @@ export function HiringManagerInterviews() {
 
     if (!matchesSearch) return false;
 
-    if (statusFilter === 'ready_for_next') return c.ready_for_next_round || c.ready_for_round_1;
+    if (statusFilter === 'ready_for_next') return c.total_rounds === 0;
     if (statusFilter === 'in_progress') return c.in_progress_rounds > 0;
-    if (statusFilter === 'completed') return c.completed_rounds === c.total_rounds && c.total_rounds > 0;
+    if (statusFilter === 'completed') return c.completed_rounds > 0;
 
     return true;
   });
@@ -227,7 +227,7 @@ export function HiringManagerInterviews() {
   const totalInterviews = rounds.length;
   const inProgressCount = rounds.filter((r) => r.status === 'In Progress').length;
   const completedCount = rounds.filter((r) => r.status === 'Completed').length;
-  const readyToScheduleCount = candidatesSummary.filter((c) => c.ready_for_next_round || c.ready_for_round_1).length;
+  const readyToScheduleCount = candidatesSummary.filter((c) => c.total_rounds === 0).length;
 
   return (
     <div className="space-y-6 max-w-7xl w-full mx-auto pb-12 font-sans">
@@ -236,37 +236,33 @@ export function HiringManagerInterviews() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-800 mb-2">
-              <Video size={13} /> Multi-Round Orchestration
+              <Video size={13} /> AI Assessment & Scoring Stage
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-950 tracking-tight">
-              Interview Management
+              AI Interview & Scores
             </h1>
             <p className="text-xs text-zinc-500 mt-1">
-              Configure multi-round pipelines (Recruiter → Technical → Managerial → Final), monitor real-time rooms, and review evaluations.
+              Schedule one AI interview per candidate, review the AI spoken communication score, then dispatch the shortlist to the Hiring Manager.
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => {
-              if (selectedCandidate) {
-                handleScheduleForCandidate(selectedCandidate);
-              } else {
-                setCreateModalInitialData({});
-                setIsCreateModalOpen(true);
-              }
+              setCreateModalInitialData({});
+              setIsCreateModalOpen(true);
             }}
             className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
           >
             <Plus size={16} />
-            <span>Schedule Interview Round</span>
+            <span>Schedule AI Interview</span>
           </button>
         </div>
 
         {/* Metrics Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-zinc-100">
           <div className="p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200/80">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Total Rounds</div>
+            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">AI Interviews</div>
             <div className="text-xl font-black text-zinc-950 mt-1">{totalInterviews}</div>
           </div>
           <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200/80">
@@ -274,11 +270,11 @@ export function HiringManagerInterviews() {
             <div className="text-xl font-black text-blue-900 mt-1">{inProgressCount}</div>
           </div>
           <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200/80">
-            <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Completed Rounds</div>
+            <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Completed & Scored</div>
             <div className="text-xl font-black text-emerald-900 mt-1">{completedCount}</div>
           </div>
           <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
-            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Ready to Schedule</div>
+            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Needs AI Interview</div>
             <div className="text-xl font-black text-amber-900 mt-1">{readyToScheduleCount}</div>
           </div>
         </div>
@@ -324,7 +320,7 @@ export function HiringManagerInterviews() {
             }`}
           >
             <Sparkles size={13} />
-            <span>Ready to Schedule ({readyToScheduleCount})</span>
+            <span>Needs AI Interview ({readyToScheduleCount})</span>
           </button>
           <button
             type="button"
@@ -385,22 +381,16 @@ export function HiringManagerInterviews() {
                 >
                   <div className="flex items-center justify-between mb-2">
                     {cand.total_rounds === 0 ? (
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                        <Sparkles size={11} /> Shortlisted · Ready for Round 1
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 flex items-center gap-1">
+                        <Sparkles size={11} /> Shortlisted · Needs AI Interview
                       </span>
                     ) : (
                       <span
                         className={`text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          isSelected ? 'bg-zinc-800 text-zinc-300' : 'bg-zinc-100 text-zinc-700'
+                          isSelected ? 'bg-zinc-800 text-zinc-300' : 'bg-emerald-100 text-emerald-800'
                         }`}
                       >
-                        {cand.total_rounds} Round{cand.total_rounds === 1 ? '' : 's'} Configured
-                      </span>
-                    )}
-
-                    {cand.ready_for_next_round && (
-                      <span className="text-[10.5px] font-bold px-2 py-0.5 rounded-md bg-amber-500 text-white flex items-center gap-1 shadow-xs">
-                        <Sparkles size={11} /> Ready for Next Round
+                        AI Interview Scheduled
                       </span>
                     )}
                   </div>
@@ -461,10 +451,31 @@ export function HiringManagerInterviews() {
                       </span>
                     )}
                   </div>
+
+                  {/* Quick Action: Schedule AI Interview (only if no round yet) */}
+                  {cand.total_rounds === 0 && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCandidate(cand);
+                        handleScheduleForCandidate(cand);
+                      }}
+                      className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-white text-zinc-950 border-white/20 hover:bg-zinc-100'
+                          : 'bg-zinc-950 text-white border-zinc-900 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <Video size={11} strokeWidth={2.5} />
+                      Schedule AI Interview
+                    </button>
+                  )}
                 </div>
               );
             })
           )}
+
         </div>
 
         {/* Selected Candidate Pipeline & Rounds Detail */}
@@ -485,15 +496,22 @@ export function HiringManagerInterviews() {
                   </div>
                 </div>
 
-                {/* Primary Action Button */}
-                <button
-                  type="button"
-                  onClick={() => handleScheduleForCandidate(selectedCandidate)}
-                  className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus size={15} />
-                  <span>{selectedCandidate.total_rounds === 0 ? 'Schedule Round 1' : 'Add Next Round'}</span>
-                </button>
+                {/* Primary Action: Schedule AI Interview (only if not yet scheduled) */}
+                {selectedCandidate.total_rounds === 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => handleScheduleForCandidate(selectedCandidate)}
+                    className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
+                  >
+                    <Video size={15} />
+                    <span>Schedule AI Interview</span>
+                  </button>
+                ) : (
+                  <span className="px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 self-start sm:self-auto">
+                    <CheckCircle2 size={14} className="text-emerald-600" />
+                    AI Interview Scheduled
+                  </span>
+                )}
               </div>
 
               {/* Highlight AI Communication Score Banner if Available */}
@@ -626,60 +644,44 @@ export function HiringManagerInterviews() {
                 </div>
               )}
 
-              {/* Ready For Round 1 Banner (Shortlisted Candidates) */}
-              {selectedCandidate.total_rounds === 0 && (
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* AI Interview Status Banner */}
+              {selectedCandidate.total_rounds === 0 ? (
+                <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5">
-                    <Sparkles size={18} className="text-emerald-600 shrink-0" />
+                    <Video size={18} className="text-blue-600 shrink-0" />
                     <div>
-                      <div className="text-xs font-bold text-emerald-950">
-                        Shortlisted Candidate · Ready for Interview Round 1
+                      <div className="text-xs font-bold text-blue-950">
+                        AI Interview Not Yet Scheduled
                       </div>
-                      <div className="text-[11px] text-emerald-800">
-                        Candidate cleared resume screening. Schedule Round 1 (Technical, HR, or Managerial) to generate their access passcode and meeting room.
+                      <div className="text-[11px] text-blue-800">
+                        Schedule one AI interview for this candidate. After the interview, their spoken communication score is generated and they are automatically added to the shortlist sent to the Hiring Manager.
                       </div>
                     </div>
                   </div>
-
                   <button
                     type="button"
                     onClick={() => handleScheduleForCandidate(selectedCandidate)}
-                    className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs transition shrink-0 cursor-pointer shadow-xs"
+                    className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shrink-0 cursor-pointer shadow-xs"
                   >
-                    Schedule Round 1
+                    Schedule AI Interview
                   </button>
                 </div>
-              )}
-
-              {/* Ready For Next Round Banner */}
-              {selectedCandidate.ready_for_next_round && (
-                <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2.5">
-                    <Sparkles size={18} className="text-amber-600 shrink-0" />
-                    <div>
-                      <div className="text-xs font-bold text-amber-900">
-                        Passed Previous Round with Positive Verdict
-                      </div>
-                      <div className="text-[11px] text-amber-700">
-                        Candidate successfully cleared the previous assessment and is ready to advance.
-                      </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-3">
+                  <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-bold text-emerald-950">AI Interview Scheduled</div>
+                    <div className="text-[11px] text-emerald-800">
+                      After completion, the AI score is generated and this candidate is included in the shortlist automatically sent to the Hiring Manager after 48hrs (or instantly via the panel above).
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleScheduleForCandidate(selectedCandidate)}
-                    className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shrink-0 cursor-pointer"
-                  >
-                    Advance to Next Round
-                  </button>
                 </div>
               )}
 
               {/* Round Timeline Stepper */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-700 mb-3">
-                  Rounds Progression
+                  AI Interview Details
                 </h3>
                 <RoundTimeline
                   rounds={selectedCandidate.rounds || []}

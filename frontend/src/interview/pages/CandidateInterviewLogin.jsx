@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { ArrowRight, KeyRound, Mail, AlertCircle, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowRight, KeyRound, Mail, AlertCircle, ShieldCheck, Sparkles, Clock } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 
 export function CandidateInterviewLogin() {
@@ -110,10 +110,18 @@ export function CandidateInterviewLogin() {
             </p>
           </div>
 
+          <div className="mb-5 p-3 bg-amber-50/80 border border-amber-200/80 rounded-2xl flex items-center gap-2.5 text-xs font-semibold text-amber-900">
+            <Clock size={15} className="shrink-0 text-amber-600" />
+            <span>AI interview links expire <strong>10 hours</strong> after delivery.</span>
+          </div>
+
           {errorMsg && (
-            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-2.5 text-xs font-medium text-rose-700">
-              <AlertCircle size={16} className="shrink-0" />
-              <span>{errorMsg}</span>
+            <div className="mb-5 p-3.5 bg-rose-50 border border-rose-200 rounded-2xl flex items-start gap-2.5 text-xs font-medium text-rose-700">
+              <AlertCircle size={16} className="shrink-0 mt-0.5" />
+              <div>
+                <span className="font-bold block">Access Restricted</span>
+                <span>{errorMsg}</span>
+              </div>
             </div>
           )}
 

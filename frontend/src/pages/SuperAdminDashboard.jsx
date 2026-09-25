@@ -153,6 +153,13 @@ export default function SuperAdminDashboard() {
 
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <Link
+            to="/dashboard/superadmin/candidate-management"
+            className="px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5"
+          >
+            <UserCheck size={14} className="text-emerald-600" />
+            Candidate Management
+          </Link>
+          <Link
             to="/dashboard/superadmin/candidates"
             className="px-4 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5"
           >

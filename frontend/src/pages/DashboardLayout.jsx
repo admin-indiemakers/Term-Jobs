@@ -248,6 +248,19 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token, location.pathname]);
 
+  // Dynamic live count for Super Admin candidate management selections
+  const [superAdminSelectedCount, setSuperAdminSelectedCount] = useState(0);
+
+  useEffect(() => {
+    if ((user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') && token) {
+      request('/api/superadmin/candidate-management', { token })
+        .then((res) => {
+          setSuperAdminSelectedCount(res?.total_count || 0);
+        })
+        .catch(() => {});
+    }
+  }, [user?.role, token, location.pathname]);
+
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -320,7 +333,6 @@ export default function DashboardLayout() {
           { to: '/dashboard/recruiter/accepted', label: 'Accepted Candidates', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted },
           { to: '/dashboard/recruiter/portal-access', label: 'Portal Access', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.PortalAccess },
           { to: '/dashboard/recruiter/workers', label: 'Workers', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Team },
-          { to: '/dashboard/recruiter/billing', label: 'Billing', end: true, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
         ]
         : userRole === 'Director'
           ? [
@@ -343,15 +355,17 @@ export default function DashboardLayout() {
               ]
           : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
             ? [
-              { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
-              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-              { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, icon: Icons.Diamond, count: superAdminCandidateCount },
-              { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, icon: Icons.Mail },
-              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
-              { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
-              { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
-              { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
-              { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, icon: Icons.PortalAccess },
+              { to: '/dashboard/superadmin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
+              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+              { to: '/dashboard/superadmin/candidate-management', label: 'Candidate Management', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted, badge: superAdminSelectedCount },
+              { to: '/dashboard/superadmin/candidate-management?tab=billing', label: 'Candidate Billing', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
+              { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Diamond, count: superAdminCandidateCount },
+              { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Mail },
+              { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
+              { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
+              { to: '/dashboard/superadmin/accounts', label: 'Buyer Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.Requisitions },
+              { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.PortalAccess },
             ]
             : (userRole === 'Admin' || userRole.toLowerCase() === 'admin')
               ? [
@@ -456,10 +470,16 @@ export default function DashboardLayout() {
                   if (item.section) lastSection = item.section;
                   const IconComp = item.icon;
 
+                  const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
+
                   const isItemActive = item.to === '/dashboard/requisitions'
                     ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                    : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
+                    ? isCandidateMgmtPath && location.search.includes('tab=billing')
+                    : item.to === '/dashboard/superadmin/candidate-management'
+                    ? isCandidateMgmtPath && !location.search.includes('tab=billing')
                     : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
-                    ? (location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
+                    ? ((location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool')) && !isCandidateMgmtPath)
                     : item.to === '/dashboard/director'
                     ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
                     : item.end
@@ -564,6 +584,35 @@ export default function DashboardLayout() {
                 <div className="flex items-center gap-2.5">
                   <Icons.Chat size={15} className="shrink-0" />
                   <span className="font-semibold text-[13px]">AI Chat</span>
+                </div>
+              </NavLink>
+
+              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
+                CANDIDATE MANAGEMENT
+              </div>
+              <NavLink
+                to="/dashboard/superadmin/candidate-management"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${isActive && !location.search.includes('tab=billing') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.Accepted size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">Candidate Management</span>
+                  {superAdminSelectedCount > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
+                      {superAdminSelectedCount}
+                    </span>
+                  )}
+                </div>
+              </NavLink>
+              <NavLink
+                to="/dashboard/superadmin/candidate-management?tab=billing"
+                onClick={onLinkClick}
+                className={({ isActive }) => `nav-link ${location.pathname.includes('/candidate-management') && location.search.includes('tab=billing') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Icons.Receipt size={15} className="shrink-0" />
+                  <span className="font-semibold text-[13px]">Candidate Billing</span>
                 </div>
               </NavLink>
 
@@ -816,6 +865,15 @@ export default function DashboardLayout() {
           title="AI Chat"
         >
           <Icons.Chat size={17} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/superadmin/candidate-management')}
+          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname.includes('/candidate-management') ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
+          title="Candidate Management"
+        >
+          <Icons.Accepted size={17} />
         </button>
 
         <button

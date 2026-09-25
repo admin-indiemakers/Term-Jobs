@@ -1870,6 +1870,244 @@ def delete_superadmin_candidate(
     }
 
 
+# --- Super Admin Candidate Management & Selection Notifications ---------------
+
+@app.get("/api/superadmin/candidate-management")
+def get_superadmin_candidate_management(
+    company: str | None = None,
+    search: str | None = None,
+    sort_by: str | None = "newest",
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Surfaces all candidates shortlisted and selected by hiring managers across all partner companies.
+
+    Provides company filtering, search, and live notification status for the Super Admin.
+    """
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    from modules.shared.db import db
+    from datetime import datetime, timezone
+
+    # 1. Fetch recorded selections from candidate_selections collection
+    recorded_selections = list(db["candidate_selections"].find({}, {"_id": 0}).sort("selected_at", -1))
+
+    # 2. Also inspect candidate_submissions for any submissions marked Accepted / Selected / Hired
+    accepted_submissions = list(db["candidate_submissions"].find(
+        {"status": {"$in": ["Accepted", "Selected", "Hired", "Selected by HR (Onboarding)"]}},
+        {"resume_pdf": 0, "resume_text": 0}
+    ).sort("updated_at", -1))
+
+    # Pre-fetch requisitions to resolve company and titles
+    all_req_ids = set()
+    for s in recorded_selections:
+        if s.get("requisition_id"):
+            all_req_ids.add(s["requisition_id"])
+    for sub in accepted_submissions:
+        if sub.get("requisition_id"):
+            all_req_ids.add(sub["requisition_id"])
+
+    req_map = {}
+    if all_req_ids:
+        for r in db["requisitions"].find({"id": {"$in": list(all_req_ids)}}):
+            comp_name = r.get("company_name") or r.get("client_name") or ""
+            if not comp_name and r.get("company_profile_id"):
+                cp = db["company_profiles"].find_one({"id": r["company_profile_id"]}, {"name": 1})
+                if cp:
+                    comp_name = cp.get("name", "")
+            if not comp_name and r.get("tenant_id"):
+                t = db["tenants"].find_one({"id": r["tenant_id"]}, {"name": 1})
+                if t:
+                    comp_name = t.get("name", "")
+            req_map[r["id"]] = {
+                "title": r.get("title", "Open Position"),
+                "ref": f"REQ-{(r['id'])[:6].upper()}",
+                "company": comp_name or "Enterprise Partner",
+                "hiring_manager_name": r.get("created_by_name") or "Hiring Manager",
+            }
+
+    # Consolidated index
+    consolidated: dict[str, dict] = {}
+    distinct_companies = set()
+
+    for rec in recorded_selections:
+        req_info = req_map.get(rec.get("requisition_id"), {})
+        comp = (rec.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
+        if comp and comp.lower() != "enterprise partner":
+            distinct_companies.add(comp)
+        cand_name = rec.get("candidate_name") or "Candidate"
+        rec_id = rec.get("id") or rec.get("selection_id") or rec.get("submission_id") or f"sel_{cand_name}_{rec.get('requisition_id')}"
+        
+        entry = {
+            "id": rec_id,
+            "selection_id": rec_id,
+            "candidate_name": cand_name,
+            "candidate_email": rec.get("candidate_email") or "",
+            "candidate_phone": rec.get("candidate_phone") or "",
+            "candidate_title": rec.get("candidate_title") or "Selected Candidate",
+            "company_name": comp,
+            "requisition_id": rec.get("requisition_id") or "",
+            "requisition_title": rec.get("requisition_title") or req_info.get("title") or "Open Requisition",
+            "requisition_ref": rec.get("requisition_ref") or req_info.get("ref") or "REQ-GENERAL",
+            "hiring_manager_name": rec.get("hiring_manager_name") or req_info.get("hiring_manager_name") or "Hiring Manager",
+            "hiring_manager_email": rec.get("hiring_manager_email") or "",
+            "match_score": float(rec.get("match_score")) if rec.get("match_score") is not None else 92.0,
+            "status": rec.get("status") or "Selected",
+            "notes": rec.get("notes") or "",
+            "selected_at": rec.get("selected_at") or rec.get("created_at") or datetime.now(timezone.utc).isoformat(),
+            "notification_message": f"Candidate {cand_name} has been selected by {comp}",
+        }
+        consolidated[rec_id] = entry
+
+    for sub in accepted_submissions:
+        sub_id = sub.get("id") or str(sub.get("_id"))
+        # Check if already captured by submission_id
+        if any(v.get("submission_id") == sub_id for v in consolidated.values()):
+            continue
+        req_info = req_map.get(sub.get("requisition_id"), {})
+        comp = (sub.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
+        if comp and comp.lower() != "enterprise partner":
+            distinct_companies.add(comp)
+        cand_name = sub.get("candidate_name") or "Candidate"
+        now_dt = sub.get("updated_at") or sub.get("created_at") or datetime.now(timezone.utc)
+        iso_str = now_dt.isoformat() if hasattr(now_dt, "isoformat") else str(now_dt)
+
+        entry = {
+            "id": sub_id,
+            "selection_id": sub_id,
+            "submission_id": sub_id,
+            "candidate_name": cand_name,
+            "candidate_email": sub.get("candidate_email") or "",
+            "candidate_phone": (sub.get("details") or {}).get("candidate_phone") or "",
+            "candidate_title": (sub.get("details") or {}).get("candidate_title") or "Selected Candidate",
+            "company_name": comp,
+            "requisition_id": sub.get("requisition_id") or "",
+            "requisition_title": req_info.get("title") or sub.get("requisition_title") or "Open Requisition",
+            "requisition_ref": req_info.get("ref") or f"REQ-{(sub.get('requisition_id') or '')[:6].upper()}",
+            "hiring_manager_name": req_info.get("hiring_manager_name") or "Hiring Manager",
+            "hiring_manager_email": "",
+            "match_score": float(sub.get("match_score")) if sub.get("match_score") is not None else 90.0,
+            "status": "Selected",
+            "notes": sub.get("hiring_manager_notes") or sub.get("summary") or "",
+            "selected_at": iso_str,
+            "notification_message": f"Candidate {cand_name} has been selected by {comp}",
+        }
+        consolidated[sub_id] = entry
+
+    all_selections = list(consolidated.values())
+
+    # Add default companies from tenants for filter options if available
+    for t in db["tenants"].find({"tenant_type": "client"}, {"name": 1}):
+        if t.get("name"):
+            distinct_companies.add(t["name"].strip())
+
+    filtered = all_selections
+
+    # Company filter
+    if company and company.strip() and company.strip().lower() != "all":
+        comp_target = company.strip().lower()
+        filtered = [s for s in filtered if comp_target in (s.get("company_name") or "").lower()]
+
+    # Search filter
+    if search and search.strip():
+        terms = [t.strip().lower() for t in search.split() if t.strip()]
+        def matches(item):
+            haystack = (
+                f"{item.get('candidate_name', '')} {item.get('candidate_email', '')} "
+                f"{item.get('company_name', '')} {item.get('requisition_title', '')} "
+                f"{item.get('hiring_manager_name', '')} {item.get('notification_message', '')}"
+            ).lower()
+            return all(term in haystack for term in terms)
+        filtered = [s for s in filtered if matches(s)]
+
+    # Sorting
+    if sort_by == "score":
+        filtered.sort(key=lambda s: float(s.get("match_score") or 0), reverse=True)
+    elif sort_by == "company":
+        filtered.sort(key=lambda s: (s.get("company_name") or "").lower())
+    elif sort_by == "name":
+        filtered.sort(key=lambda s: (s.get("candidate_name") or "").lower())
+    else:  # newest
+        filtered.sort(key=lambda s: str(s.get("selected_at") or ""), reverse=True)
+
+    # Count unread notifications for this Super Admin
+    unread_notifs = db["notifications"].count_documents({
+        "user_id": current_user.id,
+        "type": "candidate.selected",
+        "read": False,
+    })
+
+    return {
+        "status": "success",
+        "selections": filtered,
+        "total_count": len(filtered),
+        "all_count": len(all_selections),
+        "unread_notifications": unread_notifs,
+        "companies": sorted(list(distinct_companies)),
+        "stats": {
+            "total_selected": len(all_selections),
+            "companies_count": len(distinct_companies),
+            "avg_match_score": round(sum(float(s.get("match_score") or 0) for s in all_selections) / max(len(all_selections), 1), 1),
+        },
+    }
+
+
+@app.post("/api/superadmin/candidate-management/simulate-selection")
+def simulate_candidate_selection(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Allows Super Admin to trigger a candidate selection test/demo.
+    
+    Generates a notification that 'Candidate X has been selected by Company Y'
+    and adds it to the Candidate Management workspace.
+    """
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    from modules.notifications.services.notification_service import notify_candidate_selected_by_hm
+
+    cand_name = (body.get("candidate_name") or "Arjun Sharma").strip()
+    company_name = (body.get("company_name") or "Acme Corp").strip()
+    req_title = (body.get("requisition_title") or "Senior Full Stack Engineer").strip()
+    req_id = body.get("requisition_id") or "sim-req-" + str(uuid.uuid4())[:8]
+    hm_name = (body.get("hiring_manager_name") or current_user.name or "Ravi Kumar (Hiring Manager)").strip()
+    cand_email = body.get("candidate_email") or f"{cand_name.lower().replace(' ', '.')}@example.com"
+    score = float(body.get("match_score") or 94.0)
+    notes = body.get("notes") or "Selected after stellar performance in technical screening."
+
+    res = notify_candidate_selected_by_hm(
+        requisition_id=req_id,
+        candidate_name=cand_name,
+        company_name=company_name,
+        hiring_manager_name=hm_name,
+        candidate_email=cand_email,
+        match_score=score,
+        notes=notes,
+    )
+
+    return {
+        "status": "success",
+        "message": f"Candidate {cand_name} has been selected by {company_name}",
+        "selection": res,
+    }
+
+
+@app.delete("/api/superadmin/candidate-management/{selection_id}")
+def delete_candidate_selection(
+    selection_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Remove a candidate selection record from the Candidate Management workspace."""
+    if current_user.role != "Super Admin":
+        raise HTTPException(status_code=403, detail="Super Admin authorization required.")
+
+    from modules.shared.db import db
+    res = db["candidate_selections"].delete_many({"$or": [{"id": selection_id}, {"selection_id": selection_id}, {"submission_id": selection_id}]})
+    return {"status": "success", "deleted_count": res.deleted_count}
+
+
+
 # --- Candidate Automated Top 20 Matching & Email Outreach -------------------
 
 def _async_trigger_top_candidate_outreach(requisition_id: str):

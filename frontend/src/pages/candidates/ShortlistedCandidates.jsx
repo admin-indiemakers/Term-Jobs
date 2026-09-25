@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
-import { Filter, AlertCircle, Sparkles, ArrowRight } from 'lucide-react';
+import { Filter, AlertCircle, Sparkles, ArrowRight, Trash2 } from 'lucide-react';
 import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 
 export default function ShortlistedCandidates() {
@@ -35,7 +35,26 @@ export default function ShortlistedCandidates() {
 
       // Sort by match score descending (best first)
       const sorted = [...list].sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
-      setCandidates(sorted);
+
+      // Client-side safety deduplication
+      const seenIds = new Set();
+      const seenKeys = new Set();
+      const deduped = [];
+      for (const cand of sorted) {
+        const idKey = cand.id || cand.submission_id;
+        const nameKey = (cand.candidate_email || cand.candidate_name || cand.full_name || cand.name || '').toLowerCase().trim();
+        const reqKey = String(cand.requisition_id || '');
+        const compKey = nameKey ? `${nameKey}::${reqKey}` : null;
+
+        if (idKey && seenIds.has(idKey)) continue;
+        if (compKey && seenKeys.has(compKey)) continue;
+
+        if (idKey) seenIds.add(idKey);
+        if (compKey) seenKeys.add(compKey);
+        deduped.push(cand);
+      }
+
+      setCandidates(deduped);
     } catch (err) {
       console.error('Failed to load shortlisted candidates:', err);
       setError(err.message || 'Unable to load shortlisted candidates.');
@@ -47,6 +66,31 @@ export default function ShortlistedCandidates() {
   useEffect(() => {
     loadShortlistedData();
   }, [token]);
+
+  const handleDeleteCandidate = async (e, cand) => {
+    e.stopPropagation();
+    const candName = cand.candidate_name || cand.full_name || cand.name || 'this candidate';
+    if (!window.confirm(`Are you sure you want to remove ${candName}?`)) {
+      return;
+    }
+    const candId = cand.id || cand.submission_id;
+    // Optimistically update list
+    setCandidates((prev) => prev.filter((c) => (c.id || c.submission_id) !== candId));
+
+    try {
+      await request(`/candidates/${encodeURIComponent(candId)}`, {
+        method: 'DELETE',
+        token,
+      }).catch(async () => {
+        await request(`/candidates/submissions/${encodeURIComponent(candId)}`, {
+          method: 'DELETE',
+          token,
+        });
+      });
+    } catch (err) {
+      console.error('Failed to delete candidate:', err);
+    }
+  };
 
   // Derived real KPI metrics
   const stats = useMemo(() => {
@@ -374,16 +418,27 @@ export default function ShortlistedCandidates() {
                           {reqCode}
                         </span>
 
-                        <span
-                          style={{
-                            backgroundColor: '#0A0A0A',
-                            color: '#FFFFFF',
-                            borderRadius: 6,
-                          }}
-                          className="px-2.5 py-0.5 text-[11px] font-black shadow-2xs"
-                        >
-                          ⚡ {score}%
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            style={{
+                              backgroundColor: '#0A0A0A',
+                              color: '#FFFFFF',
+                              borderRadius: 6,
+                            }}
+                            className="px-2.5 py-0.5 text-[11px] font-black shadow-2xs"
+                          >
+                            ⚡ {score}%
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteCandidate(e, cand)}
+                            title="Delete candidate"
+                            className="p-1 rounded-md text-zinc-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Name & Subtitle */}

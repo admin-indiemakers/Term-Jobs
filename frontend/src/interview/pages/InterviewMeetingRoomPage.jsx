@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+import { Clock, AlertCircle } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { InterviewRoom } from '../components/InterviewRoom';
 
@@ -26,7 +27,11 @@ export function InterviewMeetingRoomPage() {
       .getRoundDetail(roundId)
       .then((res) => {
         if (res) {
-          setRound(res);
+          if (res.status !== 'Completed' && res.is_expired) {
+            setErrorMsg('This AI interview link has expired after 10 hours. Please request a new interview invitation.');
+          } else {
+            setRound(res);
+          }
         } else {
           setErrorMsg('Interview round not found.');
         }
@@ -55,15 +60,43 @@ export function InterviewMeetingRoomPage() {
     );
   }
 
+  const isExpired = errorMsg?.toLowerCase().includes('expired') || (round?.is_expired && round?.status !== 'Completed');
+
+  if (isExpired) {
+    return (
+      <div className="w-full h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-14 h-14 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500 flex items-center justify-center mb-4">
+          <Clock size={28} />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2 tracking-tight">Interview Link Expired</h2>
+        <p className="text-xs text-zinc-400 mb-6 max-w-sm leading-relaxed">
+          AI interview links and passcodes are strictly valid for <strong>10 hours</strong> from delivery. This access window has ended.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/interview/candidate')}
+            className="px-6 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer"
+          >
+            Go to Candidate Portal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (errorMsg || !round) {
     return (
       <div className="w-full h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mb-3">
+          <AlertCircle size={24} />
+        </div>
         <h2 className="text-xl font-bold text-rose-500 mb-2">Room Error</h2>
         <p className="text-xs text-zinc-400 mb-6 max-w-sm">{errorMsg || 'Could not join interview room.'}</p>
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="px-6 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition"
+          className="px-6 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white text-xs font-bold transition cursor-pointer"
         >
           Go Back
         </button>

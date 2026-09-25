@@ -71,6 +71,10 @@ export function CandidateInterviewPortal() {
 
   const handleJoinMeeting = (round) => {
     if (!round) return;
+    if (round.is_expired && round.status !== 'Completed') {
+      setErrorMsg('This AI interview link has expired after 10 hours. Please contact your recruiter to request a new link.');
+      return;
+    }
     navigate(`/interview/room/${round.id}?role=candidate&name=${encodeURIComponent(session?.candidate_name || 'Candidate')}`);
   };
 
@@ -208,15 +212,30 @@ export function CandidateInterviewPortal() {
                     <CheckCircle2 size={18} className="text-emerald-600" />
                     <span>Round Completed</span>
                   </div>
+                ) : selectedRound.is_expired ? (
+                  <div className="px-5 py-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold flex items-center gap-2.5">
+                    <Clock size={18} className="text-rose-600 shrink-0" />
+                    <div>
+                      <div>Interview Link Expired</div>
+                      <div className="text-[10.5px] font-medium text-rose-600">10-hour access period ended</div>
+                    </div>
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleJoinMeeting(selectedRound)}
-                    className="px-6 py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm flex items-center gap-2.5 transition shadow-md hover:shadow-lg cursor-pointer"
-                  >
-                    <Video size={18} />
-                    <span>Join Live Interview Room</span>
-                  </button>
+                  <div className="flex flex-col sm:items-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleJoinMeeting(selectedRound)}
+                      className="px-6 py-3.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-sm flex items-center gap-2.5 transition shadow-md hover:shadow-lg cursor-pointer"
+                    >
+                      <Video size={18} />
+                      <span>Join Live Interview Room</span>
+                    </button>
+                    {selectedRound.remaining_seconds != null && selectedRound.remaining_seconds > 0 && (
+                      <span className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                        <Clock size={11} /> Link valid for ~{Math.max(1, Math.ceil(selectedRound.remaining_seconds / 3600))}h
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
             </div>

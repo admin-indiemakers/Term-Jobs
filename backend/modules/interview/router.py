@@ -258,10 +258,15 @@ def staff_portal_endpoint(
 
 @router.get("/rounds/{round_id}")
 def get_round_detail_endpoint(round_id: str):
-    """Get specific interview round details."""
+    """Get specific interview round details with 10hr expiration check."""
     round_doc = get_round_by_id(round_id)
     if not round_doc:
         raise HTTPException(status_code=404, detail="Interview round not found")
+    if round_doc.get("status") != "Completed" and round_doc.get("is_expired"):
+        raise HTTPException(
+            status_code=410,
+            detail="This AI interview link has expired after 10 hours. Please request a new interview link from the hiring team."
+        )
     return round_doc
 
 
@@ -445,6 +450,11 @@ async def get_round_recording_endpoint(
 def livekit_token_endpoint(body: LiveKitTokenRequest):
     """Generate LiveKit video/audio access token for in-house meeting room."""
     round_doc = get_round_by_id(body.round_id)
+    if round_doc and round_doc.get("status") != "Completed" and round_doc.get("is_expired"):
+        raise HTTPException(
+            status_code=410,
+            detail="Cannot enter interview room: This AI interview link expired after 10 hours."
+        )
     room_name = round_doc.get("room_id") if round_doc else f"room_{body.round_id}"
     ident = body.participant_identity or f"{body.role}_{uuid.uuid4().hex[:6]}"
     
