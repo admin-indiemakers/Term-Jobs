@@ -5,6 +5,7 @@ import {
   Briefcase,
   MapPin,
   Clock,
+  Building2,
   Calendar,
   ChevronRight,
   ChevronDown,
