@@ -5,7 +5,7 @@ export function RoundTimeline({ rounds = [], activeRoundId, onSelectRound }) {
   if (!rounds || rounds.length === 0) {
     return (
       <div className="p-6 text-center text-sm text-zinc-500 bg-zinc-50 rounded-2xl border border-zinc-200">
-        No AI interview scheduled yet.
+        No interview rounds scheduled yet.
       </div>
     );
   }

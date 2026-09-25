@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Video,
   Plus,
@@ -24,6 +24,7 @@ import { InviteActionsModal } from '../components/InviteActionsModal';
 import { EvaluationForm } from '../components/EvaluationForm';
 import { CandidateRecordingPlayer } from '../components/CandidateRecordingPlayer';
 import { EVALUATION_VERDICTS } from '../utils/interviewConstants';
+import { getMeetingRoomLink } from '../utils/credentialGenerator';
 
 export function HiringManagerInterviews() {
   const { token, user } = useAuth();
@@ -43,6 +44,7 @@ export function HiringManagerInterviews() {
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   const [roundCommAnalysis, setRoundCommAnalysis] = useState(null);
+  const [candidateAiAnalysis, setCandidateAiAnalysis] = useState(null);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
   const [loadingCommAnalysis, setLoadingCommAnalysis] = useState(false);
 
@@ -156,6 +158,50 @@ export function HiringManagerInterviews() {
       });
   }, [selectedRoundForDetails?.id, selectedRoundForDetails?.communication_analysis]);
 
+  // Candidate's baseline AI screening round (so AI scores/transcript are always available)
+  const candidateAiRound = useMemo(() => {
+    if (!selectedCandidate) return null;
+    const candRounds = selectedCandidate.rounds || [];
+    return (
+      candRounds.find(
+        (r) =>
+          r.communication_analysis?.overall_score ||
+          (r.round_name || '').startsWith('AI') ||
+          r.round_type === 'AI_Screening'
+      ) || null
+    );
+  }, [selectedCandidate]);
+
+  // Sync candidate AI screening analysis so it is always accessible to Hiring Manager
+  useEffect(() => {
+    if (!candidateAiRound?.id) {
+      setCandidateAiAnalysis(null);
+      return;
+    }
+    if (
+      candidateAiRound.communication_analysis &&
+      Object.keys(candidateAiRound.communication_analysis).length > 0
+    ) {
+      setCandidateAiAnalysis({
+        analysis: candidateAiRound.communication_analysis,
+        metrics: candidateAiRound.communication_metrics || {},
+        transcript: candidateAiRound.transcript || [],
+      });
+      return;
+    }
+
+    interviewApi
+      .getCommunicationAnalysis(candidateAiRound.id)
+      .then((res) => {
+        if (res && res.analysis && Object.keys(res.analysis).length > 0) {
+          setCandidateAiAnalysis(res);
+        } else {
+          setCandidateAiAnalysis(null);
+        }
+      })
+      .catch(() => setCandidateAiAnalysis(null));
+  }, [candidateAiRound?.id, candidateAiRound?.communication_analysis]);
+
   const loadData = useCallback(async () => {
     setLoading(true);
     setErrorMsg('');
@@ -188,16 +234,36 @@ export function HiringManagerInterviews() {
     }
   }, [token, loadData]);
 
-  // Quick action: Open Create Round modal pre-populated for a candidate
+  // Quick action: Open Create Round modal pre-populated for a candidate's next company round
   const handleScheduleForCandidate = (cand) => {
+    if (!cand) return;
     const existingRounds = cand.rounds || [];
+    const companyRounds = existingRounds.filter((r) => !(r.round_name || '').startsWith('AI'));
+    const nextRoundNum = companyRounds.length + 1;
+    let defaultType = 'Technical_1';
+    let defaultName = 'Technical Round 1';
+    if (nextRoundNum === 2) {
+      defaultType = 'Technical_2';
+      defaultName = 'Technical Round 2';
+    } else if (nextRoundNum === 3) {
+      defaultType = 'Manager';
+      defaultName = 'Managerial Round';
+    } else if (nextRoundNum >= 4) {
+      defaultType = 'Final';
+      defaultName = 'Executive / Final Round';
+    }
+
     setCreateModalInitialData({
       candidate_submission_id: cand.candidate_submission_id,
       candidate_name: cand.candidate_name,
       candidate_email: cand.candidate_email,
       requisition_id: cand.requisition_id,
       requisition_title: cand.requisition_title,
-      nextRoundNumber: existingRounds.length + 1,
+      round_type: defaultType,
+      round_name: defaultName,
+      nextRoundNumber: nextRoundNum,
+      interviewer_name: user?.name || 'Hiring Manager',
+      interviewer_email: user?.email || '',
     });
     setIsCreateModalOpen(true);
   };
@@ -207,27 +273,47 @@ export function HiringManagerInterviews() {
     setActiveInviteModalRound(newRound);
   };
 
+  // Only candidates whose AI interview has ended and was accepted are shown to the Hiring Manager
+  const acceptedCandidates = useMemo(() => {
+    return candidatesSummary.filter((cand) => {
+      const candRounds = cand.rounds || [];
+      const hasCompleted = cand.completed_rounds > 0 || candRounds.some((r) => r.status === 'Completed');
+      if (!hasCompleted) return false;
+
+      const subStatus = (cand.submission_status || '').toLowerCase();
+      if (subStatus === 'rejected') return false;
+
+      const latestEval = cand.latest_round?.evaluation?.result;
+      if (latestEval === 'No' && subStatus !== 'shortlisted' && subStatus !== 'accepted') {
+        return false;
+      }
+      return true;
+    });
+  }, [candidatesSummary]);
+
   // Filter candidates
-  const filteredCandidates = candidatesSummary.filter((c) => {
-    const matchesSearch =
-      (c.candidate_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.requisition_title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.candidate_email || '').toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredCandidates = useMemo(() => {
+    return acceptedCandidates.filter((c) => {
+      const matchesSearch =
+        (c.candidate_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.requisition_title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.candidate_email || '').toLowerCase().includes(searchQuery.toLowerCase());
 
-    if (!matchesSearch) return false;
+      if (!matchesSearch) return false;
 
-    if (statusFilter === 'ready_for_next') return c.total_rounds === 0;
-    if (statusFilter === 'in_progress') return c.in_progress_rounds > 0;
-    if (statusFilter === 'completed') return c.completed_rounds > 0;
+      if (statusFilter === 'ready_for_next') return c.ready_for_round_1 || c.ready_for_next_round;
+      if (statusFilter === 'in_progress') return c.in_progress_rounds > 0;
+      if (statusFilter === 'completed') return c.completed_rounds > 0;
 
-    return true;
-  });
+      return true;
+    });
+  }, [acceptedCandidates, searchQuery, statusFilter]);
 
   // Overview metrics
-  const totalInterviews = rounds.length;
+  const totalAcceptedCandidates = acceptedCandidates.length;
   const inProgressCount = rounds.filter((r) => r.status === 'In Progress').length;
   const completedCount = rounds.filter((r) => r.status === 'Completed').length;
-  const readyToScheduleCount = candidatesSummary.filter((c) => c.total_rounds === 0).length;
+  const readyToScheduleCount = acceptedCandidates.filter((c) => c.ready_for_round_1 || c.ready_for_next_round).length;
 
   return (
     <div className="space-y-6 max-w-7xl w-full mx-auto pb-12 font-sans">
@@ -235,46 +321,54 @@ export function HiringManagerInterviews() {
       <div className="bg-white rounded-3xl border border-zinc-200/80 p-6 sm:p-8 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-800 mb-2">
-              <Video size={13} /> AI Assessment & Scoring Stage
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60 mb-2">
+              <Video size={13} className="text-emerald-600" />
+              <span>Company Live Interview Hub · LiveKit</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-950 tracking-tight">
-              AI Interview & Scores
+              Company Interviews & AI Scores
             </h1>
             <p className="text-xs text-zinc-500 mt-1">
-              Schedule one AI interview per candidate, review the AI spoken communication score, then dispatch the shortlist to the Hiring Manager.
+              Candidates who cleared AI screening with accepted scores. Review AI results, schedule multi-round live company interviews (Technical, Managerial, HR, Final), and join encrypted LiveKit meeting rooms.
             </p>
           </div>
 
           <button
             type="button"
             onClick={() => {
-              setCreateModalInitialData({});
-              setIsCreateModalOpen(true);
+              if (selectedCandidate) {
+                handleScheduleForCandidate(selectedCandidate);
+              } else {
+                setCreateModalInitialData({
+                  interviewer_name: user?.name || 'Hiring Manager',
+                  interviewer_email: user?.email || '',
+                });
+                setIsCreateModalOpen(true);
+              }
             }}
             className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
           >
             <Plus size={16} />
-            <span>Schedule AI Interview</span>
+            <span>Schedule Company Interview</span>
           </button>
         </div>
 
         {/* Metrics Bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-zinc-100">
           <div className="p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200/80">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">AI Interviews</div>
-            <div className="text-xl font-black text-zinc-950 mt-1">{totalInterviews}</div>
+            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Accepted AI Candidates</div>
+            <div className="text-xl font-black text-zinc-950 mt-1">{totalAcceptedCandidates}</div>
           </div>
           <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200/80">
-            <div className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider">In Progress</div>
+            <div className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider">In Progress Live</div>
             <div className="text-xl font-black text-blue-900 mt-1">{inProgressCount}</div>
           </div>
           <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200/80">
-            <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Completed & Scored</div>
+            <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Completed Rounds</div>
             <div className="text-xl font-black text-emerald-900 mt-1">{completedCount}</div>
           </div>
           <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
-            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Needs AI Interview</div>
+            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Ready to Schedule</div>
             <div className="text-xl font-black text-amber-900 mt-1">{readyToScheduleCount}</div>
           </div>
         </div>
@@ -308,7 +402,7 @@ export function HiringManagerInterviews() {
               statusFilter === 'all' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-500 hover:text-zinc-950'
             }`}
           >
-            All Candidates ({candidatesSummary.length})
+            All Candidates ({totalAcceptedCandidates})
           </button>
           <button
             type="button"
@@ -320,7 +414,7 @@ export function HiringManagerInterviews() {
             }`}
           >
             <Sparkles size={13} />
-            <span>Needs AI Interview ({readyToScheduleCount})</span>
+            <span>Ready for Next Round ({readyToScheduleCount})</span>
           </button>
           <button
             type="button"
@@ -360,6 +454,7 @@ export function HiringManagerInterviews() {
               const isSelected = (selectedCandidate?.candidate_submission_id && selectedCandidate?.candidate_submission_id === cand.candidate_submission_id) ||
                 (selectedCandidate?.candidate_email && selectedCandidate?.candidate_email === cand.candidate_email);
               const candRounds = cand.rounds || [];
+              const companyRounds = candRounds.filter((r) => !(r.round_name || '').startsWith('AI'));
               const latest = cand.latest_round;
               const evalVerdict = latest?.evaluation?.result;
               const verdictMeta = EVALUATION_VERDICTS.find((v) => v.value === evalVerdict);
@@ -380,17 +475,17 @@ export function HiringManagerInterviews() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    {cand.total_rounds === 0 ? (
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 flex items-center gap-1">
-                        <Sparkles size={11} /> Shortlisted · Needs AI Interview
+                    {companyRounds.length === 0 ? (
+                      <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
+                        <Sparkles size={11} /> AI Cleared · Ready for Round 1
                       </span>
                     ) : (
                       <span
                         className={`text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                          isSelected ? 'bg-zinc-800 text-zinc-300' : 'bg-emerald-100 text-emerald-800'
+                          isSelected ? 'bg-zinc-800 text-zinc-300' : 'bg-blue-100 text-blue-800'
                         }`}
                       >
-                        AI Interview Scheduled
+                        Company Round {companyRounds.length} Active
                       </span>
                     )}
                   </div>
@@ -415,9 +510,9 @@ export function HiringManagerInterviews() {
 
                   {/* Round Stepper Preview */}
                   <div className="mt-3 pt-3 border-t border-zinc-200/30 flex items-center justify-between text-xs">
-                    {cand.total_rounds === 0 ? (
+                    {candRounds.length === 0 ? (
                       <span className={`text-[11px] font-medium italic ${isSelected ? 'text-zinc-400' : 'text-zinc-400'}`}>
-                        No rounds scheduled yet · Click to setup Round 1
+                        AI Cleared · No company rounds yet
                       </span>
                     ) : (
                       <div className="flex items-center gap-1">
@@ -452,25 +547,23 @@ export function HiringManagerInterviews() {
                     )}
                   </div>
 
-                  {/* Quick Action: Schedule AI Interview (only if no round yet) */}
-                  {cand.total_rounds === 0 && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedCandidate(cand);
-                        handleScheduleForCandidate(cand);
-                      }}
-                      className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
-                        isSelected
-                          ? 'bg-white text-zinc-950 border-white/20 hover:bg-zinc-100'
-                          : 'bg-zinc-950 text-white border-zinc-900 hover:bg-zinc-800'
-                      }`}
-                    >
-                      <Video size={11} strokeWidth={2.5} />
-                      Schedule AI Interview
-                    </button>
-                  )}
+                  {/* Quick Action: Schedule Company Round */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedCandidate(cand);
+                      handleScheduleForCandidate(cand);
+                    }}
+                    className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-white text-zinc-950 border-white/20 hover:bg-zinc-100'
+                        : 'bg-zinc-950 text-white border-zinc-900 hover:bg-zinc-800'
+                    }`}
+                  >
+                    <Plus size={12} strokeWidth={2.5} />
+                    <span>{companyRounds.length === 0 ? 'Schedule Company Round 1' : `Schedule Round ${companyRounds.length + 1}`}</span>
+                  </button>
                 </div>
               );
             })
@@ -496,22 +589,20 @@ export function HiringManagerInterviews() {
                   </div>
                 </div>
 
-                {/* Primary Action: Schedule AI Interview (only if not yet scheduled) */}
-                {selectedCandidate.total_rounds === 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => handleScheduleForCandidate(selectedCandidate)}
-                    className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
-                  >
-                    <Video size={15} />
-                    <span>Schedule AI Interview</span>
-                  </button>
-                ) : (
-                  <span className="px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold flex items-center gap-2 self-start sm:self-auto">
-                    <CheckCircle2 size={14} className="text-emerald-600" />
-                    AI Interview Scheduled
+                {/* Primary Action: Schedule Company LiveKit Round */}
+                <button
+                  type="button"
+                  onClick={() => handleScheduleForCandidate(selectedCandidate)}
+                  className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
+                >
+                  <Plus size={15} />
+                  <span>
+                    {(() => {
+                      const coRounds = (selectedCandidate.rounds || []).filter(r => !(r.round_name || '').startsWith('AI'));
+                      return coRounds.length === 0 ? 'Schedule Company Round 1' : `Schedule Next Round (${coRounds.length + 1})`;
+                    })()}
                   </span>
-                )}
+                </button>
               </div>
 
               {/* Highlight AI Communication Score Banner if Available */}
@@ -542,7 +633,7 @@ export function HiringManagerInterviews() {
                       onClick={() => setSelectedRoundForDetails(completedWithScore)}
                       className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shrink-0 cursor-pointer shadow-xs"
                     >
-                      View AI Scorecard
+                      View AI Scorecard & Results
                     </button>
                   </div>
                 );
@@ -644,45 +735,55 @@ export function HiringManagerInterviews() {
                 </div>
               )}
 
-              {/* AI Interview Status Banner */}
-              {selectedCandidate.total_rounds === 0 ? (
-                <div className="p-4 rounded-2xl bg-blue-50 border border-blue-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <Video size={18} className="text-blue-600 shrink-0" />
-                    <div>
-                      <div className="text-xs font-bold text-blue-950">
-                        AI Interview Not Yet Scheduled
-                      </div>
-                      <div className="text-[11px] text-blue-800">
-                        Schedule one AI interview for this candidate. After the interview, their spoken communication score is generated and they are automatically added to the shortlist sent to the Hiring Manager.
+              {/* Company Live Interview Workflow Banner */}
+              {(() => {
+                const coRounds = (selectedCandidate.rounds || []).filter(r => !(r.round_name || '').startsWith('AI'));
+                const hasCompanyRounds = coRounds.length > 0;
+                return (
+                  <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
+                      <div>
+                        <div className="text-xs font-bold text-emerald-950">
+                          {hasCompanyRounds
+                            ? `${coRounds.length} Company Live Interview Round${coRounds.length > 1 ? 's' : ''} Configured`
+                            : 'AI Screening Cleared & Accepted · Ready for Company Round 1'}
+                        </div>
+                        <div className="text-[11px] text-emerald-800">
+                          {hasCompanyRounds
+                            ? 'Conduct company interviews in encrypted LiveKit video rooms, share access links, and record evaluation verdicts below.'
+                            : 'This candidate has successfully cleared AI screening. Schedule Technical Round 1 or Managerial interview with your company team.'}
+                        </div>
                       </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => handleScheduleForCandidate(selectedCandidate)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center gap-1.5 transition shrink-0 cursor-pointer shadow-xs"
+                    >
+                      <Plus size={14} />
+                      <span>{hasCompanyRounds ? `Schedule Round ${coRounds.length + 1}` : 'Schedule Technical Round 1'}</span>
+                    </button>
                   </div>
+                );
+              })()}
+
+              {/* Round Timeline Stepper */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-700 flex items-center gap-2">
+                    <Video size={14} className="text-zinc-500" />
+                    <span>Company Interview Pipeline & Rounds (LiveKit)</span>
+                  </h3>
                   <button
                     type="button"
                     onClick={() => handleScheduleForCandidate(selectedCandidate)}
-                    className="px-3.5 py-2 rounded-xl bg-blue-700 hover:bg-blue-800 text-white font-bold text-xs transition shrink-0 cursor-pointer shadow-xs"
+                    className="text-xs font-bold text-zinc-700 hover:text-zinc-950 flex items-center gap-1 cursor-pointer"
                   >
-                    Schedule AI Interview
+                    <Plus size={13} />
+                    <span>Add Round</span>
                   </button>
                 </div>
-              ) : (
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center gap-3">
-                  <CheckCircle2 size={18} className="text-emerald-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-bold text-emerald-950">AI Interview Scheduled</div>
-                    <div className="text-[11px] text-emerald-800">
-                      After completion, the AI score is generated and this candidate is included in the shortlist automatically sent to the Hiring Manager after 48hrs (or instantly via the panel above).
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Round Timeline Stepper */}
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-700 mb-3">
-                  AI Interview Details
-                </h3>
                 <RoundTimeline
                   rounds={selectedCandidate.rounds || []}
                   activeRoundId={selectedRoundForDetails?.id}
@@ -702,6 +803,18 @@ export function HiringManagerInterviews() {
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {selectedRoundForDetails.status !== 'Completed' && (
+                        <a
+                          href={`${getMeetingRoomLink(selectedRoundForDetails.id)}?role=interviewer&name=${encodeURIComponent(user?.name || 'Interviewer')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                        >
+                          <Video size={14} />
+                          <span>Join Live Meeting (LiveKit)</span>
+                        </a>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setActiveInviteModalRound(selectedRoundForDetails)}
@@ -776,233 +889,247 @@ export function HiringManagerInterviews() {
 
                   {/* Candidate Video Recording Player */}
                   <CandidateRecordingPlayer
-                    round={selectedRoundForDetails}
+                    round={selectedRoundForDetails?.video_recording_url || selectedRoundForDetails?.recording_metadata ? selectedRoundForDetails : candidateAiRound}
                     candidateName={selectedCandidate?.candidate_name}
                   />
 
                   {/* AI Spoken Communication Assessment & Executive Scorecard for Admin */}
-                  {roundCommAnalysis && roundCommAnalysis.analysis && Object.keys(roundCommAnalysis.analysis).length > 0 ? (
-                    <div className="p-5 bg-gradient-to-b from-zinc-900 to-zinc-950 text-white rounded-3xl border border-zinc-800 space-y-4 shadow-xl animate-in fade-in duration-300">
-                      <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold border border-emerald-500/30">
-                            <Sparkles size={16} />
+                  {(() => {
+                    const activeAnalysis = roundCommAnalysis || candidateAiAnalysis;
+                    const isViewingAiBaseline = !roundCommAnalysis && !!candidateAiAnalysis;
+
+                    if (!activeAnalysis || !activeAnalysis.analysis || Object.keys(activeAnalysis.analysis).length === 0) {
+                      if (loadingCommAnalysis) {
+                        return (
+                          <div className="p-4 bg-zinc-100 rounded-2xl border border-zinc-200 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
+                            <div className="w-4 h-4 border-2 border-zinc-400 border-t-zinc-800 rounded-full animate-spin" />
+                            <span>Loading AI Communication Analysis...</span>
                           </div>
-                          <div>
-                            <div className="text-xs font-bold text-white flex items-center gap-2">
-                              <span>AI Spoken Communication Assessment</span>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                CONFIDENTIAL · ADMIN ONLY
-                              </span>
+                        );
+                      }
+                      return null;
+                    }
+
+                    return (
+                      <div className="p-5 bg-gradient-to-b from-zinc-900 to-zinc-950 text-white rounded-3xl border border-zinc-800 space-y-4 shadow-xl animate-in fade-in duration-300">
+                        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold border border-emerald-500/30">
+                              <Sparkles size={16} />
                             </div>
-                            <div className="text-[11px] text-zinc-400">
-                              Automated linguistic, cadence, and response analysis for {selectedCandidate.candidate_name}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Overall Score & Assessment Grade */}
-                        <div className="flex items-center gap-3">
-                          <div className="text-right">
-                            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                              {roundCommAnalysis.analysis.assessment_grade || 'Overall Score'}
-                            </span>
-                            <span className={`text-xl font-black ${
-                              (roundCommAnalysis.analysis.overall_score ?? 0) >= 75
-                                ? 'text-emerald-400'
-                                : (roundCommAnalysis.analysis.overall_score ?? 0) >= 50
-                                ? 'text-sky-400'
-                                : (roundCommAnalysis.analysis.overall_score ?? 0) >= 30
-                                ? 'text-amber-400'
-                                : 'text-rose-400'
-                            }`}>
-                              {roundCommAnalysis.analysis.overall_score ?? 0}
-                              <span className="text-xs text-zinc-500 font-semibold"> / 100</span>
-                            </span>
-                          </div>
-                          <div className={`w-11 h-11 rounded-2xl border-2 flex items-center justify-center font-black text-lg ${
-                            (roundCommAnalysis.analysis.overall_score ?? 0) >= 75
-                              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                              : (roundCommAnalysis.analysis.overall_score ?? 0) >= 50
-                              ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
-                              : (roundCommAnalysis.analysis.overall_score ?? 0) >= 30
-                              ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                              : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                          }`}>
-                            {roundCommAnalysis.analysis.overall_score ?? 0}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Summary */}
-                      {roundCommAnalysis.analysis.summary && (
-                        <div className="p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800 text-xs text-zinc-300 leading-relaxed">
-                          <span className="font-bold text-zinc-200 block mb-1">Executive Summary:</span>
-                          {roundCommAnalysis.analysis.summary}
-                        </div>
-                      )}
-
-                      {/* Linguistic Cadence & Metrics */}
-                      <div className="grid grid-cols-3 gap-2.5 text-center">
-                        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                          <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
-                            <Activity size={12} className="text-emerald-400" />
-                            <span>Speaking Pace</span>
-                          </div>
-                          <div className="text-base font-black text-white mt-1">
-                            {roundCommAnalysis.metrics?.words_per_minute || 140} <span className="text-xs font-normal text-zinc-400">WPM</span>
-                          </div>
-                          <div className="text-[10px] text-emerald-400 font-medium truncate mt-0.5">
-                            {roundCommAnalysis.metrics?.pace_rating || 'Optimal Cadence'}
-                          </div>
-                        </div>
-
-                        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                          <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
-                            <Zap size={12} className="text-sky-400" />
-                            <span>Filler Frequency</span>
-                          </div>
-                          <div className="text-base font-black text-white mt-1">
-                            {roundCommAnalysis.metrics?.filler_percentage !== undefined ? `${roundCommAnalysis.metrics.filler_percentage}%` : '1.8%'}
-                          </div>
-                          <div className="text-[10px] text-sky-400 font-medium truncate mt-0.5">
-                            {roundCommAnalysis.metrics?.filler_count || 0} filler words detected
-                          </div>
-                        </div>
-
-                        <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                          <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
-                            <Award size={12} className="text-purple-400" />
-                            <span>Lexical Variety</span>
-                          </div>
-                          <div className="text-base font-black text-white mt-1">
-                            {roundCommAnalysis.metrics?.lexical_diversity || 0.54} <span className="text-xs font-normal text-zinc-400">TTR</span>
-                          </div>
-                          <div className="text-[10px] text-purple-400 font-medium truncate mt-0.5">
-                            {roundCommAnalysis.metrics?.vocabulary_rating || 'Rich Lexicon'}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 6 Core Dimensions */}
-                      <div className="p-3.5 bg-zinc-950 rounded-2xl border border-zinc-800">
-                        <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-2.5">
-                          Dimensional Competency Breakdown (1 - 10)
-                        </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center text-xs">
-                          {[
-                            { label: 'Relevance', val: roundCommAnalysis.analysis.relevance_score ?? 7.5 },
-                            { label: 'Substance', val: roundCommAnalysis.analysis.substance_score ?? 7.0 },
-                            { label: 'Clarity', val: roundCommAnalysis.analysis.clarity_score ?? 7.5 },
-                            { label: 'Structure', val: roundCommAnalysis.analysis.structure_score ?? 7.0 },
-                            { label: 'Vocabulary', val: roundCommAnalysis.analysis.vocabulary_score ?? 7.5 },
-                            { label: 'Confidence', val: roundCommAnalysis.analysis.confidence_score ?? 7.0 },
-                          ].map((dim, idx) => (
-                            <div key={idx} className="p-2 rounded-xl bg-zinc-900 border border-zinc-800/80">
-                              <div className="text-[11px] text-zinc-400">{dim.label}</div>
-                              <div className={`text-sm font-black mt-0.5 ${
-                                dim.val >= 7 ? 'text-emerald-400' : dim.val >= 4 ? 'text-amber-400' : 'text-rose-400'
-                              }`}>
-                                {dim.val} / 10
+                            <div>
+                              <div className="text-xs font-bold text-white flex items-center gap-2">
+                                <span>AI Spoken Communication Assessment</span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                  {isViewingAiBaseline ? 'AI SCREENING BASELINE · ACCEPTED' : 'CONFIDENTIAL · ADMIN ONLY'}
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-zinc-400">
+                                {isViewingAiBaseline
+                                  ? `Pre-screening linguistic & communication scores for ${selectedCandidate.candidate_name} (Round 1: AI Screening)`
+                                  : `Automated linguistic, cadence, and response analysis for ${selectedCandidate.candidate_name}`}
                               </div>
                             </div>
-                          ))}
+                          </div>
+
+                          {/* Overall Score & Assessment Grade */}
+                          <div className="flex items-center gap-3">
+                            <div className="text-right">
+                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
+                                {activeAnalysis.analysis.assessment_grade || 'Overall Score'}
+                              </span>
+                              <span className={`text-xl font-black ${
+                                (activeAnalysis.analysis.overall_score ?? 0) >= 75
+                                  ? 'text-emerald-400'
+                                  : (activeAnalysis.analysis.overall_score ?? 0) >= 50
+                                  ? 'text-sky-400'
+                                  : (activeAnalysis.analysis.overall_score ?? 0) >= 30
+                                  ? 'text-amber-400'
+                                  : 'text-rose-400'
+                              }`}>
+                                {activeAnalysis.analysis.overall_score ?? 0}
+                                <span className="text-xs text-zinc-500 font-semibold"> / 100</span>
+                              </span>
+                            </div>
+                            <div className={`w-11 h-11 rounded-2xl border-2 flex items-center justify-center font-black text-lg ${
+                              (activeAnalysis.analysis.overall_score ?? 0) >= 75
+                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                                : (activeAnalysis.analysis.overall_score ?? 0) >= 50
+                                ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
+                                : (activeAnalysis.analysis.overall_score ?? 0) >= 30
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                            }`}>
+                              {activeAnalysis.analysis.overall_score ?? 0}
+                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Strengths & Growth Areas */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        {roundCommAnalysis.analysis.key_strengths && roundCommAnalysis.analysis.key_strengths.length > 0 && (
-                          <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-900/40">
-                            <div className="font-bold text-emerald-400 flex items-center gap-1.5 mb-2">
-                              <CheckCircle2 size={13} />
-                              <span>Key Strengths</span>
-                            </div>
-                            <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
-                              {roundCommAnalysis.analysis.key_strengths.map((str, i) => (
-                                <li key={i}>{str}</li>
-                              ))}
-                            </ul>
+                        {/* Summary */}
+                        {activeAnalysis.analysis.summary && (
+                          <div className="p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800 text-xs text-zinc-300 leading-relaxed">
+                            <span className="font-bold text-zinc-200 block mb-1">Executive Summary:</span>
+                            {activeAnalysis.analysis.summary}
                           </div>
                         )}
 
-                        {roundCommAnalysis.analysis.areas_for_improvement && roundCommAnalysis.analysis.areas_for_improvement.length > 0 && (
-                          <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-900/40">
-                            <div className="font-bold text-amber-400 flex items-center gap-1.5 mb-2">
-                              <AlertCircle size={13} />
-                              <span>Areas for Growth</span>
+                        {/* Linguistic Cadence & Metrics */}
+                        <div className="grid grid-cols-3 gap-2.5 text-center">
+                          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                            <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
+                              <Activity size={12} className="text-emerald-400" />
+                              <span>Speaking Pace</span>
                             </div>
-                            <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
-                              {roundCommAnalysis.analysis.areas_for_improvement.map((area, i) => (
-                                <li key={i}>{area}</li>
-                              ))}
-                            </ul>
+                            <div className="text-base font-black text-white mt-1">
+                              {activeAnalysis.metrics?.words_per_minute || 140} <span className="text-xs font-normal text-zinc-400">WPM</span>
+                            </div>
+                            <div className="text-[10px] text-emerald-400 font-medium truncate mt-0.5">
+                              {activeAnalysis.metrics?.pace_rating || 'Optimal Cadence'}
+                            </div>
                           </div>
-                        )}
-                      </div>
 
-                      {/* Full Transcript Accordion */}
-                      {roundCommAnalysis.transcript && roundCommAnalysis.transcript.length > 0 && (
-                        <div className="border border-zinc-800 rounded-2xl overflow-hidden">
-                          <button
-                            type="button"
-                            onClick={() => setIsTranscriptExpanded(!isTranscriptExpanded)}
-                            className="w-full p-3 bg-zinc-900/80 hover:bg-zinc-900 flex items-center justify-between text-xs font-bold text-zinc-200 transition cursor-pointer"
-                          >
-                            <span className="flex items-center gap-2">
-                              <FileText size={14} className="text-zinc-400" />
-                              <span>View Spoken Q&A Transcript ({roundCommAnalysis.transcript.length} turns)</span>
-                            </span>
-                            {isTranscriptExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                          </button>
+                          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                            <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
+                              <Zap size={12} className="text-sky-400" />
+                              <span>Filler Frequency</span>
+                            </div>
+                            <div className="text-base font-black text-white mt-1">
+                              {activeAnalysis.metrics?.filler_percentage !== undefined ? `${activeAnalysis.metrics.filler_percentage}%` : '1.8%'}
+                            </div>
+                            <div className="text-[10px] text-sky-400 font-medium truncate mt-0.5">
+                              {activeAnalysis.metrics?.filler_count || 0} filler words detected
+                            </div>
+                          </div>
 
-                          {isTranscriptExpanded && (
-                            <div className="p-3 bg-zinc-950/90 space-y-2.5 max-h-72 overflow-y-auto border-t border-zinc-800 text-xs">
-                              {roundCommAnalysis.transcript.map((t, idx) => {
-                                const isAi = t.speaker === 'interviewer';
-                                return (
-                                  <div
-                                    key={idx}
-                                    className={`p-2.5 rounded-xl border ${
-                                      isAi
-                                        ? 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
-                                        : 'bg-emerald-950/20 border-emerald-900/30 text-emerald-100'
-                                    }`}
-                                  >
-                                    <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-semibold">
-                                      <span>{t.speaker_name || (isAi ? 'AI Interviewer (Aria)' : selectedCandidate.candidate_name)}</span>
-                                      <span>{t.timestamp || ''}</span>
-                                    </div>
-                                    <div className="leading-relaxed">{t.text}</div>
-                                  </div>
-                                );
-                              })}
+                          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
+                            <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
+                              <Award size={12} className="text-purple-400" />
+                              <span>Lexical Variety</span>
+                            </div>
+                            <div className="text-base font-black text-white mt-1">
+                              {activeAnalysis.metrics?.lexical_diversity || 0.54} <span className="text-xs font-normal text-zinc-400">TTR</span>
+                            </div>
+                            <div className="text-[10px] text-purple-400 font-medium truncate mt-0.5">
+                              {activeAnalysis.metrics?.vocabulary_rating || 'Rich Lexicon'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 6 Core Dimensions */}
+                        <div className="p-3.5 bg-zinc-950 rounded-2xl border border-zinc-800">
+                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-2.5">
+                            Dimensional Competency Breakdown (1 - 10)
+                          </span>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center text-xs">
+                            {[
+                              { label: 'Relevance', val: activeAnalysis.analysis.relevance_score ?? 7.5 },
+                              { label: 'Substance', val: activeAnalysis.analysis.substance_score ?? 7.0 },
+                              { label: 'Clarity', val: activeAnalysis.analysis.clarity_score ?? 7.5 },
+                              { label: 'Structure', val: activeAnalysis.analysis.structure_score ?? 7.0 },
+                              { label: 'Vocabulary', val: activeAnalysis.analysis.vocabulary_score ?? 7.5 },
+                              { label: 'Confidence', val: activeAnalysis.analysis.confidence_score ?? 7.0 },
+                            ].map((dim, idx) => (
+                              <div key={idx} className="p-2 rounded-xl bg-zinc-900 border border-zinc-800/80">
+                                <div className="text-[11px] text-zinc-400">{dim.label}</div>
+                                <div className={`text-sm font-black mt-0.5 ${
+                                  dim.val >= 7 ? 'text-emerald-400' : dim.val >= 4 ? 'text-amber-400' : 'text-rose-400'
+                                }`}>
+                                  {dim.val} / 10
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Strengths & Growth Areas */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                          {activeAnalysis.analysis.key_strengths && activeAnalysis.analysis.key_strengths.length > 0 && (
+                            <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-900/40">
+                              <div className="font-bold text-emerald-400 flex items-center gap-1.5 mb-2">
+                                <CheckCircle2 size={13} />
+                                <span>Key Strengths</span>
+                              </div>
+                              <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
+                                {activeAnalysis.analysis.key_strengths.map((str, i) => (
+                                  <li key={i}>{str}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {activeAnalysis.analysis.areas_for_improvement && activeAnalysis.analysis.areas_for_improvement.length > 0 && (
+                            <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-900/40">
+                              <div className="font-bold text-amber-400 flex items-center gap-1.5 mb-2">
+                                <AlertCircle size={13} />
+                                <span>Areas for Growth</span>
+                              </div>
+                              <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
+                                {activeAnalysis.analysis.areas_for_improvement.map((area, i) => (
+                                  <li key={i}>{area}</li>
+                                ))}
+                              </ul>
                             </div>
                           )}
                         </div>
-                      )}
 
-                      {/* Evaluation Form quick trigger */}
-                      <div className="flex items-center justify-between pt-2">
-                        <span className="text-[11px] text-zinc-400">
-                          Transfer scores and insights to official evaluation record:
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setActiveEvaluationRound(selectedRoundForDetails)}
-                          className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
-                        >
-                          <Award size={13} />
-                          <span>Record Official Evaluation</span>
-                        </button>
+                        {/* Full Transcript Accordion */}
+                        {activeAnalysis.transcript && activeAnalysis.transcript.length > 0 && (
+                          <div className="border border-zinc-800 rounded-2xl overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setIsTranscriptExpanded(!isTranscriptExpanded)}
+                              className="w-full p-3 bg-zinc-900/80 hover:bg-zinc-900 flex items-center justify-between text-xs font-bold text-zinc-200 transition cursor-pointer"
+                            >
+                              <span className="flex items-center gap-2">
+                                <FileText size={14} className="text-zinc-400" />
+                                <span>View Spoken Q&A Transcript ({activeAnalysis.transcript.length} turns)</span>
+                              </span>
+                              {isTranscriptExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </button>
+
+                            {isTranscriptExpanded && (
+                              <div className="p-3 bg-zinc-950/90 space-y-2.5 max-h-72 overflow-y-auto border-t border-zinc-800 text-xs">
+                                {activeAnalysis.transcript.map((t, idx) => {
+                                  const isAi = t.speaker === 'interviewer';
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className={`p-2.5 rounded-xl border ${
+                                        isAi
+                                          ? 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
+                                          : 'bg-emerald-950/20 border-emerald-900/30 text-emerald-100'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-semibold">
+                                        <span>{t.speaker_name || (isAi ? 'AI Interviewer (Aria)' : selectedCandidate.candidate_name)}</span>
+                                        <span>{t.timestamp || ''}</span>
+                                      </div>
+                                      <div className="leading-relaxed">{t.text}</div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Evaluation Form quick trigger */}
+                        <div className="flex items-center justify-between pt-2">
+                          <span className="text-[11px] text-zinc-400">
+                            Transfer scores and insights to official evaluation record:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setActiveEvaluationRound(selectedRoundForDetails)}
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                          >
+                            <Award size={13} />
+                            <span>Record Official Evaluation</span>
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ) : loadingCommAnalysis ? (
-                    <div className="p-4 bg-zinc-100 rounded-2xl border border-zinc-200 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-zinc-400 border-t-zinc-800 rounded-full animate-spin" />
-                      <span>Loading AI Communication Analysis...</span>
-                    </div>
-                  ) : null}
+                    );
+                  })()}
                 </div>
               ) : (
                 <div className="p-6 text-center text-xs text-zinc-400 bg-zinc-50 rounded-2xl border border-zinc-200">

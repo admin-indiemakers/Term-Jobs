@@ -1328,47 +1328,23 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                 }
             by_candidate[cid]["rounds"].append(r.to_doc())
 
-        # Also pull all Shortlisted candidates from candidate_submissions
+        # Match candidate submission info for candidates already in by_candidate
         submissions = session.query(CandidateSubmission).all()
         for sub in submissions:
-            status_clean = (sub.status or "").strip().lower()
-            if status_clean in ("shortlisted", "interviewing", "under review", "screened"):
-                # If tenant requisitions are known, filter to candidates for those requisitions
-                if tenant_req_ids and sub.requisition_id and sub.requisition_id not in tenant_req_ids:
-                    continue
+            sub_email_norm = (sub.candidate_email or "").strip().lower()
+            sub_name_norm = (sub.candidate_name or "").strip().lower()
+            for k, v in by_candidate.items():
+                v_email_norm = (v.get("candidate_email") or "").strip().lower()
+                v_name_norm = (v.get("candidate_name") or "").strip().lower()
+                same_req = str(v.get("requisition_id") or "") == str(sub.requisition_id or "")
 
-                # Check if this candidate is already tracked in by_candidate
-                existing_key = None
-                sub_email_norm = (sub.candidate_email or "").strip().lower()
-                sub_name_norm = (sub.candidate_name or "").strip().lower()
-                for k, v in by_candidate.items():
-                    v_email_norm = (v.get("candidate_email") or "").strip().lower()
-                    v_name_norm = (v.get("candidate_name") or "").strip().lower()
-                    same_req = str(v.get("requisition_id") or "") == str(sub.requisition_id or "")
-
-                    if (sub.id and v.get("candidate_submission_id") == sub.id) or \
-                       (sub_email_norm and v_email_norm == sub_email_norm and same_req) or \
-                       (sub_name_norm and v_name_norm == sub_name_norm and same_req):
-                        existing_key = k
-                        break
-
-                if existing_key:
-                    by_candidate[existing_key]["match_score"] = sub.match_score
-                    by_candidate[existing_key]["vendor_name"] = sub.vendor_name
-                    by_candidate[existing_key]["submission_status"] = sub.status
-                else:
-                    cand_key = sub.id or (f"{sub_email_norm}_{sub.requisition_id}" if sub_email_norm else f"{sub_name_norm}_{sub.requisition_id}") or f"sub-{len(by_candidate)}"
-                    by_candidate[cand_key] = {
-                        "candidate_submission_id": sub.id,
-                        "candidate_name": sub.candidate_name or "Candidate",
-                        "candidate_email": sub.candidate_email or "",
-                        "requisition_id": sub.requisition_id or "",
-                        "requisition_title": req_title_map.get(sub.requisition_id, "Position"),
-                        "match_score": sub.match_score,
-                        "vendor_name": sub.vendor_name,
-                        "submission_status": sub.status or "Shortlisted",
-                        "rounds": [],
-                    }
+                if (sub.id and v.get("candidate_submission_id") == sub.id) or \
+                   (sub_email_norm and v_email_norm == sub_email_norm and same_req) or \
+                   (sub_name_norm and v_name_norm == sub_name_norm and same_req):
+                    by_candidate[k]["match_score"] = sub.match_score
+                    by_candidate[k]["vendor_name"] = sub.vendor_name
+                    by_candidate[k]["submission_status"] = sub.status
+                    break
             
         summary = []
         for cid, item in by_candidate.items():
@@ -1378,14 +1354,27 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
             total_rounds = len(r_list)
             completed_rounds = sum(1 for x in r_list if x.get("status") == "Completed")
             in_progress_rounds = sum(1 for x in r_list if x.get("status") == "In Progress")
-            
+
+            # Hiring Manager only sees candidates whose AI interview has ended (completed)
+            if completed_rounds == 0:
+                continue
+
             # Determine readiness for next round
             last_round = r_list[-1] if r_list else None
             last_eval = (last_round.get("evaluation") or {}) if last_round else {}
-            last_verdict = last_eval.get("result", "")
-            
+            last_verdict = (last_eval.get("result") or "").strip()
+
+            # Exclude rejected candidates
+            sub_status = (item.get("submission_status") or "").strip().lower()
+            if last_verdict == "No" and sub_status == "rejected":
+                continue
+
+            # Check if company rounds exist (rounds other than AI Fast-Track)
+            company_rounds = [r for r in r_list if not (r.get("round_name") or "").startswith("AI")]
+            ready_for_company_round_1 = len(company_rounds) == 0
+
             ready_for_next = False
-            if last_round and last_round.get("status") == "Completed" and last_verdict in ("Strong Yes", "Yes"):
+            if last_round and last_round.get("status") == "Completed" and last_verdict in ("Strong Yes", "Yes", "Maybe"):
                 ready_for_next = True
                 
             summary.append({
@@ -1401,7 +1390,7 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                 "completed_rounds": completed_rounds,
                 "in_progress_rounds": in_progress_rounds,
                 "ready_for_next_round": ready_for_next,
-                "ready_for_round_1": (total_rounds == 0),
+                "ready_for_round_1": ready_for_company_round_1,
                 "latest_round": last_round,
                 "rounds": r_list,
             })
