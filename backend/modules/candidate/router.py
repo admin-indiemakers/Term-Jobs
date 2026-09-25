@@ -1528,6 +1528,7 @@ def shortlist_candidate(
 
 
 @router.get("/shortlist-status/{requisition_id}")
+@router.get("/requisitions/{requisition_id}/shortlist/status")
 def get_candidate_shortlist_status(
     requisition_id: str,
     current_user: User = Depends(get_current_user),
@@ -1538,6 +1539,7 @@ def get_candidate_shortlist_status(
 
 
 @router.post("/shortlist-send-now/{requisition_id}")
+@router.post("/requisitions/{requisition_id}/shortlist/send-now")
 def send_candidate_shortlist_now(
     requisition_id: str,
     body: dict | None = None,
@@ -1554,4 +1556,15 @@ def send_candidate_shortlist_now(
         is_auto=False,
         notes=notes,
     )
+
+
+@router.post("/shortlist-generate/{requisition_id}")
+@router.post("/requisitions/{requisition_id}/shortlist/generate")
+def generate_candidate_shortlist_endpoint(
+    requisition_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Generate or update candidate shortlist using our algorithm."""
+    from modules.candidate.shortlist_service import generate_and_rank_requisition_shortlist
+    return generate_and_rank_requisition_shortlist(requisition_id)
 
