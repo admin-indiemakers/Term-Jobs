@@ -216,7 +216,18 @@ export default function CandidateSchedule() {
     ])
       .then(([cand, invs]) => {
         setCandidate(cand);
-        setInterview(Array.isArray(invs) ? invs[0] || null : null);
+        const inv = Array.isArray(invs) ? invs[0] || null : null;
+        setInterview(inv);
+        if (inv?.decision) {
+          setDecision(inv.decision);
+        } else if (cand?.status === 'Accepted' || cand?.status === 'Rejected') {
+          setDecision(cand.status);
+        }
+        if (inv?.final_remark) {
+          setRemark(inv.final_remark);
+        } else if (cand?.hiring_manager_notes) {
+          setRemark(cand.hiring_manager_notes);
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -251,8 +262,15 @@ export default function CandidateSchedule() {
     setSaving(true);
     setError('');
     try {
+      // 1. Process candidate decision & complete company onboarding
+      await request(`/api/interviews/candidates/${encodeURIComponent(candidateId)}/decision`, {
+        method: 'POST',
+        token,
+        body: { decision, notes: remark, requisition_id: reqId },
+      }).catch((err) => console.warn('Candidate decision warning:', err));
+
       if (interview) {
-        // Interview exists — record decision via the interview complete endpoint
+        // Complete interview record as well
         const res = await request(`/api/interviews/${interview.id}/complete`, {
           method: 'POST',
           token,
@@ -260,7 +278,6 @@ export default function CandidateSchedule() {
         });
         setInterview(res);
       } else {
-        // No interview — directly update candidate status via PATCH
         const newStatus = decision === 'Accepted' ? 'Accepted' : 'Rejected';
         await request(`/candidates/${candidateId}/status`, {
           method: 'PATCH',
@@ -269,7 +286,11 @@ export default function CandidateSchedule() {
         });
       }
       setEditingDecision(false);
-      setSuccessMsg(decision === 'Accepted' ? `✓ ${candidate?.candidate_name || 'Candidate'} has been accepted and moved to onboarding.` : `✕ ${candidate?.candidate_name || 'Candidate'} has been rejected for this role.`);
+      setSuccessMsg(
+        decision === 'Accepted'
+          ? `✓ ${candidate?.candidate_name || 'Candidate'} has been formally accepted & onboarded with Candidate ID! Super Admin notified.`
+          : `✕ ${candidate?.candidate_name || 'Candidate'} has been rejected. Super Admin notified.`
+      );
       // Refetch candidate data so the updated status (Accepted/Rejected) is reflected
       try {
         const updatedCandidate = await request(`/candidates/${candidateId}`, { token });
@@ -277,10 +298,6 @@ export default function CandidateSchedule() {
       } catch (_) {
         // Candidate fetch failed; decision update succeeded so this is non-critical
       }
-      // Auto-navigate back after 3 seconds
-      setTimeout(() => {
-        window.location.href = `/dashboard/requisitions/${reqId}/candidates`;
-      }, 3000);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -556,104 +573,208 @@ export default function CandidateSchedule() {
             </div>
           </div>
 
-          {/* Decision panel */}
+          {/* Final Decision & Onboarding Panel */}
           {(isOver || !isReadOnly) && (
-            <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: '20px', padding: '28px 30px', marginTop: '16px', boxShadow: '0 1px 2px rgba(10,10,10,0.04)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', marginBottom: '18px' }}>
+            <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: '20px', padding: '28px 30px', marginTop: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px', marginBottom: '20px' }}>
                 <div>
-                  <SectionLabel style={{ marginBottom: '6px' }}>Final Decision</SectionLabel>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <SectionLabel style={{ margin: 0 }}>Final Hiring Decision & Onboarding</SectionLabel>
+                    {recordedDecision && (
+                      <span style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        background: recordedDecision === 'Accepted' ? '#ECFDF5' : '#FFF1F2',
+                        color: recordedDecision === 'Accepted' ? '#047857' : '#BE123C',
+                        border: `1px solid ${recordedDecision === 'Accepted' ? '#A7F3D0' : '#FECDD3'}`,
+                        padding: '3px 12px',
+                        borderRadius: '999px',
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.05em'
+                      }}>
+                        {recordedDecision === 'Accepted' ? '✓' : '✕'} RECORDED: {recordedDecision.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                   <p style={{ fontSize: '0.86rem', color: MUTED, margin: 0 }}>
-                    {isOver ? 'This meeting is over. Review the candidate and finalize the outcome.' : 'Once the meeting is over, record the outcome to move the candidate into Accepted or Rejected.'}
+                    Review this candidate, select the final hiring decision, and record your hiring evaluation remarks. Accepted candidates are onboarded to the company with a Candidate ID and shown under Accepted Candidates.
                   </p>
                 </div>
-                {isOver && !editingDecision && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', background: recordedDecision === 'Accepted' ? INK : PAPER, color: recordedDecision === 'Accepted' ? PAPER : INK, border: `1px solid ${INK}`, padding: '7px 16px', borderRadius: '999px', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '0.12em' }}>
-                    {recordedDecision === 'Accepted' ? '✓' : '✕'} {recordedDecision.toUpperCase()}
-                  </span>
-                )}
               </div>
 
-              {isOver && !editingDecision && (
-                <div style={{ background: GHOST, border: `1px solid ${LINE}`, borderRadius: '12px', padding: '18px', marginBottom: '16px' }}>
-                  <SectionLabel style={{ marginBottom: '8px' }}>Final remark</SectionLabel>
-                  <div style={{ fontSize: '0.92rem', color: INK, lineHeight: '1.7' }}>{interview.final_remark || 'No remark recorded.'}</div>
+              {successMsg && (
+                <div style={{ padding: '20px', borderRadius: '14px', background: '#ECFDF5', border: '1px solid #A7F3D0', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#065F46', fontWeight: 700, fontSize: '0.92rem' }}>
+                    <span>{successMsg}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    <a
+                      href="/dashboard/candidates/accepted"
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 18px', borderRadius: '10px', background: '#059669', color: '#FFFFFF', fontWeight: 800, fontSize: '0.82rem', textDecoration: 'none', boxShadow: '0 4px 12px rgba(5,150,105,0.3)' }}
+                    >
+                      View in Accepted Candidates →
+                    </a>
+                  </div>
                 </div>
               )}
 
-              {(!isOver || editingDecision) && !successMsg && (
-                <form onSubmit={handleComplete}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '16px' }} className="decision-grid">
-                    {['Accepted', 'Rejected'].map((d) => {
-                      const selected = decision === d;
-                      return (
-                        <button
-                          key={d}
-                          type="button"
-                          onClick={() => setDecision(d)}
-                          style={{
-                            padding: '26px 20px',
-                            borderRadius: '14px',
-                            border: selected ? `2px solid ${INK}` : `2px solid ${LINE_STRONG}`,
-                            background: selected ? INK : PAPER,
-                            cursor: 'pointer',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '10px',
-                            transition: 'all 0.15s ease',
-                            boxShadow: selected ? '0 16px 32px -16px rgba(10,10,10,0.35)' : 'none',
-                          }}
-                        >
-                          <span style={{ fontSize: '1.9rem', color: selected ? PAPER : INK, lineHeight: 1 }}>
-                            {d === 'Accepted' ? '✓' : '✕'}
-                          </span>
-                          <span style={{ fontSize: '1rem', fontWeight: 900, color: selected ? PAPER : INK, letterSpacing: '-0.01em' }}>
-                            {d === 'Accepted' ? 'Accept' : 'Reject'}
-                          </span>
-                          <span style={{ fontSize: '0.72rem', color: selected ? 'rgba(255,255,255,0.7)' : MUTED, fontWeight: 600, textAlign: 'center', maxWidth: '220px', letterSpacing: '0.02em' }}>
-                            {d === 'Accepted' ? 'Move to accepted candidates & onboarding.' : 'Decline this candidate for this role.'}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
+              <form onSubmit={handleComplete}>
+                {/* Accept / Reject Selector Cards */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '20px' }} className="decision-grid">
+                  {/* ACCEPT CARD */}
+                  <button
+                    type="button"
+                    onClick={() => setDecision('Accepted')}
+                    style={{
+                      padding: '22px 20px',
+                      borderRadius: '16px',
+                      border: decision === 'Accepted' ? '2.5px solid #059669' : `1.5px solid ${LINE_STRONG}`,
+                      background: decision === 'Accepted' ? '#F0FDF4' : PAPER,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: decision === 'Accepted' ? '0 12px 24px -10px rgba(5,150,105,0.25)' : 'none',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: decision === 'Accepted' ? '#059669' : '#F4F4F0',
+                      color: decision === 'Accepted' ? '#FFFFFF' : INK,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.5rem',
+                      fontWeight: 900
+                    }}>
+                      ✓
+                    </div>
+                    <span style={{ fontSize: '1.05rem', fontWeight: 900, color: decision === 'Accepted' ? '#065F46' : INK, letterSpacing: '-0.01em' }}>
+                      Accept & Onboard
+                    </span>
+                    <span style={{ fontSize: '0.74rem', color: decision === 'Accepted' ? '#047857' : MUTED, fontWeight: 600, maxWidth: '240px', lineHeight: 1.4 }}>
+                      Issues Candidate ID, starts 8-gate company onboarding & work order, notifies Super Admin.
+                    </span>
+                  </button>
+
+                  {/* REJECT CARD */}
+                  <button
+                    type="button"
+                    onClick={() => setDecision('Rejected')}
+                    style={{
+                      padding: '22px 20px',
+                      borderRadius: '16px',
+                      border: decision === 'Rejected' ? '2.5px solid #E11D48' : `1.5px solid ${LINE_STRONG}`,
+                      background: decision === 'Rejected' ? '#FFF1F2' : PAPER,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease',
+                      boxShadow: decision === 'Rejected' ? '0 12px 24px -10px rgba(225,29,72,0.25)' : 'none',
+                      textAlign: 'center',
+                    }}
+                  >
+                    <div style={{
+                      width: '44px',
+                      height: '44px',
+                      borderRadius: '12px',
+                      background: decision === 'Rejected' ? '#E11D48' : '#F4F4F0',
+                      color: decision === 'Rejected' ? '#FFFFFF' : INK,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '1.5rem',
+                      fontWeight: 900
+                    }}>
+                      ✕
+                    </div>
+                    <span style={{ fontSize: '1.05rem', fontWeight: 900, color: decision === 'Rejected' ? '#9F1239' : INK, letterSpacing: '-0.01em' }}>
+                      Reject Candidate
+                    </span>
+                    <span style={{ fontSize: '0.74rem', color: decision === 'Rejected' ? '#BE123C' : MUTED, fontWeight: 600, maxWidth: '240px', lineHeight: 1.4 }}>
+                      Decline candidate for this requisition and transmit rejection reason to Super Admin.
+                    </span>
+                  </button>
+                </div>
+
+                {/* Decision Reason / Final Remark Textarea */}
+                <div style={{ marginBottom: '18px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 800, color: INK, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Decision Reason / Final Hiring Remark {decision === 'Rejected' && <span style={{ color: '#E11D48' }}>*</span>}
+                  </label>
                   <textarea
                     value={remark}
                     onChange={(e) => setRemark(e.target.value)}
-                    placeholder="Final remark — strengths, concerns, and overall fit for the role…"
+                    placeholder={
+                      decision === 'Accepted'
+                        ? "Enter hiring decision remarks (e.g. Cleared all evaluation criteria with strong communication scores. Ready for company onboarding)..."
+                        : "Enter specific rejection reason (e.g. Incomplete answers during screening, technical skills mismatch)..."
+                    }
                     rows={3}
-                    style={{ width: '100%', padding: '12px 14px', borderRadius: '10px', border: `1px solid ${LINE_STRONG}`, fontSize: '0.88rem', resize: 'vertical', boxSizing: 'border-box', marginBottom: '16px', background: PAPER, color: INK }}
+                    style={{
+                      width: '100%',
+                      padding: '14px 16px',
+                      borderRadius: '12px',
+                      border: `1.5px solid ${decision === 'Accepted' ? '#10B981' : '#F43F5E'}`,
+                      fontSize: '0.88rem',
+                      resize: 'vertical',
+                      boxSizing: 'border-box',
+                      background: PAPER,
+                      color: INK,
+                      lineHeight: 1.6,
+                      outline: 'none',
+                    }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', flexWrap: 'wrap' }}>
-                    {editingDecision && (
-                      <button
-                        type="button"
-                        onClick={() => { setEditingDecision(false); setDecision(recordedDecision || 'Accepted'); setRemark(interview?.final_remark || ''); }}
-                        style={{ background: PAPER, border: `1px solid ${LINE_STRONG}`, padding: '11px 20px', borderRadius: '10px', fontSize: '0.86rem', fontWeight: 700, color: INK, cursor: 'pointer' }}
-                      >
-                        Cancel
-                      </button>
-                    )}
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      style={{ background: INK, color: PAPER, border: 0, padding: '12px 28px', borderRadius: '10px', fontSize: '0.88rem', fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 20px -8px rgba(10,10,10,0.4)' }}
-                    >
-                      {saving ? 'Recording…' : isOver && editingDecision ? 'Update Decision' : 'Confirm & Record Decision'}
-                    </button>
-                  </div>
-                </form>
-              )}
+                </div>
 
-              {isOver && !editingDecision && (
-                <button
-                  type="button"
-                  onClick={() => { setEditingDecision(true); setDecision(recordedDecision || 'Accepted'); setRemark(interview?.final_remark || ''); }}
-                  style={{ background: PAPER, border: `1px solid ${LINE_STRONG}`, padding: '9px 18px', borderRadius: '10px', fontSize: '0.82rem', fontWeight: 700, color: INK, cursor: 'pointer' }}
-                >
-                  ✎ Edit decision
-                </button>
-              )}
+                {/* Submit Button */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    style={{
+                      background: decision === 'Accepted' ? '#059669' : '#E11D48',
+                      color: '#FFFFFF',
+                      border: 0,
+                      padding: '13px 32px',
+                      borderRadius: '12px',
+                      fontSize: '0.9rem',
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      boxShadow: decision === 'Accepted'
+                        ? '0 8px 20px -6px rgba(5,150,105,0.45)'
+                        : '0 8px 20px -6px rgba(225,29,72,0.45)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.15s ease'
+                    }}
+                  >
+                    {saving ? (
+                      'Processing Decision & Onboarding…'
+                    ) : decision === 'Accepted' ? (
+                      <>
+                        <span>✓</span>
+                        <span>Confirm Acceptance & Onboard Candidate</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>✕</span>
+                        <span>Confirm Rejection with Reason</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
         </>

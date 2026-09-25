@@ -689,6 +689,19 @@ def complete_interview(interview_id: str, final_remark: str, decision: str) -> O
                         )
                     except Exception as notify_err:
                         logger.warning("complete_interview: failed to notify Super Admin: %s", notify_err)
+
+            # Trigger complete formal onboarding, candidate ID assignment & admin notification
+            try:
+                cand_id_to_process = (sub.id if sub else None) or interview.candidate_submission_id
+                if cand_id_to_process:
+                    process_candidate_hiring_decision(
+                        candidate_id=cand_id_to_process,
+                        decision=decision,
+                        notes=final_remark,
+                        requisition_id=interview.requisition_id,
+                    )
+            except Exception as proc_err:
+                logger.warning("complete_interview: process_candidate_hiring_decision error: %s", proc_err)
             else:
                 logger.warning(
                     "complete_interview: candidate submission %s not found for interview %s",
@@ -1466,15 +1479,17 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
         req_title_map = {r.id: (r.title or "Position") for r in req_rows}
         tenant_req_ids = set(req_title_map.keys())
 
-        # Query all scheduled interview rounds for this tenant
+        # Query scheduled interview rounds from SQLite
         round_filters = [InterviewRound.tenant_id == tenant_id] if tenant_id else []
         rounds = session.query(InterviewRound).filter(*round_filters).all()
         by_candidate = {}
+        seen_round_ids = set()
         for r in rounds:
             cid = r.candidate_submission_id or r.candidate_email or r.id
             if cid not in by_candidate:
                 by_candidate[cid] = {
                     "candidate_submission_id": r.candidate_submission_id,
+                    "candidate_id": r.candidate_submission_id,
                     "candidate_name": r.candidate_name,
                     "candidate_email": r.candidate_email,
                     "requisition_id": r.requisition_id,
@@ -1485,8 +1500,38 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                     "rounds": [],
                 }
             by_candidate[cid]["rounds"].append(r.to_doc())
+            seen_round_ids.add(r.id)
 
-        # Match candidate submission info for candidates already in by_candidate
+        # Also query MongoDB interview_rounds
+        try:
+            m_round_filters = {"tenant_id": tenant_id} if tenant_id else {}
+            mongo_rounds = list(db["interview_rounds"].find(m_round_filters))
+            for mr in mongo_rounds:
+                mr_id = mr.get("id") or str(mr.get("_id"))
+                if mr_id not in seen_round_ids:
+                    cid = mr.get("candidate_submission_id") or mr.get("candidate_email") or mr_id
+                    if cid not in by_candidate:
+                        by_candidate[cid] = {
+                            "candidate_submission_id": mr.get("candidate_submission_id"),
+                            "candidate_id": mr.get("candidate_submission_id"),
+                            "candidate_name": mr.get("candidate_name"),
+                            "candidate_email": mr.get("candidate_email"),
+                            "requisition_id": mr.get("requisition_id"),
+                            "requisition_title": mr.get("requisition_title") or req_title_map.get(mr.get("requisition_id"), "Position"),
+                            "match_score": None,
+                            "vendor_name": None,
+                            "submission_status": "Interviewing",
+                            "rounds": [],
+                        }
+                    m_clean = dict(mr)
+                    m_clean["id"] = mr_id
+                    m_clean.pop("_id", None)
+                    by_candidate[cid]["rounds"].append(m_clean)
+                    seen_round_ids.add(mr_id)
+        except Exception as m_err:
+            logger.warning(f"Error querying mongo interview_rounds in summary: {m_err}")
+
+        # Match candidate submission info from SQLite
         submissions = session.query(CandidateSubmission).all()
         for sub in submissions:
             sub_email_norm = (sub.candidate_email or "").strip().lower()
@@ -1502,7 +1547,33 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                     by_candidate[k]["match_score"] = sub.match_score
                     by_candidate[k]["vendor_name"] = sub.vendor_name
                     by_candidate[k]["submission_status"] = sub.status
+                    if not by_candidate[k].get("candidate_submission_id"):
+                        by_candidate[k]["candidate_submission_id"] = sub.id
                     break
+
+        # Also enrich candidate submission info from MongoDB candidate_submissions
+        try:
+            mongo_subs = list(db["candidate_submissions"].find({}))
+            for ms in mongo_subs:
+                ms_email = (ms.get("candidate_email") or "").strip().lower()
+                ms_id = ms.get("id") or str(ms.get("_id"))
+                ms_req = str(ms.get("requisition_id") or "")
+                for k, v in by_candidate.items():
+                    v_email = (v.get("candidate_email") or "").strip().lower()
+                    same_req = str(v.get("requisition_id") or "") == ms_req
+                    if (v.get("candidate_submission_id") == ms_id) or (ms_email and v_email == ms_email and same_req):
+                        if ms.get("status"):
+                            by_candidate[k]["submission_status"] = ms["status"]
+                        if ms.get("match_score") is not None:
+                            by_candidate[k]["match_score"] = ms["match_score"]
+                        if ms.get("vendor_name"):
+                            by_candidate[k]["vendor_name"] = ms["vendor_name"]
+                        cand_assigned_id = ms.get("candidate_id") or ms_id
+                        by_candidate[k]["candidate_id"] = cand_assigned_id
+                        if not by_candidate[k].get("candidate_submission_id"):
+                            by_candidate[k]["candidate_submission_id"] = ms_id
+        except Exception:
+            pass
             
         summary = []
         for cid, item in by_candidate.items():
@@ -1513,19 +1584,14 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
             completed_rounds = sum(1 for x in r_list if x.get("status") == "Completed")
             in_progress_rounds = sum(1 for x in r_list if x.get("status") == "In Progress")
 
-            # Hiring Manager only sees candidates whose AI interview has ended (completed)
-            if completed_rounds == 0:
+            # Hiring Manager sees candidates whose AI interview has completed, or who have active status
+            if completed_rounds == 0 and item.get("submission_status") not in ("Accepted", "Hired"):
                 continue
 
             # Determine readiness for next round
             last_round = r_list[-1] if r_list else None
             last_eval = (last_round.get("evaluation") or {}) if last_round else {}
             last_verdict = (last_eval.get("result") or "").strip()
-
-            # Exclude rejected candidates
-            sub_status = (item.get("submission_status") or "").strip().lower()
-            if last_verdict == "No" and sub_status == "rejected":
-                continue
 
             # Check if company rounds exist (rounds other than AI Fast-Track)
             company_rounds = [r for r in r_list if not (r.get("round_name") or "").startswith("AI")]
@@ -1537,6 +1603,7 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                 
             summary.append({
                 "candidate_submission_id": item["candidate_submission_id"],
+                "candidate_id": item.get("candidate_id") or item["candidate_submission_id"],
                 "candidate_name": item["candidate_name"],
                 "candidate_email": item["candidate_email"],
                 "requisition_id": item["requisition_id"],
@@ -1667,5 +1734,285 @@ def get_round_recording(round_id: str) -> Optional[dict]:
         print(f"[RECORDING] GridFS read warning: {e}")
 
     return None
+
+
+def process_candidate_hiring_decision(
+    candidate_id: str,
+    decision: str,  # "Accepted" or "Rejected"
+    notes: str = "",
+    actor_user: Any = None,
+    requisition_id: Optional[str] = None,
+) -> dict:
+    """
+    Formal Hiring Decision Workflow:
+    - If Accepted:
+      1. Formal Candidate ID is confirmed/assigned (e.g. CND-XXXX)
+      2. Candidate is onboarded to the company (onboarding_checklists checklist initialized with activation gates)
+      3. Draft work order initialized in work_orders
+      4. Candidate status updated to 'Accepted' across MongoDB and SQLite
+      5. High-priority notification dispatched to Super Admin
+      6. Candidate surfaces under Accepted Candidates view & Onboarding tab
+    - If Rejected:
+      1. Candidate status updated to 'Rejected' across MongoDB and SQLite
+      2. Super Admin notified
+    """
+    import uuid
+    from datetime import datetime, timezone
+    from modules.shared.db import get_session, db
+    from modules.candidate.domain.models import CandidateSubmission
+    from modules.requisition.domain.models import Requisition
+
+    now = datetime.now(timezone.utc)
+    now_iso = now.isoformat()
+    cid_clean = (candidate_id or "").strip()
+    actor_name = getattr(actor_user, "name", None) or getattr(actor_user, "email", None) or "Hiring Manager"
+    actor_email = getattr(actor_user, "email", "")
+    company_name = getattr(actor_user, "tenant_name", None) or "Enterprise Partner"
+
+    # 1. Lookup candidate in MongoDB candidate_submissions
+    sub_doc = db["candidate_submissions"].find_one({
+        "$or": [
+            {"id": cid_clean},
+            {"submission_id": cid_clean},
+            {"candidate_id": cid_clean},
+            {"candidate_email": cid_clean.lower()},
+        ]
+    })
+    if not sub_doc and requisition_id:
+        sub_doc = db["candidate_submissions"].find_one({"requisition_id": requisition_id})
+
+    # 2. Lookup in SQLite
+    with get_session() as session:
+        sql_sub = session.get(CandidateSubmission, cid_clean)
+        if not sql_sub and sub_doc:
+            sql_sub = session.get(CandidateSubmission, sub_doc.get("id"))
+        if not sql_sub and sub_doc and sub_doc.get("candidate_email"):
+            sql_sub = session.query(CandidateSubmission).filter(
+                CandidateSubmission.candidate_email == sub_doc["candidate_email"].lower()
+            ).first()
+
+        candidate_name = (
+            (sub_doc or {}).get("candidate_name")
+            or (sql_sub.candidate_name if sql_sub else None)
+            or "Candidate"
+        )
+        candidate_email = (
+            (sub_doc or {}).get("candidate_email")
+            or (sql_sub.candidate_email if sql_sub else None)
+            or ""
+        )
+        req_id = (
+            requisition_id
+            or (sub_doc or {}).get("requisition_id")
+            or (sql_sub.requisition_id if sql_sub else "")
+        )
+
+        req_title = "Position"
+        if req_id:
+            req_obj = session.get(Requisition, req_id)
+            if req_obj:
+                req_title = req_obj.title or "Position"
+                if not getattr(actor_user, "tenant_name", None) and req_obj.company_name:
+                    company_name = req_obj.company_name
+
+        if not sub_doc and not sql_sub:
+            raise ValueError(f"Candidate submission '{candidate_id}' not found.")
+
+        # Determine formal Candidate ID
+        existing_cid = (sub_doc or {}).get("candidate_id") or (sub_doc or {}).get("id") or cid_clean
+        if existing_cid and str(existing_cid).startswith("CND-"):
+            final_cand_id = existing_cid
+        else:
+            final_cand_id = f"CND-{uuid.uuid4().hex[:8].upper()}"
+
+        if decision == "Accepted":
+            # 1. Update SQLite submission
+            if sql_sub:
+                sql_sub.status = "Accepted"
+                sql_sub.updated_at = now
+                session.add(sql_sub)
+                session.commit()
+
+            # 2. Update MongoDB candidate_submissions
+            sub_id_to_match = (sql_sub.id if sql_sub else None) or (sub_doc.get("id") if sub_doc else cid_clean)
+            update_fields = {
+                "status": "Accepted",
+                "candidate_id": final_cand_id,
+                "accepted_at": now_iso,
+                "accepted_by": actor_name,
+                "hiring_manager_notes": notes or f"Accepted by {actor_name} on {now_iso[:10]}",
+                "onboarding_status": "Pending Setup",
+                "updated_at": now_iso,
+            }
+            db["candidate_submissions"].update_many(
+                {"$or": [
+                    {"id": sub_id_to_match},
+                    {"id": final_cand_id},
+                    {"id": cid_clean},
+                    {"candidate_email": candidate_email.lower(), "requisition_id": req_id} if candidate_email and req_id else {"candidate_email": candidate_email.lower()}
+                ]},
+                {"$set": update_fields}
+            )
+
+            # 3. Update or Insert in candidates collection
+            db["candidates"].update_one(
+                {"$or": [{"id": final_cand_id}, {"candidate_email": candidate_email.lower()}]},
+                {"$set": {
+                    "id": final_cand_id,
+                    "candidate_id": final_cand_id,
+                    "candidate_name": candidate_name,
+                    "candidate_email": candidate_email,
+                    "status": "Accepted",
+                    "company_name": company_name,
+                    "updated_at": now_iso,
+                }},
+                upsert=True
+            )
+
+            # 4. Onboard candidate: Initialize Checklist in onboarding_checklists
+            try:
+                from modules.onboarding.router import _get_or_create_onboarding_doc
+                _get_or_create_onboarding_doc(final_cand_id)
+            except Exception as onb_err:
+                logger.warning(f"Error creating onboarding doc via helper: {onb_err}")
+                default_gates = [
+                    {"id": "pan_aadhaar_bank", "label": "PAN, Aadhaar, bank details", "responsible": "Worker", "type": "blocking", "status": "pending"},
+                    {"id": "nda_ip", "label": "NDA and IP assignment", "responsible": "Worker", "type": "blocking", "status": "pending"},
+                    {"id": "pf_esic", "label": "PF and ESIC declaration", "responsible": "TalentBridge", "type": "blocking", "status": "pending"},
+                    {"id": "bgv", "label": "Background verification pack", "responsible": "TalentBridge", "type": "blocking", "status": "pending"},
+                    {"id": "ad_vpn_badge", "label": "Access provisioning — AD, VPN, badge", "responsible": "Buyer IT", "type": "blocking", "status": "pending"},
+                    {"id": "site_safety", "label": "Site safety induction", "responsible": "Buyer EHS", "type": "blocking", "status": "pending"},
+                    {"id": "laptop", "label": "Laptop issuance", "responsible": "Buyer IT", "type": "warn_only", "status": "pending"},
+                    {"id": "manager_orientation", "label": "Manager orientation", "responsible": "Manager", "type": "warn_only", "status": "pending"},
+                ]
+                db["onboarding_checklists"].update_one(
+                    {"$or": [{"candidate_id": final_cand_id}, {"workorder_id": final_cand_id}, {"candidate_email": candidate_email.lower()}]},
+                    {"$set": {
+                        "candidate_id": final_cand_id,
+                        "workorder_id": final_cand_id,
+                        "candidate_name": candidate_name,
+                        "candidate_email": candidate_email,
+                        "company_name": company_name,
+                        "requisition_id": req_id,
+                        "requisition_title": req_title,
+                        "status": "in_progress",
+                        "activation_status": "pending",
+                        "activation_gates": default_gates,
+                        "updated_at": now_iso,
+                    }},
+                    upsert=True
+                )
+
+            # 5. Initialize Work Order in work_orders
+            db["work_orders"].update_one(
+                {"$or": [{"candidate_id": final_cand_id}, {"workorder_id": final_cand_id}]},
+                {"$set": {
+                    "candidate_id": final_cand_id,
+                    "workorder_id": final_cand_id,
+                    "candidate_name": candidate_name,
+                    "candidate_email": candidate_email,
+                    "requisition_id": req_id,
+                    "requisition_title": req_title,
+                    "company_name": company_name,
+                    "status": "Draft",
+                    "agreement_status": "Draft",
+                    "created_at": now_iso,
+                    "updated_at": now_iso,
+                }},
+                upsert=True
+            )
+
+            # 6. Send high-priority notification to Super Admin
+            notif_msg = f"{candidate_name} (Candidate ID: {final_cand_id}) has been formally accepted by {company_name} for '{req_title}' and onboarded to company."
+            db["notifications"].insert_one({
+                "id": f"notif-{uuid.uuid4().hex[:12]}",
+                "title": f"Candidate Accepted & Onboarded: {candidate_name}",
+                "body": notif_msg,
+                "type": "candidate_accepted",
+                "recipient_role": "Super Admin",
+                "candidate_id": final_cand_id,
+                "candidate_name": candidate_name,
+                "candidate_email": candidate_email,
+                "requisition_id": req_id,
+                "company_name": company_name,
+                "hiring_manager_name": actor_name,
+                "status": "unread",
+                "created_at": now_iso,
+            })
+
+            # Also dispatch audit & email notification to super admins
+            try:
+                from modules.notifications.services.notification_service import notify_candidate_selected_by_hm
+                notify_candidate_selected_by_hm(
+                    requisition_id=req_id,
+                    candidate_name=candidate_name,
+                    company_name=company_name,
+                    hiring_manager_name=actor_name,
+                    hiring_manager_email=actor_email,
+                    candidate_email=candidate_email,
+                    candidate_id=final_cand_id,
+                    submission_id=sub_id_to_match,
+                    match_score=(sub_doc or {}).get("match_score"),
+                    notes=notes,
+                )
+            except Exception as notif_err:
+                logger.warning(f"Error calling notify_candidate_selected_by_hm: {notif_err}")
+
+            return {
+                "status": "success",
+                "decision": "Accepted",
+                "candidate_id": final_cand_id,
+                "candidate_name": candidate_name,
+                "submission_status": "Accepted",
+                "message": f"Candidate {candidate_name} has been accepted and onboarded with Candidate ID {final_cand_id}. Admin notified.",
+            }
+
+        else:
+            # Rejection workflow
+            if sql_sub:
+                sql_sub.status = "Rejected"
+                sql_sub.updated_at = now
+                session.add(sql_sub)
+                session.commit()
+
+            sub_id_to_match = (sql_sub.id if sql_sub else None) or (sub_doc.get("id") if sub_doc else cid_clean)
+            db["candidate_submissions"].update_many(
+                {"$or": [
+                    {"id": sub_id_to_match},
+                    {"id": cid_clean},
+                    {"candidate_email": candidate_email.lower(), "requisition_id": req_id} if candidate_email and req_id else {"candidate_email": candidate_email.lower()}
+                ]},
+                {"$set": {
+                    "status": "Rejected",
+                    "rejected_at": now_iso,
+                    "rejected_by": actor_name,
+                    "rejection_notes": notes,
+                    "updated_at": now_iso,
+                }}
+            )
+
+            # Notify Admin
+            db["notifications"].insert_one({
+                "id": f"notif-{uuid.uuid4().hex[:12]}",
+                "title": f"Candidate Rejected: {candidate_name}",
+                "body": f"{candidate_name} was marked as Rejected by {company_name} for '{req_title}'.",
+                "type": "candidate_rejected",
+                "recipient_role": "Super Admin",
+                "candidate_id": cid_clean,
+                "candidate_name": candidate_name,
+                "requisition_id": req_id,
+                "company_name": company_name,
+                "status": "unread",
+                "created_at": now_iso,
+            })
+
+            return {
+                "status": "success",
+                "decision": "Rejected",
+                "candidate_id": cid_clean,
+                "candidate_name": candidate_name,
+                "submission_status": "Rejected",
+                "message": f"Candidate {candidate_name} has been marked as Rejected. Admin notified.",
+            }
 
 

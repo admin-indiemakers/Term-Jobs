@@ -50,6 +50,7 @@ from modules.interview.services.interview_service import (
     get_round_communication_analysis,
     save_round_recording,
     get_round_recording,
+    process_candidate_hiring_decision,
 )
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
@@ -300,6 +301,40 @@ def get_interview_summary_endpoint(
     """Get aggregated interview progression per candidate for Hiring Manager, or all for Super Admin."""
     effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
     return get_hiring_manager_summary(tenant_id=effective_tenant)
+
+
+@router.post("/candidates/{candidate_id}/decision")
+def candidate_decision_endpoint(
+    candidate_id: str,
+    body: Dict[str, Any],
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Formal hiring decision by Hiring Manager / Company Admin (Accepted / Rejected).
+    When Accepted:
+      - Assigns/confirms formal Candidate ID (CND-XXXX)
+      - Onboards candidate to company (onboarding checklist with 8 activation gates + draft work order)
+      - Updates status to 'Accepted' in SQLite & MongoDB
+      - Notifies Super Admin (both in-app notification & candidate_selections record)
+      - Immediately surfaces candidate under Accepted Candidates and Onboarding views
+    """
+    decision = body.get("decision", "Accepted")
+    notes = body.get("notes", "")
+    requisition_id = body.get("requisition_id")
+    try:
+        return process_candidate_hiring_decision(
+            candidate_id=candidate_id,
+            decision=decision,
+            notes=notes,
+            actor_user=current_user,
+            requisition_id=requisition_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to record candidate decision: {str(e)}")
+
+
 
 
 @router.post("/candidate/login")

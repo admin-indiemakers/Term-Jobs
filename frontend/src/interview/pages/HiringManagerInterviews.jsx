@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Video,
   Plus,
@@ -15,6 +16,11 @@ import {
   ChevronUp,
   Clock,
   RefreshCw,
+  UserCheck,
+  UserX,
+  ExternalLink,
+  X,
+  ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { interviewApi } from '../services/interviewApi';
@@ -28,18 +34,27 @@ import { getMeetingRoomLink } from '../utils/credentialGenerator';
 
 export function HiringManagerInterviews() {
   const { token, user } = useAuth();
+  const navigate = useNavigate();
 
   const [candidatesSummary, setCandidatesSummary] = useState([]);
   const [rounds, setRounds] = useState([]);
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [selectedRoundForDetails, setSelectedRoundForDetails] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'ready_for_next' | 'in_progress' | 'completed'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'accepted' | 'ready_for_next' | 'in_progress' | 'completed'
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [createModalInitialData, setCreateModalInitialData] = useState({});
   const [activeInviteModalRound, setActiveInviteModalRound] = useState(null);
   const [activeEvaluationRound, setActiveEvaluationRound] = useState(null);
+
+  // Final Decision (Accept & Onboard / Reject) State
+  const [isDecisionModalOpen, setIsDecisionModalOpen] = useState(false);
+  const [decisionType, setDecisionType] = useState('Accepted'); // 'Accepted' | 'Rejected'
+  const [decisionCandidate, setDecisionCandidate] = useState(null);
+  const [decisionNotes, setDecisionNotes] = useState('');
+  const [submittingDecision, setSubmittingDecision] = useState(false);
+  const [decisionSuccessMsg, setDecisionSuccessMsg] = useState('');
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
@@ -118,6 +133,44 @@ export function HiringManagerInterviews() {
       setErrorMsg(err?.message || 'Failed to re-generate candidate shortlist.');
     } finally {
       setGeneratingShortlist(false);
+    }
+  };
+
+  const handleOpenDecisionModal = (cand, type) => {
+    setDecisionCandidate(cand);
+    setDecisionType(type);
+    setDecisionNotes('');
+    setDecisionSuccessMsg('');
+    setErrorMsg('');
+    setIsDecisionModalOpen(true);
+  };
+
+  const handleConfirmDecision = async () => {
+    if (!decisionCandidate) return;
+    const candIdent = decisionCandidate.candidate_submission_id || decisionCandidate.candidate_id || decisionCandidate.candidate_email;
+    setSubmittingDecision(true);
+    setErrorMsg('');
+    try {
+      const res = await interviewApi.recordCandidateDecision(
+        candIdent,
+        decisionType,
+        decisionNotes,
+        decisionCandidate.requisition_id,
+        token
+      );
+      const assignedId = res?.candidate_id || decisionCandidate.candidate_id || '';
+      setDecisionSuccessMsg(
+        res?.message ||
+        (decisionType === 'Accepted'
+          ? `Candidate ${decisionCandidate.candidate_name} has been formally accepted & onboarded${assignedId ? ` with Candidate ID ${assignedId}` : ''}. Super Admin notified.`
+          : `Candidate ${decisionCandidate.candidate_name} has been rejected. Super Admin notified.`)
+      );
+      setIsDecisionModalOpen(false);
+      await loadData();
+    } catch (err) {
+      setErrorMsg(err?.message || `Failed to record ${decisionType} decision.`);
+    } finally {
+      setSubmittingDecision(false);
     }
   };
 
@@ -211,15 +264,26 @@ export function HiringManagerInterviews() {
         interviewApi.listRounds({}, token).catch(() => []),
       ]);
 
-      setCandidatesSummary(Array.isArray(summaryRes) ? summaryRes : []);
+      const sumList = Array.isArray(summaryRes) ? summaryRes : [];
+      setCandidatesSummary(sumList);
       setRounds(Array.isArray(roundsRes) ? roundsRes : []);
 
-      if (Array.isArray(summaryRes) && summaryRes.length > 0) {
-        const first = summaryRes[0];
-        setSelectedCandidate(first);
-        const candRounds = first.rounds || [];
-        const latest = first.latest_round || (candRounds.length > 0 ? candRounds[candRounds.length - 1] : null);
-        setSelectedRoundForDetails(latest);
+      if (sumList.length > 0) {
+        setSelectedCandidate((prev) => {
+          if (prev) {
+            const match = sumList.find(
+              (c) =>
+                (c.candidate_submission_id && c.candidate_submission_id === prev.candidate_submission_id) ||
+                (c.candidate_email && c.candidate_email === prev.candidate_email) ||
+                (c.candidate_id && c.candidate_id === prev.candidate_id)
+            );
+            if (match) return match;
+          }
+          return sumList[0];
+        });
+        const candRounds = sumList[0].rounds || [];
+        const latest = sumList[0].latest_round || (candRounds.length > 0 ? candRounds[candRounds.length - 1] : null);
+        setSelectedRoundForDetails((prev) => prev || latest);
       }
     } catch (err) {
       setErrorMsg(err?.message || 'Failed to load interview workflows.');
@@ -297,10 +361,15 @@ export function HiringManagerInterviews() {
       const matchesSearch =
         (c.candidate_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.requisition_title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (c.candidate_id || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (c.candidate_email || '').toLowerCase().includes(searchQuery.toLowerCase());
 
       if (!matchesSearch) return false;
 
+      if (statusFilter === 'accepted') {
+        const s = (c.submission_status || '').toLowerCase();
+        return s === 'accepted' || s === 'hired';
+      }
       if (statusFilter === 'ready_for_next') return c.ready_for_round_1 || c.ready_for_next_round;
       if (statusFilter === 'in_progress') return c.in_progress_rounds > 0;
       if (statusFilter === 'completed') return c.completed_rounds > 0;
@@ -311,6 +380,10 @@ export function HiringManagerInterviews() {
 
   // Overview metrics
   const totalAcceptedCandidates = acceptedCandidates.length;
+  const acceptedHiredCount = acceptedCandidates.filter((c) => {
+    const s = (c.submission_status || '').toLowerCase();
+    return s === 'accepted' || s === 'hired';
+  }).length;
   const inProgressCount = rounds.filter((r) => r.status === 'In Progress').length;
   const completedCount = rounds.filter((r) => r.status === 'Completed').length;
   const readyToScheduleCount = acceptedCandidates.filter((c) => c.ready_for_round_1 || c.ready_for_next_round).length;
@@ -354,22 +427,29 @@ export function HiringManagerInterviews() {
         </div>
 
         {/* Metrics Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6 pt-6 border-t border-zinc-100">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-zinc-100">
           <div className="p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200/80">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">Accepted AI Candidates</div>
+            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">AI Cleared Pipeline</div>
             <div className="text-xl font-black text-zinc-950 mt-1">{totalAcceptedCandidates}</div>
+          </div>
+          <div className="p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-300 shadow-2xs">
+            <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
+              <CheckCircle2 size={12} className="text-emerald-600" />
+              <span>Accepted Candidates</span>
+            </div>
+            <div className="text-xl font-black text-emerald-950 mt-1">{acceptedHiredCount}</div>
+          </div>
+          <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
+            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Ready to Schedule</div>
+            <div className="text-xl font-black text-amber-900 mt-1">{readyToScheduleCount}</div>
           </div>
           <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200/80">
             <div className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider">In Progress Live</div>
             <div className="text-xl font-black text-blue-900 mt-1">{inProgressCount}</div>
           </div>
-          <div className="p-3.5 bg-emerald-50/60 rounded-2xl border border-emerald-200/80">
-            <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider">Completed Rounds</div>
-            <div className="text-xl font-black text-emerald-900 mt-1">{completedCount}</div>
-          </div>
-          <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
-            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Ready to Schedule</div>
-            <div className="text-xl font-black text-amber-900 mt-1">{readyToScheduleCount}</div>
+          <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200/80">
+            <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">Completed Rounds</div>
+            <div className="text-xl font-black text-purple-900 mt-1">{completedCount}</div>
           </div>
         </div>
       </div>
@@ -389,7 +469,7 @@ export function HiringManagerInterviews() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search candidate name, requisition, email..."
+            placeholder="Search candidate name, ID, requisition, email..."
             className="w-full pl-10 pr-3.5 py-2.5 bg-white border border-zinc-200 rounded-2xl text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 shadow-xs"
           />
         </div>
@@ -398,7 +478,7 @@ export function HiringManagerInterviews() {
           <button
             type="button"
             onClick={() => setStatusFilter('all')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer shrink-0 ${
               statusFilter === 'all' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-500 hover:text-zinc-950'
             }`}
           >
@@ -406,8 +486,20 @@ export function HiringManagerInterviews() {
           </button>
           <button
             type="button"
+            onClick={() => setStatusFilter('accepted')}
+            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
+              statusFilter === 'accepted'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-950'
+            }`}
+          >
+            <CheckCircle2 size={13} />
+            <span>Accepted ({acceptedHiredCount})</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setStatusFilter('ready_for_next')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0 ${
               statusFilter === 'ready_for_next'
                 ? 'bg-amber-500 text-white shadow-xs'
                 : 'text-zinc-500 hover:text-zinc-950'
@@ -419,7 +511,7 @@ export function HiringManagerInterviews() {
           <button
             type="button"
             onClick={() => setStatusFilter('in_progress')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer shrink-0 ${
               statusFilter === 'in_progress' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-500 hover:text-zinc-950'
             }`}
           >
@@ -428,7 +520,7 @@ export function HiringManagerInterviews() {
           <button
             type="button"
             onClick={() => setStatusFilter('completed')}
-            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl font-bold transition cursor-pointer shrink-0 ${
               statusFilter === 'completed' ? 'bg-white text-zinc-950 shadow-xs' : 'text-zinc-500 hover:text-zinc-950'
             }`}
           >
@@ -475,7 +567,11 @@ export function HiringManagerInterviews() {
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    {companyRounds.length === 0 ? (
+                    {((cand.submission_status || '').toLowerCase() === 'accepted' || (cand.submission_status || '').toLowerCase() === 'hired') ? (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500 text-zinc-950 flex items-center gap-1 shadow-2xs">
+                        <CheckCircle2 size={11} className="stroke-[3]" /> Accepted & Onboarded
+                      </span>
+                    ) : companyRounds.length === 0 ? (
                       <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 flex items-center gap-1">
                         <Sparkles size={11} /> AI Cleared · Ready for Round 1
                       </span>
@@ -486,6 +582,14 @@ export function HiringManagerInterviews() {
                         }`}
                       >
                         Company Round {companyRounds.length} Active
+                      </span>
+                    )}
+
+                    {cand.candidate_id && (
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md ${
+                        isSelected ? 'bg-zinc-800 text-emerald-300' : 'bg-zinc-100 text-zinc-600 font-semibold'
+                      }`}>
+                        {cand.candidate_id}
                       </span>
                     )}
                   </div>
@@ -547,23 +651,41 @@ export function HiringManagerInterviews() {
                     )}
                   </div>
 
-                  {/* Quick Action: Schedule Company Round */}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedCandidate(cand);
-                      handleScheduleForCandidate(cand);
-                    }}
-                    className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
-                      isSelected
-                        ? 'bg-white text-zinc-950 border-white/20 hover:bg-zinc-100'
-                        : 'bg-zinc-950 text-white border-zinc-900 hover:bg-zinc-800'
-                    }`}
-                  >
-                    <Plus size={12} strokeWidth={2.5} />
-                    <span>{companyRounds.length === 0 ? 'Schedule Company Round 1' : `Schedule Round ${companyRounds.length + 1}`}</span>
-                  </button>
+                  {/* Quick Action: If Accepted, view in Accepted Candidates, else Schedule Next Round */}
+                  {((cand.submission_status || '').toLowerCase() === 'accepted' || (cand.submission_status || '').toLowerCase() === 'hired') ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate('/dashboard/candidates/accepted');
+                      }}
+                      className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-emerald-500 text-zinc-950 border-emerald-400 hover:bg-emerald-400 font-extrabold shadow-xs'
+                          : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100'
+                      }`}
+                    >
+                      <CheckCircle2 size={12} strokeWidth={2.5} />
+                      <span>Onboarded · View in Accepted</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedCandidate(cand);
+                        handleScheduleForCandidate(cand);
+                      }}
+                      className={`mt-3 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'bg-white text-zinc-950 border-white/20 hover:bg-zinc-100'
+                          : 'bg-zinc-950 text-white border-zinc-900 hover:bg-zinc-800'
+                      }`}
+                    >
+                      <Plus size={12} strokeWidth={2.5} />
+                      <span>{companyRounds.length === 0 ? 'Schedule Company Round 1' : `Schedule Round ${companyRounds.length + 1}`}</span>
+                    </button>
+                  )}
                 </div>
               );
             })
@@ -576,34 +698,112 @@ export function HiringManagerInterviews() {
           {selectedCandidate ? (
             <div className="bg-white rounded-3xl border border-zinc-200/80 p-6 sm:p-8 shadow-xs space-y-6 sticky top-20">
               {/* Candidate Info Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-200">
-                <div>
-                  <div className="inline-flex items-center gap-1 text-xs font-bold text-zinc-500 uppercase tracking-wider mb-1">
-                    <span>Active Pipeline Detail</span>
-                  </div>
-                  <h2 className="text-2xl font-extrabold text-zinc-950 tracking-tight">
-                    {selectedCandidate.candidate_name}
-                  </h2>
-                  <div className="text-xs text-zinc-500 mt-1">
-                    {selectedCandidate.candidate_email} · Requisition: <strong className="text-zinc-800">{selectedCandidate.requisition_title}</strong>
-                  </div>
-                </div>
+              {(() => {
+                const isCandAccepted = (selectedCandidate.submission_status || '').toLowerCase() === 'accepted' || (selectedCandidate.submission_status || '').toLowerCase() === 'hired';
+                return (
+                  <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 pb-6 border-b border-zinc-200">
+                    <div className="space-y-1">
+                      <div className="inline-flex items-center gap-2">
+                        <span className="text-[10px] font-extrabold text-zinc-500 uppercase tracking-wider">
+                          Active Pipeline Detail
+                        </span>
+                        {isCandAccepted && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 border border-emerald-300 text-emerald-900 text-[10px] font-black uppercase tracking-wider shadow-2xs">
+                            <CheckCircle2 size={11} className="text-emerald-700" />
+                            <span>Accepted & Onboarded</span>
+                          </span>
+                        )}
+                      </div>
 
-                {/* Primary Action: Schedule Company LiveKit Round */}
-                <button
-                  type="button"
-                  onClick={() => handleScheduleForCandidate(selectedCandidate)}
-                  className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
-                >
-                  <Plus size={15} />
-                  <span>
-                    {(() => {
-                      const coRounds = (selectedCandidate.rounds || []).filter(r => !(r.round_name || '').startsWith('AI'));
-                      return coRounds.length === 0 ? 'Schedule Company Round 1' : `Schedule Next Round (${coRounds.length + 1})`;
-                    })()}
-                  </span>
-                </button>
-              </div>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <h2 className="text-2xl font-extrabold text-zinc-950 tracking-tight">
+                          {selectedCandidate.candidate_name}
+                        </h2>
+                        {selectedCandidate.candidate_id && (
+                          <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-zinc-900 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-xs">
+                            <span className="text-zinc-400 text-[10px] font-sans uppercase font-medium">Candidate ID:</span>
+                            <span>{selectedCandidate.candidate_id}</span>
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-zinc-500">
+                        {selectedCandidate.candidate_email} · Requisition: <strong className="text-zinc-800">{selectedCandidate.requisition_title}</strong>
+                      </div>
+                    </div>
+
+                    {/* Primary Actions: Final Accept, Final Reject, Schedule Next Round */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      {isCandAccepted ? (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/dashboard/candidates/accepted')}
+                          className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black flex items-center gap-2 transition shadow-md hover:shadow-lg cursor-pointer"
+                        >
+                          <CheckCircle2 size={15} />
+                          <span>View in Accepted Candidates</span>
+                          <ExternalLink size={13} />
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDecisionModal(selectedCandidate, 'Accepted')}
+                            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs font-black flex items-center gap-2 transition shadow-md hover:shadow-lg cursor-pointer"
+                            title="Formally accept candidate, assign Candidate ID, initialize company onboarding & notify Super Admin"
+                          >
+                            <UserCheck size={16} strokeWidth={2.5} />
+                            <span>Final Accept & Onboard</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDecisionModal(selectedCandidate, 'Rejected')}
+                            className="px-3.5 py-2.5 rounded-2xl bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 hover:border-rose-300 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                            title="Reject candidate and notify Super Admin"
+                          >
+                            <UserX size={15} />
+                            <span>Final Reject</span>
+                          </button>
+                        </>
+                      )}
+
+                      {/* Primary Action: Schedule Company LiveKit Round */}
+                      <button
+                        type="button"
+                        onClick={() => handleScheduleForCandidate(selectedCandidate)}
+                        className="px-4 py-2.5 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white text-xs font-bold flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
+                      >
+                        <Plus size={15} />
+                        <span>
+                          {(() => {
+                            const coRounds = (selectedCandidate.rounds || []).filter(r => !(r.round_name || '').startsWith('AI'));
+                            return coRounds.length === 0 ? 'Schedule Company Round 1' : `Schedule Next Round (${coRounds.length + 1})`;
+                          })()}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Success Notification Banner for Decision */}
+              {decisionSuccessMsg && (
+                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-300 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2 font-medium">
+                    <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+                    <span>{decisionSuccessMsg}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/dashboard/candidates/accepted')}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shrink-0 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                  >
+                    <span>Open Accepted Candidates</span>
+                    <ExternalLink size={12} />
+                  </button>
+                </div>
+              )}
 
               {/* Highlight AI Communication Score Banner if Available */}
               {(() => {
@@ -1173,6 +1373,152 @@ export function HiringManagerInterviews() {
               }}
               onCancel={() => setActiveEvaluationRound(null)}
             />
+          </div>
+        </div>
+      )}
+
+      {/* Final Hiring Decision Modal (Accept & Onboard / Reject) */}
+      {isDecisionModalOpen && decisionCandidate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <div className="max-w-lg w-full bg-white rounded-3xl border border-zinc-200 shadow-2xl p-6 sm:p-7 space-y-5 animate-in fade-in zoom-in-95 duration-150 my-8">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-md shrink-0 ${
+                    decisionType === 'Accepted'
+                      ? 'bg-emerald-500 text-zinc-950 font-black'
+                      : 'bg-rose-500 text-white font-bold'
+                  }`}
+                >
+                  {decisionType === 'Accepted' ? (
+                    <UserCheck size={24} strokeWidth={2.5} />
+                  ) : (
+                    <UserX size={24} strokeWidth={2.5} />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-lg font-black text-zinc-950 tracking-tight">
+                    {decisionType === 'Accepted' ? 'Final Accept & Onboard Candidate' : 'Confirm Candidate Rejection'}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    {decisionType === 'Accepted'
+                      ? 'Onboard candidate to company & notify Super Admin'
+                      : 'Super Admin will be notified of this hiring decision'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsDecisionModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-zinc-100 hover:bg-zinc-200 text-zinc-600 flex items-center justify-center cursor-pointer transition shrink-0"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Candidate Card Summary */}
+            <div className="p-4 rounded-2xl bg-zinc-50 border border-zinc-200/80 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-black text-zinc-900">{decisionCandidate.candidate_name}</span>
+                <span className="text-[11px] font-mono px-2.5 py-0.5 rounded bg-zinc-200/80 text-zinc-800 font-semibold">
+                  {decisionCandidate.candidate_id || 'ID will be generated'}
+                </span>
+              </div>
+              <div className="text-xs text-zinc-500 flex items-center gap-1.5 truncate">
+                <span>{decisionCandidate.candidate_email}</span>
+                <span>·</span>
+                <strong className="text-zinc-700 font-semibold">{decisionCandidate.requisition_title}</strong>
+              </div>
+            </div>
+
+            {/* For Accepted: Show Automated Onboarding Sequence */}
+            {decisionType === 'Accepted' && (
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-emerald-950 space-y-2">
+                <div className="text-xs font-black uppercase tracking-wider text-emerald-800 flex items-center gap-1.5">
+                  <Sparkles size={13} className="text-emerald-600" />
+                  <span>Automated Onboarding Sequence</span>
+                </div>
+                <ul className="text-xs space-y-1.5 text-emerald-900">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    <span>Assigns formal Candidate ID (<code className="font-mono font-bold text-emerald-800">{decisionCandidate.candidate_id || 'CND-XXXX'}</code>)</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    <span>Initializes 8-gate activation checklist (PAN/Aadhaar/Bank, NDA/IP, BGV, Laptop)</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    <span>Generates draft Work Order agreement</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    <span>Dispatches instant notification to Super Admin</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
+                    <span>Candidate immediately surfaces under Accepted Candidates</span>
+                  </li>
+                </ul>
+              </div>
+            )}
+
+            {/* Remarks / Notes textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-zinc-700">
+                {decisionType === 'Accepted' ? 'Hiring Remarks / Offer Notes (Optional)' : 'Rejection Reason / Notes (Optional)'}
+              </label>
+              <textarea
+                rows={3}
+                value={decisionNotes}
+                onChange={(e) => setDecisionNotes(e.target.value)}
+                placeholder={
+                  decisionType === 'Accepted'
+                    ? 'e.g. Recommended for immediate onboarding. Cleared AI and company rounds with high communication ratings.'
+                    : 'e.g. Not a cultural fit / skills gap.'
+                }
+                className="w-full p-3 rounded-2xl bg-white border border-zinc-200 text-xs text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-950 resize-none shadow-2xs"
+              />
+            </div>
+
+            {/* Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDecisionModalOpen(false)}
+                disabled={submittingDecision}
+                className="px-4 py-2.5 rounded-2xl bg-zinc-100 hover:bg-zinc-200 text-zinc-700 text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDecision}
+                disabled={submittingDecision}
+                className={`px-5 py-2.5 rounded-2xl text-xs font-extrabold flex items-center gap-2 shadow-md transition cursor-pointer disabled:opacity-50 ${
+                  decisionType === 'Accepted'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-emerald-500/20'
+                    : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-500/20'
+                }`}
+              >
+                {submittingDecision ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    <span>Processing Decision...</span>
+                  </>
+                ) : decisionType === 'Accepted' ? (
+                  <>
+                    <UserCheck size={15} />
+                    <span>Confirm & Onboard to Company</span>
+                  </>
+                ) : (
+                  <>
+                    <UserX size={15} />
+                    <span>Confirm Rejection</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
