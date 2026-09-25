@@ -12,6 +12,7 @@ from modules.identity.router import get_current_user
 from modules.shared.db import get_session
 from modules.interview.domain.models import (
     InterviewSchedule,
+    InterviewRound,
     InterviewStatus,
     ScheduleInterviewRequest,
     VendorConfirmRequest,
@@ -110,14 +111,17 @@ def get_company_interviews(
     Fetch all interview schedules created by the company tenant.
     """
     origin = _extract_origin(request)
+    req_id_val = str(requisition_id).strip() if (requisition_id and isinstance(requisition_id, str)) else None
+    cand_sub_id_val = str(candidate_submission_id).strip() if (candidate_submission_id and isinstance(candidate_submission_id, str)) else None
+
     with get_session() as session:
         query = session.query(InterviewSchedule).filter(
             InterviewSchedule.tenant_id == current_user.tenant_id
         )
-        if requisition_id:
-            query = query.filter(InterviewSchedule.requisition_id == requisition_id)
-        if candidate_submission_id:
-            query = query.filter(InterviewSchedule.candidate_submission_id == candidate_submission_id)
+        if req_id_val:
+            query = query.filter(InterviewSchedule.requisition_id == req_id_val)
+        if cand_sub_id_val:
+            query = query.filter(InterviewSchedule.candidate_submission_id == cand_sub_id_val)
             
         interviews = query.all()
         results = []
@@ -128,6 +132,86 @@ def get_company_interviews(
                 doc["meeting_link"] = f"{origin}/interview/room/{doc['round_id']}"
             doc["calendar_links"] = generate_calendar_links(doc, base_url=origin)
             results.append(doc)
+
+        # Also inspect modern InterviewRound records
+        from modules.candidate.domain.models import CandidateSubmission
+        from sqlalchemy import or_
+
+        round_query = session.query(InterviewRound)
+        if current_user.tenant_id and current_user.role != "Super Admin":
+            round_query = round_query.filter(
+                (InterviewRound.tenant_id == current_user.tenant_id) | (InterviewRound.tenant_id == None)
+            )
+        if req_id_val:
+            round_query = round_query.filter(InterviewRound.requisition_id == req_id_val)
+
+        if cand_sub_id_val:
+            cand_sub = session.get(CandidateSubmission, cand_sub_id_val)
+            c_email = (cand_sub.candidate_email or "").strip().lower() if cand_sub else ""
+            c_name = (cand_sub.candidate_name or "").strip().lower() if cand_sub else ""
+
+            # Check for linked fast-track submissions in mongo
+            linked_ids = {cand_sub_id_val}
+            try:
+                from modules.shared.db import db
+                for ms in db["candidate_submissions"].find({
+                    "$or": [
+                        {"id": cand_sub_id_val},
+                        {"candidate_id": cand_sub_id_val},
+                        {"submission_id": cand_sub_id_val},
+                    ]
+                }):
+                    if ms.get("id"):
+                        linked_ids.add(ms["id"])
+                    if ms.get("candidate_id"):
+                        linked_ids.add(ms["candidate_id"])
+                    if ms.get("round_id"):
+                        linked_ids.add(ms["round_id"])
+                    if ms.get("candidate_email"):
+                        c_email = ms["candidate_email"].strip().lower()
+            except Exception:
+                pass
+
+            combined_filter = InterviewRound.candidate_submission_id.in_(list(linked_ids))
+            if c_email:
+                combined_filter = combined_filter | (InterviewRound.candidate_email.ilike(c_email))
+            if c_name:
+                combined_filter = combined_filter | (InterviewRound.candidate_name.ilike(c_name))
+
+            round_matches = round_query.filter(combined_filter).all()
+        else:
+            round_matches = round_query.all() if req_id_val else []
+
+        for r in round_matches:
+            if any(doc.get("round_id") == r.id or doc.get("id") == r.id for doc in results):
+                continue
+            ev = r.evaluation or {}
+            decision_val = ev.get("decision") or ev.get("final_decision") or None
+            status_val = "COMPLETED" if r.status == "Completed" else "CONFIRMED_BY_VENDOR"
+            results.append({
+                "id": r.id,
+                "round_id": r.id,
+                "interview_round": r.round_name or "AI Technical Interview",
+                "candidate_submission_id": candidate_submission_id or r.candidate_submission_id,
+                "requisition_id": r.requisition_id,
+                "status": status_val,
+                "decision": decision_val,
+                "final_remark": ev.get("notes") or "",
+                "meeting_link": f"{origin}/interview/room/{r.id}",
+                "candidate_passcode": r.candidate_passcode,
+                "candidate_token": r.candidate_token,
+                "interviewer_name": r.interviewer_name or "AI Assessment Engine",
+                "evaluation": r.evaluation,
+                "communication_metrics": r.communication_metrics,
+                "communication_analysis": r.communication_analysis,
+                "transcript": r.transcript,
+                "recording_url": r.recording_url or f"/api/interviews/rounds/{r.id}/recording",
+                "scheduled_date": r.scheduled_date or "",
+                "scheduled_time": r.scheduled_time or "",
+                "created_at": r.created_at.isoformat() if hasattr(r.created_at, "isoformat") else str(r.created_at or ""),
+                "updated_at": r.updated_at.isoformat() if hasattr(r.updated_at, "isoformat") else str(r.updated_at or ""),
+            })
+
         return results
 
 
@@ -200,9 +284,10 @@ def list_rounds_endpoint(
     candidate_id: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
 ):
-    """List interview rounds for the authenticated Hiring Manager / HR tenant."""
+    """List interview rounds for the authenticated Hiring Manager / HR tenant, or all for Super Admin."""
+    effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
     return get_hiring_manager_rounds(
-        tenant_id=current_user.tenant_id,
+        tenant_id=effective_tenant,
         requisition_id=requisition_id,
         candidate_id=candidate_id,
     )
@@ -212,8 +297,9 @@ def list_rounds_endpoint(
 def get_interview_summary_endpoint(
     current_user: User = Depends(get_current_user),
 ):
-    """Get aggregated interview progression per candidate for Hiring Manager."""
-    return get_hiring_manager_summary(tenant_id=current_user.tenant_id)
+    """Get aggregated interview progression per candidate for Hiring Manager, or all for Super Admin."""
+    effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
+    return get_hiring_manager_summary(tenant_id=effective_tenant)
 
 
 @router.post("/candidate/login")

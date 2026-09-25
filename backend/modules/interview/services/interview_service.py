@@ -10,6 +10,9 @@ import urllib.parse
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 from modules.shared.db import get_session, db
 from modules.interview.domain.models import InterviewSchedule, InterviewStatus, InterviewRound, InterviewChatMessage
@@ -798,7 +801,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
                 duration_minutes=int(doc.get("duration_minutes", 45)),
                 meeting_link=hosted_meeting_link,
                 candidate_portal_link=cand_portal_link,
-                passcode=doc.get("candidate_passcode"),
+                passcode=str(doc.get("candidate_passcode") or ""),
                 instructions=doc.get("instructions", ""),
             )
         except Exception as em_err:
@@ -830,7 +833,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
                     scheduled_time=doc.get("scheduled_time", ""),
                     duration_minutes=int(doc.get("duration_minutes", 45)),
                     meeting_link=hosted_meeting_link,
-                    passcode=doc.get("candidate_passcode"),
+                    passcode=str(doc.get("candidate_passcode") or ""),
                 ))
             else:
                 asyncio.run(send_candidate_interview_scheduled_alert(
@@ -843,7 +846,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
                     scheduled_time=doc.get("scheduled_time", ""),
                     duration_minutes=int(doc.get("duration_minutes", 45)),
                     meeting_link=hosted_meeting_link,
-                    passcode=doc.get("candidate_passcode"),
+                    passcode=str(doc.get("candidate_passcode") or ""),
                 ))
     except Exception as tg_err:
         print(f"[ROUND TELEGRAM NOTIFY ERROR] {tg_err}")
@@ -852,13 +855,15 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
 
 
 def get_hiring_manager_rounds(
-    tenant_id: str,
+    tenant_id: Optional[str] = None,
     requisition_id: Optional[str] = None,
     candidate_id: Optional[str] = None,
 ) -> List[dict]:
-    """Retrieve all interview rounds belonging to the Hiring Manager tenant."""
+    """Retrieve all interview rounds belonging to the Hiring Manager tenant, or all rounds for Super Admin."""
     with get_session() as session:
-        q = session.query(InterviewRound).filter(InterviewRound.tenant_id == tenant_id)
+        q = session.query(InterviewRound)
+        if tenant_id:
+            q = q.filter((InterviewRound.tenant_id == tenant_id) | (InterviewRound.tenant_id == None))
         if requisition_id:
             q = q.filter(InterviewRound.requisition_id == requisition_id)
         if candidate_id:
@@ -982,6 +987,19 @@ def get_round_by_id(round_id: str) -> Optional[dict]:
         rdoc["is_expired"] = exp_info["is_expired"]
         rdoc["expires_at"] = exp_info["expires_at"]
         rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
+
+        # Ensure role title and company name are always resolved accurately
+        req_id = r.requisition_id
+        if req_id and (not rdoc.get("requisition_title") or rdoc.get("requisition_title") in ("Position", "Candidate Role")):
+            from modules.requisition.domain.models import Requisition
+            req_model = session.get(Requisition, req_id)
+            if req_model and req_model.title:
+                rdoc["requisition_title"] = req_model.title
+            if req_model and (not rdoc.get("company_name") or rdoc.get("company_name") in ("Hiring Partner", "Enterprise Partner")):
+                rdoc["company_name"] = req_model.company_name or "Bearitt"
+
+        if not rdoc.get("company_name"):
+            rdoc["company_name"] = "Bearitt"
         return rdoc
 
 
@@ -991,6 +1009,9 @@ def update_round_status(round_id: str, new_status: str) -> Optional[dict]:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
         if not r:
             return None
+        # Enforce single-attempt policy: once a round is Completed, do not allow changing back to In Progress or Scheduled
+        if r.status == "Completed" and new_status in ("In Progress", "Scheduled"):
+            return r.to_doc()
         r.status = new_status
         r.updated_at = datetime.now(timezone.utc)
         session._track(r)
@@ -1028,15 +1049,46 @@ def submit_round_evaluation(round_id: str, eval_data: dict, evaluator_identity: 
         session._track(r)
         
         # Also update candidate submission status in pipeline if applicable
-        if r.candidate_submission_id:
-            sub = session.get(CandidateSubmission, r.candidate_submission_id)
+        cand_sub_id = r.candidate_submission_id
+        cand_email = (r.candidate_email or "").strip().lower()
+        if cand_sub_id or cand_email:
+            sub = session.get(CandidateSubmission, cand_sub_id) if cand_sub_id else None
+            if not sub and cand_email and r.requisition_id:
+                sub = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == r.requisition_id,
+                    CandidateSubmission.candidate_email == cand_email
+                ).first()
+
+            now_iso = datetime.now(timezone.utc).isoformat()
+            if result_verdict in ("Strong Yes", "Yes", "Hold"):
+                target_status = "Shortlisted"
+            elif result_verdict == "No":
+                target_status = f"Rejected at {r.round_name}"
+            else:
+                target_status = "Under Review"
+
             if sub is not None:
-                if result_verdict in ("Strong Yes", "Yes"):
-                    sub.status = f"Passed {r.round_name}"
-                elif result_verdict == "No":
-                    sub.status = f"Rejected at {r.round_name}"
+                sub.status = target_status
                 sub.updated_at = datetime.now(timezone.utc)
                 session._track(sub)
+
+            try:
+                sub_query = {"requisition_id": r.requisition_id}
+                if cand_sub_id:
+                    sub_query["$or"] = [{"id": cand_sub_id}, {"candidate_email": cand_email}]
+                else:
+                    sub_query["candidate_email"] = cand_email
+
+                update_fields = {
+                    "status": target_status,
+                    "interview_result": result_verdict,
+                    "updated_at": now_iso,
+                }
+                if target_status == "Shortlisted":
+                    update_fields["shortlisted_at"] = now_iso
+                db["candidate_submissions"].update_many(sub_query, {"$set": update_fields})
+            except Exception as mongo_err:
+                logger.warning(f"Failed to update candidate_submission in Mongo: {mongo_err}")
                 
         session.commit()
 
@@ -1052,7 +1104,8 @@ def submit_round_evaluation(round_id: str, eval_data: dict, evaluator_identity: 
         return r.to_doc()
 
 
-def record_round_transcript(round_id: str, transcript_turns: list) -> Optional[dict]:
+def record_round_transcript(round_id: str, transcript_turns
+: list) -> Optional[dict]:
     """Append or save speech transcript turns to the interview round."""
     with get_session() as session:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
@@ -1134,6 +1187,111 @@ async def analyze_round_communication(
 
         r.updated_at = datetime.now(timezone.utc)
         session._track(r)
+
+        # Update candidate submission status in SQLite and Mongo upon interview completion
+        cand_sub_id = r.candidate_submission_id
+        cand_email = (r.candidate_email or "").strip().lower()
+        cand_name = (r.candidate_name or "").strip()
+        now_iso = datetime.now(timezone.utc).isoformat()
+
+        # Find all associated submission IDs and emails (direct + fast-track outreach linked records)
+        linked_sub_ids = set()
+        linked_emails = set()
+        if cand_sub_id:
+            linked_sub_ids.add(cand_sub_id)
+        if cand_email:
+            linked_emails.add(cand_email)
+
+        # Inspect Mongo for linked candidate_id or outreach entries
+        try:
+            for ms in db["candidate_submissions"].find({
+                "$or": [
+                    {"id": cand_sub_id} if cand_sub_id else {"_id": None},
+                    {"candidate_id": cand_sub_id} if cand_sub_id else {"_id": None},
+                    {"round_id": r.id},
+                    {"candidate_email": cand_email} if cand_email else {"_id": None},
+                ]
+            }):
+                if ms.get("id"):
+                    linked_sub_ids.add(ms["id"])
+                if ms.get("candidate_id"):
+                    linked_sub_ids.add(ms["candidate_id"])
+                if ms.get("candidate_email"):
+                    linked_emails.add(ms["candidate_email"].strip().lower())
+        except Exception:
+            pass
+
+        # Also inspect by candidate name + requisition
+        if cand_name and r.requisition_id:
+            try:
+                import re
+                for ms in db["candidate_submissions"].find({
+                    "requisition_id": r.requisition_id,
+                    "candidate_name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}
+                }):
+                    if ms.get("id"):
+                        linked_sub_ids.add(ms["id"])
+                    if ms.get("candidate_id"):
+                        linked_sub_ids.add(ms["candidate_id"])
+                    if ms.get("candidate_email"):
+                        linked_emails.add(ms["candidate_email"].strip().lower())
+            except Exception:
+                pass
+
+        # 1. Update SQLite candidate submissions
+        sqlite_subs = []
+        if linked_sub_ids:
+            sqlite_subs.extend(
+                session.query(CandidateSubmission).filter(CandidateSubmission.id.in_(list(linked_sub_ids))).all()
+            )
+        if linked_emails and r.requisition_id:
+            for em in linked_emails:
+                matched = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == r.requisition_id,
+                    CandidateSubmission.candidate_email == em
+                ).all()
+                for m in matched:
+                    if m not in sqlite_subs:
+                        sqlite_subs.append(m)
+
+        for sub in sqlite_subs:
+            if sub.status not in ("Hired", "Accepted"):
+                sub.status = "Shortlisted"
+            sub.match_score = max(float(sub.match_score or 0), float(overall or 0)) if overall > 0 else (sub.match_score or 55.0)
+            sub.updated_at = datetime.now(timezone.utc)
+            session._track(sub)
+
+        # 2. Update MongoDB candidate submissions
+        try:
+            mongo_or = []
+            for sid in linked_sub_ids:
+                mongo_or.append({"id": sid})
+                mongo_or.append({"submission_id": sid})
+            for em in linked_emails:
+                if r.requisition_id:
+                    mongo_or.append({"candidate_email": em, "requisition_id": r.requisition_id})
+                else:
+                    mongo_or.append({"candidate_email": em})
+            mongo_or.append({"round_id": r.id})
+
+            if mongo_or:
+                db["candidate_submissions"].update_many(
+                    {"$or": mongo_or},
+                    {"$set": {
+                        "status": "Shortlisted",
+                        "interview_score": overall,
+                        "interview_result": eval_dict.get("result") or "Completed",
+                        "interview_summary": analysis_data.get("summary", "") or eval_dict.get("notes", ""),
+                        "interview_status": "Completed",
+                        "round_id": r.id,
+                        "recording_url": r.recording_url or f"/api/interviews/rounds/{r.id}/recording",
+                        "shortlisted_at": now_iso,
+                        "updated_at": now_iso,
+                    }}
+                )
+        except Exception as mongo_sub_err:
+            logger.warning(f"Failed to update candidate_submission in Mongo: {mongo_sub_err}")
+
         session.commit()
 
         # Trigger Shortlist Algorithm for the Requisition
@@ -1395,8 +1553,8 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                 "rounds": r_list,
             })
 
-        # Sort summary: candidates ready for round 1 or next round first, then by name
-        summary.sort(key=lambda x: (not (x.get("ready_for_round_1") or x.get("ready_for_next_round")), x.get("candidate_name", "")))
+        # Sort summary: candidates with completed or active interview rounds first, then ready for round 1
+        summary.sort(key=lambda x: (-(x.get("completed_rounds", 0) * 10 + x.get("in_progress_rounds", 0)), not x.get("ready_for_round_1"), x.get("candidate_name", "")))
         return summary
 
 

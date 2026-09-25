@@ -9,11 +9,13 @@ import uuid
 from datetime import datetime, timezone
 
 UTC = timezone.utc
-from typing import ClassVar
+from typing import Any, ClassVar, Generic, Literal, Optional, TypeVar
 try:
     from typing import Self
 except ImportError:
     from typing_extensions import Self
+
+T = TypeVar("T", bound="Model")
 
 from pymongo import ASCENDING, DESCENDING, MongoClient
 
@@ -180,6 +182,14 @@ class Column:
     def desc(self) -> Sort:
         return Sort(self.name, DESCENDING)
 
+    def __get__(self, instance: Any, owner: Any = None) -> Any:
+        if instance is None:
+            return self
+        return instance.__dict__.get(self.name)
+
+    def __set__(self, instance: Any, value: Any) -> None:
+        instance.__dict__[self.name] = value
+
 
 class Model:
     """Base class for Mongo-backed models."""
@@ -194,6 +204,12 @@ class Model:
         for name, value in kwargs.items():
             setattr(self, name, value)
 
+    def __getattr__(self, name: str) -> Any:
+        return self.__dict__.get(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        self.__dict__[name] = value
+
     @classmethod
     def from_doc(cls, doc: dict):
         obj = cls()
@@ -206,8 +222,8 @@ class Model:
         return dict(self.__dict__)
 
 
-class Query:
-    def __init__(self, session: "Session", model: type[Model]) -> None:
+class Query(Generic[T]):
+    def __init__(self, session: "Session", model: type[T]) -> None:
         self._session = session
         self._model = model
         self._filters: dict = {}
@@ -217,7 +233,7 @@ class Query:
     def _coll(self):
         return self._session._db[self._model.__tablename__]
 
-    def filter(self, *criteria, **kwargs) -> "Query":
+    def filter(self, *criteria, **kwargs) -> "Query[T]":
         for c in criteria:
             if isinstance(c, Criterion):
                 mongo_cond = c.to_mongo()
@@ -239,10 +255,10 @@ class Query:
             self._filters[name] = value
         return self
 
-    def filter_by(self, **kwargs) -> "Query":
+    def filter_by(self, **kwargs) -> "Query[T]":
         return self.filter(**kwargs)
 
-    def order_by(self, *sorts) -> "Query":
+    def order_by(self, *sorts) -> "Query[T]":
         for s in sorts:
             if isinstance(s, Sort):
                 self._sorts.append(tuple(s))
@@ -250,11 +266,11 @@ class Query:
                 self._sorts.append(s)
         return self
 
-    def limit(self, n: int) -> "Query":
+    def limit(self, n: int) -> "Query[T]":
         self._limit = n
         return self
 
-    def first(self):
+    def first(self) -> Optional[T]:
         doc = self._coll().find_one(self._filters, sort=self._sorts or None)
         if doc is None:
             return None
@@ -262,7 +278,7 @@ class Query:
         self._session._track(obj)
         return obj
 
-    def all(self) -> list[Model]:
+    def all(self) -> list[T]:
         cursor = self._coll().find(self._filters)
         if self._sorts:
             cursor = cursor.sort(self._sorts)
@@ -292,7 +308,7 @@ class Session:
     def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *exc) -> bool:
+    def __exit__(self, *exc) -> Literal[False]:
         return False
 
     def _coll(self, model: type[Model]):
@@ -303,7 +319,7 @@ class Session:
             self._tracked.append(obj)
             self._snapshots[id(obj)] = obj.to_doc()
 
-    def get(self, model: type[Model], doc_id: str):
+    def get(self, model: type[T], doc_id: str) -> Optional[T]:
         doc = self._coll(model).find_one({"id": doc_id})
         if doc is None:
             return None
@@ -311,7 +327,7 @@ class Session:
         self._track(obj)
         return obj
 
-    def query(self, model: type[Model]) -> Query:
+    def query(self, model: type[T]) -> Query[T]:
         return Query(self, model)
 
     def add(self, obj: Model) -> None:

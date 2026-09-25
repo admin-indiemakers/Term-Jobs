@@ -5,7 +5,12 @@ or authentication errors, guaranteeing high uptime and resilient LLM operations.
 """
 import os
 from dotenv import load_dotenv
-from loguru import logger
+try:
+    loguru_mod = __import__("loguru")
+    logger = loguru_mod.logger
+except (ImportError, Exception):
+    import logging
+    logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
 

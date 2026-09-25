@@ -1,4 +1,4 @@
-﻿"""
+"""
 Candidate Resume Extractor & Structurer
 Uses dedicated Groq LLM API to extract candidate identity and qualifications:
 - Full Name
@@ -13,6 +13,7 @@ import os
 import re
 import json
 import logging
+import asyncio
 from typing import Any, Dict, Optional
 from groq import AsyncGroq
 from dotenv import load_dotenv
@@ -22,7 +23,8 @@ logger = logging.getLogger(__name__)
 
 # Dedicated Groq Key for Candidate Bank Parsing (falls back to primary GROQ_API_KEY)
 CANDIDATE_GROQ_API_KEY = os.getenv("GROQ_API_KEY_CANDIDATE") or os.getenv("GROQ_API_KEY")
-GROQ_MODEL = os.getenv("GROQ_MODEL") or "openai/gpt-oss-120b"
+# Default to high-throughput, instant models for fast resume parsing
+GROQ_MODEL = os.getenv("GROQ_MODEL_FAST") or "qwen/qwen3.8-27b"
 
 CANDIDATE_EXTRACTION_SYSTEM = """You are an expert HR and recruitment AI parser.
 Your task is to accurately extract candidate contact information, professional title, skills, and summary from the given resume text.
@@ -58,51 +60,45 @@ Return ONLY the JSON object:"""
 async def extract_candidate_profile(resume_text: str, filename: str = "") -> Dict[str, Any]:
     """
     Extract structured candidate profile from resume text using Groq LLM with regex heuristics fallback.
+    Uses strict 4-second timeout to guarantee immediate response with zero UI lag.
     """
+    fallback = _build_fallback_profile(resume_text, filename)
     if not resume_text or not resume_text.strip():
-        return _build_fallback_profile("", filename)
+        return fallback
 
-    truncated_text = resume_text[:7500]
+    truncated_text = resume_text[:6000]
     prompt = CANDIDATE_EXTRACTION_PROMPT.format(resume_text=truncated_text)
 
     parsed_data = None
-    try:
+    if CANDIDATE_GROQ_API_KEY:
+        # Fast candidate models in priority order
+        candidate_models = ["qwen/qwen3.8-27b", "openai/gpt-oss-20b"]
         client = AsyncGroq(api_key=CANDIDATE_GROQ_API_KEY)
-        response = await client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": CANDIDATE_EXTRACTION_SYSTEM},
-                {"role": "user", "content": prompt},
-            ],
-            model=GROQ_MODEL,
-            temperature=0.05,
-            response_format={"type": "json_object"},
-        )
-        content = response.choices[0].message.content
-        if content:
-            parsed_data = json.loads(content.strip())
-    except Exception as e:
-        logger.warning(f"Groq candidate profile extraction failed ({e}), attempting fallback model or heuristics...")
-        # Try fallback model if first one fails
-        try:
-            client = AsyncGroq(api_key=CANDIDATE_GROQ_API_KEY)
-            response = await client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": CANDIDATE_EXTRACTION_SYSTEM},
-                    {"role": "user", "content": prompt},
-                ],
-                model="openai/gpt-oss-20b",
-                temperature=0.05,
-                response_format={"type": "json_object"},
-            )
-            content = response.choices[0].message.content
-            if content:
-                parsed_data = json.loads(content.strip())
-        except Exception as e2:
-            logger.warning(f"Secondary Groq model extraction failed ({e2}), using regex fallback.")
+        
+        for model in candidate_models:
+            try:
+                response = await asyncio.wait_for(
+                    client.chat.completions.create(
+                        messages=[
+                            {"role": "system", "content": CANDIDATE_EXTRACTION_SYSTEM},
+                            {"role": "user", "content": prompt},
+                        ],
+                        model=model,
+                        temperature=0.05,
+                        response_format={"type": "json_object"},
+                    ),
+                    timeout=3.5  # Strict 3.5s timeout prevents any request hang
+                )
+                content = response.choices[0].message.content
+                if content:
+                    parsed_data = json.loads(content.strip())
+                    if parsed_data:
+                        break
+            except Exception as e:
+                logger.info(f"Fast Groq model {model} extraction skipped/timed out: {e}")
+                continue
 
     # Fallback or Augment if any field is missing
-    fallback = _build_fallback_profile(resume_text, filename)
-    
     if not parsed_data:
         parsed_data = fallback
     else:

@@ -193,9 +193,9 @@ export default function OpenRolesPage({ enabled = true }) {
     const params = new URLSearchParams(window.location.search);
     const path = window.location.pathname.toLowerCase();
     if (
-      params.get('auth') || 
-      params.get('login') || 
-      window.location.hash === '#login' || 
+      params.get('auth') ||
+      params.get('login') ||
+      window.location.hash === '#login' ||
       window.location.hash === '#candidate-login' ||
       path.includes('/candidate')
     ) {
@@ -1680,206 +1680,205 @@ export default function OpenRolesPage({ enabled = true }) {
                             <span>{submitError}</span>
                           </div>
                         )}
-                      {/* Name & Email Row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                            Full Name *
-                          </label>
-                          <input
-                            type="text"
-                            required
-                            value={applyForm.name}
-                            onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })}
-                            placeholder="e.g. Alex Johnson"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                            Email Address *
-                          </label>
-                          <input
-                            type="email"
-                            required
-                            value={applyForm.email}
-                            onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
-                            placeholder="alex@example.com"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Phone & LinkedIn Row */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                            Phone Number *
-                          </label>
-                          <input
-                            type="tel"
-                            required
-                            value={applyForm.phone}
-                            onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
-                            placeholder="+1 (555) 000-0000"
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                            LinkedIn Profile (Optional)
-                          </label>
-                          <input
-                            type="url"
-                            value={applyForm.linkedin_url}
-                            onChange={(e) => setApplyForm({ ...applyForm, linkedin_url: e.target.value })}
-                            placeholder="https://linkedin.com/in/..."
-                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Resume Selection */}
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
-                          Resume Document *
-                        </label>
-
-                        {hasResume && !useCustomResume ? (
-                          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <FileText size={18} className="text-white/70" />
-                              <div>
-                                <div className="text-xs font-semibold text-white">{currentResumeName}</div>
-                                <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setUseCustomResume(true)}
-                              className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
-                            >
-                              Upload different file
-                            </button>
-                          </div>
-                        ) : (
-                          <div
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              setIsDragging(true);
-                            }}
-                            onDragLeave={() => setIsDragging(false)}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              setIsDragging(false);
-                              const file = e.dataTransfer.files?.[0];
-                              if (file) {
-                                setResumeFile(file);
-                                setSubmitError(null);
-                              }
-                            }}
-                            onClick={() => fileInputRef.current?.click()}
-                            className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${
-                              isDragging
-                                ? 'border-white bg-white/[0.08]'
-                                : 'border-white/15 bg-white/[0.02] hover:border-white/30'
-                            }`}
-                          >
+                        {/* Name & Email Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                              Full Name *
+                            </label>
                             <input
-                              type="file"
-                              ref={fileInputRef}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
+                              type="text"
+                              required
+                              value={applyForm.name}
+                              onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })}
+                              placeholder="e.g. Alex Johnson"
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                              Email Address *
+                            </label>
+                            <input
+                              type="email"
+                              required
+                              value={applyForm.email}
+                              onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
+                              placeholder="alex@example.com"
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Phone & LinkedIn Row */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                              Phone Number *
+                            </label>
+                            <input
+                              type="tel"
+                              required
+                              value={applyForm.phone}
+                              onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
+                              placeholder="+1 (555) 000-0000"
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                              LinkedIn Profile (Optional)
+                            </label>
+                            <input
+                              type="url"
+                              value={applyForm.linkedin_url}
+                              onChange={(e) => setApplyForm({ ...applyForm, linkedin_url: e.target.value })}
+                              placeholder="https://linkedin.com/in/..."
+                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Resume Selection */}
+                        <div>
+                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
+                            Resume Document *
+                          </label>
+
+                          {hasResume && !useCustomResume ? (
+                            <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <FileText size={18} className="text-white/70" />
+                                <div>
+                                  <div className="text-xs font-semibold text-white">{currentResumeName}</div>
+                                  <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setUseCustomResume(true)}
+                                className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
+                              >
+                                Upload different file
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                setIsDragging(true);
+                              }}
+                              onDragLeave={() => setIsDragging(false)}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                setIsDragging(false);
+                                const file = e.dataTransfer.files?.[0];
                                 if (file) {
                                   setResumeFile(file);
                                   setSubmitError(null);
                                 }
                               }}
-                              accept=".pdf,.docx,.doc"
-                              className="hidden"
-                            />
-                            <Upload size={22} className="text-white/40 mx-auto mb-2" />
-                            {resumeFile ? (
-                              <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
-                                <Check size={14} className="text-white" />
-                                <span>{resumeFile.name} ({(resumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
-                              </div>
-                            ) : (
-                              <>
-                                <div className="text-xs font-semibold text-white/90">
-                                  Drop resume here or click to browse
+                              onClick={() => fileInputRef.current?.click()}
+                              className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${isDragging
+                                  ? 'border-white bg-white/[0.08]'
+                                  : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                                }`}
+                            >
+                              <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={(e) => {
+                                  const file = e.target.files?.[0];
+                                  if (file) {
+                                    setResumeFile(file);
+                                    setSubmitError(null);
+                                  }
+                                }}
+                                accept=".pdf,.docx,.doc"
+                                className="hidden"
+                              />
+                              <Upload size={22} className="text-white/40 mx-auto mb-2" />
+                              {resumeFile ? (
+                                <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
+                                  <Check size={14} className="text-white" />
+                                  <span>{resumeFile.name} ({(resumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                                 </div>
-                                <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
-                              </>
-                            )}
-                          </div>
-                        )}
+                              ) : (
+                                <>
+                                  <div className="text-xs font-semibold text-white/90">
+                                    Drop resume here or click to browse
+                                  </div>
+                                  <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
+                                </>
+                              )}
+                            </div>
+                          )}
 
-                        {useCustomResume && hasResume && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setUseCustomResume(false);
-                              setResumeFile(null);
-                            }}
-                            className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
-                          >
-                            ← Use saved profile resume instead
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Brief Cover Note */}
-                      <div>
-                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
-                          Brief Note to Hiring Manager (Optional)
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={applyForm.cover_note}
-                          onChange={(e) => setApplyForm({ ...applyForm, cover_note: e.target.value })}
-                          placeholder="Highlight your relevant experience or availability..."
-                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
-                        />
-                      </div>
-
-                      {/* Telegram Bot Live Updates Callout */}
-                      <div className="flex items-center justify-between p-3 rounded-xl bg-sky-950/30 border border-sky-500/20 text-[11px] text-zinc-300">
-                        <div className="flex items-center gap-2">
-                          <Send size={13} className="text-[#229ED9] shrink-0" />
-                          <span>Get 1-tap interview invites & match alerts via Telegram</span>
+                          {useCustomResume && hasResume && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setUseCustomResume(false);
+                                setResumeFile(null);
+                              }}
+                              className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
+                            >
+                              ← Use saved profile resume instead
+                            </button>
+                          )}
                         </div>
-                        <a
-                          href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${selectedJob?.id || 'apply'}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[#229ED9] hover:text-[#1E88E5] font-bold text-xs shrink-0 text-decoration-none hover:underline"
-                        >
-                          Start Bot →
-                        </a>
-                      </div>
 
-                      {/* Submit Button */}
-                      <button
-                        type="submit"
-                        disabled={submitting}
-                        className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 flex items-center justify-center gap-2"
-                      >
-                        {submitting ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
-                            <span>Processing Application...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Send size={14} />
-                            <span>Submit Application to Hiring Partner</span>
-                          </>
-                        )}
-                      </button>
-                    </form>
-                  )}
-                </div>
+                        {/* Brief Cover Note */}
+                        <div>
+                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                            Brief Note to Hiring Manager (Optional)
+                          </label>
+                          <textarea
+                            rows={2}
+                            value={applyForm.cover_note}
+                            onChange={(e) => setApplyForm({ ...applyForm, cover_note: e.target.value })}
+                            placeholder="Highlight your relevant experience or availability..."
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                          />
+                        </div>
+
+                        {/* Telegram Bot Live Updates Callout */}
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-sky-950/30 border border-sky-500/20 text-[11px] text-zinc-300">
+                          <div className="flex items-center gap-2">
+                            <Send size={13} className="text-[#229ED9] shrink-0" />
+                            <span>Get 1-tap interview invites & match alerts via Telegram</span>
+                          </div>
+                          <a
+                            href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${selectedJob?.id || 'apply'}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#229ED9] hover:text-[#1E88E5] font-bold text-xs shrink-0 text-decoration-none hover:underline"
+                          >
+                            Start Bot →
+                          </a>
+                        </div>
+
+                        {/* Submit Button */}
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 flex items-center justify-center gap-2"
+                        >
+                          {submitting ? (
+                            <>
+                              <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
+                              <span>Processing Application...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Send size={14} />
+                              <span>Submit Application to Hiring Partner</span>
+                            </>
+                          )}
+                        </button>
+                      </form>
+                    )}
+                  </div>
                 </>
               )}
             </div>
@@ -2236,11 +2235,10 @@ export default function OpenRolesPage({ enabled = true }) {
                         }
                       }}
                       onClick={() => poolFileInputRef.current?.click()}
-                      className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${
-                        poolIsDragging
+                      className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
                           ? 'border-white bg-white/[0.08]'
                           : 'border-white/15 bg-white/[0.02] hover:border-white/30'
-                      }`}
+                        }`}
                     >
                       <input
                         type="file"
@@ -2432,11 +2430,10 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthModalTab('login');
                   setAuthError(null);
                 }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
-                  authModalTab === 'login'
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
                     ? 'bg-white text-black shadow-xs'
                     : 'text-white/60 hover:text-white'
-                }`}
+                  }`}
               >
                 Sign In
               </button>
@@ -2446,11 +2443,10 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthModalTab('register');
                   setAuthError(null);
                 }}
-                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
-                  authModalTab === 'register'
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
                     ? 'bg-white text-black shadow-xs'
                     : 'text-white/60 hover:text-white'
-                }`}
+                  }`}
               >
                 Create Profile
               </button>

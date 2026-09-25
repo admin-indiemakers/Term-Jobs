@@ -59,7 +59,7 @@ export function AiInterviewStage({
   // Per-question finalized speech segments
   const [finalizedSegments, setFinalizedSegments] = useState([]);
   const [answers, setAnswers] = useState({});
-  const [isCompleted, setIsCompleted] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(round?.status === 'Completed');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploadingRecording, setIsUploadingRecording] = useState(false);
   const [recordingUploaded, setRecordingUploaded] = useState(false);
@@ -76,8 +76,20 @@ export function AiInterviewStage({
   const recordingStartTimeRef = useRef(null);
   const internalStreamRef = useRef(null);
 
+  // Safety watchdog: ensure loading spinner never hangs indefinitely
+  useEffect(() => {
+    if (!isUploadingRecording && !isAnalyzing) return;
+    const safetyTimer = setTimeout(() => {
+      console.log('🔄 [AI STAGE] Auto-recovery: releasing loading screen');
+      setIsUploadingRecording(false);
+      setIsAnalyzing(false);
+    }, 4500);
+    return () => clearTimeout(safetyTimer);
+  }, [isUploadingRecording, isAnalyzing]);
+
   // Auto-record candidate video/audio stream using MediaRecorder (if not handled centrally by parent InterviewRoom)
   useEffect(() => {
+    if (round?.status === 'Completed' || isCompleted) return;
     if (onSaveProofRecording) return;
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
 
@@ -420,36 +432,60 @@ export function AiInterviewStage({
       updateAiSpeaking(false);
     }
 
-    // 1. Finalize & upload the interview conversation proof video to backend & MongoDB GridFS
+    // 1. Kick off video proof recording save asynchronously in the background
     setIsUploadingRecording(true);
     const callSeconds = recordingStartTimeRef.current
       ? Math.max(1, Math.round((Date.now() - recordingStartTimeRef.current) / 1000))
       : 30;
 
-    try {
-      if (onSaveProofRecording) {
-        console.log('📹 [PROOF RECORDING] Finalizing session proof via parent room handler...');
-        await onSaveProofRecording(callSeconds);
-        setRecordingUploaded(true);
-      } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        let recordedBlob = null;
-        await new Promise((resolve) => {
-          mediaRecorderRef.current.onstop = resolve;
-          mediaRecorderRef.current.stop();
-        });
-        if (recordedChunksRef.current.length > 0) {
-          const mime = mediaRecorderRef.current.mimeType || 'video/webm';
-          recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
-          console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
-        }
-        if (recordedBlob && round?.id) {
-          await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
+    const backgroundUpload = (async () => {
+      try {
+        if (onSaveProofRecording) {
+          console.log('📹 [PROOF RECORDING] Finalizing session proof via parent room handler...');
+          await onSaveProofRecording(callSeconds);
           setRecordingUploaded(true);
-          console.log('✅ [RECORDING] Video successfully uploaded to backend');
+        } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          let recordedBlob = null;
+          await new Promise((resolve) => {
+            const timer = setTimeout(() => {
+              console.warn('[RECORDING] onstop timed out after 1.5s');
+              resolve();
+            }, 1500);
+            mediaRecorderRef.current.onstop = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+            try {
+              mediaRecorderRef.current.stop();
+            } catch (e) {
+              clearTimeout(timer);
+              resolve();
+            }
+          });
+          if (recordedChunksRef.current.length > 0) {
+            const mime = mediaRecorderRef.current.mimeType || 'video/webm';
+            recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
+            console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
+          }
+          if (recordedBlob && round?.id) {
+            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
+            setRecordingUploaded(true);
+            console.log('✅ [RECORDING] Video successfully uploaded to backend');
+          }
         }
+      } catch (recErr) {
+        console.warn('⚠️ [RECORDING] Video proof storage warning:', recErr);
       }
-    } catch (recErr) {
-      console.warn('⚠️ [RECORDING] Video proof storage warning:', recErr);
+    })();
+
+    // Wait at most 1.5 seconds for video packaging, then release the UI so candidate is never stuck
+    try {
+      await Promise.race([
+        backgroundUpload,
+        new Promise((resolve) => setTimeout(resolve, 1500))
+      ]);
+    } catch (e) {
+      // Ignored
     } finally {
       setIsUploadingRecording(false);
     }
@@ -491,12 +527,16 @@ export function AiInterviewStage({
 
     try {
       if (round?.id) {
-        const res = await interviewApi.analyzeCommunication(round.id, {
+        const analysisPromise = interviewApi.analyzeCommunication(round.id, {
           transcript_turns: turnsToSubmit,
           call_duration_seconds: totalSeconds,
           candidate_name: candidateName,
           role_title: requisitionTitle,
         });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Analysis timeout after 5s')), 5000)
+        );
+        const res = await Promise.race([analysisPromise, timeoutPromise]);
 
         if (res) {
           setAnalysisResult(res.analysis || null);
@@ -566,6 +606,16 @@ export function AiInterviewStage({
               ? 'Securely encrypting and archiving your interview video recording for the hiring team...'
               : 'Encrypting and securely delivering your spoken responses to the hiring team...'}
           </p>
+          <button
+            type="button"
+            onClick={() => {
+              setIsUploadingRecording(false);
+              setIsAnalyzing(false);
+            }}
+            className="mt-6 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold transition cursor-pointer shadow-sm"
+          >
+            Continue to Confirmation →
+          </button>
         </div>
       );
     }
@@ -630,7 +680,7 @@ export function AiInterviewStage({
             <button
               type="button"
               onClick={() => {
-                window.location.href = '/candidate/portal';
+                window.location.href = '/interview/candidate';
               }}
               className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs transition cursor-pointer shadow-lg shadow-emerald-500/20"
             >

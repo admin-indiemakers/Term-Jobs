@@ -47,12 +47,13 @@ RESUME_UPLOAD_DIRS = [
 def _tenant_requisition_ids(session, tenant_id: str, user_id: str | None = None, user_role: str | None = None) -> set[str]:
     """IDs of all requisitions belonging to a tenant.
     
-    When user_role is 'Hiring Manager', only returns requisitions created by that user.
+    When user_role is 'Hiring Manager', prioritizes requisitions created by that user, falling back to company tenant requisitions.
     """
-    filters = [Requisition.tenant_id == tenant_id]
     if user_role == "Hiring Manager" and user_id:
-        filters.append(Requisition.created_by == user_id)
-    rows = session.query(Requisition).filter(*filters).all()
+        user_rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id, Requisition.created_by == user_id).all()
+        if user_rows:
+            return {r.id for r in user_rows}
+    rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
     return {r.id for r in rows}
 
 
@@ -179,6 +180,37 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         except Exception:
             pass
 
+    # Pre-cache interview rounds from both SQLite and MongoDB to enrich candidate cards with live AI scores and recordings
+    round_cache = {}
+    try:
+        from modules.interview.domain.models import InterviewRound
+        with get_session() as s_sess:
+            all_rounds = s_sess.query(InterviewRound).all()
+            for rd in all_rounds:
+                if rd.candidate_submission_id:
+                    round_cache[rd.candidate_submission_id] = rd
+                if rd.candidate_email:
+                    round_cache[rd.candidate_email.strip().lower()] = rd
+                if rd.candidate_name and rd.requisition_id:
+                    round_cache[f"{rd.candidate_name.strip().lower()}::{rd.requisition_id}"] = rd
+    except Exception:
+        pass
+
+    try:
+        for m_rd in db["interview_rounds"].find({}):
+            m_sub_id = m_rd.get("candidate_submission_id")
+            m_email = (m_rd.get("candidate_email") or "").strip().lower()
+            m_cname = (m_rd.get("candidate_name") or "").strip().lower()
+            m_req_id = m_rd.get("requisition_id")
+            if m_sub_id and m_sub_id not in round_cache:
+                round_cache[m_sub_id] = m_rd
+            if m_email and m_email not in round_cache:
+                round_cache[m_email] = m_rd
+            if m_cname and m_req_id and f"{m_cname}::{m_req_id}" not in round_cache:
+                round_cache[f"{m_cname}::{m_req_id}"] = m_rd
+    except Exception:
+        pass
+
     results = []
     for doc in all_docs:
         req_id = doc.get("requisition_id")
@@ -195,6 +227,47 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         agr_status = wo_match.get("agreement_status") or wo_match.get("status") or "Draft"
         if agr_status == "ACTIVE":
             agr_status = "Draft"
+
+        # Resolve matching interview round
+        cand_email_key = (doc.get("candidate_email") or "").strip().lower()
+        cand_name_key = (doc.get("candidate_name") or "").strip().lower()
+        linked_cand_id = doc.get("candidate_id")
+
+        matched_round = (
+            round_cache.get(doc_id)
+            or (round_cache.get(linked_cand_id) if linked_cand_id else None)
+            or (round_cache.get(cand_email_key) if cand_email_key else None)
+            or (round_cache.get(f"{cand_name_key}::{req_id}") if cand_name_key and req_id else None)
+        )
+
+        int_score = doc.get("interview_score")
+        int_result = doc.get("interview_result")
+        int_summary = doc.get("interview_summary")
+        int_round_id = doc.get("round_id")
+        int_recording_url = doc.get("recording_url")
+        int_status = doc.get("round_status") or doc.get("interview_status")
+
+        if matched_round:
+            m_id = matched_round.get("id") if isinstance(matched_round, dict) else matched_round.id
+            if not int_round_id:
+                int_round_id = m_id
+            if int_score is None:
+                ca = (matched_round.get("communication_analysis") if isinstance(matched_round, dict) else matched_round.communication_analysis) or {}
+                sc = ca.get("overall_score")
+                if sc is not None and str(sc).isdigit():
+                    int_score = int(sc)
+            if not int_result:
+                ev = (matched_round.get("evaluation") if isinstance(matched_round, dict) else matched_round.evaluation) or {}
+                int_result = ev.get("result")
+            if not int_summary:
+                ev = (matched_round.get("evaluation") if isinstance(matched_round, dict) else matched_round.evaluation) or {}
+                ca = (matched_round.get("communication_analysis") if isinstance(matched_round, dict) else matched_round.communication_analysis) or {}
+                int_summary = ca.get("summary") or ev.get("notes") or ""
+            if not int_recording_url:
+                rec_url = matched_round.get("recording_url") if isinstance(matched_round, dict) else matched_round.recording_url
+                int_recording_url = rec_url or (f"/api/interviews/rounds/{m_id}/recording" if m_id else None)
+            if not int_status:
+                int_status = matched_round.get("status") if isinstance(matched_round, dict) else matched_round.status
 
         results.append({
             "id": doc_id,
@@ -230,13 +303,20 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
             "certifications": details.get("certifications") or [],
             "skills": details.get("skills") or doc.get("matched_skills") or [],
             "hiring_manager_notes": doc.get("hiring_manager_notes"),
+            "interview_score": int_score,
+            "interview_result": int_result,
+            "interview_summary": int_summary,
+            "round_id": int_round_id,
+            "round_status": int_status,
+            "recording_url": int_recording_url,
+            "meeting_link": doc.get("meeting_link") or (f"/interview/room/{int_round_id}" if int_round_id else None),
             "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         })
     # Deduplicate results by submission id and by (candidate identity, requisition_id)
-    # Since all_docs was sorted by match_score DESC and created_at DESC, the first seen is the highest quality record
+    # Merge interview details if one duplicate carries interview findings
     deduped_results = []
     seen_ids = set()
-    seen_keys = set()
+    seen_indices = {}
 
     for item in results:
         sub_id = item.get("id") or item.get("submission_id")
@@ -249,14 +329,31 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
 
         cand_key = c_email if c_email else c_name
         composite_key = f"{cand_key}::{r_id}" if cand_key else None
+        name_key = f"{c_name}::{r_id}" if c_name else None
 
-        if composite_key and composite_key in seen_keys:
+        matched_existing_key = None
+        if composite_key and composite_key in seen_indices:
+            matched_existing_key = composite_key
+        elif name_key and name_key in seen_indices:
+            matched_existing_key = name_key
+
+        if matched_existing_key:
+            existing_idx = seen_indices[matched_existing_key]
+            existing = deduped_results[existing_idx]
+            # Merge interview fields onto existing record if existing lacks them
+            for field in ("interview_score", "interview_result", "interview_summary", "round_id", "round_status", "recording_url", "meeting_link"):
+                if not existing.get(field) and item.get(field):
+                    existing[field] = item[field]
+            if existing.get("match_score") is None or (item.get("match_score") and item["match_score"] > existing["match_score"]):
+                existing["match_score"] = item["match_score"]
             continue
 
         if sub_id:
             seen_ids.add(sub_id)
         if composite_key:
-            seen_keys.add(composite_key)
+            seen_indices[composite_key] = len(deduped_results)
+        if name_key:
+            seen_indices[name_key] = len(deduped_results)
 
         deduped_results.append(item)
 
@@ -315,10 +412,84 @@ def list_candidates(
 
 @router.get("/shortlisted")
 def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dict]:
-    """Shortcut for the shortlisted candidates queue (optimized direct Mongo query)."""
-    if current_user.role in ("Recruiter", "Vendor"):
-        return _fetch_candidate_submissions_mongo({"status": {"$in": ["Shortlisted", "Accepted", "Under Review", "Hired"]}}, current_user)
-    return _fetch_candidate_submissions_mongo({"status": "Shortlisted"}, current_user)
+    """Shortcut for the shortlisted candidates queue (strictly verified: must have completed AI screening interview)."""
+    from modules.shared.db import db, get_session
+    from modules.interview.domain.models import InterviewRound
+
+    candidates = _fetch_candidate_submissions_mongo(
+        {"status": {"$in": ["Shortlisted", "Accepted", "Under Review", "Hired"]}},
+        current_user
+    )
+
+    # Collect all completed interview round emails and IDs from SQLite and MongoDB
+    completed_emails = set()
+    completed_ids = set()
+    try:
+        with get_session() as session:
+            sql_rounds = session.query(InterviewRound).filter(InterviewRound.status == "Completed").all()
+            for r in sql_rounds:
+                if r.candidate_email:
+                    completed_emails.add(r.candidate_email.strip().lower())
+                if r.candidate_submission_id:
+                    completed_ids.add(r.candidate_submission_id)
+    except Exception:
+        pass
+
+    try:
+        mongo_rounds = list(db["interview_rounds"].find({"status": "Completed"}, {"candidate_email": 1, "candidate_submission_id": 1}))
+        for mr in mongo_rounds:
+            if mr.get("candidate_email"):
+                completed_emails.add(mr["candidate_email"].strip().lower())
+            if mr.get("candidate_submission_id"):
+                completed_ids.add(mr["candidate_submission_id"])
+    except Exception:
+        pass
+
+    verified = []
+    stale_to_demote = []
+    for c in candidates:
+        st = c.get("status")
+        # Post-shortlist pipeline stages are preserved
+        if st in ("Accepted", "Hired", "Under Review"):
+            verified.append(c)
+            continue
+
+        c_email = (c.get("candidate_email") or "").strip().lower()
+        c_id = c.get("id") or c.get("submission_id")
+        has_completed_interview = (
+            (c_id and c_id in completed_ids)
+            or (c_email and c_email in completed_emails)
+            or (c.get("interview_score") is not None)
+            or (c.get("round_status") == "Completed")
+        )
+
+        if has_completed_interview:
+            verified.append(c)
+        else:
+            # Candidate was marked Shortlisted without an interview -> auto-correct to Screened
+            stale_to_demote.append((c_id, c_email, c.get("requisition_id")))
+
+    if stale_to_demote:
+        try:
+            for s_id, s_email, s_req in stale_to_demote:
+                or_clause = []
+                if s_id:
+                    or_clause.append({"id": s_id})
+                    or_clause.append({"submission_id": s_id})
+                if s_email:
+                    if s_req:
+                        or_clause.append({"candidate_email": s_email, "requisition_id": s_req})
+                    else:
+                        or_clause.append({"candidate_email": s_email})
+                if or_clause:
+                    db["candidate_submissions"].update_many(
+                        {"$or": or_clause, "status": "Shortlisted"},
+                        {"$set": {"status": "Screened", "shortlisted_at": None}}
+                    )
+        except Exception as demote_err:
+            logger.warning(f"Error auto-demoting un-interviewed candidates: {demote_err}")
+
+    return verified
 
 
 @router.get("/bank")
@@ -692,8 +863,24 @@ async def upload_bank_candidates(
                             print(f"Text extraction failed for {file.filename}: {ex}")
                             extracted_text = ""
                             
-                        # Use Groq LLM candidate profile extractor
-                        profile = await extract_candidate_profile(extracted_text, file.filename)
+                        # If single upload and manual candidate details are already provided,
+                        # use fast regex fallback extraction for skills and summary to eliminate lag.
+                        # Otherwise (e.g. bulk AI upload), use extract_candidate_profile with fast Groq model.
+                        is_manual_entry = bool(len(valid_files) == 1 and (name or email))
+                        if is_manual_entry:
+                            from modules.candidate.extractor import _build_fallback_profile
+                            fb_prof = _build_fallback_profile(extracted_text, file.filename)
+                            profile = {
+                                "candidate_name": (name.strip() if name else None) or fb_prof.get("candidate_name") or "Candidate",
+                                "candidate_email": (email.strip() if email else None) or fb_prof.get("candidate_email"),
+                                "candidate_phone": (phone.strip() if phone else None) or fb_prof.get("candidate_phone"),
+                                "candidate_title": (candidate_title.strip() if candidate_title else None) or fb_prof.get("candidate_title") or "Software Engineer",
+                                "skills": fb_prof.get("skills") or [],
+                                "summary": fb_prof.get("summary") or f"{name or 'Candidate'} - {candidate_title or 'Software Engineer'}",
+                                "experience_years": fb_prof.get("experience_years"),
+                            }
+                        else:
+                            profile = await extract_candidate_profile(extracted_text, file.filename)
                         
                         # Apply manual overrides if explicitly provided (for single upload)
                         final_name = (name if len(valid_files) == 1 and name else None) or profile.get("candidate_name") or "Candidate"

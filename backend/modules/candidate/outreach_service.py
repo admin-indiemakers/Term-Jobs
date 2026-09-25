@@ -438,6 +438,9 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
         )
 
         # 2. Automatically fast-track candidate into requisition submissions
+        req_doc = db["requisitions"].find_one({"id": req_id}) or {}
+        tenant_id = req_doc.get("tenant_id") or "local"
+
         existing_sub = db["candidate_submissions"].find_one({
             "requisition_id": req_id,
             "candidate_email": cand_email.lower()
@@ -450,6 +453,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                 {"_id": existing_sub["_id"]},
                 {"$set": {
                     "id": cand_sub_id,
+                    "tenant_id": tenant_id,
                     "status": "Interested - Fast Track",
                     "candidate_responded_interested": True,
                     "responded_at": now,
@@ -459,6 +463,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
         else:
             sub_doc = {
                 "id": cand_sub_id,
+                "tenant_id": tenant_id,
                 "requisition_id": req_id,
                 "requisition_title": req_title,
                 "candidate_id": cand_id,
@@ -476,6 +481,37 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                 "source": "AI Talent Match & Outreach",
             }
             db["candidate_submissions"].insert_one(sub_doc)
+
+        # Sync to SQLite CandidateSubmission table
+        try:
+            from modules.shared.db import get_session
+            from modules.candidate.domain.models import CandidateSubmission
+            with get_session() as session:
+                sql_sub = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == req_id,
+                    CandidateSubmission.candidate_email == cand_email.lower()
+                ).first()
+                if not sql_sub:
+                    sql_sub = CandidateSubmission(
+                        id=cand_sub_id,
+                        requisition_id=req_id,
+                        candidate_name=cand_name,
+                        candidate_email=cand_email.lower(),
+                        vendor_name="Portal Talent Memory (Auto-Matched)",
+                        match_score=outreach.get("match_score") if outreach else 90.0,
+                        matched_skills=outreach.get("matched_skills", []) if outreach else [],
+                        status="Interested - Fast Track",
+                        created_at=datetime.now(timezone.utc),
+                        updated_at=datetime.now(timezone.utc),
+                    )
+                    session.add(sql_sub)
+                else:
+                    sql_sub.status = "Interested - Fast Track"
+                    sql_sub.match_score = outreach.get("match_score") if outreach else 90.0
+                    sql_sub.updated_at = datetime.now(timezone.utc)
+                session.commit()
+        except Exception as sql_sync_err:
+            logger.warning(f"Error syncing SQLite CandidateSubmission on RSVP: {sql_sync_err}")
 
         # 3. Create or resolve InterviewRound for instant video interview access
         round_doc = None
