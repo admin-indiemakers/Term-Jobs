@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -1251,48 +1252,51 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {/* Unified Candidate Perks Tab (Fixed to Bottom) */}
-            <div className="fixed bottom-3 sm:bottom-4 z-40 right-0 left-[100vw] lg:left-[calc(100vw+360px)] xl:left-[calc(100vw+410px)] 2xl:left-[calc(100vw+440px)] flex justify-center px-4 pointer-events-none">
-              <div className="w-full max-w-xl mx-auto rounded-2xl sm:rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_16px_50px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden transition-all pointer-events-auto">
-                {/* 3-Feature Highlights */}
-                <div className="px-5 py-2.5 sm:py-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-                      <Rocket size={14} className="text-white" />
+            {enabled && typeof document !== 'undefined' && createPortal(
+              <div className="fixed bottom-3 sm:bottom-4 z-40 left-0 lg:left-[360px] xl:left-[410px] 2xl:left-[440px] right-0 flex justify-center px-4 pointer-events-none">
+                <div className="w-full max-w-xl mx-auto rounded-2xl sm:rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_16px_50px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden transition-all pointer-events-auto">
+                  {/* 3-Feature Highlights */}
+                  <div className="px-5 py-2.5 sm:py-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                        <Rocket size={14} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Instant Matching</h4>
+                        <p className="text-[10px] text-white/50 leading-tight truncate">
+                          Auto-matched with relevant roles
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Instant Matching</h4>
-                      <p className="text-[10px] text-white/50 leading-tight truncate">
-                        Auto-matched with relevant roles
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-                      <ShieldCheck size={14} className="text-white" />
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                        <ShieldCheck size={14} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Verified Opportunities</h4>
+                        <p className="text-[10px] text-white/50 leading-tight truncate">
+                          Direct enterprise requisitions
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Verified Opportunities</h4>
-                      <p className="text-[10px] text-white/50 leading-tight truncate">
-                        Direct enterprise requisitions
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
-                      <Users size={14} className="text-white" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">One Profile, Many Roles</h4>
-                      <p className="text-[10px] text-white/50 leading-tight truncate">
-                        Apply to multiple roles in 1 click
-                      </p>
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                        <Users size={14} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-[11px] font-bold text-white tracking-tight truncate">One Profile, Many Roles</h4>
+                        <p className="text-[10px] text-white/50 leading-tight truncate">
+                          Apply to multiple roles in 1 click
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            </div>
+              </div>,
+              document.body
+            )}
           </main>
         </div>
       </div>
@@ -1300,8 +1304,8 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */}
       {/* ============================================================ */}
-      {selectedJob && (
-        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+      {selectedJob && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
           <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto">
             {/* Modal Header */}
             <div className="p-5 sm:p-6 border-b border-white/10 flex items-start justify-between gap-4 bg-white/[0.02]">
@@ -1815,17 +1819,15 @@ export default function OpenRolesPage({ enabled = true }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ============================================================ */}
       {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
       {/* ============================================================ */}
-      {/* ============================================================ */}
-      {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
-      {/* ============================================================ */}
-      {showMyAppsModal && (
-        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl">
+      {showMyAppsModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
           <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-base font-bold text-white">Your Submitted Applications</h3>
@@ -1858,14 +1860,15 @@ export default function OpenRolesPage({ enabled = true }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ============================================================ */}
       {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
       {/* ============================================================ */}
-      {showSetupModal && (
-        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto">
+      {showSetupModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto">
           <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <div>
@@ -1961,14 +1964,15 @@ export default function OpenRolesPage({ enabled = true }) {
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ============================================================ */}
       {/* MODAL 4: GENERAL TALENT POOL                                 */}
       {/* ============================================================ */}
-      {showGeneralPoolModal && (
-        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+      {showGeneralPoolModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
           <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all">
             <div className="flex items-start justify-between pb-4 border-b border-white/10">
               <div>
@@ -2203,12 +2207,13 @@ export default function OpenRolesPage({ enabled = true }) {
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
-      {showAuthModal && (
-        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
+      {showAuthModal && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
           <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-md w-full shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
             {/* Close button */}
             <button
@@ -2460,7 +2465,8 @@ export default function OpenRolesPage({ enabled = true }) {
               <span>Verified candidate session · Encrypted data</span>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
     </div>
