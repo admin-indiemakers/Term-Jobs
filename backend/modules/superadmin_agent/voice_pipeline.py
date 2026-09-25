@@ -9,38 +9,71 @@ import os
 import re
 import asyncio
 import uuid
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, TYPE_CHECKING
 
 try:
-    from loguru import logger
+    from loguru import logger  # type: ignore[import-untyped]
 except ImportError:
     import logging
     logger = logging.getLogger(__name__)
-from openai import RateLimitError, AuthenticationError, NotFoundError
 
-from pipecat.frames.frames import Frame, TTSSpeakFrame
-from pipecat.pipeline.pipeline import Pipeline
-from pipecat.pipeline.runner import PipelineRunner
-from pipecat.pipeline.task import PipelineTask
-from pipecat.services.groq.llm import GroqLLMService
-from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
-from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
-from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport
-from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection
-from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequestHandler
-from pipecat.transports.base_transport import TransportParams
-from pipecat.processors.aggregators.llm_context import LLMContext, ToolsSchema
-from pipecat.processors.aggregators.llm_response_universal import (
-    LLMContextAggregatorPair,
-    LLMUserAggregatorParams,
-)
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams
-from pipecat.processors.frameworks.rtvi import RTVIProcessor
-from pipecat.adapters.schemas.function_schema import FunctionSchema
+# Optional runtime dependencies — installed in .venv but not always present in dev linters.
+# All imports are guarded so the module degrades gracefully if pipecat is unavailable.
+try:
+    from openai import RateLimitError, AuthenticationError, NotFoundError  # type: ignore[import-untyped]
+    from pipecat.frames.frames import Frame, TTSSpeakFrame  # type: ignore[import-untyped]
+    from pipecat.pipeline.pipeline import Pipeline  # type: ignore[import-untyped]
+    from pipecat.pipeline.runner import PipelineRunner  # type: ignore[import-untyped]
+    from pipecat.pipeline.task import PipelineTask  # type: ignore[import-untyped]
+    from pipecat.services.groq.llm import GroqLLMService  # type: ignore[import-untyped]
+    from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings  # type: ignore[import-untyped]
+    from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings  # type: ignore[import-untyped]
+    from pipecat.transports.smallwebrtc.transport import SmallWebRTCTransport  # type: ignore[import-untyped]
+    from pipecat.transports.smallwebrtc.connection import SmallWebRTCConnection  # type: ignore[import-untyped]
+    from pipecat.transports.smallwebrtc.request_handler import SmallWebRTCRequestHandler  # type: ignore[import-untyped]
+    from pipecat.transports.base_transport import TransportParams  # type: ignore[import-untyped]
+    from pipecat.processors.aggregators.llm_context import LLMContext, ToolsSchema  # type: ignore[import-untyped]
+    from pipecat.processors.aggregators.llm_response_universal import (  # type: ignore[import-untyped]
+        LLMContextAggregatorPair,
+        LLMUserAggregatorParams,
+    )
+    from pipecat.audio.vad.silero import SileroVADAnalyzer  # type: ignore[import-untyped]
+    from pipecat.audio.vad.vad_analyzer import VADParams  # type: ignore[import-untyped]
+    from pipecat.processors.frameworks.rtvi import RTVIProcessor  # type: ignore[import-untyped]
+    from pipecat.adapters.schemas.function_schema import FunctionSchema  # type: ignore[import-untyped]
+    PIPECAT_AVAILABLE = True
+except ImportError:
+    PIPECAT_AVAILABLE = False
+    # Provide stubs so the rest of the module can be imported without pipecat
+    Frame = object  # type: ignore[assignment,misc]
+    TTSSpeakFrame = object  # type: ignore[assignment,misc]
+    Pipeline = object  # type: ignore[assignment,misc]
+    PipelineRunner = object  # type: ignore[assignment,misc]
+    PipelineTask = object  # type: ignore[assignment,misc]
+    GroqLLMService = object  # type: ignore[assignment,misc]
+    SarvamSTTService = object  # type: ignore[assignment,misc]
+    SarvamSTTSettings = object  # type: ignore[assignment,misc]
+    SarvamTTSService = object  # type: ignore[assignment,misc]
+    SarvamTTSSettings = object  # type: ignore[assignment,misc]
+    SmallWebRTCTransport = object  # type: ignore[assignment,misc]
+    SmallWebRTCConnection = object  # type: ignore[assignment,misc]
+    SmallWebRTCRequestHandler = object  # type: ignore[assignment,misc]
+    TransportParams = object  # type: ignore[assignment,misc]
+    LLMContext = object  # type: ignore[assignment,misc]
+    ToolsSchema = object  # type: ignore[assignment,misc]
+    LLMContextAggregatorPair = object  # type: ignore[assignment,misc]
+    LLMUserAggregatorParams = object  # type: ignore[assignment,misc]
+    SileroVADAnalyzer = object  # type: ignore[assignment,misc]
+    VADParams = object  # type: ignore[assignment,misc]
+    RTVIProcessor = object  # type: ignore[assignment,misc]
+    FunctionSchema = object  # type: ignore[assignment,misc]
+    RateLimitError = Exception  # type: ignore[assignment,misc]
+    AuthenticationError = Exception  # type: ignore[assignment,misc]
+    NotFoundError = Exception  # type: ignore[assignment,misc]
 
 from .groq_manager import get_next_groq_key
 from .agent import TOOLS, TOOL_MAP
+
 
 def get_sarvam_stt_key() -> str:
     """Retrieve dedicated Sarvam AI key for Speech-to-Text with fresh environment reload."""
@@ -80,7 +113,7 @@ session_executed_actions: dict[str, list] = {}
 class RotatableGroqLLMService(GroqLLMService):
     """Groq LLM Service that automatically rotates API keys on 429 / Auth errors."""
 
-    async def get_chat_completions(self, context) -> any:
+    async def get_chat_completions(self, context) -> "Any":  # type: ignore[override]
         for attempt in range(5):
             try:
                 return await super().get_chat_completions(context)

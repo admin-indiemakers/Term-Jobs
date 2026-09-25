@@ -264,30 +264,36 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                     if best_interview_score is None or best_interview_score < 75:
                         best_interview_score = 80
 
-            # Algorithm Weighting
-            resume_score = float(sub.match_score) if sub.match_score is not None else 70.0
+            # Algorithm Weighting:
+            # Composite = 60% AI interview score + 40% resume score (only if interview completed)
+            # If no completed interview → candidate is NOT eligible for HM shortlist.
+            resume_score = float(sub.match_score) if sub.match_score is not None else 0.0
             if best_interview_score is not None:
                 composite_score = round(0.6 * best_interview_score + 0.4 * resume_score, 1)
             else:
+                # Keep raw resume score for display but do NOT shortlist without interview
                 composite_score = round(resume_score, 1)
 
             # Update candidate match_score to reflect composite algorithmic score
             sub.match_score = composite_score
 
-            # Shortlist threshold: completed interview round or composite >= 40 or interview passed or already shortlisted
+            # ── STRICT GATE: candidate must have COMPLETED the AI screening interview ──
+            # Simply having a good resume is not enough — they must have attended the interview.
             is_qualified = (
-                has_completed_interview
-                or (best_interview_score is not None and best_interview_score >= 35)
-                or composite_score >= 40
-                or has_passed_round
-                or sub.status in ("Shortlisted", "Accepted", "Under Review", "Hired")
+                has_completed_interview                                      # round.status == "Completed"
+                or (best_interview_score is not None and has_passed_round)   # AI evaluation passed
+                or sub.status in ("Shortlisted", "Accepted", "Under Review", "Hired")  # already promoted
             )
 
             if is_qualified:
                 if sub.status not in ("Hired", "Rejected"):
                     sub.status = "Shortlisted"
                 shortlisted_count += 1
-            
+            else:
+                # Reset any stale Shortlisted status if interview has not been completed
+                if sub.status == "Shortlisted":
+                    sub.status = "Screened"
+
             sub.updated_at = now
             session.add(sub)
 
@@ -297,6 +303,7 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                 "candidate_email": sub.candidate_email,
                 "match_score": composite_score,
                 "interview_score": best_interview_score,
+                "has_completed_interview": has_completed_interview,
                 "status": sub.status,
                 "is_shortlisted": is_qualified,
             })
@@ -382,28 +389,62 @@ def dispatch_requisition_shortlist(
         if not req:
             raise ValueError(f"Requisition {requisition_id} not found")
 
-        # 1. Update Candidate Submissions: promote Screened candidates to Shortlisted
-        # In SQLite:
+        # 1. Gather only candidates already marked Shortlisted by the scoring algorithm
+        #    (i.e. those who completed the AI screening interview).
+        #    We do NOT blindly promote un-interviewed candidates here.
         sqlite_subs = (
             session.query(CandidateSubmission)
             .filter(CandidateSubmission.requisition_id == requisition_id)
             .all()
         )
+
+        # Fetch completed interview rounds to determine who actually attended screening
+        interview_rounds = (
+            session.query(InterviewRound)
+            .filter(InterviewRound.requisition_id == requisition_id)
+            .all()
+        )
+        completed_emails = set()
+        completed_sub_ids = set()
+        for ir in interview_rounds:
+            if ir.status == "Completed":
+                if ir.candidate_email:
+                    completed_emails.add(ir.candidate_email.strip().lower())
+                if ir.candidate_submission_id:
+                    completed_sub_ids.add(ir.candidate_submission_id)
+
+        # Only promote candidates who attended the AI interview
         for s in sqlite_subs:
-            if s.status not in ("Shortlisted", "Accepted", "Under Review", "Hired", "Rejected"):
+            email = (s.candidate_email or "").strip().lower()
+            attended = s.id in completed_sub_ids or email in completed_emails
+            already_promoted = s.status in ("Shortlisted", "Accepted", "Under Review", "Hired")
+            if attended and s.status not in ("Hired", "Rejected"):
                 s.status = "Shortlisted"
                 s.updated_at = now
                 session.add(s)
+            elif not attended and not already_promoted:
+                # Leave un-interviewed candidates as Screened — do not promote
+                pass
 
-        # In MongoDB:
+        # In MongoDB: only promote candidates who attended the AI screening
         try:
-            db["candidate_submissions"].update_many(
-                {
+            email_list = list(completed_emails)
+            sub_id_list = list(completed_sub_ids)
+            if email_list or sub_id_list:
+                mongo_filter = {
                     "requisition_id": requisition_id,
-                    "status": {"$nin": ["Shortlisted", "Accepted", "Under Review", "Hired", "Rejected"]}
-                },
-                {"$set": {"status": "Shortlisted", "shortlisted_at": now_iso, "updated_at": now_iso}}
-            )
+                    "status": {"$nin": ["Shortlisted", "Accepted", "Under Review", "Hired", "Rejected"]},
+                    "$or": (
+                        [{"candidate_email": {"$in": email_list}}] if email_list else []
+                    ) + (
+                        [{"id": {"$in": sub_id_list}}] if sub_id_list else []
+                    )
+                }
+                if mongo_filter["$or"]:
+                    db["candidate_submissions"].update_many(
+                        mongo_filter,
+                        {"$set": {"status": "Shortlisted", "shortlisted_at": now_iso, "updated_at": now_iso}}
+                    )
         except Exception as e:
             logger.warning(f"Error updating MongoDB candidate submissions: {e}")
 
