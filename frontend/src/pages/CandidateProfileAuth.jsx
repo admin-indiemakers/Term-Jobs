@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
+import { Backdrop } from '../components/landing/Backdrop';
 
 // Google OAuth Client ID
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
@@ -223,13 +224,11 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
         description="Access live enterprise open roles, 1-click apply with your candidate profile, and track your interview invitations."
         canonicalUrl="https://termjobs.vercel.app/#jobs"
       />
-      <div className="clp-aurora" />
-      <div className="clp-grid" />
 
       <main className="clp-shell">
         {/* ——— Left Side: TermJobs Editorial / Brand Panel ——— */}
         <section className="clp-brand">
-          <div className="clp-brand-glow" />
+          <Backdrop tone="dark" />
 
           <div className="clp-brand-inner">
             <button
@@ -275,6 +274,7 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
 
         {/* ——— Right Side: Clean TermJobs Auth Panel ——— */}
         <section className="clp-form-side">
+          <Backdrop tone="light" />
           <div className="clp-form-wrap">
             {/* Top Navigation */}
             <div className="flex items-center justify-between mb-6">
@@ -336,7 +336,7 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
             {/* Divider */}
             <div className="relative flex items-center justify-center mb-5">
               <div className="border-t border-[#E5E5E0] w-full" />
-              <span className="bg-white px-3 text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] absolute">
+              <span className="bg-paper px-3 text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] absolute">
                 or use candidate email
               </span>
             </div>

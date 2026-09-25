@@ -1266,6 +1266,18 @@ async def apply_to_requisition(
         comp_name = cp.name if cp and cp.name else "Partner Enterprise"
 
     clean_email = email.strip().lower()
+
+    # Prevent duplicate applications from same candidate for same requisition
+    existing_sub = db["candidate_submissions"].find_one({
+        "candidate_email": clean_email,
+        "requisition_id": requisition_id
+    })
+    if existing_sub:
+        raise HTTPException(
+            status_code=400,
+            detail="You have already submitted an application for this role. Your profile is currently under review."
+        )
+
     pdf_base64 = ""
     filename = "resume.pdf"
     extracted_text = ""
@@ -1404,6 +1416,8 @@ async def apply_to_requisition(
         "details": details,
         "tenant_id": req.tenant_id,
         "resume_pdf": pdf_base64,
+        "has_resume": True,
+        "profile_completed": True if (phone or profile.get("candidate_phone")) else False,
         "created_at": now_utc,
         "updated_at": now_utc,
     }
@@ -1432,6 +1446,7 @@ async def apply_to_requisition(
 
 
 @app.post("/api/public/candidate/register")
+@app.post("/api/public/talent-pool/join")
 async def register_public_candidate(
     name: str = Form(...),
     email: str = Form(...),
@@ -1514,13 +1529,19 @@ async def register_public_candidate(
         "extracted_text": extracted_text,
         "details": details,
         "resume_pdf": pdf_base64,
+        "has_resume": True,
+        "profile_completed": True if (phone.strip() or profile.get("candidate_phone")) else False,
         "source": "Portal Registration",
         "created_at": now_utc,
         "updated_at": now_utc,
     }
 
     try:
-        db["candidates"].insert_one(cand_doc)
+        db["candidates"].update_one(
+            {"candidate_email": email.strip().lower()},
+            {"$set": cand_doc},
+            upsert=True
+        )
     except Exception as err:
         print(f"[DB CANDIDATE REGISTER ERROR] {err}")
 

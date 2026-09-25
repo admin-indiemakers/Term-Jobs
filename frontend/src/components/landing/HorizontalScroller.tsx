@@ -2,7 +2,7 @@ import { motion, useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { EASE } from "./animations";
 
-export function useHorizontalPanels(total: number) {
+export function useHorizontalPanels(total: number, enabled: boolean = true) {
   const [index, setIndex] = useState(0);
   const locked = useRef(false);
 
@@ -27,6 +27,7 @@ export function useHorizontalPanels(total: number) {
   );
 
   useEffect(() => {
+    if (!enabled) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight" || e.key === "PageDown") {
         e.preventDefault();
@@ -42,9 +43,10 @@ export function useHorizontalPanels(total: number) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [step, goTo, total]);
+  }, [step, goTo, total, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     const onWheel = (e: WheelEvent) => {
       const primary = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
       if (Math.abs(primary) < 12) return;
@@ -53,9 +55,10 @@ export function useHorizontalPanels(total: number) {
     };
     window.addEventListener("wheel", onWheel, { passive: false });
     return () => window.removeEventListener("wheel", onWheel);
-  }, [step]);
+  }, [step, enabled]);
 
   useEffect(() => {
+    if (!enabled) return;
     let startX = 0;
     let startY = 0;
     const onStart = (e: TouchEvent) => {
@@ -74,7 +77,7 @@ export function useHorizontalPanels(total: number) {
       window.removeEventListener("touchstart", onStart);
       window.removeEventListener("touchend", onEnd);
     };
-  }, [step]);
+  }, [step, enabled]);
 
   return { index, goTo, step };
 }
@@ -89,7 +92,7 @@ export function HorizontalScroller({
   const reduced = useReducedMotion();
 
   return (
-    <div className="fixed inset-0 overflow-hidden">
+    <div className="absolute inset-0 overflow-hidden">
       <motion.div
         className="flex h-dvh w-max"
         animate={{ x: `-${index * 100}vw` }}

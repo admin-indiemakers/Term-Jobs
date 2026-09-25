@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Navigate, useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ApiError } from '../api/client';
 import SEOHead from '../components/SEOHead';
+import { Backdrop } from '../components/landing/Backdrop';
 
 function Mark() {
   return (
@@ -72,13 +72,12 @@ export default function AuthPage() {
         description="Sign in to your Term Jobs portal to manage contractor requisitions, talent onboarding, timesheets, and automated workforce billing."
         canonicalUrl="https://termjobs.vercel.app/login"
       />
-      <div className="clp-aurora" />
-      <div className="clp-grid" />
 
       <main className="clp-shell">
         {/* ——— Editorial / brand panel ——— */}
         <section className="clp-brand">
-          <div className="clp-brand-glow" />
+          {/* Statement section dark background system */}
+          <Backdrop tone="dark" />
 
           <div className="clp-brand-inner">
             <Link to="/" className="clp-lockup" title="Return to Home">
@@ -120,6 +119,9 @@ export default function AuthPage() {
 
         {/* ——— Sign-in panel ——— */}
         <section className="clp-form-side">
+          {/* Landing page background system */}
+          <Backdrop tone="light" />
+
           <div className="clp-form-wrap">
             <Link to="/" className="clp-mobile-lockup" title="Return to Home">
               <span className="clp-mark"><Mark /></span>
@@ -220,6 +222,11 @@ export default function AuthPage() {
                 </svg>
                 Encrypted session
               </span>
+
+              <Link to="/" className="clp-switch group" title="Return to Platform Overview">
+                <span>Platform overview</span>
+                <span className="clp-switch-arrow">→</span>
+              </Link>
             </div>
           </div>
         </section>

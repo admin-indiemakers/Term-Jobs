@@ -14,7 +14,7 @@ export function PageProgress({
 
   return (
     <>
-      <div className="fixed top-0 right-0 left-0 z-40 h-[2px] bg-transparent">
+      <div className="absolute top-0 right-0 left-0 z-40 h-[2px] bg-transparent">
         <motion.div
           className="h-full origin-left"
           style={{ background: color, opacity: 0.6 }}
@@ -23,7 +23,7 @@ export function PageProgress({
         />
       </div>
       <div
-        className="fixed bottom-5 left-5 z-40 text-[0.62rem] font-semibold tracking-[0.24em] tabular-nums md:bottom-8 md:left-10"
+        className="absolute bottom-5 left-5 z-40 text-[0.62rem] font-semibold tracking-[0.24em] tabular-nums md:bottom-8 md:left-10"
         style={{ color }}
         aria-live="polite"
       >

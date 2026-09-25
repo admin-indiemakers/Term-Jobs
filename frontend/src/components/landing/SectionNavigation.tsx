@@ -19,7 +19,7 @@ export function SectionNavigation({
   return (
     <nav
       aria-label="Sections"
-      className="fixed right-5 bottom-5 z-40 md:right-10 md:bottom-8"
+      className="absolute right-5 bottom-5 z-40 md:right-10 md:bottom-8"
       style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
     >
       <ul className="flex flex-wrap justify-end gap-x-5 gap-y-2 md:flex-col md:items-end md:gap-2">

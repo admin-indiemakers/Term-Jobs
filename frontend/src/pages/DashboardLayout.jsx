@@ -40,102 +40,102 @@ const Icons = {
   ),
   Dashboard: (props) => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-      <polyline points="9 22 9 12 15 12 15 22"/>
+      <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
     </svg>
   ),
   Requisitions: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
       <rect width="6" height="6" x="9" y="9" />
     </svg>
   ),
   Plus: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <line x1="12" y1="5" x2="12" y2="19"/>
-      <line x1="5" y1="12" x2="19" y2="12"/>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   ),
   Diamond: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0z"/>
+      <path d="M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0z" />
     </svg>
   ),
   CandidatesBank: (props) => (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="10"/>
-      <circle cx="12" cy="12" r="3.5"/>
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="3.5" />
     </svg>
   ),
   Shortlisted: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <polyline points="20 6 9 17 4 12"/>
+      <polyline points="20 6 9 17 4 12" />
     </svg>
   ),
   Interviews: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
     </svg>
   ),
   Accepted: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <circle cx="12" cy="12" r="9"/>
-      <circle cx="12" cy="12" r="2.5" fill="currentColor"/>
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="2.5" fill="currentColor" />
     </svg>
   ),
   PortalAccess: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+      <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
     </svg>
   ),
   Flag: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
-      <line x1="4" y1="22" x2="4" y2="15"/>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+      <line x1="4" y1="22" x2="4" y2="15" />
     </svg>
   ),
   Team: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
-      <circle cx="9" cy="7" r="4"/>
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
-      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
     </svg>
   ),
   Timesheet: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-      <line x1="16" y1="2" x2="16" y2="6"/>
-      <line x1="8" y1="2" x2="8" y2="6"/>
-      <line x1="3" y1="10" x2="21" y2="10"/>
+      <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
     </svg>
   ),
   Receipt: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/>
-      <path d="M14 8H8"/>
-      <path d="M16 12H8"/>
-      <path d="M13 16H8"/>
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+      <path d="M14 8H8" />
+      <path d="M16 12H8" />
+      <path d="M13 16H8" />
     </svg>
   ),
   Agreements: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-      <polyline points="14 2 14 8 20 8"/>
-      <line x1="16" y1="13" x2="8" y2="13"/>
-      <line x1="16" y1="17" x2="8" y2="17"/>
-      <polyline points="10 9 9 9 8 9"/>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+      <line x1="16" y1="13" x2="8" y2="13" />
+      <line x1="16" y1="17" x2="8" y2="17" />
+      <polyline points="10 9 9 9 8 9" />
     </svg>
   ),
   Chat: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
     </svg>
   ),
   Mail: (props) => (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-      <rect width="20" height="16" x="2" y="4" rx="2"/>
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
+      <rect width="20" height="16" x="2" y="4" rx="2" />
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     </svg>
   ),
 };
@@ -175,7 +175,7 @@ export default function DashboardLayout() {
           pendingTimesheets: pendingTs,
           pendingExpenses: pendingExp,
         });
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [user?.role, token]);
 
@@ -194,13 +194,13 @@ export default function DashboardLayout() {
             setDirectorPendingAgreements(pending);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
 
       request('/api/workforce/director/work-orders', { token })
         .then((res) => {
           setDirectorPendingWorkOrders(res?.pending_director_count || 0);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [user?.role, token, location.pathname]);
 
@@ -218,7 +218,7 @@ export default function DashboardLayout() {
             setProcurementPendingSows(pending);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [user?.role, token, location.pathname]);
 
@@ -231,7 +231,7 @@ export default function DashboardLayout() {
         .then((res) => {
           setFinancePendingPayments(res?.ready_for_payment_count || 0);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [user?.role, token, location.pathname]);
 
@@ -244,7 +244,7 @@ export default function DashboardLayout() {
         .then((res) => {
           setSuperAdminCandidateCount(res?.total_count || 0);
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, [user?.role, token, location.pathname]);
 
@@ -324,47 +324,47 @@ export default function DashboardLayout() {
         ]
         : userRole === 'Director'
           ? [
-              { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
-              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-              { to: '/dashboard/director/work-orders', label: 'Work Orders', end: true, icon: Icons.Receipt, badge: directorPendingWorkOrders },
-              { to: '/dashboard/director/agreements', label: 'Agreements', end: true, icon: Icons.Agreements, badge: directorPendingAgreements }
-            ]
+            { to: '/dashboard/director', label: 'Executive Overview', end: true, icon: Icons.Dashboard },
+            { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+            { to: '/dashboard/director/work-orders', label: 'Work Orders', end: true, icon: Icons.Receipt, badge: directorPendingWorkOrders },
+            { to: '/dashboard/director/agreements', label: 'Agreements', end: true, icon: Icons.Agreements, badge: directorPendingAgreements }
+          ]
           : (userRole === 'Procurement' || userRole === 'Procurement Team')
             ? [
-                { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
-                { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
-                { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-              ]
-          : (userRole === 'Finance' || userRole === 'Finance Team')
-            ? [
+              { to: '/dashboard/procurement', label: 'Work Orders', end: true, icon: Icons.Agreements, badge: procurementPendingSows },
+              { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+            ]
+            : (userRole === 'Finance' || userRole === 'Finance Team')
+              ? [
                 { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, icon: Icons.Receipt, badge: financePendingPayments },
                 { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
                 { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
               ]
-          : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
-            ? [
-              { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
-              { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-              { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, icon: Icons.Diamond, count: superAdminCandidateCount },
-              { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, icon: Icons.Mail },
-              { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
-              { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
-              { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
-              { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
-              { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, icon: Icons.PortalAccess },
-            ]
-            : (userRole === 'Admin' || userRole.toLowerCase() === 'admin')
-              ? [
-                  { to: '/dashboard/admin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+              : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
+                ? [
+                  { to: '/dashboard/superadmin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
                   { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-                  { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
-                  { to: '/dashboard/candidates', label: 'Candidates', end: false, icon: Icons.Diamond },
-                  { to: '/dashboard/admin/partner-vendors', label: 'Vendors', end: false, icon: Icons.Building },
+                  { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, icon: Icons.Diamond, count: superAdminCandidateCount },
+                  { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, icon: Icons.Mail },
+                  { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, icon: Icons.Chat },
+                  { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', icon: Icons.Plus },
+                  { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', icon: Icons.Plus },
+                  { to: '/dashboard/superadmin/accounts', label: 'Accounts', end: false, icon: Icons.Requisitions },
+                  { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, icon: Icons.PortalAccess },
                 ]
-              : [
-                  { to: '/dashboard/hr', label: 'Dashboard', end: true },
-                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-                ];
+                : (userRole === 'Admin' || userRole.toLowerCase() === 'admin')
+                  ? [
+                    { to: '/dashboard/admin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+                    { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                    { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
+                    { to: '/dashboard/candidates', label: 'Candidates', end: false, icon: Icons.Diamond },
+                    { to: '/dashboard/admin/partner-vendors', label: 'Vendors', end: false, icon: Icons.Building },
+                  ]
+                  : [
+                    { to: '/dashboard/hr', label: 'Dashboard', end: true },
+                    { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                  ];
 
   // Render full reusable sidebar inner contents
   const renderSidebarContent = (onLinkClick) => (
@@ -459,12 +459,12 @@ export default function DashboardLayout() {
                   const isItemActive = item.to === '/dashboard/requisitions'
                     ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
                     : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
-                    ? (location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
-                    : item.to === '/dashboard/director'
-                    ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
-                    : item.end
-                    ? location.pathname === item.to
-                    : location.pathname.startsWith(item.to);
+                      ? (location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
+                      : item.to === '/dashboard/director'
+                        ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
+                        : item.end
+                          ? location.pathname === item.to
+                          : location.pathname.startsWith(item.to);
 
                   return (
                     <React.Fragment key={item.label}>
@@ -1307,22 +1307,22 @@ export default function DashboardLayout() {
                   {userRole === 'Super Admin'
                     ? 'Platform'
                     : (user?.tenant_name && user.tenant_name !== 'Unknown Tenant')
-                    ? user.tenant_name
-                    : (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
+                      ? user.tenant_name
+                      : (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
                 </span>
                 <span className="text-[#8A8A85] font-normal">/</span>
                 <span className="text-[#0A0A0A] font-semibold truncate">
                   {userRole === 'Super Admin' && location.pathname === '/dashboard/superadmin' ? 'Console'
                     : (location.pathname.includes('/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
-                    ? (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin' ? 'Candidate Pool' : (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates'))
-                    : location.pathname.includes('/requisitions') ? 'Requisitions'
-                    : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
-                    : location.pathname.includes('/interviews') ? 'Interview Requests'
-                    : location.pathname.includes('/agreements') ? 'Agreements'
-                    : location.pathname.includes('/chat') ? 'AI Chat'
-                    : location.pathname.includes('/accepted') ? 'Accepted Candidates'
-                    : location.pathname.includes('/portal-access') ? 'Portal Access'
-                    : 'Dashboard'}
+                      ? (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin' ? 'Candidate Pool' : (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates'))
+                      : location.pathname.includes('/requisitions') ? 'Requisitions'
+                        : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
+                          : location.pathname.includes('/interviews') ? 'Interview Requests'
+                            : location.pathname.includes('/agreements') ? 'Agreements'
+                              : location.pathname.includes('/chat') ? 'AI Chat'
+                                : location.pathname.includes('/accepted') ? 'Accepted Candidates'
+                                  : location.pathname.includes('/portal-access') ? 'Portal Access'
+                                    : 'Dashboard'}
                 </span>
                 <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
                 <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>

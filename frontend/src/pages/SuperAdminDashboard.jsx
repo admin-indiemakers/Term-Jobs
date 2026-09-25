@@ -353,8 +353,8 @@ export default function SuperAdminDashboard() {
                       <span className="text-[11px] text-gray-400 font-medium">{act.date}</span>
                       <span
                         className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${act.badgeTone === 'green'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-gray-100 text-gray-700 border border-gray-200'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-gray-100 text-gray-700 border border-gray-200'
                           }`}
                       >
                         {act.badge}

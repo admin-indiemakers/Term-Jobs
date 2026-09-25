@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search,
@@ -8,6 +8,12 @@ import {
   Building2,
   Calendar,
   ChevronRight,
+  ChevronDown,
+  ArrowRight,
+  Zap,
+  Users,
+  Bookmark,
+  Rocket,
   X,
   Upload,
   CheckCircle2,
@@ -52,7 +58,7 @@ function GoogleIcon({ className = "w-4 h-4" }) {
   );
 }
 
-export default function OpenRolesPage() {
+export default function OpenRolesPage({ enabled = true }) {
   const navigate = useNavigate();
   const candidateAuth = useCandidateAuth();
   const candidateUser = candidateAuth?.candidateUser;
@@ -71,6 +77,28 @@ export default function OpenRolesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
   const [selectedFamily, setSelectedFamily] = useState('ALL');
+  const [selectedLocation, setSelectedLocation] = useState('ALL');
+  const [bookmarkedIds, setBookmarkedIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tj_saved_jobs');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleBookmark = (e, jobId) => {
+    e.stopPropagation();
+    setBookmarkedIds((prev) => {
+      const next = prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId];
+      try {
+        localStorage.setItem('tj_saved_jobs', JSON.stringify(next));
+      } catch (err) {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   // Modal states
   const [selectedJob, setSelectedJob] = useState(null);
@@ -122,6 +150,9 @@ export default function OpenRolesPage() {
     cover_note: '',
   });
   const [poolResume, setPoolResume] = useState(null);
+  const [poolIsDragging, setPoolIsDragging] = useState(false);
+  const [poolUseCustomResume, setPoolUseCustomResume] = useState(false);
+  const poolFileInputRef = useRef(null);
   const [poolSubmitting, setPoolSubmitting] = useState(false);
   const [poolSuccess, setPoolSuccess] = useState(null);
   const [poolError, setPoolError] = useState(null);
@@ -329,6 +360,37 @@ export default function OpenRolesPage() {
   );
   const currentResumeName = candidateAuth?.resumeFilename || candidateUser?.filename || 'profile_resume.pdf';
 
+  // Optimistic tracking of jobs applied in current session
+  const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => new Set());
+
+  // Map of candidate's submitted applications for O(1) matching
+  const appliedMap = useMemo(() => {
+    const map = new Map();
+    if (!Array.isArray(applications)) return map;
+    applications.forEach((app) => {
+      if (app.requisition_id) {
+        map.set(String(app.requisition_id), app);
+      }
+      if (app.id) {
+        map.set(String(app.id), app);
+      }
+      if (app.requisition_title) {
+        map.set(app.requisition_title.toLowerCase().trim(), app);
+      }
+    });
+    return map;
+  }, [applications]);
+
+  const getJobApplication = useCallback((job) => {
+    if (!job) return null;
+    return (
+      appliedMap.get(String(job.id)) ||
+      (job._id && appliedMap.get(String(job._id))) ||
+      (job.title && appliedMap.get(job.title.toLowerCase().trim())) ||
+      null
+    );
+  }, [appliedMap]);
+
   // Auto-populate candidate details
   useEffect(() => {
     if (candidateUser) {
@@ -423,9 +485,15 @@ export default function OpenRolesPage() {
       const matchesFamily =
         selectedFamily === 'ALL' || role.job_family === selectedFamily;
 
-      return matchesSearch && matchesWorkMode && matchesFamily;
+      const locVal = Array.isArray(role.location)
+        ? role.location.join(' ')
+        : (role.location || job.location || job.company_location || '');
+      const matchesLocation =
+        selectedLocation === 'ALL' || locVal.toLowerCase().includes(selectedLocation.toLowerCase());
+
+      return matchesSearch && matchesWorkMode && matchesFamily && matchesLocation;
     });
-  }, [requisitions, searchQuery, selectedWorkMode, selectedFamily]);
+  }, [requisitions, searchQuery, selectedWorkMode, selectedFamily, selectedLocation]);
 
   // Job families for filter pills
   const availableFamilies = useMemo(() => {
@@ -435,6 +503,37 @@ export default function OpenRolesPage() {
     });
     return Array.from(set);
   }, [requisitions]);
+
+  // Locations for filter dropdown
+  const availableLocations = useMemo(() => {
+    const set = new Set();
+    requisitions.forEach((j) => {
+      const loc = j.structured_role?.location || j.location || j.company_location;
+      if (Array.isArray(loc)) {
+        loc.forEach((l) => l && set.add(l));
+      } else if (loc && typeof loc === 'string') {
+        set.add(loc);
+      }
+    });
+    return Array.from(set);
+  }, [requisitions]);
+
+  const getLocationDisplay = (job) => {
+    const role = job.structured_role || {};
+    if (Array.isArray(role.location) && role.location.length > 0) {
+      return role.location[0];
+    }
+    if (role.location && typeof role.location === 'string') {
+      return role.location;
+    }
+    if (job.company_location) {
+      return job.company_location;
+    }
+    if (job.location) {
+      return job.location;
+    }
+    return (role.work_mode || 'Remote').toLowerCase() === 'remote' ? 'Remote' : 'Hybrid';
+  };
 
   const handleOpenJob = (job) => {
     setSelectedJob(job);
@@ -453,7 +552,7 @@ export default function OpenRolesPage() {
       return;
     }
 
-    if (!isProfileComplete && !useCustomResume && !resumeFile) {
+    if (!isProfileComplete && !useCustomResume && !resumeFile && !hasResume) {
       setShowSetupModal(true);
       return;
     }
@@ -468,6 +567,11 @@ export default function OpenRolesPage() {
     }
     if (!applicantEmail) {
       setSubmitError('Please enter your email address.');
+      return;
+    }
+
+    if (!hasResume && !resumeFile) {
+      setSubmitError('Please choose or drop your resume file (PDF or DOCX) to complete your application.');
       return;
     }
 
@@ -488,7 +592,8 @@ export default function OpenRolesPage() {
       formData.append('github_url', applyForm.github_url.trim() || candidateUser?.details?.github_url || '');
       formData.append('cover_note', applyForm.cover_note.trim());
 
-      if (useCustomResume && resumeFile) {
+      // Always append the uploaded resume file if present
+      if (resumeFile) {
         formData.append('resume', resumeFile);
       }
 
@@ -503,6 +608,9 @@ export default function OpenRolesPage() {
       }
 
       setSubmitSuccess(result);
+      if (selectedJob?.id) {
+        setJustAppliedJobIds((prev) => new Set([...prev, String(selectedJob.id)]));
+      }
       if (refreshProfile) {
         refreshProfile();
       }
@@ -559,23 +667,25 @@ export default function OpenRolesPage() {
 
   const handlePoolSubmit = async (e) => {
     e.preventDefault();
-    if (!poolResume) {
-      setPoolError('Please upload your resume (PDF or DOCX).');
+    if (!poolResume && (!hasResume || poolUseCustomResume)) {
+      setPoolError('Please upload your resume file (PDF or DOCX).');
       return;
     }
     setPoolSubmitting(true);
     setPoolError(null);
     try {
       const formData = new FormData();
-      formData.append('name', poolForm.name.trim());
-      formData.append('email', poolForm.email.trim());
-      formData.append('phone', poolForm.phone.trim());
-      formData.append('title', poolForm.title.trim());
+      formData.append('name', poolForm.name.trim() || candidateUser?.candidate_name || '');
+      formData.append('email', poolForm.email.trim() || candidateUser?.candidate_email || '');
+      formData.append('phone', poolForm.phone.trim() || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '');
+      formData.append('title', poolForm.title.trim() || candidateUser?.candidate_title || '');
       formData.append('skills', poolForm.skills.trim());
-      formData.append('linkedin_url', poolForm.linkedin_url.trim());
-      formData.append('github_url', poolForm.github_url.trim());
+      formData.append('linkedin_url', poolForm.linkedin_url.trim() || candidateUser?.details?.linkedin_url || '');
+      formData.append('github_url', poolForm.github_url.trim() || candidateUser?.details?.github_url || '');
       formData.append('cover_note', poolForm.cover_note.trim());
-      formData.append('resume', poolResume);
+      if (poolResume) {
+        formData.append('resume', poolResume);
+      }
 
       const res = await fetch(`${API_BASE_URL}/api/public/talent-pool/join`, {
         method: 'POST',
@@ -587,6 +697,9 @@ export default function OpenRolesPage() {
         throw new Error(result.detail || 'Could not join talent pool.');
       }
       setPoolSuccess(result);
+      if (refreshProfile) {
+        refreshProfile();
+      }
     } catch (err) {
       setPoolError(err.message || 'Failed to submit profile.');
     } finally {
@@ -594,501 +707,644 @@ export default function OpenRolesPage() {
     }
   };
 
+  const selectedJobApp = selectedJob
+    ? getJobApplication(selectedJob) || (justAppliedJobIds.has(String(selectedJob.id)) ? { status: 'Screened' } : null)
+    : null;
+  const isSelectedJobApplied = Boolean(selectedJobApp);
+
   return (
-    <div className="min-h-screen bg-ink text-paper flex flex-col font-sans selection:bg-emerald-500 selection:text-black relative overflow-x-hidden">
-      <SEOHead
-        title="Open Roles & Contract Opportunities — TermJobs"
-        description="Browse live contract positions across enterprise partners on TermJobs. Fast-track AI screening, transparent rate transparency, and direct review with hiring managers."
-        canonicalUrl="https://termjobs.vercel.app/open-roles"
-      />
+    <div className="min-h-screen bg-[#08090b] text-white flex flex-col lg:flex-row font-sans selection:bg-emerald-500 selection:text-black">
+      {enabled && (
+        <SEOHead
+          title="Open Roles & Contract Opportunities — TermJobs"
+          description="Browse live contract positions across enterprise partners on TermJobs. Fast-track AI screening, transparent rate transparency, and direct review with hiring managers."
+          canonicalUrl="https://termjobs.vercel.app/open-roles"
+        />
+      )}
 
-      {/* Atmospheric Background Layer */}
-      <Backdrop tone="dark" />
+      {/* ============================================================ */}
+      {/* LEFT PANEL: LIGHT EDITORIAL COLUMN                          */}
+      <aside className="w-full lg:w-[360px] xl:w-[410px] 2xl:w-[440px] shrink-0 bg-paper text-ink p-8 sm:p-10 xl:p-12 border-b lg:border-b-0 lg:border-r border-ink/10 flex flex-col justify-between relative overflow-hidden lg:min-h-screen lg:sticky lg:top-0">
+        {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
+        <Backdrop tone="sidebar" />
 
-      {/* Top Navigation Bar */}
-      <header className="sticky top-0 z-40 bg-ink/80 backdrop-blur-xl border-b border-paper/10 px-6 py-4 md:px-12">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Left: Back & Brand */}
-          <div className="flex items-center gap-4">
+        <div className="relative z-10 flex flex-col justify-between flex-1">
+          <div>
+            {/* Brand Mark with overlapping rectangles */}
+            <Link to="/" className="inline-flex items-center gap-3 group cursor-pointer">
+              <svg className="w-8 h-8 text-neutral-900 shrink-0" viewBox="0 0 32 32" fill="none">
+                <rect x="3" y="6" width="16" height="20" rx="4.5" stroke="currentColor" strokeWidth="2.4" />
+                <rect x="13" y="6" width="16" height="20" rx="4.5" stroke="currentColor" strokeWidth="2.4" />
+              </svg>
+              <div>
+                <span className="text-sm font-extrabold tracking-[0.22em] text-neutral-900 block leading-none">
+                  TERMJOBS
+                </span>
+                <span className="text-[0.6rem] font-bold tracking-[0.16em] text-neutral-400 uppercase block mt-1">
+                  Contract Workforce Platform
+                </span>
+              </div>
+            </Link>
+
+            {/* Accent vertical separator */}
+            <div className="w-[2px] h-9 bg-neutral-400 my-8" />
+
+            {/* Eyebrow */}
+            <div className="text-[0.66rem] font-bold tracking-[0.2em] text-neutral-400 uppercase mb-4">
+              Contract Workforce Platform
+            </div>
+
+            {/* Headline */}
+            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-[-0.03em] leading-[1.06] text-neutral-950">
+              Explore<br />
+              Open Roles.<br />
+              <span className="text-neutral-400 font-bold block mt-1">
+                Direct with<br />
+                Hiring Partners.
+              </span>
+            </h1>
+
+            {/* Subtext */}
+            <p className="mt-6 text-xs sm:text-sm text-neutral-500 leading-relaxed max-w-sm font-normal">
+              Browse live contract opportunities from verified enterprise partners. Apply directly with 1-click
+              resume parsing, instant skill matching, and verified compliance.
+            </p>
+
+            {/* Pure Transparent Glass Platform Metrics */}
+            <div className="mt-6 grid grid-cols-3 gap-2 sm:gap-2.5 relative z-10 max-w-sm">
+              {/* Card 1: Open Roles */}
+              <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                <Briefcase size={14} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                <div className="text-base sm:text-lg font-extrabold text-neutral-900 tracking-tight leading-none my-1.5">
+                  {requisitions.length > 0 ? requisitions.length : '24'}
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                  Open Roles
+                </div>
+              </div>
+
+              {/* Card 2: Enterprise Partners */}
+              <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                <Building2 size={14} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                <div className="text-base sm:text-lg font-extrabold text-neutral-900 tracking-tight leading-none my-1.5">
+                  {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || '36'}
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                  Partners
+                </div>
+              </div>
+
+              {/* Card 3: Avg Review Time */}
+              <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 rounded-2xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
+                <Zap size={14} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
+                <div className="text-base sm:text-lg font-extrabold text-neutral-900 tracking-tight leading-none my-1.5">
+                  &lt; 24h
+                </div>
+                <div className="text-[9px] sm:text-[10px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
+                  Review Time
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom Talent Pool Callout with Left Accent Line */}
+          <div className="mt-8 pt-4">
+            <div className="flex items-stretch gap-3.5 max-w-sm">
+              {/* Vertical Accent Line running alongside sentence and button */}
+              <div className="w-[2px] bg-neutral-400 rounded-full shrink-0" />
+
+              <div className="flex flex-col gap-2.5">
+                <div className="flex items-center gap-2 text-neutral-700">
+                  <Sparkles size={14} className="text-neutral-900 shrink-0" />
+                  <span className="text-xs sm:text-[13px] font-medium text-neutral-700 leading-snug">
+                    Don't see your role? Join the verified talent pool.
+                  </span>
+                </div>
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowGeneralPoolModal(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-neutral-900 hover:bg-neutral-800 text-white font-semibold text-xs tracking-tight transition cursor-pointer active:scale-95 shadow-md shadow-neutral-900/10"
+                  >
+                    <span>Join Talent Pool</span>
+                    <ArrowRight size={13} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* ============================================================ */}
+      {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
+      {/* ============================================================ */}
+      <div className="flex-1 min-w-0 bg-ink text-paper p-5 sm:p-7 xl:p-10 flex flex-col relative overflow-hidden">
+        {/* Atmospheric Background Layer */}
+        <Backdrop tone="dark" />
+
+        <div className="relative z-10 flex flex-col flex-1">
+          {/* Top Header Navigation */}
+          <header className="flex items-center justify-between gap-4 mb-6">
             <Link
               to="/"
-              className="group inline-flex items-center gap-2 text-[0.68rem] font-bold tracking-[0.16em] uppercase text-paper/60 hover:text-paper transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 text-xs text-paper/60 hover:text-white transition font-medium cursor-pointer"
             >
-              <ArrowLeft size={14} className="transition-transform group-hover:-translate-x-1" />
+              <ArrowLeft size={14} />
               <span>Platform Overview</span>
             </Link>
 
-            <div className="h-4 w-px bg-paper/15 hidden sm:block" />
-
-            <Link to="/" className="flex items-center gap-2.5 group cursor-pointer">
-              <img src={logo} alt="TermJobs Logo" className="h-7 w-7 object-contain" />
-              <span className="text-[0.7rem] font-extrabold tracking-[0.32em] text-paper uppercase group-hover:text-emerald-400 transition-colors">
-                TermJobs
-              </span>
-            </Link>
-          </div>
-
-          {/* Right: Candidate Pill or Auth Links */}
-          <div className="flex items-center gap-3">
-            {candidateUser ? (
-              <div className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
-                <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center border border-emerald-500/30">
-                  {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-paper max-w-[120px] truncate">
+            {/* Right Action Buttons */}
+            <div className="flex items-center gap-2 sm:gap-3 ml-auto">
+              {candidateUser ? (
+                <div className="flex items-center gap-2 p-1 pl-2.5 pr-2 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
+                  <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 font-black text-[10px] flex items-center justify-center border border-emerald-500/30">
+                    {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
+                  </div>
+                  <span className="text-xs font-semibold text-white max-w-[120px] truncate">
                     {candidateUser.candidate_name || candidateUser.candidate_email}
                   </span>
-                  {hasResume && (
-                    <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
-                      <CheckCircle2 size={10} />
-                      Resume on File
-                    </span>
-                  )}
+                  <div className="h-3 w-px bg-paper/20 mx-1" />
+                  <button
+                    type="button"
+                    onClick={() => setShowSetupModal(true)}
+                    className="px-2.5 py-1 text-[11px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                  >
+                    Edit Profile
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowMyAppsModal(true)}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition rounded-lg hover:bg-emerald-500/10 cursor-pointer"
+                  >
+                    Applications ({applications.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    className="p-1 text-paper/50 hover:text-rose-400 transition cursor-pointer"
+                    title="Sign out"
+                  >
+                    <LogOut size={13} />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 sm:gap-2.5">
+                  {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
+                  <div className="inline-flex items-center px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:border-white/30 backdrop-blur-md transition-all">
+                    {/* Google Sign In Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => handleGoogleSignIn()}
+                      disabled={authLoading}
+                      className="p-0.5 text-white hover:opacity-85 transition-opacity cursor-pointer disabled:opacity-50 flex items-center justify-center"
+                      title={authLoading ? 'Signing in...' : 'Sign in with Google'}
+                    >
+                      <GoogleIcon className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Vertical Divider */}
+                    <div className="h-3 w-px bg-white/20 mx-2" />
+
+                    {/* Candidate Email/Password Login Trigger */}
+                    <button
+                      type="button"
+                      onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
+                      className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs font-medium text-white/90 hover:text-white transition cursor-pointer"
+                    >
+                      <User size={13} className="text-white/70" />
+                      <span>Candidate Sign In</span>
+                    </button>
+                  </div>
+
+                  {/* Staff Portal Link (Border-only Transparent Pill) */}
+                  <Link
+                    to="/login"
+                    className="inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[11px] sm:text-xs font-medium transition backdrop-blur-md active:scale-95"
+                  >
+                    <Users size={13} className="text-white/70" />
+                    <span>Staff Portal</span>
+                    <ArrowRight size={12} className="text-white/60" />
+                  </Link>
+                </div>
+              )}
+            </div>
+          </header>
+
+          {/* Glass Search & Filter Control Console */}
+          <div className="mt-4 mb-9 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="w-full max-w-4xl p-2 rounded-2xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2.5 transition-all">
+              {/* Keyword Search Input */}
+              <div className="relative flex-1 w-full min-w-[150px]">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search roles, skills, company..."
+                  className="w-full bg-transparent pl-9 pr-7 py-2 text-xs sm:text-sm text-white placeholder-white/40 focus:outline-none font-sans"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Dropdowns & Glass Action Button */}
+              <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
+                {/* Work Mode Filter */}
+                <div className="relative flex-1 sm:flex-initial">
+                  <select
+                    value={selectedWorkMode}
+                    onChange={(e) => setSelectedWorkMode(e.target.value)}
+                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-6 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                  >
+                    <option value="ALL" className="bg-zinc-950 text-white">All Modes</option>
+                    <option value="Remote" className="bg-zinc-950 text-white">Remote</option>
+                    <option value="Hybrid" className="bg-zinc-950 text-white">Hybrid</option>
+                    <option value="Onsite" className="bg-zinc-950 text-white">Onsite</option>
+                  </select>
+                  <Briefcase size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
-                <div className="h-3 w-px bg-paper/20 mx-1" />
-
-                <button
-                  type="button"
-                  onClick={() => setShowSetupModal(true)}
-                  className="px-2.5 py-1 text-[11px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
-                  title="Edit candidate profile & resume"
-                >
-                  Edit Profile
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setShowMyAppsModal(true)}
-                  className="px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition rounded-lg hover:bg-emerald-500/10 cursor-pointer"
-                >
-                  Applications ({applications.length})
-                </button>
-
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="p-1 text-paper/50 hover:text-rose-400 transition cursor-pointer"
-                  title="Sign out"
-                >
-                  <LogOut size={13} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 sm:gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => handleGoogleSignIn()}
-                  disabled={authLoading}
-                  className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white hover:bg-neutral-100 text-neutral-900 text-[0.68rem] font-bold tracking-wide transition shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
-                  title="Sign in with Google"
-                >
-                  <GoogleIcon className="w-3.5 h-3.5" />
-                  <span>{authLoading ? 'Signing in...' : 'Sign in with Google'}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-paper/10 hover:bg-paper/15 border border-paper/15 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-paper transition cursor-pointer"
-                >
-                  <User size={12} />
-                  <span>Candidate Sign In</span>
-                </button>
-
-                <Link
-                  to="/login"
-                  className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-paper text-ink hover:bg-paper/90 text-[0.68rem] font-bold tracking-[0.14em] uppercase transition cursor-pointer"
-                >
-                  <LogIn size={12} />
-                  <span>Staff Portal</span>
-                </Link>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* Hero Header Section */}
-      <section className="relative z-10 pt-12 pb-8 px-6 md:px-12 max-w-7xl mx-auto w-full">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 pb-8 border-b border-paper/10">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-paper/[0.06] border border-paper/15 text-[0.65rem] font-bold tracking-[0.24em] text-paper/70 uppercase mb-4">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>01 — Active Requisitions</span>
-            </div>
-
-            <h1 className="font-display text-[clamp(2rem,4.8vw,3.8rem)] leading-[0.98] font-extrabold tracking-[-0.03em] text-paper">
-              EXPLORE OPEN ROLES.
-              <span className="block text-haze">DIRECT WITH HIRING PARTNERS.</span>
-            </h1>
-
-            <p className="mt-4 max-w-2xl text-sm md:text-base leading-relaxed text-paper/60">
-              Browse live contract opportunities published by verified enterprise partners. Apply directly with 1-click
-              resume parsing, instant skill matching, and verified compliance review.
-            </p>
-          </div>
-
-          {/* Quick Metrics Ticker */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <div className="px-3.5 py-2 rounded-xl bg-paper/[0.04] border border-paper/10 backdrop-blur-sm text-center">
-              <div className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-paper/40">Open Roles</div>
-              <div className="text-xl font-extrabold tabular-nums text-paper mt-0.5">{requisitions.length}</div>
-            </div>
-            <div className="px-3.5 py-2 rounded-xl bg-paper/[0.04] border border-paper/10 backdrop-blur-sm text-center">
-              <div className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-paper/40">Enterprises</div>
-              <div className="text-xl font-extrabold tabular-nums text-emerald-400 mt-0.5">
-                {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || 1}
-              </div>
-            </div>
-            <div className="px-3.5 py-2 rounded-xl bg-paper/[0.04] border border-paper/10 backdrop-blur-sm text-center">
-              <div className="text-[0.6rem] font-semibold tracking-[0.16em] uppercase text-paper/40">Review Speed</div>
-              <div className="text-xl font-extrabold tabular-nums text-paper mt-0.5">&lt; 24h</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Unauthenticated Candidate Fast-Track Google Banner */}
-        {!candidateUser && (
-          <div className="mt-8 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-950/40 via-paper/[0.03] to-blue-950/30 border border-emerald-500/20 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-center shrink-0">
-                <Sparkles size={20} className="text-emerald-400" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-white flex items-center gap-2">
-                  <span>Fast-Track Candidate Access</span>
-                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[10px] font-extrabold uppercase tracking-wider">
-                    Google 1-Click
-                  </span>
+                {/* Department Filter */}
+                <div className="relative flex-1 sm:flex-initial">
+                  <select
+                    value={selectedFamily}
+                    onChange={(e) => setSelectedFamily(e.target.value)}
+                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-6 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[130px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                  >
+                    <option value="ALL" className="bg-zinc-950 text-white">All Depts</option>
+                    {availableFamilies.map((fam) => (
+                      <option key={fam} value={fam} className="bg-zinc-950 text-white">
+                        {fam}
+                      </option>
+                    ))}
+                  </select>
+                  <Building2 size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
-                <p className="text-[11px] text-paper/60 mt-0.5 max-w-xl">
-                  Sign in with Google to 1-click apply across all enterprise requisitions, attach your master resume once, and track your interview invitations live.
-                </p>
+
+                {/* Location Filter */}
+                <div className="relative flex-1 sm:flex-initial hidden md:block">
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-6 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[120px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                  >
+                    <option value="ALL" className="bg-zinc-950 text-white">All Locations</option>
+                    {availableLocations.map((loc) => (
+                      <option key={loc} value={loc} className="bg-zinc-950 text-white">
+                        {loc}
+                      </option>
+                    ))}
+                  </select>
+                  <MapPin size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <ChevronDown size={11} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                </div>
+
+                {/* Glass Search Action Button (No Green) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="w-8 h-8 rounded-xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
+                  title="Search Roles"
+                >
+                  <ArrowRight size={14} />
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto">
-              <button
-                type="button"
-                onClick={() => handleGoogleSignIn()}
-                disabled={authLoading}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                <GoogleIcon className="w-4 h-4" />
-                <span>Continue with Google</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-paper/10 hover:bg-paper/15 border border-paper/15 text-xs font-semibold text-paper transition cursor-pointer"
-              >
-                <span>Candidate Sign In</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Search & Filters Controls Bar */}
-        <div className="mt-8 p-3 sm:p-4 rounded-2xl bg-paper/[0.03] border border-paper/10 backdrop-blur-md flex flex-col md:flex-row items-center gap-3">
-          {/* Keyword Search Input */}
-          <div className="relative flex-1 w-full">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-paper/40" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by role title, technology (React, Python, AWS), or company..."
-              className="w-full bg-paper/[0.05] hover:bg-paper/[0.08] focus:bg-paper/[0.1] border border-paper/10 focus:border-paper/30 rounded-xl pl-10 pr-4 py-2.5 text-xs text-paper placeholder-paper/40 transition-colors focus:outline-none font-sans"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-paper/40 hover:text-paper cursor-pointer"
-              >
-                <X size={13} />
-              </button>
-            )}
           </div>
 
-          {/* Work Mode Toggle Pills */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-paper/[0.05] border border-paper/10 shrink-0 w-full sm:w-auto overflow-x-auto">
-            {['ALL', 'Remote', 'Hybrid', 'Onsite'].map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => setSelectedWorkMode(mode)}
-                className={`px-3 py-1.5 rounded-lg text-[0.68rem] font-bold tracking-[0.1em] uppercase transition cursor-pointer whitespace-nowrap ${
-                  selectedWorkMode.toLowerCase() === mode.toLowerCase()
-                    ? 'bg-paper text-ink shadow-sm'
-                    : 'text-paper/60 hover:text-paper'
-                }`}
-              >
-                {mode === 'ALL' ? 'All Modes' : mode}
-              </button>
-            ))}
-          </div>
-
-          {/* Department Filter if multiple exist */}
-          {availableFamilies.length > 0 && (
-            <div className="shrink-0 w-full sm:w-auto">
-              <select
-                value={selectedFamily}
-                onChange={(e) => setSelectedFamily(e.target.value)}
-                className="w-full sm:w-auto bg-paper/[0.05] border border-paper/10 rounded-xl px-3 py-2.5 text-xs text-paper focus:outline-none cursor-pointer uppercase font-semibold text-[0.68rem] tracking-[0.08em]"
-              >
-                <option value="ALL" className="bg-zinc-900 text-white">All Departments</option>
-                {availableFamilies.map((fam) => (
-                  <option key={fam} value={fam} className="bg-zinc-900 text-white">
-                    {fam}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Main Roles Grid Section */}
-      <main className="relative z-10 flex-1 px-6 md:px-12 max-w-7xl mx-auto w-full pb-20">
-        {loading ? (
-          <div className="py-24 text-center space-y-3">
-            <div className="w-10 h-10 rounded-full border-2 border-emerald-400 border-t-transparent animate-spin mx-auto" />
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/60">
-              Loading published requisitions...
-            </div>
-          </div>
-        ) : error ? (
-          <div className="p-8 rounded-3xl bg-rose-500/10 border border-rose-500/20 text-center max-w-md mx-auto my-12">
-            <AlertCircle size={28} className="text-rose-400 mx-auto mb-2" />
-            <h3 className="text-sm font-bold text-white">Unable to fetch open roles</h3>
-            <p className="text-xs text-zinc-400 mt-1 mb-4">{error}</p>
+          {/* Section Title Header */}
+          <div className="flex items-center justify-between mb-4 pt-1">
+            <h2 className="font-display text-lg sm:text-xl font-extrabold tracking-[-0.03em] text-white">
+              Latest Opportunities
+            </h2>
             <button
               type="button"
-              onClick={() => window.location.reload()}
-              className="px-4 py-2 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition cursor-pointer"
+              onClick={() => {
+                setSearchQuery('');
+                setSelectedWorkMode('ALL');
+                setSelectedFamily('ALL');
+                setSelectedLocation('ALL');
+              }}
+              className="text-xs font-semibold text-paper/60 hover:text-paper transition inline-flex items-center gap-1.5 cursor-pointer"
             >
-              Retry
+              <span>View All Roles</span>
+              <ArrowRight size={13} />
             </button>
           </div>
-        ) : filteredJobs.length === 0 ? (
-          <div className="py-20 px-6 rounded-3xl bg-paper/[0.02] border border-paper/10 text-center max-w-xl mx-auto my-8">
-            <div className="w-12 h-12 rounded-2xl bg-paper/[0.05] border border-paper/10 flex items-center justify-center text-paper/60 mx-auto mb-4">
-              <Search size={22} />
-            </div>
-            <h3 className="text-base font-bold text-paper">No roles matching your filters</h3>
-            <p className="text-xs text-paper/60 mt-1 max-w-sm mx-auto">
-              Try clearing your search query or switching work mode filters to explore other open opportunities.
-            </p>
-            <div className="mt-6 flex items-center justify-center gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedWorkMode('ALL');
-                  setSelectedFamily('ALL');
-                }}
-                className="px-4 py-2 rounded-xl bg-paper/10 hover:bg-paper/15 text-paper text-xs font-bold transition cursor-pointer"
-              >
-                Clear All Filters
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowGeneralPoolModal(true)}
-                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition cursor-pointer shadow-md shadow-emerald-950/40"
-              >
-                Join General Talent Pool
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {filteredJobs.map((job) => {
-              const role = job.structured_role || {};
-              const skills = (role.must_have_skills || []).slice(0, 5);
-              const workMode = role.work_mode || 'Remote';
-              const isRemote = workMode.toLowerCase() === 'remote';
-              const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
-              const dueInfo = formatDueDate(dueDateVal);
 
-              return (
-                <article
-                  key={job.id}
-                  className="group relative rounded-3xl bg-paper/[0.03] hover:bg-paper/[0.06] border border-paper/10 hover:border-emerald-500/40 backdrop-blur-md p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/60"
+          {/* Opportunities Grid Section */}
+          <main id="roles-grid-section" className="flex-1 w-full flex flex-col pb-32">
+            {loading ? (
+              <div className="py-24 text-center space-y-3">
+                <div className="w-10 h-10 rounded-full border-2 border-white/80 border-t-transparent animate-spin mx-auto" />
+                <div className="text-xs font-semibold uppercase tracking-[0.16em] text-paper/60">
+                  Loading published requisitions...
+                </div>
+              </div>
+            ) : error ? (
+              <div className="p-8 rounded-3xl bg-rose-500/10 border border-rose-500/20 text-center max-w-md mx-auto my-12 backdrop-blur-md">
+                <AlertCircle size={28} className="text-rose-400 mx-auto mb-2" />
+                <h3 className="text-sm font-bold text-white">Unable to fetch open roles</h3>
+                <p className="text-xs text-zinc-400 mt-1 mb-4">{error}</p>
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="px-4 py-2 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600 transition cursor-pointer"
                 >
-                  <div>
-                    {/* Top Row: Company & Badges */}
-                    <div className="flex items-center justify-between gap-3 mb-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold uppercase tracking-[0.14em] text-paper/60">
-                          {job.company_name || 'Enterprise Partner'}
-                        </span>
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-paper/[0.06] text-[10px] text-paper/50 font-mono">
-                          {job.ref || `REQ-${job.id.slice(0, 6).toUpperCase()}`}
-                        </span>
+                  Retry
+                </button>
+              </div>
+            ) : filteredJobs.length === 0 ? (
+              <div className="py-20 px-6 rounded-3xl bg-paper/[0.02] border border-paper/10 text-center max-w-xl mx-auto my-8 backdrop-blur-md">
+                <div className="w-12 h-12 rounded-2xl bg-paper/[0.05] border border-paper/10 flex items-center justify-center text-paper/60 mx-auto mb-4">
+                  <Search size={22} />
+                </div>
+                <h3 className="text-base font-bold text-paper">No roles matching your filters</h3>
+                <p className="text-xs text-paper/60 mt-1 max-w-sm mx-auto">
+                  Try clearing your search query or switching work mode filters to explore other open opportunities.
+                </p>
+                <div className="mt-6 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedWorkMode('ALL');
+                      setSelectedFamily('ALL');
+                      setSelectedLocation('ALL');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-paper/10 hover:bg-paper/15 text-paper text-xs font-bold transition cursor-pointer"
+                  >
+                    Clear All Filters
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGeneralPoolModal(true)}
+                    className="px-4 py-2 rounded-xl bg-white hover:bg-neutral-200 text-black text-xs font-bold transition cursor-pointer shadow-md"
+                  >
+                    Join General Talent Pool
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3.5 sm:gap-4">
+                {filteredJobs.map((job) => {
+                  const role = job.structured_role || {};
+                  const skills = (role.must_have_skills || []).concat(role.nice_to_have_skills || []);
+                  const workMode = role.work_mode || 'Remote';
+                  const isRemote = workMode.toLowerCase() === 'remote';
+                  const isHybrid = workMode.toLowerCase() === 'hybrid';
+                  const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
+                  const dueInfo = formatDueDate(dueDateVal);
+                  const companyInitial = (job.company_name || 'E').slice(0, 1).toUpperCase();
+                  const isSaved = bookmarkedIds.includes(job.id);
+                  const locDisplay = getLocationDisplay(job);
+                  const existingApp = getJobApplication(job);
+                  const isApplied = Boolean(existingApp || justAppliedJobIds.has(String(job.id)));
+
+                  return (
+                    <article
+                      key={job.id}
+                      onClick={() => handleOpenJob(job)}
+                      className="group relative rounded-xl sm:rounded-2xl bg-paper/[0.04] hover:bg-paper/[0.08] border border-paper/10 hover:border-white/25 hover:shadow-[0_4px_24px_rgba(255,255,255,0.06)] p-4 sm:p-4.5 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 shadow-md backdrop-blur-md cursor-pointer"
+                    >
+                      <div>
+                        {/* Top Row: Company Initial, Name, Work Mode Badge, Bookmark */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6.5 h-6.5 sm:w-7 sm:h-7 rounded-lg bg-white text-black font-extrabold flex items-center justify-center text-[10.5px] sm:text-[11px] shadow-sm shrink-0">
+                              {companyInitial}
+                            </div>
+                            <span className="text-[11px] font-bold text-paper tracking-wider uppercase truncate max-w-[130px]">
+                              {job.company_name || 'Enterprise'}
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-paper/10 text-paper/90 border border-paper/15">
+                              {isRemote ? (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
+                                  <span>Remote</span>
+                                </>
+                              ) : isHybrid ? (
+                                <>
+                                  <Check size={9} className="text-paper/60" />
+                                  <span>Hybrid</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                  <span>Onsite</span>
+                                </>
+                              )}
+                            </span>
+                            {isApplied && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-semibold bg-white/10 text-white border border-white/20">
+                                <Check size={9} className="text-white" />
+                                <span>Applied</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => toggleBookmark(e, job.id)}
+                            className="p-1 text-paper/40 hover:text-white transition cursor-pointer"
+                            title={isSaved ? 'Remove Bookmark' : 'Save Role'}
+                          >
+                            <Bookmark size={14} className={isSaved ? 'text-white fill-white' : ''} />
+                          </button>
+                        </div>
+
+                        {/* Role Title */}
+                        <h3 className="text-sm sm:text-[15px] font-bold text-paper mt-2.5 tracking-tight group-hover:text-white transition-colors line-clamp-1">
+                          {job.title}
+                        </h3>
+
+                        {/* Meta Information Row */}
+                        <div className="flex items-center gap-2.5 text-[10px] sm:text-[10.5px] text-paper/60 mt-1.5 font-medium">
+                          <div className="flex items-center gap-1 truncate max-w-[110px]" title={locDisplay}>
+                            <MapPin size={11} className="text-paper/40 shrink-0" />
+                            <span className="truncate">{locDisplay}</span>
+                          </div>
+                          <span className="text-paper/20">|</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Clock size={11} className="text-paper/40 shrink-0" />
+                            <span>{role.duration || '6 Months'}</span>
+                          </div>
+                          <span className="text-paper/20">|</span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Users size={11} className="text-paper/40 shrink-0" />
+                            <span>{role.experience || '3+ years'}</span>
+                          </div>
+                        </div>
+
+                        {/* Skill Tags */}
+                        <div className="mt-3 flex flex-wrap gap-1">
+                          {skills.slice(0, 4).map((skill) => (
+                            <span
+                              key={skill}
+                              className="px-2 py-0.5 rounded-md bg-paper/[0.06] border border-paper/10 text-[10px] font-medium text-paper/80"
+                            >
+                              {skill}
+                            </span>
+                          ))}
+                          {skills.length > 4 && (
+                            <span className="px-1.5 py-0.5 rounded-md bg-paper/[0.04] border border-paper/10 text-[9.5px] text-paper/50 font-mono">
+                              +{skills.length - 4}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-[0.1em] border ${
-                          isRemote
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                            : 'bg-paper/10 border-paper/20 text-paper/80'
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${isRemote ? 'bg-emerald-400 animate-pulse' : 'bg-paper/50'}`} />
-                        <span>{workMode}</span>
-                      </span>
-                    </div>
+                      {/* Card Footer: Due Date & Apply Button */}
+                      <div className="mt-3.5 pt-2.5 border-t border-paper/10 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 text-[10px] sm:text-[10.5px] text-paper/60 font-medium">
+                          <Calendar size={12} className="text-paper/40 shrink-0" />
+                          <span>Apply by {dueInfo ? dueInfo.text : 'Sep 27, 2026'}</span>
+                          {dueInfo?.daysLeft && (
+                            <>
+                              <span className="text-paper/20">•</span>
+                              <span className="text-paper/50">{dueInfo.daysLeft}</span>
+                            </>
+                          )}
+                        </div>
 
-                    {/* Role Title */}
-                    <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-paper group-hover:text-emerald-300 transition-colors">
-                      {job.title}
-                    </h2>
-
-                    {/* Meta Info: Family, Duration, Experience, Due Date */}
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-paper/60 mt-2 font-medium">
-                      {role.job_family && (
-                        <div className="flex items-center gap-1.5">
-                          <Layers size={13} className="text-paper/40" />
-                          <span>{role.job_family}</span>
-                        </div>
-                      )}
-                      {role.duration && (
-                        <div className="flex items-center gap-1.5">
-                          <Clock size={13} className="text-paper/40" />
-                          <span>{role.duration}</span>
-                        </div>
-                      )}
-                      {role.experience && (
-                        <div className="flex items-center gap-1.5">
-                          <Briefcase size={13} className="text-paper/40" />
-                          <span>{role.experience}</span>
-                        </div>
-                      )}
-                      {dueInfo && (
-                        <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${
-                          dueInfo.isUrgent
-                            ? 'bg-amber-500/10 text-amber-300 border border-amber-500/25'
-                            : 'bg-paper/[0.06] text-paper/80 border border-paper/10'
-                        }`}>
-                          <Calendar size={12} className={dueInfo.isUrgent ? 'text-amber-400' : 'text-emerald-400'} />
-                          <span>Apply by <strong>{dueInfo.text}</strong></span>
-                          <span className="opacity-50">•</span>
-                          <span className="font-semibold">{dueInfo.daysLeft}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Skill Tags */}
-                    {skills.length > 0 && (
-                      <div className="mt-5 flex flex-wrap gap-1.5">
-                        {skills.map((skill) => (
-                          <span
-                            key={skill}
-                            className="px-2.5 py-1 rounded-lg bg-paper/[0.05] border border-paper/10 text-[11px] font-medium text-paper/80"
+                        {isApplied ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenJob(job);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
+                            title="Application Submitted · Click to view application status"
                           >
-                            {skill}
-                          </span>
-                        ))}
-                        {(role.must_have_skills || []).length > 5 && (
-                          <span className="px-2 py-1 text-[11px] text-paper/40 font-mono">
-                            +{(role.must_have_skills || []).length - 5} more
-                          </span>
+                            <Check size={12} className="text-white" />
+                            <span>Applied</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenJob(job);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white hover:bg-neutral-200 text-black font-bold text-[11px] tracking-tight transition shadow-sm cursor-pointer shrink-0 active:scale-95"
+                          >
+                            <span>Apply Now</span>
+                            <ArrowRight size={12} />
+                          </button>
                         )}
                       </div>
-                    )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Unified Candidate Perks Tab (Fixed to Bottom) */}
+            <div className="fixed bottom-3 sm:bottom-4 z-40 right-0 left-[100vw] lg:left-[calc(100vw+360px)] xl:left-[calc(100vw+410px)] 2xl:left-[calc(100vw+440px)] flex justify-center px-4 pointer-events-none">
+              <div className="w-full max-w-xl mx-auto rounded-2xl sm:rounded-full bg-[#0a0b10]/90 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/15 shadow-[0_16px_50px_rgba(0,0,0,0.7),0_4px_16px_rgba(0,0,0,0.4),inset_0_1px_1px_rgba(255,255,255,0.15)] overflow-hidden transition-all pointer-events-auto">
+                {/* 3-Feature Highlights */}
+                <div className="px-5 py-2.5 sm:py-3 grid grid-cols-1 md:grid-cols-3 gap-2.5 sm:gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                      <Rocket size={14} className="text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Instant Matching</h4>
+                      <p className="text-[10px] text-white/50 leading-tight truncate">
+                        Auto-matched with relevant roles
+                      </p>
+                    </div>
                   </div>
 
-                  {/* Card Bottom CTA Bar */}
-                  <div className="mt-7 pt-5 border-t border-paper/10 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenJob(job)}
-                      className="text-xs font-bold text-paper/60 hover:text-paper transition inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>View Full JD</span>
-                      <ChevronRight size={14} />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleOpenJob(job)}
-                      className="inline-flex items-center gap-2 rounded-full bg-paper hover:bg-paper/90 text-ink px-5 py-2.5 text-[0.7rem] font-bold tracking-[0.14em] uppercase transition-all duration-300 hover:scale-102 active:scale-95 cursor-pointer shadow-md shadow-black/50"
-                    >
-                      <span>Apply Now</span>
-                      <span>→</span>
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                      <ShieldCheck size={14} className="text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">Verified Opportunities</h4>
+                      <p className="text-[10px] text-white/50 leading-tight truncate">
+                        Direct enterprise requisitions
+                      </p>
+                    </div>
                   </div>
-                </article>
-              );
-            })}
-          </div>
-        )}
 
-        {/* General Talent Pool Banner */}
-        <div className="mt-14 rounded-3xl bg-gradient-to-r from-paper/[0.04] via-paper/[0.07] to-paper/[0.04] border border-paper/15 p-8 md:p-10 flex flex-col md:flex-row items-center justify-between gap-6 backdrop-blur-md">
-          <div className="max-w-xl">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-[10px] font-bold uppercase tracking-wider mb-2">
-              <Sparkles size={12} />
-              <span>Direct Enterprise Sourcing</span>
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-white/[0.06] border border-white/10 text-white shrink-0">
+                      <Users size={14} className="text-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="text-[11px] font-bold text-white tracking-tight truncate">One Profile, Many Roles</h4>
+                      <p className="text-[10px] text-white/50 leading-tight truncate">
+                        Apply to multiple roles in 1 click
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h3 className="text-xl md:text-2xl font-extrabold text-paper tracking-tight">
-              Don't see your specific role?
-            </h3>
-            <p className="text-xs md:text-sm text-paper/60 mt-1 leading-relaxed">
-              Upload your resume to the TermJobs Verified Talent Pool. Our AI matching pipeline continuously screens your
-              profile against upcoming enterprise contract requirements.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowGeneralPoolModal(true)}
-            className="shrink-0 px-6 py-3.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-[0.14em] uppercase transition-all hover:-translate-y-0.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
-          >
-            Join General Talent Pool →
-          </button>
+          </main>
         </div>
-      </main>
+      </div>
 
       {/* ============================================================ */}
       {/* MODAL 1: VIEW JOB DETAILS & 1-CLICK APPLY                    */}
       {/* ============================================================ */}
       {selectedJob && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-auto">
+        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+          <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden my-auto">
             {/* Modal Header */}
-            <div className="p-6 border-b border-zinc-800/80 flex items-start justify-between gap-4 bg-zinc-900/40">
+            <div className="p-5 sm:p-6 border-b border-white/10 flex items-start justify-between gap-4 bg-white/[0.02]">
               <div>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <span className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-400">
+                  <span className="text-xs font-bold uppercase tracking-[0.16em] text-white/70">
                     {selectedJob.company_name || 'Enterprise Client'}
                   </span>
-                  <span className="text-[10px] text-zinc-500 font-mono">
+                  <span className="text-[10px] text-white/40 font-mono">
                     {selectedJob.ref || `REQ-${selectedJob.id.slice(0, 6).toUpperCase()}`}
                   </span>
                 </div>
-                <h2 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+                <h2 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
                   {selectedJob.title}
                 </h2>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-zinc-400 mt-2">
-                  <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-300 font-medium">
+                <div className="flex flex-wrap items-center gap-2.5 text-xs text-white/60 mt-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/10 text-white/80 font-medium">
                     {selectedJob.structured_role?.work_mode || 'Remote'}
                   </span>
-                  <span>·</span>
+                  <span className="text-white/30">·</span>
                   <span>{selectedJob.structured_role?.duration || '6 Months'}</span>
-                  <span>·</span>
+                  <span className="text-white/30">·</span>
                   <span>{selectedJob.structured_role?.experience || 'Experienced'}</span>
+                  {isSelectedJobApplied && (
+                    <>
+                      <span className="text-white/30">·</span>
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-white border border-white/20">
+                        <Check size={11} className="text-white" />
+                        <span>Application Submitted</span>
+                      </span>
+                    </>
+                  )}
                   {(() => {
                     const dVal = selectedJob.due_date || selectedJob.submission_deadline || selectedJob.application_due_date || selectedJob.structured_role?.submission_deadline;
                     const dInfo = formatDueDate(dVal);
                     if (!dInfo) return null;
                     return (
                       <>
-                        <span>·</span>
-                        <span className={`inline-flex items-center gap-1 font-medium ${dInfo.isUrgent ? 'text-amber-400' : 'text-emerald-400'}`}>
-                          <Calendar size={13} />
+                        <span className="text-white/30">·</span>
+                        <span className="inline-flex items-center gap-1 font-medium text-white/80">
+                          <Calendar size={13} className="text-white/50" />
                           <span>Apply by: {dInfo.text} ({dInfo.daysLeft})</span>
                         </span>
                       </>
@@ -1100,28 +1356,28 @@ export default function OpenRolesPage() {
               <button
                 type="button"
                 onClick={() => setSelectedJob(null)}
-                className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white transition cursor-pointer"
+                className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
               >
-                <X size={18} />
+                <X size={16} />
               </button>
             </div>
 
             {/* Modal Scrollable Body */}
-            <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-zinc-300 leading-relaxed font-sans">
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-white/80 leading-relaxed font-sans">
               {submitSuccess ? (
                 <div className="py-10 text-center space-y-3">
-                  <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
+                  <div className="w-16 h-16 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
                     <CheckCircle2 size={32} />
                   </div>
                   <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
-                  <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                  <p className="text-xs text-white/60 max-w-md mx-auto">
                     Your profile and resume have been submitted directly to the hiring partner. You will receive an interview
                     invite via email as soon as matching is verified.
                   </p>
                   <button
                     type="button"
                     onClick={() => setSelectedJob(null)}
-                    className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-zinc-950 font-bold text-xs transition hover:bg-emerald-400 cursor-pointer"
+                    className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs transition hover:bg-neutral-200 cursor-pointer shadow-sm"
                   >
                     Done
                   </button>
@@ -1134,18 +1390,12 @@ export default function OpenRolesPage() {
                     const dInfo = formatDueDate(dVal);
                     if (!dInfo) return null;
                     return (
-                      <div className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 text-xs ${
-                        dInfo.isUrgent
-                          ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
-                          : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                      }`}>
+                      <div className="p-3.5 rounded-2xl border border-white/10 bg-white/[0.03] flex items-center justify-between gap-3 text-xs text-white/80">
                         <div className="flex items-center gap-2 font-medium">
-                          <Calendar size={15} className="shrink-0" />
-                          <span>Application Due Date: <strong className="font-semibold underline decoration-current/40">{dInfo.text}</strong></span>
+                          <Calendar size={15} className="shrink-0 text-white/50" />
+                          <span>Application Due Date: <strong className="font-semibold text-white">{dInfo.text}</strong></span>
                         </div>
-                        <span className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider ${
-                          dInfo.isUrgent ? 'bg-amber-500/20 text-amber-200' : 'bg-emerald-500/20 text-emerald-200'
-                        }`}>
+                        <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] uppercase tracking-wider bg-white/10 text-white">
                           {dInfo.daysLeft}
                         </span>
                       </div>
@@ -1154,14 +1404,14 @@ export default function OpenRolesPage() {
 
                   {/* Job Overview / Markdown */}
                   <div className="space-y-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">Position Overview</h4>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white/50">Position Overview</h4>
                     {selectedJob.generated_jd_markdown ? (
                       <div
-                        className="prose prose-invert prose-xs max-w-none text-zinc-300 leading-relaxed"
+                        className="prose prose-invert prose-xs max-w-none text-white/80 leading-relaxed"
                         dangerouslySetInnerHTML={{ __html: marked.parse(selectedJob.generated_jd_markdown) }}
                       />
                     ) : (
-                      <p className="text-zinc-400 text-xs">
+                      <p className="text-white/60 text-xs">
                         This is a high-priority contract requisition delivered through the TermJobs platform. Candidates will
                         collaborate directly with the client engineering leadership.
                       </p>
@@ -1170,14 +1420,14 @@ export default function OpenRolesPage() {
                     {/* Must-have skills grid */}
                     {selectedJob.structured_role?.must_have_skills?.length > 0 && (
                       <div className="pt-3">
-                        <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider mb-2">
+                        <div className="text-xs font-bold text-white/50 uppercase tracking-wider mb-2">
                           Core Required Competencies
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {selectedJob.structured_role.must_have_skills.map((s) => (
                             <span
                               key={s}
-                              className="px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs font-medium"
+                              className="px-2.5 py-1 rounded-lg bg-white/[0.05] border border-white/10 text-white/90 text-xs font-medium"
                             >
                               {s}
                             </span>
@@ -1188,29 +1438,94 @@ export default function OpenRolesPage() {
                   </div>
 
                   {/* Apply Section */}
-                  <div className="pt-6 border-t border-zinc-800">
+                  <div className="pt-6 border-t border-white/10">
                     <div className="flex items-center gap-2 mb-4">
-                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="w-2 h-2 rounded-full bg-white/80 animate-pulse" />
                       <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                        Submit Your Application
+                        {isSelectedJobApplied ? 'Application Status' : 'Submit Your Application'}
                       </h4>
                     </div>
 
-                    {!candidateUser ? (
+                    {isSelectedJobApplied ? (
+                      /* Application Already Submitted Panel */
+                      <div className="p-5 sm:p-6 rounded-2xl bg-white/[0.03] border border-white/15 space-y-4 backdrop-blur-xl">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center border border-white/20 shrink-0">
+                              <CheckCircle2 size={22} />
+                            </div>
+                            <div>
+                              <div className="text-sm font-bold text-white flex items-center gap-2">
+                                <span>Application Already Submitted</span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-white/10 border border-white/20 text-white">
+                                  {selectedJobApp?.status || 'Active'}
+                                </span>
+                              </div>
+                              <div className="text-xs text-white/50 mt-0.5">
+                                {selectedJobApp?.created_at ? `Submitted on ${selectedJobApp.created_at}` : 'Your application is on file and actively being screened'}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-white/70 leading-relaxed">
+                          You have already submitted an application for this role. Your profile and verified resume are currently with the hiring partner. Candidates cannot submit duplicate applications for the same requisition.
+                        </p>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-center">
+                            <div className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Review Status</div>
+                            <div className="text-xs font-bold text-white mt-1">{selectedJobApp?.status || 'Screened'}</div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-center">
+                            <div className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Match Score</div>
+                            <div className="text-xs font-bold text-white mt-1">
+                              {selectedJobApp?.match_score ? `${selectedJobApp.match_score}%` : 'Verified Fit'}
+                            </div>
+                          </div>
+                          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-center col-span-2 sm:col-span-1">
+                            <div className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Live Stage</div>
+                            <div className="text-xs font-bold text-white mt-1">
+                              {selectedJobApp?.interview_status || 'Under Review'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 flex items-center justify-between gap-3 border-t border-white/10">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedJob(null);
+                              setShowMyAppsModal(true);
+                            }}
+                            className="px-4 py-2 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/15 text-xs font-semibold text-white transition cursor-pointer"
+                          >
+                            View All Applications ({applications.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedJob(null)}
+                            className="px-5 py-2 rounded-xl bg-white text-black hover:bg-neutral-200 text-xs font-bold transition cursor-pointer shadow-sm"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      </div>
+                    ) : !candidateUser ? (
                       /* Mandatory Candidate Authentication Gateway */
-                      <div className="p-6 sm:p-7 rounded-2xl bg-gradient-to-b from-zinc-900/90 to-zinc-950 border border-zinc-800 text-center space-y-4 shadow-xl">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
-                          <Lock size={22} className="text-emerald-400" />
+                      <div className="p-6 sm:p-7 rounded-2xl bg-white/[0.02] border border-white/10 text-center space-y-4 shadow-xl backdrop-blur-xl">
+                        <div className="w-12 h-12 rounded-2xl bg-white/[0.06] border border-white/15 text-white flex items-center justify-center mx-auto shadow-inner">
+                          <Lock size={20} className="text-white" />
                         </div>
 
                         <div className="max-w-md mx-auto space-y-1.5">
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase tracking-wider">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.06] border border-white/15 text-white/80 text-[10px] font-extrabold uppercase tracking-wider">
                             <span>Sign-Up Mandatory</span>
                           </div>
                           <h3 className="font-display text-base sm:text-lg font-bold text-white tracking-tight">
                             Candidate Profile Required to Apply
                           </h3>
-                          <p className="text-xs text-zinc-400 leading-relaxed">
+                          <p className="text-xs text-white/60 leading-relaxed">
                             To ensure verified talent evaluation, direct partner communication, and live ATS tracking, all applicants must have a verified candidate profile before applying.
                           </p>
                         </div>
@@ -1244,7 +1559,7 @@ export default function OpenRolesPage() {
                                 setAuthModalTab('register');
                                 setShowAuthModal(true);
                               }}
-                              className="flex-1 py-2.5 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-xs font-semibold text-zinc-200 hover:text-white transition cursor-pointer"
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-white/[0.05] hover:bg-white/[0.10] border border-white/15 text-xs font-semibold text-white/90 hover:text-white transition cursor-pointer"
                             >
                               Create Talent Profile
                             </button>
@@ -1254,7 +1569,7 @@ export default function OpenRolesPage() {
                                 setAuthModalTab('login');
                                 setShowAuthModal(true);
                               }}
-                              className="flex-1 py-2.5 px-3 rounded-xl bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 text-xs font-medium text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+                              className="flex-1 py-2.5 px-3 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/10 text-xs font-medium text-white/60 hover:text-white transition cursor-pointer"
                             >
                               Candidate Sign In
                             </button>
@@ -1262,17 +1577,17 @@ export default function OpenRolesPage() {
                         </div>
 
                         {/* Reassurance pills */}
-                        <div className="pt-4 border-t border-zinc-800/80 flex flex-wrap items-center justify-center gap-4 text-[11px] text-zinc-500">
+                        <div className="pt-4 border-t border-white/10 flex flex-wrap items-center justify-center gap-4 text-[11px] text-white/50">
                           <span className="flex items-center gap-1.5">
-                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            <CheckCircle2 size={13} className="text-white/60" />
                             1-Click Verified Apply
                           </span>
                           <span className="flex items-center gap-1.5">
-                            <ShieldCheck size={13} className="text-emerald-400" />
+                            <ShieldCheck size={13} className="text-white/60" />
                             Direct Partner Review
                           </span>
                           <span className="flex items-center gap-1.5">
-                            <Sparkles size={13} className="text-emerald-400" />
+                            <Sparkles size={13} className="text-white/60" />
                             Live Interview Status
                           </span>
                         </div>
@@ -1281,20 +1596,20 @@ export default function OpenRolesPage() {
                       /* Authenticated Application Form */
                       <form onSubmit={handleApplySubmit} className="space-y-4">
                         {/* Verified Candidate Header */}
-                        <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/25 flex items-center justify-between">
+                        <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-[11px] font-bold border border-emerald-500/30">
+                            <div className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center text-[11px] font-bold border border-white/20">
                               {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
                             </div>
                             <div>
                               <div className="text-xs font-semibold text-white flex items-center gap-1.5">
                                 <span>Applying as</span>
-                                <span className="font-bold text-emerald-400">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
-                                <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-1.5 py-0.2 rounded-full">
+                                <span className="font-bold text-white">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                                <span className="text-[10px] font-bold bg-white/10 text-white/90 border border-white/20 px-1.5 py-0.2 rounded-full">
                                   Verified
                                 </span>
                               </div>
-                              <div className="text-[10px] text-zinc-400 mt-0.5">
+                              <div className="text-[10px] text-white/50 mt-0.5">
                                 {hasResume ? '✓ Master resume ready for 1-click submission' : 'Upload your resume below to complete'}
                               </div>
                             </div>
@@ -1302,7 +1617,7 @@ export default function OpenRolesPage() {
                           <button
                             type="button"
                             onClick={logout}
-                            className="text-[11px] text-zinc-400 hover:text-rose-400 transition cursor-pointer"
+                            className="text-[11px] text-white/50 hover:text-rose-400 transition cursor-pointer"
                           >
                             Sign out
                           </button>
@@ -1317,7 +1632,7 @@ export default function OpenRolesPage() {
                       {/* Name & Email Row */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                             Full Name *
                           </label>
                           <input
@@ -1326,11 +1641,11 @@ export default function OpenRolesPage() {
                             value={applyForm.name}
                             onChange={(e) => setApplyForm({ ...applyForm, name: e.target.value })}
                             placeholder="e.g. Alex Johnson"
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                             Email Address *
                           </label>
                           <input
@@ -1339,7 +1654,7 @@ export default function OpenRolesPage() {
                             value={applyForm.email}
                             onChange={(e) => setApplyForm({ ...applyForm, email: e.target.value })}
                             placeholder="alex@example.com"
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                           />
                         </div>
                       </div>
@@ -1347,7 +1662,7 @@ export default function OpenRolesPage() {
                       {/* Phone & LinkedIn Row */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                             Phone Number *
                           </label>
                           <input
@@ -1356,11 +1671,11 @@ export default function OpenRolesPage() {
                             value={applyForm.phone}
                             onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
                             placeholder="+1 (555) 000-0000"
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                           />
                         </div>
                         <div>
-                          <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                             LinkedIn Profile (Optional)
                           </label>
                           <input
@@ -1368,30 +1683,30 @@ export default function OpenRolesPage() {
                             value={applyForm.linkedin_url}
                             onChange={(e) => setApplyForm({ ...applyForm, linkedin_url: e.target.value })}
                             placeholder="https://linkedin.com/in/..."
-                            className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                            className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                           />
                         </div>
                       </div>
 
                       {/* Resume Selection */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1.5">
+                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
                           Resume Document *
                         </label>
 
                         {hasResume && !useCustomResume ? (
-                          <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between">
+                          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
                             <div className="flex items-center gap-2.5">
-                              <FileText size={18} className="text-emerald-400" />
+                              <FileText size={18} className="text-white/70" />
                               <div>
                                 <div className="text-xs font-semibold text-white">{currentResumeName}</div>
-                                <div className="text-[10px] text-zinc-500">Verified resume from candidate profile</div>
+                                <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
                               </div>
                             </div>
                             <button
                               type="button"
                               onClick={() => setUseCustomResume(true)}
-                              className="text-[11px] font-medium text-emerald-400 hover:text-emerald-300 underline cursor-pointer"
+                              className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
                             >
                               Upload different file
                             </button>
@@ -1407,13 +1722,16 @@ export default function OpenRolesPage() {
                               e.preventDefault();
                               setIsDragging(false);
                               const file = e.dataTransfer.files?.[0];
-                              if (file) setResumeFile(file);
+                              if (file) {
+                                setResumeFile(file);
+                                setSubmitError(null);
+                              }
                             }}
                             onClick={() => fileInputRef.current?.click()}
                             className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${
                               isDragging
-                                ? 'border-emerald-400 bg-emerald-500/10'
-                                : 'border-zinc-800 bg-zinc-900/60 hover:border-zinc-700'
+                                ? 'border-white bg-white/[0.08]'
+                                : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                             }`}
                           >
                             <input
@@ -1421,23 +1739,26 @@ export default function OpenRolesPage() {
                               ref={fileInputRef}
                               onChange={(e) => {
                                 const file = e.target.files?.[0];
-                                if (file) setResumeFile(file);
+                                if (file) {
+                                  setResumeFile(file);
+                                  setSubmitError(null);
+                                }
                               }}
                               accept=".pdf,.docx,.doc"
                               className="hidden"
                             />
-                            <Upload size={22} className="text-zinc-500 mx-auto mb-2" />
+                            <Upload size={22} className="text-white/40 mx-auto mb-2" />
                             {resumeFile ? (
-                              <div className="text-xs font-semibold text-emerald-400 flex items-center justify-center gap-1.5">
-                                <Check size={14} />
+                              <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
+                                <Check size={14} className="text-white" />
                                 <span>{resumeFile.name} ({(resumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                               </div>
                             ) : (
                               <>
-                                <div className="text-xs font-semibold text-zinc-200">
+                                <div className="text-xs font-semibold text-white/90">
                                   Drop resume here or click to browse
                                 </div>
-                                <div className="text-[10px] text-zinc-500 mt-1">PDF, DOCX up to 10MB</div>
+                                <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
                               </>
                             )}
                           </div>
@@ -1450,7 +1771,7 @@ export default function OpenRolesPage() {
                               setUseCustomResume(false);
                               setResumeFile(null);
                             }}
-                            className="mt-2 text-[11px] text-zinc-400 hover:text-white underline cursor-pointer"
+                            className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
                           >
                             ← Use saved profile resume instead
                           </button>
@@ -1459,7 +1780,7 @@ export default function OpenRolesPage() {
 
                       {/* Brief Cover Note */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-1">
+                        <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                           Brief Note to Hiring Manager (Optional)
                         </label>
                         <textarea
@@ -1467,7 +1788,7 @@ export default function OpenRolesPage() {
                           value={applyForm.cover_note}
                           onChange={(e) => setApplyForm({ ...applyForm, cover_note: e.target.value })}
                           placeholder="Highlight your relevant experience or availability..."
-                          className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500/50"
+                          className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                         />
                       </div>
 
@@ -1475,11 +1796,11 @@ export default function OpenRolesPage() {
                       <button
                         type="submit"
                         disabled={submitting}
-                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-2"
+                        className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 flex items-center justify-center gap-2"
                       >
                         {submitting ? (
                           <>
-                            <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                            <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
                             <span>Processing Application...</span>
                           </>
                         ) : (
@@ -1502,15 +1823,18 @@ export default function OpenRolesPage() {
       {/* ============================================================ */}
       {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
       {/* ============================================================ */}
+      {/* ============================================================ */}
+      {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
+      {/* ============================================================ */}
       {showMyAppsModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <h3 className="text-base font-bold text-white">Your Submitted Applications</h3>
               <button
                 type="button"
                 onClick={() => setShowMyAppsModal(false)}
-                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1518,17 +1842,17 @@ export default function OpenRolesPage() {
 
             <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
               {applications.length === 0 ? (
-                <div className="py-8 text-center text-xs text-zinc-500">
+                <div className="py-8 text-center text-xs text-white/50">
                   You haven't submitted any applications yet.
                 </div>
               ) : (
                 applications.map((app, i) => (
-                  <div key={i} className="p-3.5 rounded-2xl bg-zinc-900/60 border border-zinc-800 flex items-center justify-between">
+                  <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
                     <div>
                       <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
-                      <div className="text-[11px] text-zinc-400">{app.company_name || 'Enterprise Client'}</div>
+                      <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'}</div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
                       {app.status || 'Under Review'}
                     </span>
                   </div>
@@ -1543,17 +1867,17 @@ export default function OpenRolesPage() {
       {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
       {/* ============================================================ */}
       {showSetupModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <div>
                 <h3 className="text-base font-bold text-white">Candidate Profile & Resume</h3>
-                <p className="text-xs text-zinc-400">Keep your details up to date for instant 1-click applications.</p>
+                <p className="text-xs text-white/50">Keep your details up to date for instant 1-click applications.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowSetupModal(false)}
-                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -1561,7 +1885,7 @@ export default function OpenRolesPage() {
 
             {setupSuccess ? (
               <div className="py-8 text-center space-y-2">
-                <CheckCircle2 size={32} className="text-emerald-400 mx-auto" />
+                <CheckCircle2 size={32} className="text-white mx-auto" />
                 <h4 className="text-sm font-bold text-white">Profile Updated Successfully</h4>
               </div>
             ) : (
@@ -1573,18 +1897,18 @@ export default function OpenRolesPage() {
                 )}
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Full Name *</label>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
                     value={setupForm.name}
                     onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-white/35"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Phone Number *</label>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Phone Number *</label>
                   <input
                     type="tel"
                     required
@@ -1625,14 +1949,14 @@ export default function OpenRolesPage() {
                     className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700"
                   />
                   {hasResume && !setupResumeFile && (
-                    <div className="text-[10px] text-emerald-400 mt-1">Existing resume: {currentResumeName}</div>
+                    <div className="text-[10px] text-white/60 mt-1">Existing resume: {currentResumeName}</div>
                   )}
                 </div>
 
                 <button
                   type="submit"
                   disabled={setupSubmitting}
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer mt-2"
+                  className="w-full py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-sm"
                 >
                   {setupSubmitting ? 'Saving Profile...' : 'Save Profile Details'}
                 </button>
@@ -1646,107 +1970,237 @@ export default function OpenRolesPage() {
       {/* MODAL 4: GENERAL TALENT POOL                                 */}
       {/* ============================================================ */}
       {showGeneralPoolModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
+          <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all">
+            <div className="flex items-start justify-between pb-4 border-b border-white/10">
               <div>
-                <h3 className="text-base font-bold text-white">Join General Talent Pool</h3>
-                <p className="text-xs text-zinc-400">Get matched with upcoming enterprise contract roles.</p>
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50 mb-1">
+                  Candidate Talent Network
+                </div>
+                <h3 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
+                  Join General Talent Pool
+                </h3>
+                <p className="text-xs text-white/50 mt-1">
+                  Get auto-matched with upcoming enterprise contract roles and verified hiring partners.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGeneralPoolModal(false)}
-                className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
               >
                 <X size={16} />
               </button>
             </div>
 
             {poolSuccess ? (
-              <div className="py-8 text-center space-y-2">
-                <CheckCircle2 size={32} className="text-emerald-400 mx-auto" />
-                <h4 className="text-sm font-bold text-white">Profile Submitted to Talent Pool</h4>
-                <p className="text-xs text-zinc-400">We will notify you when a matching role is published.</p>
+              <div className="py-8 text-center space-y-3">
+                <div className="w-14 h-14 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
+                  <CheckCircle2 size={30} />
+                </div>
+                <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
+                <p className="text-xs text-white/60 max-w-xs mx-auto">
+                  We will notify you via email as soon as an enterprise requisition matching your skillset is published.
+                </p>
                 <button
                   type="button"
-                  onClick={() => setShowGeneralPoolModal(false)}
-                  className="mt-4 px-5 py-2 rounded-full bg-emerald-500 text-zinc-950 font-bold text-xs"
+                  onClick={() => {
+                    setShowGeneralPoolModal(false);
+                    setPoolSuccess(null);
+                  }}
+                  className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition shadow-sm cursor-pointer"
                 >
-                  Close
+                  Done
                 </button>
               </div>
             ) : (
-              <form onSubmit={handlePoolSubmit} className="mt-4 space-y-3 text-xs">
-                {poolError && (
-                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
-                    {poolError}
+              <form onSubmit={handlePoolSubmit} className="mt-5 space-y-4 text-xs">
+                {candidateUser && (
+                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center text-[11px] font-bold border border-white/20">
+                        {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                          <span>Joining as</span>
+                          <span className="font-bold text-white">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                          <span className="text-[10px] font-bold bg-white/10 text-white/90 border border-white/20 px-1.5 py-0.2 rounded-full">
+                            Verified
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-white/50 mt-0.5">
+                          {hasResume ? '✓ Master resume on profile ready' : 'Upload your resume below to complete'}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                {poolError && (
+                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0" />
+                    <span>{poolError}</span>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Full Name *</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
                       value={poolForm.name}
                       onChange={(e) => setPoolForm({ ...poolForm, name: e.target.value })}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
+                      placeholder="e.g. Alex Johnson"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Email *</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email Address *</label>
                     <input
                       type="email"
                       required
                       value={poolForm.email}
                       onChange={(e) => setPoolForm({ ...poolForm, email: e.target.value })}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
+                      placeholder="alex@example.com"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Phone *</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone Number *</label>
                     <input
                       type="tel"
                       required
                       value={poolForm.phone}
                       onChange={(e) => setPoolForm({ ...poolForm, phone: e.target.value })}
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
+                      placeholder="+1 (555) 000-0000"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Target Title *</label>
+                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Target Title / Role *</label>
                     <input
                       type="text"
                       required
                       value={poolForm.title}
                       onChange={(e) => setPoolForm({ ...poolForm, title: e.target.value })}
-                      placeholder="e.g. Backend Lead"
-                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none"
+                      placeholder="e.g. Senior Frontend Lead"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Resume File *</label>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Core Skills (Optional)</label>
                   <input
-                    type="file"
-                    required
-                    accept=".pdf,.docx,.doc"
-                    onChange={(e) => setPoolResume(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white"
+                    type="text"
+                    value={poolForm.skills}
+                    onChange={(e) => setPoolForm({ ...poolForm, skills: e.target.value })}
+                    placeholder="e.g. React, TypeScript, Node.js, AWS"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                   />
+                </div>
+
+                {/* Resume Dropzone */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
+                    Resume Document *
+                  </label>
+
+                  {hasResume && !poolUseCustomResume ? (
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                      <div className="flex items-center gap-2.5">
+                        <FileText size={18} className="text-white/70" />
+                        <div>
+                          <div className="text-xs font-semibold text-white">{currentResumeName}</div>
+                          <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPoolUseCustomResume(true)}
+                        className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
+                      >
+                        Upload different file
+                      </button>
+                    </div>
+                  ) : (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setPoolIsDragging(true);
+                      }}
+                      onDragLeave={() => setPoolIsDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setPoolIsDragging(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (file) {
+                          setPoolResume(file);
+                          setPoolError(null);
+                        }
+                      }}
+                      onClick={() => poolFileInputRef.current?.click()}
+                      className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${
+                        poolIsDragging
+                          ? 'border-white bg-white/[0.08]'
+                          : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                      }`}
+                    >
+                      <input
+                        type="file"
+                        ref={poolFileInputRef}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setPoolResume(file);
+                            setPoolError(null);
+                          }
+                        }}
+                        accept=".pdf,.docx,.doc"
+                        className="hidden"
+                      />
+                      <Upload size={22} className="text-white/40 mx-auto mb-2" />
+                      {poolResume ? (
+                        <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
+                          <Check size={14} className="text-white" />
+                          <span>{poolResume.name} ({(poolResume.size / 1024 / 1024).toFixed(2)} MB)</span>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="text-xs font-semibold text-white/90">
+                            Drop resume here or click to browse
+                          </div>
+                          <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {poolUseCustomResume && hasResume && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPoolUseCustomResume(false);
+                        setPoolResume(null);
+                      }}
+                      className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
+                    >
+                      ← Use saved profile resume instead
+                    </button>
+                  )}
                 </div>
 
                 <button
                   type="submit"
                   disabled={poolSubmitting}
-                  className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase tracking-wider transition cursor-pointer mt-2"
+                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3"
                 >
-                  {poolSubmitting ? 'Submitting...' : 'Join Talent Network'}
+                  {poolSubmitting ? 'Submitting Profile...' : 'Join Talent Network'}
                 </button>
               </form>
             )}
@@ -1756,8 +2210,8 @@ export default function OpenRolesPage() {
 
       {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80 backdrop-blur-md font-sans">
-          <div className="bg-[#0e0f14] border border-paper/15 rounded-2xl max-w-md w-full shadow-2xl p-6 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-y-0 left-[100vw] right-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-md w-full shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
             {/* Close button */}
             <button
               type="button"
@@ -1766,21 +2220,21 @@ export default function OpenRolesPage() {
                 setAuthError(null);
                 setAuthSuccessMsg('');
               }}
-              className="absolute top-4 right-4 p-1.5 rounded-lg text-paper/40 hover:text-white bg-paper/[0.04] hover:bg-paper/10 transition cursor-pointer"
+              className="absolute top-5 right-5 p-2 rounded-full text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition cursor-pointer"
             >
               <X size={16} />
             </button>
 
             {/* Brand Header */}
             <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-paper/[0.06] border border-paper/10 text-[0.65rem] font-bold tracking-[0.2em] text-paper/70 uppercase mb-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.06] border border-white/10 text-[0.65rem] font-bold tracking-[0.2em] text-white/70 uppercase mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
                 <span>Candidate Talent Portal</span>
               </div>
-              <h3 className="font-display text-xl font-extrabold text-paper tracking-tight">
+              <h3 className="font-display text-xl font-extrabold text-white tracking-tight">
                 {authModalTab === 'login' ? 'Sign In to Open Roles' : 'Create Talent Profile'}
               </h3>
-              <p className="text-xs text-paper/60 mt-1">
+              <p className="text-xs text-white/60 mt-1">
                 {authModalTab === 'login'
                   ? 'Access verified partner requisitions and 1-click apply.'
                   : 'Join the verified talent network to browse and apply for roles.'}
@@ -1792,7 +2246,7 @@ export default function OpenRolesPage() {
               type="button"
               onClick={() => handleGoogleSignIn()}
               disabled={authLoading}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-100 text-neutral-900 font-bold text-xs tracking-wide shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-200 text-neutral-900 font-bold text-xs tracking-wide shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
             >
               <GoogleIcon className="w-4 h-4" />
               <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
@@ -1800,14 +2254,14 @@ export default function OpenRolesPage() {
 
             {/* Divider */}
             <div className="relative flex items-center justify-center mb-5">
-              <div className="border-t border-paper/10 w-full" />
-              <span className="bg-[#0e0f14] px-3 text-[10px] font-bold uppercase tracking-wider text-paper/40 absolute">
+              <div className="border-t border-white/10 w-full" />
+              <span className="bg-[#0a0b10] px-3 text-[10px] font-bold uppercase tracking-wider text-white/40 absolute">
                 or use candidate credentials
               </span>
             </div>
 
             {/* Tab Switcher */}
-            <div className="flex p-1 bg-paper/[0.04] border border-paper/10 rounded-xl mb-4">
+            <div className="flex p-1 bg-white/[0.04] border border-white/10 rounded-xl mb-4">
               <button
                 type="button"
                 onClick={() => {
@@ -1816,8 +2270,8 @@ export default function OpenRolesPage() {
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
                   authModalTab === 'login'
-                    ? 'bg-paper text-ink shadow-xs'
-                    : 'text-paper/60 hover:text-white'
+                    ? 'bg-white text-black shadow-xs'
+                    : 'text-white/60 hover:text-white'
                 }`}
               >
                 Sign In
@@ -1830,8 +2284,8 @@ export default function OpenRolesPage() {
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
                   authModalTab === 'register'
-                    ? 'bg-paper text-ink shadow-xs'
-                    : 'text-paper/60 hover:text-white'
+                    ? 'bg-white text-black shadow-xs'
+                    : 'text-white/60 hover:text-white'
                 }`}
               >
                 Create Profile
@@ -1847,8 +2301,8 @@ export default function OpenRolesPage() {
             )}
 
             {authSuccessMsg && (
-              <div className="p-3 mb-4 rounded-xl bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs flex items-center gap-2">
-                <CheckCircle2 size={15} className="shrink-0" />
+              <div className="p-3 mb-4 rounded-xl bg-white/[0.06] border border-white/15 text-white text-xs flex items-center gap-2">
+                <CheckCircle2 size={15} className="shrink-0 text-white" />
                 <span>{authSuccessMsg}</span>
               </div>
             )}
@@ -1857,40 +2311,40 @@ export default function OpenRolesPage() {
             {authModalTab === 'login' && (
               <form onSubmit={handleEmailLogin} className="space-y-3.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-paper/60 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-paper/40" />
+                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
                     <input
                       type="email"
                       required
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
                       placeholder="you@domain.com"
-                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-paper/60 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
                     Password
                   </label>
                   <div className="relative">
-                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-paper/40" />
+                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
                     <input
                       type={showAuthPassword ? 'text' : 'password'}
                       required
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                     <button
                       type="button"
                       onClick={() => setShowAuthPassword(!showAuthPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-paper/40 hover:text-white cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
                     >
                       {showAuthPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
@@ -1900,7 +2354,7 @@ export default function OpenRolesPage() {
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition cursor-pointer mt-2 disabled:opacity-50"
+                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
                 >
                   {authLoading ? 'Signing In…' : 'Sign In to Candidate Profile'}
                 </button>
@@ -1912,32 +2366,32 @@ export default function OpenRolesPage() {
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Full Name *</label>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
                       placeholder="Alex Johnson"
-                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Email *</label>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email *</label>
                     <input
                       type="email"
                       required
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="alex@example.com"
-                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Password *</label>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Password *</label>
                     <input
                       type="password"
                       required
@@ -1945,57 +2399,57 @@ export default function OpenRolesPage() {
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       placeholder="Min 6 characters"
-                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Phone</label>
+                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone</label>
                     <input
                       type="tel"
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
                       placeholder="+1 (555) 000-0000"
-                      className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Professional Title</label>
+                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Professional Title</label>
                   <input
                     type="text"
                     value={regTitle}
                     onChange={(e) => setRegTitle(e.target.value)}
                     placeholder="e.g. Senior Fullstack Engineer"
-                    className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
+                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
                   <input
                     type="text"
                     value={regSkills}
                     onChange={(e) => setRegSkills(e.target.value)}
                     placeholder="React, TypeScript, Python, Node.js"
-                    className="w-full bg-paper/[0.04] border border-paper/10 rounded-xl px-3 py-2 text-xs text-white placeholder-paper/30 focus:outline-none focus:border-emerald-500/50"
+                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-paper/60 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
+                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc"
                     onChange={(e) => setRegResume(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-paper/60 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-paper/10 file:text-paper hover:file:bg-paper/20 cursor-pointer"
+                    className="w-full text-xs text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-white/15 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 file:transition cursor-pointer"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs uppercase tracking-wider transition cursor-pointer mt-2 disabled:opacity-50"
+                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
                 >
                   {authLoading ? 'Creating Profile…' : 'Create Profile & Access Roles'}
                 </button>
@@ -2011,22 +2465,6 @@ export default function OpenRolesPage() {
         </div>
       )}
 
-      {/* Footer matching launchpad */}
-      <footer className="border-t border-paper/10 bg-ink/90 py-8 px-6 md:px-12 text-center text-xs text-paper/40 relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <span className="font-extrabold text-paper uppercase tracking-[0.2em] text-[0.68rem]">TermJobs</span>
-            <span>·</span>
-            <span>Autonomous Contract Workforce Platform</span>
-          </div>
-          <div className="flex items-center gap-5 text-paper/60 text-xs">
-            <Link to="/" className="hover:text-paper transition">Platform Overview</Link>
-            <Link to="/open-roles" className="hover:text-paper transition text-emerald-400 font-semibold">Open Roles</Link>
-            <Link to="/interview/login" className="hover:text-paper transition">Interview Vault</Link>
-            <Link to="/login" className="hover:text-paper transition">Sign In</Link>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
