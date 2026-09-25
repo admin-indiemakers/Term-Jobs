@@ -180,7 +180,7 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         except Exception:
             pass
 
-    # Pre-cache interview rounds to enrich candidate cards with live AI scores and recordings
+    # Pre-cache interview rounds from both SQLite and MongoDB to enrich candidate cards with live AI scores and recordings
     round_cache = {}
     try:
         from modules.interview.domain.models import InterviewRound
@@ -193,6 +193,21 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
                     round_cache[rd.candidate_email.strip().lower()] = rd
                 if rd.candidate_name and rd.requisition_id:
                     round_cache[f"{rd.candidate_name.strip().lower()}::{rd.requisition_id}"] = rd
+    except Exception:
+        pass
+
+    try:
+        for m_rd in db["interview_rounds"].find({}):
+            m_sub_id = m_rd.get("candidate_submission_id")
+            m_email = (m_rd.get("candidate_email") or "").strip().lower()
+            m_cname = (m_rd.get("candidate_name") or "").strip().lower()
+            m_req_id = m_rd.get("requisition_id")
+            if m_sub_id and m_sub_id not in round_cache:
+                round_cache[m_sub_id] = m_rd
+            if m_email and m_email not in round_cache:
+                round_cache[m_email] = m_rd
+            if m_cname and m_req_id and f"{m_cname}::{m_req_id}" not in round_cache:
+                round_cache[f"{m_cname}::{m_req_id}"] = m_rd
     except Exception:
         pass
 
@@ -233,24 +248,26 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         int_status = doc.get("round_status") or doc.get("interview_status")
 
         if matched_round:
+            m_id = matched_round.get("id") if isinstance(matched_round, dict) else matched_round.id
             if not int_round_id:
-                int_round_id = matched_round.id
+                int_round_id = m_id
             if int_score is None:
-                ca = matched_round.communication_analysis or {}
+                ca = (matched_round.get("communication_analysis") if isinstance(matched_round, dict) else matched_round.communication_analysis) or {}
                 sc = ca.get("overall_score")
                 if sc is not None and str(sc).isdigit():
                     int_score = int(sc)
             if not int_result:
-                ev = matched_round.evaluation or {}
+                ev = (matched_round.get("evaluation") if isinstance(matched_round, dict) else matched_round.evaluation) or {}
                 int_result = ev.get("result")
             if not int_summary:
-                ev = matched_round.evaluation or {}
-                ca = matched_round.communication_analysis or {}
+                ev = (matched_round.get("evaluation") if isinstance(matched_round, dict) else matched_round.evaluation) or {}
+                ca = (matched_round.get("communication_analysis") if isinstance(matched_round, dict) else matched_round.communication_analysis) or {}
                 int_summary = ca.get("summary") or ev.get("notes") or ""
             if not int_recording_url:
-                int_recording_url = matched_round.recording_url or f"/api/interviews/rounds/{matched_round.id}/recording"
+                rec_url = matched_round.get("recording_url") if isinstance(matched_round, dict) else matched_round.recording_url
+                int_recording_url = rec_url or (f"/api/interviews/rounds/{m_id}/recording" if m_id else None)
             if not int_status:
-                int_status = matched_round.status
+                int_status = matched_round.get("status") if isinstance(matched_round, dict) else matched_round.status
 
         results.append({
             "id": doc_id,
@@ -395,11 +412,84 @@ def list_candidates(
 
 @router.get("/shortlisted")
 def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dict]:
-    """Shortcut for the shortlisted candidates queue (optimized direct Mongo query)."""
-    return _fetch_candidate_submissions_mongo(
+    """Shortcut for the shortlisted candidates queue (strictly verified: must have completed AI screening interview)."""
+    from modules.shared.db import db, get_session
+    from modules.interview.domain.models import InterviewRound
+
+    candidates = _fetch_candidate_submissions_mongo(
         {"status": {"$in": ["Shortlisted", "Accepted", "Under Review", "Hired"]}},
         current_user
     )
+
+    # Collect all completed interview round emails and IDs from SQLite and MongoDB
+    completed_emails = set()
+    completed_ids = set()
+    try:
+        with get_session() as session:
+            sql_rounds = session.query(InterviewRound).filter(InterviewRound.status == "Completed").all()
+            for r in sql_rounds:
+                if r.candidate_email:
+                    completed_emails.add(r.candidate_email.strip().lower())
+                if r.candidate_submission_id:
+                    completed_ids.add(r.candidate_submission_id)
+    except Exception:
+        pass
+
+    try:
+        mongo_rounds = list(db["interview_rounds"].find({"status": "Completed"}, {"candidate_email": 1, "candidate_submission_id": 1}))
+        for mr in mongo_rounds:
+            if mr.get("candidate_email"):
+                completed_emails.add(mr["candidate_email"].strip().lower())
+            if mr.get("candidate_submission_id"):
+                completed_ids.add(mr["candidate_submission_id"])
+    except Exception:
+        pass
+
+    verified = []
+    stale_to_demote = []
+    for c in candidates:
+        st = c.get("status")
+        # Post-shortlist pipeline stages are preserved
+        if st in ("Accepted", "Hired", "Under Review"):
+            verified.append(c)
+            continue
+
+        c_email = (c.get("candidate_email") or "").strip().lower()
+        c_id = c.get("id") or c.get("submission_id")
+        has_completed_interview = (
+            (c_id and c_id in completed_ids)
+            or (c_email and c_email in completed_emails)
+            or (c.get("interview_score") is not None)
+            or (c.get("round_status") == "Completed")
+        )
+
+        if has_completed_interview:
+            verified.append(c)
+        else:
+            # Candidate was marked Shortlisted without an interview -> auto-correct to Screened
+            stale_to_demote.append((c_id, c_email, c.get("requisition_id")))
+
+    if stale_to_demote:
+        try:
+            for s_id, s_email, s_req in stale_to_demote:
+                or_clause = []
+                if s_id:
+                    or_clause.append({"id": s_id})
+                    or_clause.append({"submission_id": s_id})
+                if s_email:
+                    if s_req:
+                        or_clause.append({"candidate_email": s_email, "requisition_id": s_req})
+                    else:
+                        or_clause.append({"candidate_email": s_email})
+                if or_clause:
+                    db["candidate_submissions"].update_many(
+                        {"$or": or_clause, "status": "Shortlisted"},
+                        {"$set": {"status": "Screened", "shortlisted_at": None}}
+                    )
+        except Exception as demote_err:
+            logger.warning(f"Error auto-demoting un-interviewed candidates: {demote_err}")
+
+    return verified
 
 
 @router.get("/bank")

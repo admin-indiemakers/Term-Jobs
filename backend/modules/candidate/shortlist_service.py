@@ -217,12 +217,17 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
         except Exception as sync_err:
             logger.warning(f"Error syncing MongoDB submissions to SQLite for {requisition_id}: {sync_err}")
         
-        # Fetch all interview rounds for this requisition to get latest AI scores
+        # Fetch all interview rounds for this requisition from SQLite and MongoDB
         interview_rounds = (
             session.query(InterviewRound)
             .filter(InterviewRound.requisition_id == requisition_id)
             .all()
         )
+        mongo_rounds = []
+        try:
+            mongo_rounds = list(db["interview_rounds"].find({"requisition_id": requisition_id}))
+        except Exception as e:
+            logger.warning(f"Error fetching MongoDB interview rounds for {requisition_id}: {e}")
         
         # Map rounds by candidate email, submission id, or candidate name
         rounds_by_sub = {}
@@ -235,6 +240,17 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                 rounds_by_email.setdefault(ir.candidate_email.strip().lower(), []).append(ir)
             if ir.candidate_name:
                 rounds_by_name.setdefault(ir.candidate_name.strip().lower(), []).append(ir)
+
+        for mr in mongo_rounds:
+            m_sub_id = mr.get("candidate_submission_id")
+            m_email = (mr.get("candidate_email") or "").strip().lower()
+            m_name = (mr.get("candidate_name") or "").strip().lower()
+            if m_sub_id:
+                rounds_by_sub.setdefault(m_sub_id, []).append(mr)
+            if m_email:
+                rounds_by_email.setdefault(m_email, []).append(mr)
+            if m_name:
+                rounds_by_name.setdefault(m_name, []).append(mr)
 
         ranked_candidates = []
         shortlisted_count = 0
@@ -249,16 +265,20 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
             # Find best completed interview score
             best_interview_score = None
             has_passed_round = False
-            has_completed_interview = any(r.status == "Completed" for r in c_rounds)
+            has_completed_interview = False
             for r in c_rounds:
-                ca = r.communication_analysis or {}
+                st = r.get("status") if isinstance(r, dict) else r.status
+                if st == "Completed":
+                    has_completed_interview = True
+
+                ca = (r.get("communication_analysis") if isinstance(r, dict) else r.communication_analysis) or {}
                 sc = ca.get("overall_score")
                 if sc is not None and str(sc).isdigit():
                     sc_int = int(sc)
                     if best_interview_score is None or sc_int > best_interview_score:
                         best_interview_score = sc_int
                 
-                ev = r.evaluation or {}
+                ev = (r.get("evaluation") if isinstance(r, dict) else r.evaluation) or {}
                 if ev.get("result") in ("Strong Yes", "Yes", "Hold"):
                     has_passed_round = True
                     if best_interview_score is None or best_interview_score < 75:
@@ -271,26 +291,25 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
             if best_interview_score is not None:
                 composite_score = round(0.6 * best_interview_score + 0.4 * resume_score, 1)
             else:
-                # Keep raw resume score for display but do NOT shortlist without interview
+                # Keep raw resume score for display in pool but do NOT shortlist without interview
                 composite_score = round(resume_score, 1)
 
             # Update candidate match_score to reflect composite algorithmic score
             sub.match_score = composite_score
 
             # ── STRICT GATE: candidate must have COMPLETED the AI screening interview ──
-            # Simply having a good resume is not enough — they must have attended the interview.
+            # Having a good resume score alone is NOT enough — they must have attended the interview.
             is_qualified = (
-                has_completed_interview                                      # round.status == "Completed"
-                or (best_interview_score is not None and has_passed_round)   # AI evaluation passed
-                or sub.status in ("Shortlisted", "Accepted", "Under Review", "Hired")  # already promoted
+                has_completed_interview
+                or (best_interview_score is not None and has_passed_round)
             )
 
             if is_qualified:
-                if sub.status not in ("Hired", "Rejected"):
+                if sub.status not in ("Hired", "Accepted", "Under Review"):
                     sub.status = "Shortlisted"
                 shortlisted_count += 1
             else:
-                # Reset any stale Shortlisted status if interview has not been completed
+                # Reset any candidate without completed interview from Shortlisted -> Screened
                 if sub.status == "Shortlisted":
                     sub.status = "Screened"
 
@@ -316,7 +335,7 @@ def generate_and_rank_requisition_shortlist(requisition_id: str) -> Dict[str, An
                         "match_score": composite_score,
                         "interview_score": best_interview_score,
                         "status": sub.status,
-                        "shortlisted_at": now_iso,
+                        "shortlisted_at": now_iso if is_qualified else None,
                         "updated_at": now_iso,
                     }}
                 )
@@ -398,7 +417,7 @@ def dispatch_requisition_shortlist(
             .all()
         )
 
-        # Fetch completed interview rounds to determine who actually attended screening
+        # Fetch completed interview rounds from SQLite and MongoDB
         interview_rounds = (
             session.query(InterviewRound)
             .filter(InterviewRound.requisition_id == requisition_id)
@@ -413,25 +432,58 @@ def dispatch_requisition_shortlist(
                 if ir.candidate_submission_id:
                     completed_sub_ids.add(ir.candidate_submission_id)
 
-        # Only promote candidates who attended the AI interview
+        try:
+            m_completed = list(db["interview_rounds"].find({"requisition_id": requisition_id, "status": "Completed"}))
+            for mr in m_completed:
+                if mr.get("candidate_email"):
+                    completed_emails.add(mr["candidate_email"].strip().lower())
+                if mr.get("candidate_submission_id"):
+                    completed_sub_ids.add(mr["candidate_submission_id"])
+        except Exception:
+            pass
+
+        # Update SQLite candidates:
+        # Strictly promote ONLY attended candidates; reset non-attended Shortlisted back to Screened
         for s in sqlite_subs:
             email = (s.candidate_email or "").strip().lower()
             attended = s.id in completed_sub_ids or email in completed_emails
-            already_promoted = s.status in ("Shortlisted", "Accepted", "Under Review", "Hired")
-            if attended and s.status not in ("Hired", "Rejected"):
-                s.status = "Shortlisted"
-                s.updated_at = now
-                session.add(s)
-            elif not attended and not already_promoted:
-                # Leave un-interviewed candidates as Screened — do not promote
-                pass
+            if attended:
+                if s.status not in ("Hired", "Accepted", "Under Review"):
+                    s.status = "Shortlisted"
+                    s.updated_at = now
+                    session.add(s)
+            else:
+                if s.status == "Shortlisted":
+                    s.status = "Screened"
+                    s.updated_at = now
+                    session.add(s)
 
-        # In MongoDB: only promote candidates who attended the AI screening
+        # In MongoDB:
+        # 1. Demote any candidates in this requisition who are Shortlisted but never attended
+        # 2. Promote candidates who did attend
         try:
             email_list = list(completed_emails)
             sub_id_list = list(completed_sub_ids)
+
+            # Demote non-interviewed candidates who are currently Shortlisted
+            demote_query = {
+                "requisition_id": requisition_id,
+                "status": "Shortlisted",
+            }
             if email_list or sub_id_list:
-                mongo_filter = {
+                demote_query["$nor"] = (
+                    [{"candidate_email": {"$in": email_list}}] if email_list else []
+                ) + (
+                    [{"id": {"$in": sub_id_list}}] if sub_id_list else []
+                )
+            db["candidate_submissions"].update_many(
+                demote_query,
+                {"$set": {"status": "Screened", "shortlisted_at": None, "updated_at": now_iso}}
+            )
+
+            # Promote interviewed candidates
+            if email_list or sub_id_list:
+                promote_filter = {
                     "requisition_id": requisition_id,
                     "status": {"$nin": ["Shortlisted", "Accepted", "Under Review", "Hired", "Rejected"]},
                     "$or": (
@@ -440,9 +492,9 @@ def dispatch_requisition_shortlist(
                         [{"id": {"$in": sub_id_list}}] if sub_id_list else []
                     )
                 }
-                if mongo_filter["$or"]:
+                if promote_filter["$or"]:
                     db["candidate_submissions"].update_many(
-                        mongo_filter,
+                        promote_filter,
                         {"$set": {"status": "Shortlisted", "shortlisted_at": now_iso, "updated_at": now_iso}}
                     )
         except Exception as e:
