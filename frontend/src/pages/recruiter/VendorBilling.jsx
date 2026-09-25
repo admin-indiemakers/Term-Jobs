@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 import WorkOrderProgressBar from '../../components/WorkOrderProgressBar';
 
-export default function VendorBilling() {
+export default function VendorBilling({ isEmbedded = false }) {
   const { user, token } = useAuth();
 
   const [loading, setLoading] = useState(true);
@@ -336,7 +336,7 @@ export default function VendorBilling() {
   const currencySymbol = '₹';
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#111827] pb-24">
+    <div className={isEmbedded ? "w-full text-[#111827] pt-2 pb-12" : "min-h-screen bg-[#F8F9FA] text-[#111827] pb-24"}>
       {/* Embedded Print Styling for Clean Single-Page / Multi-Page Work Order Document */}
       <style>{`
         @media print {
@@ -373,7 +373,7 @@ export default function VendorBilling() {
       )}
 
       {/* Main Container */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      <div className={isEmbedded ? "w-full" : "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8"}>
         {/* Header Bar */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#E5E7EB]">
           <div>
@@ -382,11 +382,13 @@ export default function VendorBilling() {
                 <Receipt className="w-5 h-5" />
               </div>
               <h1 className="text-2xl font-bold tracking-tight text-[#0A0A0A]">
-                Vendor Billing & Invoicing
+                {isEmbedded ? 'Candidate Billing & Work Orders' : 'Vendor Billing & Invoicing'}
               </h1>
             </div>
             <p className="text-sm text-[#6B7280] mt-1.5 ml-11.5">
-              Manage contractor timesheets, weekly overtime pricing breakdowns, approved expenses, and editable Work Order PDF packages.
+              {isEmbedded
+                ? 'Super Admin oversight of candidate contractor timesheets, weekly overtime pricing breakdowns, approved expenses, and editable Work Order PDF packages.'
+                : 'Manage contractor timesheets, weekly overtime pricing breakdowns, approved expenses, and editable Work Order PDF packages.'}
             </p>
           </div>
 

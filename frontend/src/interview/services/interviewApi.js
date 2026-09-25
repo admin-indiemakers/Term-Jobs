@@ -136,70 +136,24 @@ export const interviewApi = {
 
   // 48-Hour Shortlist Automation & Instant Send
   async getShortlistStatus(requisitionId, token) {
-    try {
-      return await request(`/api/requisitions/${requisitionId}/shortlist/status`, {
-        method: 'GET',
-        token,
-      });
-    } catch (err) {
-      if (err?.status === 404) {
-        try {
-          return await request(`/requisitions/${requisitionId}/shortlist/status`, {
-            method: 'GET',
-            token,
-          });
-        } catch {
-          return await request(`/api/candidates/shortlist-status/${requisitionId}`, {
-            method: 'GET',
-            token,
-          });
-        }
-      }
-      throw err;
-    }
+    return request(`/api/requisitions/${requisitionId}/shortlist/status`, {
+      method: 'GET',
+      token,
+    });
   },
 
   async sendShortlistInstant(requisitionId, notes = '', token) {
-    try {
-      return await request(`/api/requisitions/${requisitionId}/shortlist/send-now`, {
-        method: 'POST',
-        body: { notes },
-        token,
-      });
-    } catch (err) {
-      if (err?.status === 404) {
-        try {
-          return await request(`/requisitions/${requisitionId}/shortlist/send-now`, {
-            method: 'POST',
-            body: { notes },
-            token,
-          });
-        } catch {
-          return await request(`/api/candidates/shortlist-send-now/${requisitionId}`, {
-            method: 'POST',
-            body: { notes },
-            token,
-          });
-        }
-      }
-      throw err;
-    }
+    return request(`/api/requisitions/${requisitionId}/shortlist/send-now`, {
+      method: 'POST',
+      body: { notes },
+      token,
+    });
   },
 
   async generateShortlist(requisitionId, token) {
-    try {
-      return await request(`/api/requisitions/${requisitionId}/shortlist/generate`, {
-        method: 'POST',
-        token,
-      });
-    } catch (err) {
-      if (err?.status === 404) {
-        return await request(`/requisitions/${requisitionId}/shortlist/generate`, {
-          method: 'POST',
-          token,
-        });
-      }
-      throw err;
-    }
+    return request(`/api/requisitions/${requisitionId}/shortlist/generate`, {
+      method: 'POST',
+      token,
+    });
   },
 };

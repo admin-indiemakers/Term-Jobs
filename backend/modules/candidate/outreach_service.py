@@ -8,7 +8,7 @@ import os
 import uuid
 import secrets
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from bson import ObjectId
 from modules.shared.db import db
@@ -502,6 +502,9 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                     req_doc = db["requisitions"].find_one({"id": req_id}) or {}
                     tenant_id = req_doc.get("tenant_id") or "default"
 
+                    now_utc = datetime.now(timezone.utc)
+                    expires_at_val = now_utc + timedelta(hours=10)
+
                     round_obj = InterviewRound(
                         tenant_id=tenant_id,
                         requisition_id=req_id,
@@ -512,7 +515,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                         round_number=1,
                         round_name="AI Fast-Track Technical Interview",
                         round_type="Technical",
-                        scheduled_date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+                        scheduled_date=now_utc.strftime("%Y-%m-%d"),
                         scheduled_time="Immediate / On-Demand",
                         duration_minutes=45,
                         interviewer_name=f"{comp_name} Technical Team",
@@ -526,7 +529,10 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                         room_id=room_id,
                         status="Scheduled",
                         evaluation={},
+                        expires_at=expires_at_val,
                         created_by="TermJobs Fast-Track Dispatcher",
+                        created_at=now_utc,
+                        updated_at=now_utc,
                     )
                     session.add(round_obj)
                     session.commit()

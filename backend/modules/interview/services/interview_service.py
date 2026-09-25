@@ -7,7 +7,7 @@ import string
 import time
 import jwt
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional
 import uuid
 
@@ -15,6 +15,96 @@ from modules.shared.db import get_session, db
 from modules.interview.domain.models import InterviewSchedule, InterviewStatus, InterviewRound, InterviewChatMessage
 from modules.calendar.domain.models import CalendarConfig
 from modules.candidate.domain.models import CandidateSubmission
+
+LINK_EXPIRATION_HOURS = 10
+
+
+def is_round_link_expired(round_doc_or_obj) -> bool:
+    """Return True if the AI interview link has expired (strictly 10 hours validity limit)."""
+    if not round_doc_or_obj:
+        return True
+
+    now = datetime.now(timezone.utc)
+
+    # 1. Check explicit expires_at
+    expires_at = getattr(round_doc_or_obj, "expires_at", None)
+    if expires_at is None and isinstance(round_doc_or_obj, dict):
+        expires_at = round_doc_or_obj.get("expires_at")
+
+    if expires_at:
+        if isinstance(expires_at, str):
+            try:
+                expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            except Exception:
+                expires_at = None
+        if isinstance(expires_at, datetime):
+            if expires_at.tzinfo is None:
+                expires_at = expires_at.replace(tzinfo=timezone.utc)
+            return now > expires_at
+
+    # 2. Fallback to created_at + 10 hours
+    created_at = getattr(round_doc_or_obj, "created_at", None)
+    if created_at is None and isinstance(round_doc_or_obj, dict):
+        created_at = round_doc_or_obj.get("created_at")
+
+    if created_at:
+        if isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except Exception:
+                created_at = None
+        if isinstance(created_at, datetime):
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            return now > (created_at + timedelta(hours=LINK_EXPIRATION_HOURS))
+
+    return False
+
+
+def get_round_expiration_info(round_doc_or_obj) -> dict:
+    """Compute expiration metadata for an interview round."""
+    now = datetime.now(timezone.utc)
+    created_at = getattr(round_doc_or_obj, "created_at", None)
+    if created_at is None and isinstance(round_doc_or_obj, dict):
+        created_at = round_doc_or_obj.get("created_at")
+
+    if isinstance(created_at, str):
+        try:
+            created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except Exception:
+            created_at = None
+
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+
+    expires_at = getattr(round_doc_or_obj, "expires_at", None)
+    if expires_at is None and isinstance(round_doc_or_obj, dict):
+        expires_at = round_doc_or_obj.get("expires_at")
+
+    if isinstance(expires_at, str):
+        try:
+            expires_at = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+        except Exception:
+            expires_at = None
+
+    if isinstance(expires_at, datetime) and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+    if not expires_at:
+        if created_at:
+            expires_at = created_at + timedelta(hours=LINK_EXPIRATION_HOURS)
+        else:
+            expires_at = now + timedelta(hours=LINK_EXPIRATION_HOURS)
+
+    is_expired = now > expires_at
+    remaining_secs = max(0, int((expires_at - now).total_seconds())) if not is_expired else 0
+
+    return {
+        "is_expired": is_expired,
+        "expires_at": expires_at.isoformat(),
+        "remaining_seconds": remaining_secs,
+        "valid_duration_hours": LINK_EXPIRATION_HOURS,
+    }
 
 
 def _generate_candidate_passcode() -> str:
@@ -84,6 +174,11 @@ def send_interview_invitation_email(
               <td style="font-size: 16px; color: #059669; font-weight: 900; font-family: monospace;">🔑 {passcode}</td>
             </tr>
           </table>
+        </div>
+
+        <!-- Link Expiration Banner -->
+        <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-radius: 10px; padding: 12px 16px; margin-bottom: 24px; font-size: 13px; color: #991b1b; line-height: 1.5;">
+          ⏱️ <strong>Link Expiration Notice:</strong> This AI interview link and passcode are strictly valid for <strong>10 hours</strong> from delivery. Please complete your interview within this window.
         </div>
 
         <!-- Join Video Room Button -->
@@ -334,6 +429,8 @@ def create_interview_proposal(
             cand_token = str(uuid.uuid4())
             interviewer_token = str(uuid.uuid4())
             room_id = f"room_round_{uuid.uuid4().hex[:10]}"
+            now_utc = datetime.now(timezone.utc)
+            expires_at_val = now_utc + timedelta(hours=LINK_EXPIRATION_HOURS)
             
             round_obj = InterviewRound(
                 tenant_id=tenant_id,
@@ -359,7 +456,10 @@ def create_interview_proposal(
                 room_id=room_id,
                 status="Scheduled",
                 evaluation={},
+                expires_at=expires_at_val,
                 created_by=company_name or "Hiring Team",
+                created_at=now_utc,
+                updated_at=now_utc,
             )
             session.add(round_obj)
             session.flush()
@@ -571,6 +671,21 @@ def complete_interview(interview_id: str, final_remark: str, decision: str) -> O
                     interview.candidate_submission_id,
                     new_status,
                 )
+                if decision == "Accepted":
+                    try:
+                        from modules.notifications.services.notification_service import notify_candidate_selected_by_hm
+                        notify_candidate_selected_by_hm(
+                            requisition_id=sub.requisition_id or interview.requisition_id,
+                            candidate_name=sub.candidate_name or interview.candidate_name,
+                            hiring_manager_name=interview.interviewer_name or "Hiring Manager",
+                            candidate_email=sub.candidate_email or interview.candidate_email,
+                            candidate_id=getattr(sub, "candidate_id", None) or sub.id,
+                            submission_id=sub.id,
+                            match_score=sub.match_score,
+                            notes=final_remark,
+                        )
+                    except Exception as notify_err:
+                        logger.warning("complete_interview: failed to notify Super Admin: %s", notify_err)
             else:
                 logger.warning(
                     "complete_interview: candidate submission %s not found for interview %s",
@@ -620,6 +735,9 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
         interviewer_token = str(uuid.uuid4())
         room_id = f"room_round_{uuid.uuid4().hex[:10]}"
         
+        now_utc = datetime.now(timezone.utc)
+        expires_at_val = now_utc + timedelta(hours=LINK_EXPIRATION_HOURS)
+        
         round_obj = InterviewRound(
             tenant_id=tenant_id,
             requisition_id=data.get("requisition_id", ""),
@@ -644,7 +762,10 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
             room_id=room_id,
             status="Scheduled",
             evaluation={},
+            expires_at=expires_at_val,
             created_by=created_by,
+            created_at=now_utc,
+            updated_at=now_utc,
         )
         
         session.add(round_obj)
@@ -760,7 +881,12 @@ def get_candidate_rounds_by_token(token_or_email: str) -> List[dict]:
             c_token = (r.candidate_token or "").strip().lower()
             c_email = (r.candidate_email or "").strip().lower()
             if c_token == token_or_email_clean or c_email == token_or_email_clean:
-                matched.append(r.to_doc())
+                rdoc = r.to_doc()
+                exp_info = get_round_expiration_info(r)
+                rdoc["is_expired"] = exp_info["is_expired"]
+                rdoc["expires_at"] = exp_info["expires_at"]
+                rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
+                matched.append(rdoc)
         matched.sort(key=lambda x: x.get("round_number", 1))
         return matched
 
@@ -785,7 +911,7 @@ def authenticate_candidate_login(
     passcode: Optional[str] = None,
     token: Optional[str] = None,
 ) -> dict:
-    """Validate candidate login via email + passcode or direct invite token."""
+    """Validate candidate login via email + passcode or direct invite token with 10hr expiration check."""
     email_clean = email.strip().lower()
     with get_session() as session:
         rounds = session.query(InterviewRound).filter(
@@ -820,8 +946,16 @@ def authenticate_candidate_login(
                 raise ValueError("Invalid interview passcode. Please check your invitation email.")
         else:
             raise ValueError("Passcode or invitation token is required to log in.")
-            
-        first_round = user_rounds[0]
+
+        # Check link expiration: if all candidate rounds are expired (and not Completed), block with informative error
+        unexpired_or_completed = [r for r in user_rounds if not is_round_link_expired(r) or r.status == "Completed"]
+        if not unexpired_or_completed:
+            raise ValueError(
+                "This AI interview link has expired. Interview access links and passcodes are valid for 10 hours from creation. Please contact your recruiter or hiring coordinator for a new link."
+            )
+
+        first_round = unexpired_or_completed[0]
+        exp_info = get_round_expiration_info(first_round)
         return {
             "authenticated": True,
             "candidate_name": first_round.candidate_name,
@@ -831,14 +965,24 @@ def authenticate_candidate_login(
             "requisition_id": first_round.requisition_id,
             "requisition_title": first_round.requisition_title,
             "rounds_count": len(user_rounds),
+            "is_expired": exp_info["is_expired"],
+            "expires_at": exp_info["expires_at"],
+            "remaining_seconds": exp_info["remaining_seconds"],
         }
 
 
 def get_round_by_id(round_id: str) -> Optional[dict]:
-    """Retrieve single round by ID."""
+    """Retrieve single round by ID with expiration metadata."""
     with get_session() as session:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
-        return r.to_doc() if r else None
+        if not r:
+            return None
+        rdoc = r.to_doc()
+        exp_info = get_round_expiration_info(r)
+        rdoc["is_expired"] = exp_info["is_expired"]
+        rdoc["expires_at"] = exp_info["expires_at"]
+        rdoc["remaining_seconds"] = exp_info["remaining_seconds"]
+        return rdoc
 
 
 def update_round_status(round_id: str, new_status: str) -> Optional[dict]:
@@ -1196,9 +1340,15 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                 # Check if this candidate is already tracked in by_candidate
                 existing_key = None
                 sub_email_norm = (sub.candidate_email or "").strip().lower()
+                sub_name_norm = (sub.candidate_name or "").strip().lower()
                 for k, v in by_candidate.items():
+                    v_email_norm = (v.get("candidate_email") or "").strip().lower()
+                    v_name_norm = (v.get("candidate_name") or "").strip().lower()
+                    same_req = str(v.get("requisition_id") or "") == str(sub.requisition_id or "")
+
                     if (sub.id and v.get("candidate_submission_id") == sub.id) or \
-                       (sub_email_norm and (v.get("candidate_email") or "").strip().lower() == sub_email_norm):
+                       (sub_email_norm and v_email_norm == sub_email_norm and same_req) or \
+                       (sub_name_norm and v_name_norm == sub_name_norm and same_req):
                         existing_key = k
                         break
 
@@ -1207,7 +1357,7 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                     by_candidate[existing_key]["vendor_name"] = sub.vendor_name
                     by_candidate[existing_key]["submission_status"] = sub.status
                 else:
-                    cand_key = sub.id or sub.candidate_email or f"sub-{len(by_candidate)}"
+                    cand_key = sub.id or (f"{sub_email_norm}_{sub.requisition_id}" if sub_email_norm else f"{sub_name_norm}_{sub.requisition_id}") or f"sub-{len(by_candidate)}"
                     by_candidate[cand_key] = {
                         "candidate_submission_id": sub.id,
                         "candidate_name": sub.candidate_name or "Candidate",

@@ -276,6 +276,8 @@ async def process_telegram_update(update: dict) -> None:
                 lookup["$or"].append({"email": target_email})
             if target_id:
                 lookup["$or"].append({"id": target_id})
+                lookup["$or"].append({"candidate_id": target_id})
+                lookup["$or"].append({"submission_id": target_id})
                 lookup["$or"].append({"details.token": target_id})
 
             cand = db["candidates"].find_one(lookup)
@@ -293,36 +295,43 @@ async def process_telegram_update(update: dict) -> None:
                         }
                     }
                 )
-            else:
-                # Check candidate_submissions
-                sub = db["candidate_submissions"].find_one({"$or": [{"candidate_email": target_email}, {"candidate_id": target_id}]}) if (target_email or target_id) else None
-                if sub:
-                    cand_name = sub.get("candidate_name") or first_name
-                    db["candidate_submissions"].update_one(
-                        {"_id": sub["_id"]},
-                        {"$set": {"telegram_chat_id": str(chat_id), "telegram_username": username}}
-                    )
-
-                # Create or ensure candidate record in candidates collection
-                cand_id = (sub.get("candidate_id") if sub else None) or str(uuid.uuid4())
-                cand_email = target_email or (sub.get("candidate_email") if sub else f"user_{chat_id}@telegram.termjobs.in")
-                cand_doc = {
-                    "id": cand_id,
-                    "candidate_name": cand_name,
-                    "candidate_email": cand_email,
-                    "candidate_title": "Software Professional",
-                    "telegram_chat_id": str(chat_id),
-                    "telegram_username": username,
-                    "telegram_connected_at": now_iso,
-                    "availability": "available",
-                    "source": "Telegram Bot Self-Link",
-                    "created_at": now_iso,
-                }
-                db["candidates"].update_one(
-                    {"candidate_email": cand_email},
-                    {"$set": cand_doc},
-                    upsert=True
+            
+            # Also check candidate_submissions
+            sub_lookup = []
+            if target_email:
+                sub_lookup.append({"candidate_email": target_email})
+            if target_id:
+                sub_lookup.append({"candidate_id": target_id})
+                sub_lookup.append({"id": target_id})
+                sub_lookup.append({"submission_id": target_id})
+            sub = db["candidate_submissions"].find_one({"$or": sub_lookup}) if sub_lookup else None
+            if sub:
+                cand_name = cand_name or sub.get("candidate_name") or first_name
+                db["candidate_submissions"].update_one(
+                    {"_id": sub["_id"]},
+                    {"$set": {"telegram_chat_id": str(chat_id), "telegram_username": username}}
                 )
+
+            # Create or ensure candidate record in candidates collection
+            cand_id = (cand.get("id") if cand else None) or (sub.get("candidate_id") or sub.get("id") if sub else None) or str(uuid.uuid4())
+            cand_email = target_email or (cand.get("candidate_email") if cand else "") or (sub.get("candidate_email") if sub else f"user_{chat_id}@telegram.termjobs.in")
+            cand_doc = {
+                "id": cand_id,
+                "candidate_name": cand_name,
+                "candidate_email": cand_email,
+                "candidate_title": (cand.get("candidate_title") if cand else "") or "Software Professional",
+                "telegram_chat_id": str(chat_id),
+                "telegram_username": username,
+                "telegram_connected_at": now_iso,
+                "availability": "available",
+                "source": "Telegram Bot Self-Link",
+                "created_at": now_iso,
+            }
+            db["candidates"].update_one(
+                {"candidate_email": cand_email},
+                {"$set": cand_doc},
+                upsert=True
+            )
 
             # Store in telegram_links
             db["telegram_links"].update_one(
@@ -330,8 +339,8 @@ async def process_telegram_update(update: dict) -> None:
                 {
                     "$set": {
                         "chat_id": str(chat_id),
-                        "candidate_email": target_email or (cand.get("candidate_email") if cand else ""),
-                        "candidate_id": cand.get("id") if cand else (sub.get("candidate_id") if 'sub' in locals() and sub else target_id),
+                        "candidate_email": cand_email,
+                        "candidate_id": cand_id,
                         "username": username,
                         "connected_at": now_iso
                     }
@@ -339,13 +348,18 @@ async def process_telegram_update(update: dict) -> None:
                 upsert=True
             )
 
+            role_mention = ""
+            if sub and sub.get("requisition_title"):
+                role_mention = f" for *{sub.get('requisition_title')}*"
+
             welcome_msg = (
                 f"🎉 *Congratulations, {cand_name}!*\n\n"
-                f"Your Telegram account is now linked to *{target_email or 'TermJobs Career Alerts'}*.\n\n"
+                f"Your Telegram account is now successfully linked to your TermJobs profile{role_mention}.\n\n"
                 f"⚡ *What happens next?*\n"
-                f"Whenever a hiring manager schedules an interview or an AI match occurs, "
-                f"you will receive instant notifications with 1-tap *Interested* / *Placed* and video room buttons.\n\n"
-                f"Sending you a test job match alert below to verify! 👇"
+                f"• Direct alerts whenever hiring partners evaluate your application\n"
+                f"• 1-Tap RSVP buttons (*Available & Interested* / *Placed*)\n"
+                f"• Direct access links and passcodes to video interview rooms\n\n"
+                f"Sending you a test job match alert below to confirm live connectivity! 👇"
             )
 
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -358,16 +372,20 @@ async def process_telegram_update(update: dict) -> None:
                     }
                 )
 
-            # Immediately trigger a live sample alert so the user sees it work!
-            req = db["requisitions"].find_one({"status": {"$in": ["Published", "Active", "Open"]}}) or db["requisitions"].find_one({})
+            # Immediately trigger a live sample alert (preferring the one they applied to)
+            req = None
+            if sub and sub.get("requisition_id"):
+                req = db["requisitions"].find_one({"id": sub["requisition_id"]})
+            if not req:
+                req = db["requisitions"].find_one({"status": {"$in": ["Published", "Active", "Open"]}}) or db["requisitions"].find_one({})
             if req:
                 await send_candidate_requisition_alert(
                     chat_id=chat_id,
                     requisition=req,
-                    candidate={"candidate_name": cand_name, "candidate_email": target_email or "candidate@termjobs.in", "id": cand.get("id") if cand else (cand_id if 'cand_id' in locals() else str(uuid.uuid4()))},
+                    candidate={"candidate_name": cand_name, "candidate_email": cand_email, "id": cand_id},
                     outreach_token=secrets.token_urlsafe(24),
-                    match_score=92.0,
-                    match_reasons=["Direct profile link verified", "Availability confirmed"]
+                    match_score=94.0,
+                    match_reasons=["Direct application profile verified", "Availability confirmed via Telegram"]
                 )
             return
 
@@ -526,6 +544,20 @@ async def telegram_polling_loop():
     offset = 0
     print("[TELEGRAM WORKER] Starting Telegram long-polling worker...")
 
+    # Ensure webhook is cleared so long-polling can start cleanly without 409 webhook conflict
+    token = get_telegram_token()
+    if token:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as init_client:
+                del_resp = await init_client.post(
+                    f"{TELEGRAM_API_BASE}/bot{token}/deleteWebhook",
+                    json={"drop_pending_updates": True}
+                )
+                if del_resp.status_code == 200 and del_resp.json().get("ok"):
+                    print("[TELEGRAM WORKER] Verified webhook is cleared for long-polling.")
+        except Exception as e:
+            print(f"[TELEGRAM WORKER] Note on webhook reset: {e}")
+
     while _is_polling:
         token = get_telegram_token()
         if not token:
@@ -549,7 +581,24 @@ async def telegram_polling_loop():
                             print(f"[TELEGRAM UPDATE PROCESS ERROR] {update_err}")
                 elif res.status_code == 409:
                     # Conflict: another polling instance or webhook is active
-                    print("[TELEGRAM WORKER 409] Conflict detected. Waiting 10s...")
+                    err_msg = ""
+                    try:
+                        err_payload = res.json()
+                        err_msg = err_payload.get("description", res.text)
+                    except Exception:
+                        err_msg = res.text
+
+                    if "webhook" in err_msg.lower():
+                        print(f"[TELEGRAM WORKER 409] Active webhook conflict ({err_msg}). Clearing webhook...")
+                        try:
+                            await client.post(
+                                f"{TELEGRAM_API_BASE}/bot{token}/deleteWebhook",
+                                json={"drop_pending_updates": False}
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        print(f"[TELEGRAM WORKER 409] Conflict: {err_msg}. Another uvicorn or bot instance is currently running with the same token.")
                     await asyncio.sleep(10)
                 else:
                     await asyncio.sleep(3)

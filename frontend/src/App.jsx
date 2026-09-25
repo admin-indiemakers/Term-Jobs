@@ -56,6 +56,7 @@ import LandingPage from './pages/LandingPage';
 import OpenRolesPage from './pages/OpenRolesPage';
 import AdminAccounts from './pages/AdminAccounts';
 import SuperAdminCandidatePool from './pages/SuperAdminCandidatePool';
+import SuperAdminCandidateManagement from './pages/SuperAdminCandidateManagement';
 import SuperAdminOutreachControl from './pages/SuperAdminOutreachControl';
 import { CandidateInterviewLogin } from './interview/pages/CandidateInterviewLogin';
 import { CandidateInterviewPortal } from './interview/pages/CandidateInterviewPortal';
@@ -204,6 +205,7 @@ export default function App() {
           <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
           <Route path="/admin/login" element={<SuperAdminLogin />} />
           <Route path="/director/login" element={<DirectorLogin />} />
+          <Route path="/" element={<LandingPage />} />
           <Route
             path="/dashboard"
             element={
@@ -251,7 +253,7 @@ export default function App() {
             <Route path="recruiter/agreements" element={<VendorAgreements />} />
             <Route path="recruiter/accepted" element={<RecruiterDashboard view="accepted" />} />
             <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
-            <Route path="recruiter/billing" element={<VendorBilling />} />
+            <Route path="recruiter/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="admin/directors" element={<ManageDirectors />} />
             <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
@@ -276,6 +278,10 @@ export default function App() {
             <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
             <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
             <Route path="superadmin/admins" element={<AdminAccounts />} />
+            <Route path="superadmin/candidate-management" element={<SuperAdminCandidateManagement />} />
+            <Route path="candidate-management" element={<SuperAdminCandidateManagement />} />
+            <Route path="superadmin/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
+            <Route path="superadmin/candidate-billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
             <Route path="superadmin/candidates" element={<SuperAdminCandidatePool />} />
             <Route path="superadmin/candidate-pool" element={<SuperAdminCandidatePool />} />
             <Route path="superadmin/candidatepool" element={<SuperAdminCandidatePool />} />

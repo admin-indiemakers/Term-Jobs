@@ -1,12 +1,13 @@
+"""FastAPI router exposing candidate submissions for the Hiring Manager UI."""
 import asyncio
 import base64
-"""FastAPI router exposing candidate submissions for the Hiring Manager UI."""
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from fastapi.responses import FileResponse, Response
+import logging
 import os
-import shutil
 import uuid
 from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse, Response
 
 from modules.candidate.domain.models import CandidateSubmission, Candidate, ScreeningCache
 from modules.identity.domain.models import User, Tenant
@@ -15,6 +16,7 @@ from modules.notifications.services.notification_service import notify_candidate
 from modules.requisition.domain.models import CompanyProfile, Requisition
 from modules.shared.db import get_session
 
+logger = logging.getLogger("candidate_router")
 
 router = APIRouter(prefix="/candidates", tags=["Candidates"])
 
@@ -230,7 +232,69 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
             "hiring_manager_notes": doc.get("hiring_manager_notes"),
             "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         })
-    return results
+    # Deduplicate results by submission id and by (candidate identity, requisition_id)
+    # Since all_docs was sorted by match_score DESC and created_at DESC, the first seen is the highest quality record
+    deduped_results = []
+    seen_ids = set()
+    seen_keys = set()
+
+    for item in results:
+        sub_id = item.get("id") or item.get("submission_id")
+        if sub_id and sub_id in seen_ids:
+            continue
+
+        c_email = (item.get("candidate_email") or "").strip().lower()
+        c_name = (item.get("candidate_name") or "").strip().lower()
+        r_id = str(item.get("requisition_id") or "")
+
+        cand_key = c_email if c_email else c_name
+        composite_key = f"{cand_key}::{r_id}" if cand_key else None
+
+        if composite_key and composite_key in seen_keys:
+            continue
+
+        if sub_id:
+            seen_ids.add(sub_id)
+        if composite_key:
+            seen_keys.add(composite_key)
+
+        deduped_results.append(item)
+
+    return deduped_results
+
+
+@router.delete("/submissions/{candidate_id}")
+@router.delete("/{candidate_id}")
+def delete_candidate_submission(
+    candidate_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Delete a candidate submission from candidate_submissions and candidates collections."""
+    from modules.shared.db import db
+    from bson import ObjectId
+
+    q = {"$or": [
+        {"id": candidate_id},
+        {"submission_id": candidate_id},
+        {"candidate_id": candidate_id},
+    ]}
+    try:
+        q["$or"].append({"_id": ObjectId(candidate_id)})
+    except Exception:
+        pass
+
+    res_sub = db["candidate_submissions"].delete_many(q)
+    res_cand = db["candidates"].delete_many(q)
+    deleted_total = (res_sub.deleted_count or 0) + (res_cand.deleted_count or 0)
+
+    if deleted_total == 0:
+        raise HTTPException(status_code=404, detail="Candidate submission not found")
+
+    return {
+        "status": "success",
+        "message": f"Candidate submission {candidate_id} deleted successfully.",
+        "deleted_count": deleted_total,
+    }
 
 
 @router.get("")
@@ -557,8 +621,25 @@ def update_submission_status(
                 vendor_name=getattr(current_user, "tenant_name", None) or getattr(current_user, "name", None) or sub.vendor_name or "Vendor A",
                 match_score=sub.match_score,
             )
-    except Exception:  # noqa: BLE001
-        pass
+
+        # Notify Super Admin whenever a candidate is selected/accepted by Hiring Manager
+        if new_status in ("Accepted", "Selected", "Hired", "Selected by HR (Onboarding)"):
+            from modules.notifications.services.notification_service import notify_candidate_selected_by_hm
+            comp_name = getattr(current_user, "tenant_name", None) or ""
+            notify_candidate_selected_by_hm(
+                requisition_id=sub.requisition_id,
+                candidate_name=sub.candidate_name,
+                company_name=comp_name,
+                hiring_manager_name=current_user.name,
+                hiring_manager_email=current_user.email,
+                candidate_email=sub.candidate_email,
+                candidate_id=getattr(sub, "candidate_id", None) or getattr(sub, "workorder_id", None) or sub.id,
+                submission_id=sub.id,
+                match_score=sub.match_score,
+                notes=body.get("notes") or body.get("remark") or "",
+            )
+    except Exception as notify_exc:  # noqa: BLE001
+        print(f"Notification error on status change: {notify_exc}")
 
     return {
         "status": "success",
