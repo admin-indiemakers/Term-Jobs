@@ -61,13 +61,13 @@ export default function SuperAdminCandidateManagement() {
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
   const [simulating, setSimulating] = useState(false);
   const [simulateForm, setSimulateForm] = useState({
-    candidate_name: 'Sneha Patel',
-    candidate_email: 'sneha.patel@testcandidate.com',
-    company_name: 'Acme Corp',
-    requisition_title: 'Senior Frontend Engineer',
-    hiring_manager_name: 'Anita Desai (Hiring Manager)',
-    match_score: 95,
-    notes: 'Exceeded expectations in system design and React problem solving.',
+    candidate_name: '',
+    candidate_email: '',
+    company_name: '',
+    requisition_title: '',
+    hiring_manager_name: '',
+    match_score: '',
+    notes: '',
   });
 
   const loadData = useCallback(async (quiet = false) => {

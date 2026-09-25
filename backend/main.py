@@ -1417,8 +1417,12 @@ async def apply_to_requisition(
     except Exception as err:
         print(f"[DB CANDIDATE UPSERT ERROR] {err}")
 
+    from modules.candidate.telegram_service import get_telegram_bot_username
+    tg_bot_username = get_telegram_bot_username()
+
     return {
         "status": "success",
+        "candidate_id": sub_id,
         "application_ref": sub_id,
         "candidate_name": name.strip(),
         "candidate_email": email.strip().lower(),
@@ -1428,6 +1432,8 @@ async def apply_to_requisition(
         "match_score": score,
         "recommendation": recommendation,
         "message": f"Thank you, {name}! Your application for '{req.title}' at {comp_name} has been successfully received.",
+        "telegram_bot_username": tg_bot_username,
+        "telegram_bot_url": f"https://t.me/{tg_bot_username}?start={sub_id}",
     }
 
 
@@ -1554,10 +1560,15 @@ async def register_public_candidate(
     except Exception as err:
         print(f"[DB SUBMISSION REGISTER ERROR] {err}")
 
+    from modules.candidate.telegram_service import get_telegram_bot_username
+    tg_bot_username = get_telegram_bot_username()
+
     return {
         "status": "success",
         "candidate_id": cand_id,
         "message": f"Welcome, {name}! Your profile and resume have been successfully added to the TermJobs Talent Pool.",
+        "telegram_bot_username": tg_bot_username,
+        "telegram_bot_url": f"https://t.me/{tg_bot_username}?start={cand_id}",
     }
 
 
@@ -2067,14 +2078,17 @@ def simulate_candidate_selection(
 
     from modules.notifications.services.notification_service import notify_candidate_selected_by_hm
 
-    cand_name = (body.get("candidate_name") or "Arjun Sharma").strip()
-    company_name = (body.get("company_name") or "Acme Corp").strip()
-    req_title = (body.get("requisition_title") or "Senior Full Stack Engineer").strip()
+    cand_name = (body.get("candidate_name") or "").strip()
+    company_name = (body.get("company_name") or "").strip()
+    req_title = (body.get("requisition_title") or "").strip()
     req_id = body.get("requisition_id") or "sim-req-" + str(uuid.uuid4())[:8]
-    hm_name = (body.get("hiring_manager_name") or current_user.name or "Ravi Kumar (Hiring Manager)").strip()
-    cand_email = body.get("candidate_email") or f"{cand_name.lower().replace(' ', '.')}@example.com"
-    score = float(body.get("match_score") or 94.0)
-    notes = body.get("notes") or "Selected after stellar performance in technical screening."
+    hm_name = (body.get("hiring_manager_name") or current_user.name or "").strip()
+    cand_email = (body.get("candidate_email") or "").strip()
+    score = float(body.get("match_score") or 0)
+    notes = (body.get("notes") or "").strip()
+
+    if not cand_name or not company_name or not req_title or not cand_email:
+        raise HTTPException(status_code=400, detail="candidate_name, company_name, requisition_title, and candidate_email are all required.")
 
     res = notify_candidate_selected_by_hm(
         requisition_id=req_id,

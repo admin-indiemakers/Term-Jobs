@@ -37,6 +37,7 @@ import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
+const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'Termjobs_alertbot';
 
 function GoogleIcon({ className = "w-4 h-4" }) {
   return (
@@ -663,6 +664,17 @@ export default function OpenRolesPage() {
                   Applications ({applications.length})
                 </button>
 
+                <a
+                  href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-[#229ED9] hover:text-[#1E88E5] transition rounded-lg hover:bg-sky-500/10 text-decoration-none"
+                  title="Link your Telegram to get 1-tap alerts"
+                >
+                  <Send size={11} />
+                  <span>Start Bot</span>
+                </a>
+
                 <button
                   type="button"
                   onClick={logout}
@@ -674,6 +686,17 @@ export default function OpenRolesPage() {
               </div>
             ) : (
               <div className="flex items-center gap-2 sm:gap-2.5">
+                <a
+                  href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#229ED9]/15 hover:bg-[#229ED9]/25 border border-[#229ED9]/30 text-[0.68rem] font-bold tracking-[0.14em] uppercase text-[#229ED9] transition cursor-pointer text-decoration-none"
+                  title="Start Telegram Bot for Instant Job Matches"
+                >
+                  <Send size={12} className="text-[#229ED9]" />
+                  <span>Start Bot</span>
+                </a>
+
                 <button
                   type="button"
                   onClick={() => handleGoogleSignIn()}
@@ -761,11 +784,21 @@ export default function OpenRolesPage() {
                   </span>
                 </div>
                 <p className="text-[11px] text-paper/60 mt-0.5 max-w-xl">
-                  Sign in with Google to 1-click apply across all enterprise requisitions, attach your master resume once, and track your interview invitations live.
+                  Sign in with Google or start our Telegram Bot to 1-click apply across all enterprise requisitions and track your interview invitations live.
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2.5 shrink-0 w-full sm:w-auto">
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full sm:w-auto">
+              <a
+                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white text-xs font-bold transition shadow-sm active:scale-95 cursor-pointer text-decoration-none"
+                title="Connect Telegram Bot for 1-Tap Job Matches & RSVPs"
+              >
+                <Send size={13} />
+                <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+              </a>
               <button
                 type="button"
                 onClick={() => handleGoogleSignIn()}
@@ -999,14 +1032,26 @@ export default function OpenRolesPage() {
 
                   {/* Card Bottom CTA Bar */}
                   <div className="mt-7 pt-5 border-t border-paper/10 flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleOpenJob(job)}
-                      className="text-xs font-bold text-paper/60 hover:text-paper transition inline-flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>View Full JD</span>
-                      <ChevronRight size={14} />
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenJob(job)}
+                        className="text-xs font-bold text-paper/60 hover:text-paper transition inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>View Full JD</span>
+                        <ChevronRight size={14} />
+                      </button>
+                      <a
+                        href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${job.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-[#229ED9] hover:underline"
+                        title="Start bot & receive 1-tap alerts for this role"
+                      >
+                        <Send size={11} />
+                        <span>Bot Alert</span>
+                      </a>
+                    </div>
 
                     <button
                       type="button"
@@ -1039,13 +1084,25 @@ export default function OpenRolesPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowGeneralPoolModal(true)}
-            className="shrink-0 px-6 py-3.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-[0.14em] uppercase transition-all hover:-translate-y-0.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
-          >
-            Join General Talent Pool →
-          </button>
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            <a
+              href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-5 py-3.5 rounded-full bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs tracking-[0.14em] uppercase transition-all hover:-translate-y-0.5 shadow-lg shadow-sky-950/50 cursor-pointer text-decoration-none inline-flex items-center gap-2"
+              title="Start Telegram Bot for Live Opportunities"
+            >
+              <Send size={14} />
+              <span>Start Bot</span>
+            </a>
+            <button
+              type="button"
+              onClick={() => setShowGeneralPoolModal(true)}
+              className="px-6 py-3.5 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs tracking-[0.14em] uppercase transition-all hover:-translate-y-0.5 shadow-lg shadow-emerald-950/50 cursor-pointer"
+            >
+              Join General Talent Pool →
+            </button>
+          </div>
         </div>
       </main>
 
@@ -1106,22 +1163,53 @@ export default function OpenRolesPage() {
             {/* Modal Scrollable Body */}
             <div className="p-6 overflow-y-auto space-y-6 flex-1 text-xs sm:text-sm text-zinc-300 leading-relaxed font-sans">
               {submitSuccess ? (
-                <div className="py-10 text-center space-y-3">
+                <div className="py-8 text-center space-y-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40">
                     <CheckCircle2 size={32} />
                   </div>
-                  <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
-                  <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                    Your profile and resume have been submitted directly to the hiring partner. You will receive an interview
-                    invite via email as soon as matching is verified.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedJob(null)}
-                    className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-zinc-950 font-bold text-xs transition hover:bg-emerald-400 cursor-pointer"
-                  >
-                    Done
-                  </button>
+                  <div className="space-y-1">
+                    <h3 className="text-lg font-bold text-white">Application Submitted Successfully!</h3>
+                    <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                      Your profile and resume have been submitted directly to the hiring partner for <strong>{selectedJob?.title || 'this role'}</strong>.
+                    </p>
+                  </div>
+
+                  {/* Connect Telegram / Start Bot Callout */}
+                  <div className="p-4 sm:p-5 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-lg mx-auto shadow-lg shadow-sky-950/40">
+                    <div className="flex items-center gap-2 text-sky-300 font-bold text-xs sm:text-sm mb-1.5">
+                      <Send size={16} className="text-[#229ED9]" />
+                      <span>Start Bot to Receive 1-Tap Interview & Match Updates</span>
+                    </div>
+                    <p className="text-xs text-zinc-300 leading-relaxed mb-3">
+                      Never miss an update from hiring managers. Start our official Telegram Bot now to receive instant interview schedules, video room links, and status updates directly on your phone with 1-tap RSVP buttons.
+                    </p>
+                    <div className="p-2.5 bg-black/40 rounded-xl border border-sky-500/20 text-[11px] font-mono text-sky-200 mb-3 flex items-center justify-between">
+                      <span>Application Ref: <strong>{submitSuccess.application_ref || submitSuccess.candidate_id}</strong></span>
+                      <span className="text-emerald-400 font-sans font-semibold">Match: {submitSuccess.match_score || 85}%</span>
+                    </div>
+                    <a
+                      href={submitSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${submitSuccess.candidate_id || submitSuccess.application_ref || ''}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs shadow-md transition text-decoration-none cursor-pointer active:scale-[0.99]"
+                    >
+                      <Send size={15} />
+                      <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+                    </a>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedJob(null);
+                        setSubmitSuccess(null);
+                      }}
+                      className="px-6 py-2.5 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs transition cursor-pointer"
+                    >
+                      Done / Browse More Roles
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
@@ -1255,6 +1343,35 @@ export default function OpenRolesPage() {
                             >
                               Candidate Sign In
                             </button>
+                          </div>
+
+                          {/* Alternative: Start Telegram Bot */}
+                          <div className="pt-2 text-left">
+                            <div className="p-3.5 rounded-xl bg-sky-950/40 border border-sky-500/25 flex flex-col sm:flex-row items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-[#229ED9]/20 text-[#229ED9] flex items-center justify-center shrink-0">
+                                  <Send size={15} />
+                                </div>
+                                <div>
+                                  <div className="text-[11px] font-bold text-white flex items-center gap-1.5">
+                                    <span>Prefer Mobile? Start Bot</span>
+                                    <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#229ED9]/20 text-[#229ED9] font-mono">@{TELEGRAM_BOT_USERNAME}</span>
+                                  </div>
+                                  <p className="text-[10.5px] text-zinc-400 mt-0.5">
+                                    Get 1-tap alerts & video interview invites in Telegram.
+                                  </p>
+                                </div>
+                              </div>
+                              <a
+                                href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${selectedJob?.id || 'open_roles'}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="w-full sm:w-auto shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#229ED9] hover:bg-[#1E88E5] text-white text-[11px] font-bold transition text-decoration-none cursor-pointer"
+                              >
+                                <Send size={12} />
+                                <span>Start Bot</span>
+                              </a>
+                            </div>
                           </div>
                         </div>
 
@@ -1468,6 +1585,22 @@ export default function OpenRolesPage() {
                         />
                       </div>
 
+                      {/* Telegram Bot Live Updates Callout */}
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-sky-950/30 border border-sky-500/20 text-[11px] text-zinc-300">
+                        <div className="flex items-center gap-2">
+                          <Send size={13} className="text-[#229ED9] shrink-0" />
+                          <span>Get 1-tap interview invites & match alerts via Telegram</span>
+                        </div>
+                        <a
+                          href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${selectedJob?.id || 'apply'}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#229ED9] hover:text-[#1E88E5] font-bold text-xs shrink-0 text-decoration-none hover:underline"
+                        >
+                          Start Bot →
+                        </a>
+                      </div>
+
                       {/* Submit Button */}
                       <button
                         type="submit"
@@ -1660,17 +1793,40 @@ export default function OpenRolesPage() {
             </div>
 
             {poolSuccess ? (
-              <div className="py-8 text-center space-y-2">
+              <div className="py-8 text-center space-y-4">
                 <CheckCircle2 size={32} className="text-emerald-400 mx-auto" />
-                <h4 className="text-sm font-bold text-white">Profile Submitted to Talent Pool</h4>
+                <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
                 <p className="text-xs text-zinc-400">We will notify you when a matching role is published.</p>
-                <button
-                  type="button"
-                  onClick={() => setShowGeneralPoolModal(false)}
-                  className="mt-4 px-5 py-2 rounded-full bg-emerald-500 text-zinc-950 font-bold text-xs"
-                >
-                  Close
-                </button>
+
+                {/* Start Telegram Bot Callout */}
+                <div className="p-4 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-sm mx-auto shadow">
+                  <div className="flex items-center gap-2 text-sky-300 font-bold text-xs mb-1">
+                    <Send size={14} className="text-[#229ED9]" />
+                    <span>Start Bot for 1-Tap Matching Alerts</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 leading-relaxed mb-3">
+                    Connect <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive notifications directly in Telegram with 1-tap RSVP buttons.
+                  </p>
+                  <a
+                    href={poolSuccess.telegram_bot_url || `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${poolSuccess.candidate_id || ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-3.5 rounded-xl bg-[#229ED9] hover:bg-[#1E88E5] text-white font-bold text-xs transition text-decoration-none cursor-pointer"
+                  >
+                    <Send size={13} />
+                    <span>Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+                  </a>
+                </div>
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowGeneralPoolModal(false)}
+                    className="mt-2 px-6 py-2 rounded-full bg-zinc-800 hover:bg-zinc-700 text-zinc-200 font-semibold text-xs transition cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             ) : (
               <form onSubmit={handlePoolSubmit} className="mt-4 space-y-3 text-xs">
@@ -1999,8 +2155,21 @@ export default function OpenRolesPage() {
               </form>
             )}
 
+            {/* Telegram Bot Direct Option */}
+            <div className="mt-4 pt-3 border-t border-paper/10 text-center">
+              <a
+                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-[#229ED9] hover:underline font-semibold text-decoration-none"
+              >
+                <Send size={12} />
+                <span>Prefer instant mobile alerts? Start Bot (@{TELEGRAM_BOT_USERNAME})</span>
+              </a>
+            </div>
+
             {/* Footer Security Note */}
-            <div className="mt-5 pt-3 border-t border-paper/10 flex items-center justify-center gap-1.5 text-[11px] text-paper/40">
+            <div className="mt-3 pt-2 border-t border-paper/10 flex items-center justify-center gap-1.5 text-[11px] text-paper/40">
               <ShieldCheck size={13} className="text-emerald-400" />
               <span>Verified candidate session · Encrypted data</span>
             </div>
