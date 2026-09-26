@@ -1869,6 +1869,97 @@ def process_candidate_hiring_decision(
                 upsert=True
             )
 
+            # 3b. Automatically create and dispatch formal Employment Offer Letter & Agreement to candidate agreements
+            try:
+                from datetime import timedelta
+                existing_offer = db["offer_letters"].find_one({
+                    "$or": [
+                        {"candidate_id": final_cand_id},
+                        {"candidate_id": cid_clean},
+                        {"candidate_email": candidate_email.lower()}
+                    ]
+                })
+                annual_ctc = 1800000
+                monthly_ctc = annual_ctc // 12
+                basic_annual = int(annual_ctc * 0.50)
+                hra_annual = int(annual_ctc * 0.25)
+                other_annual = int(annual_ctc * 0.15)
+                pf_annual = int(annual_ctc * 0.10)
+                joining_str = (now + timedelta(days=14)).strftime("%d %B %Y")
+                today_str = now.strftime("%d %B %Y")
+
+                if not existing_offer:
+                    new_offer = {
+                        "candidate_id": final_cand_id,
+                        "submission_id": final_cand_id,
+                        "company_name": company_name or "TCS",
+                        "company_address": "Corporate Technology Park, Outer Ring Road, Bengaluru, Karnataka 560103",
+                        "candidate_name": candidate_name,
+                        "candidate_email": candidate_email,
+                        "job_title": req_title,
+                        "offer_date": today_str,
+                        "joining_date": joining_str,
+                        "contract_period": "Full Time / Unlimited",
+                        "mobility_clause": "You should be aware that you might be subject to transfer to another city or location where the Company operates a business or will operate a business in the future, to carry on similar responsibilities whenever the requirement arises.",
+                        "leave_policy": {
+                            "earned_leave": 18,
+                            "casual_leave": 12,
+                            "sick_leave": 12,
+                            "restricted_holidays": 3,
+                        },
+                        "termination_company_notice_days": 30,
+                        "termination_employee_notice_days": 30,
+                        "probation_period_months": 3,
+                        "non_compete_period": "12 months",
+                        "annexure": {
+                            "grade": "Band L4 / Senior Specialist",
+                            "department": "Platform & Software Engineering",
+                            "reporting_to": "Engineering Director / Hiring Lead",
+                            "work_location": "Bengaluru / Hybrid",
+                            "contract_type": "Full Time",
+                            "currency": "INR (₹)",
+                            "basic_salary_annual": basic_annual,
+                            "basic_salary_monthly": basic_annual // 12,
+                            "hra_annual": hra_annual,
+                            "hra_monthly": hra_annual // 12,
+                            "other_allowance_annual": other_annual,
+                            "other_allowance_monthly": other_annual // 12,
+                            "pf_annual": pf_annual,
+                            "pf_monthly": pf_annual // 12,
+                            "total_fixed_annual": annual_ctc,
+                            "total_fixed_monthly": monthly_ctc,
+                            "meal_voucher_monthly": 3000,
+                            "annual_bonus_percentage": 10,
+                            "medical_insurance_coverage": "₹5,00,000 for employee, spouse, children & parents",
+                            "life_insurance_coverage": "Group Life Insurance policy up to 3x Annual CTC",
+                            "gratuity_terms": "As per Payment of Gratuity Act, 1972",
+                        },
+                        "hr_signatory_name": actor_name or "Rakesh Sharma",
+                        "hr_signatory_title": "VP – Human Resources",
+                        "status": "Offer Extended",
+                        "agreement_status": "Pending Signature",
+                        "sent_at": now_iso,
+                        "sent_by": actor_name,
+                        "created_at": now_iso,
+                        "updated_at": now_iso,
+                    }
+                    db["offer_letters"].insert_one(new_offer)
+                else:
+                    db["offer_letters"].update_one(
+                        {"_id": existing_offer["_id"]},
+                        {"$set": {
+                            "status": "Offer Extended",
+                            "agreement_status": "Pending Signature",
+                            "sent_at": now_iso,
+                            "sent_by": actor_name,
+                            "candidate_name": candidate_name or existing_offer.get("candidate_name"),
+                            "candidate_email": candidate_email or existing_offer.get("candidate_email"),
+                            "updated_at": now_iso,
+                        }}
+                    )
+            except Exception as offer_err:
+                logger.warning(f"Error auto-dispatching offer letter on acceptance: {offer_err}")
+
             # 4. Onboard candidate: Initialize Checklist in onboarding_checklists
             try:
                 from modules.onboarding.router import _get_or_create_onboarding_doc

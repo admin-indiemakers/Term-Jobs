@@ -2953,6 +2953,264 @@ def generate_requisition_shortlist_endpoint(
     return res
 
 
+# --- Candidate Employment Offer Letter Endpoints ---
+
+@app.get("/api/candidates/{candidate_id}/offer-letter")
+@app.get("/candidates/{candidate_id}/offer-letter")
+def get_candidate_offer_letter_endpoint(
+    candidate_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Retrieve existing or generated formal employment offer letter for candidate."""
+    from datetime import datetime, timezone, timedelta
+    from modules.shared.db import db, get_session
+    from modules.candidate.domain.models import CandidateSubmission
+    now = datetime.now(timezone.utc)
+    
+    raw_id = candidate_id.replace("CND-", "").strip()
+
+    # 1. Lookup candidate details from DB first so we have the real name & email
+    cand_name = "Candidate Name"
+    cand_email = ""
+    req_title = "DevSecOps Engineer"
+    req_id = ""
+    company_name = getattr(current_user, "tenant_name", None) or "TCS"
+    
+    # 1a. Query SQLite CandidateSubmission
+    try:
+        with get_session() as session:
+            sub = session.get(CandidateSubmission, candidate_id)
+            if not sub:
+                sub = session.query(CandidateSubmission).filter(
+                    (CandidateSubmission.id == candidate_id) |
+                    (CandidateSubmission.id == raw_id) |
+                    (CandidateSubmission.id.like(f"%{raw_id}%"))
+                ).first()
+            if sub:
+                if sub.candidate_name:
+                    cand_name = sub.candidate_name
+                if sub.candidate_email:
+                    cand_email = sub.candidate_email
+                if sub.requisition_id:
+                    req_id = sub.requisition_id
+    except Exception as e:
+        logger.warning(f"Error checking SQLite CandidateSubmission for offer letter: {e}")
+
+    # 1b. Query MongoDB candidate_submissions
+    try:
+        cand_doc = db["candidate_submissions"].find_one({
+            "$or": [
+                {"id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"id": raw_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if not cand_doc:
+            cand_doc = db["candidates"].find_one({
+                "$or": [
+                    {"id": candidate_id},
+                    {"candidate_id": candidate_id},
+                    {"id": raw_id},
+                ]
+            })
+        if cand_doc:
+            if cand_doc.get("candidate_name") and (cand_name == "Candidate Name" or not cand_name):
+                cand_name = cand_doc.get("candidate_name")
+            if not cand_email:
+                cand_email = cand_doc.get("candidate_email") or cand_doc.get("email") or ""
+            if not req_id:
+                req_id = cand_doc.get("requisition_id") or ""
+            if cand_doc.get("requisition_title"):
+                req_title = cand_doc.get("requisition_title")
+    except Exception as e:
+        logger.warning(f"Error checking Mongo for candidate offer letter: {e}")
+
+    # 1c. Lookup requisition title & company name
+    if req_id:
+        try:
+            from modules.requisition.domain.models import Requisition
+            with get_session() as session:
+                req_obj = session.get(Requisition, req_id)
+                if req_obj:
+                    req_title = req_obj.title or req_title
+                    comp_struct = req_obj.structured_role or {}
+                    if comp_struct.get("company_name"):
+                        company_name = comp_struct["company_name"]
+        except Exception as e:
+            logger.warning(f"Error checking Requisition for offer letter: {e}")
+
+    # 2. Check existing offer letter in MongoDB
+    try:
+        existing = db["offer_letters"].find_one({
+            "$or": [
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if existing:
+            existing["_id"] = str(existing.get("_id"))
+            # Upgrade placeholder candidate name or empty email if real data is available
+            if (not existing.get("candidate_name") or existing.get("candidate_name") == "Candidate Name") and cand_name != "Candidate Name":
+                existing["candidate_name"] = cand_name
+            if not existing.get("candidate_email") and cand_email:
+                existing["candidate_email"] = cand_email
+            return {"status": "success", "offer": existing}
+    except Exception as e:
+        logger.warning(f"Error checking existing offer letter: {e}")
+
+    default_joining = (now + timedelta(days=14)).strftime("%d %B %Y")
+    today_str = now.strftime("%d %B %Y")
+
+    # Standard Annexure A compensation breakdown: Total CTC 18,00,000 INR
+    annual_ctc = 1800000
+    monthly_ctc = annual_ctc // 12
+    basic_annual = int(annual_ctc * 0.50)
+    hra_annual = int(annual_ctc * 0.25)
+    other_annual = int(annual_ctc * 0.15)
+    pf_annual = int(annual_ctc * 0.10)
+
+    default_offer = {
+        "candidate_id": candidate_id,
+        "submission_id": candidate_id,
+        "company_name": company_name,
+        "company_address": "Corporate Technology Park, Outer Ring Road, Bengaluru, Karnataka 560103",
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "job_title": req_title,
+        "offer_date": today_str,
+        "joining_date": default_joining,
+        "mobility_clause": "You should be aware that you might be subject to transfer to another city or location where the Company operates a business or will operate a business in the future, to carry on similar responsibilities whenever the requirement arises.",
+        "contract_period": "Full Time / Unlimited",
+        "leave_policy": {
+            "earned_leave": 18,
+            "casual_leave": 12,
+            "sick_leave": 12,
+            "restricted_holidays": 3,
+        },
+        "termination_company_notice_days": 30,
+        "termination_employee_notice_days": 30,
+        "probation_period_months": 3,
+        "non_compete_period": "12 months",
+        "annexure": {
+            "grade": "Band L4 / Senior Specialist",
+            "department": "Platform & Software Engineering",
+            "reporting_to": "Engineering Director / Hiring Lead",
+            "work_location": "Bengaluru / Hybrid",
+            "contract_type": "Full Time",
+            "currency": "INR (₹)",
+            "basic_salary_annual": basic_annual,
+            "basic_salary_monthly": basic_annual // 12,
+            "hra_annual": hra_annual,
+            "hra_monthly": hra_annual // 12,
+            "other_allowance_annual": other_annual,
+            "other_allowance_monthly": other_annual // 12,
+            "pf_annual": pf_annual,
+            "pf_monthly": pf_annual // 12,
+            "total_fixed_annual": annual_ctc,
+            "total_fixed_monthly": monthly_ctc,
+            "meal_voucher_monthly": 3000,
+            "annual_bonus_percentage": 10,
+            "medical_insurance_coverage": "₹5,00,000 for employee, spouse, children & parents",
+            "life_insurance_coverage": "Group Life Insurance policy up to 3x Annual CTC",
+            "gratuity_terms": "As per Payment of Gratuity Act, 1972",
+        },
+        "hr_signatory_name": getattr(current_user, "name", None) or "Rakesh Sharma",
+        "hr_signatory_title": "VP – Human Resources",
+        "status": "Draft",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+
+    return {"status": "success", "offer": default_offer}
+
+
+@app.post("/api/candidates/{candidate_id}/offer-letter")
+@app.post("/candidates/{candidate_id}/offer-letter")
+def save_candidate_offer_letter_endpoint(
+    candidate_id: str,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Save or update custom editable employment offer letter for candidate."""
+    from datetime import datetime, timezone
+    from modules.shared.db import db
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
+    offer_data = payload.get("offer", payload)
+    offer_data["candidate_id"] = candidate_id
+    offer_data["updated_at"] = now_iso
+    offer_data["updated_by"] = getattr(current_user, "email", None) or getattr(current_user, "name", None) or "HR"
+
+    try:
+        db["offer_letters"].update_one(
+            {"$or": [{"candidate_id": candidate_id}, {"submission_id": candidate_id}]},
+            {"$set": offer_data},
+            upsert=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to persist offer letter: {e}")
+        return {"status": "error", "detail": str(e)}
+
+    return {"status": "success", "message": "Offer letter saved successfully.", "offer": offer_data}
+
+
+@app.post("/api/candidates/{candidate_id}/offer-letter/send")
+@app.post("/candidates/{candidate_id}/offer-letter/send")
+def send_candidate_offer_letter_endpoint(
+    candidate_id: str,
+    payload: dict | None = None,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Formally dispatch offer letter to candidate and update hiring pipeline."""
+    from datetime import datetime, timezone
+    from modules.shared.db import db
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    try:
+        # Mark offer as sent
+        db["offer_letters"].update_one(
+            {"$or": [{"candidate_id": candidate_id}, {"submission_id": candidate_id}]},
+            {"$set": {
+                "status": "Offer Extended",
+                "sent_at": now_iso,
+                "sent_by": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR"
+            }},
+            upsert=True
+        )
+
+        # Update candidate submission status
+        db["candidate_submissions"].update_one(
+            {"$or": [{"id": candidate_id}, {"candidate_id": candidate_id}]},
+            {"$set": {
+                "status": "Offer Extended",
+                "offer_extended_at": now_iso,
+                "updated_at": now_iso,
+            }}
+        )
+
+        # Notify
+        db["notifications"].insert_one({
+            "type": "OFFER_LETTER_SENT",
+            "candidate_id": candidate_id,
+            "actor": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR",
+            "title": "Formal Offer Letter Dispatched",
+            "message": f"Employment offer letter has been dispatched to candidate {candidate_id}.",
+            "created_at": now_iso,
+            "read": False
+        })
+    except Exception as e:
+        logger.error(f"Failed to send offer letter: {e}")
+        return {"status": "error", "detail": str(e)}
+
+    return {"status": "success", "message": "Offer letter formally sent to candidate!"}
+
+
+
 
 @app.post("/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:

@@ -821,19 +821,37 @@ export default function OnboardingManagement() {
                         >
                           {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleGenerateWorkOrder(cand)}
-                          style={{
-                            backgroundColor: isCompleted ? '#0A0A0A' : '#1A1A1A',
-                            color: '#FFFFFF',
-                            borderRadius: 10,
-                          }}
-                          className="px-3 py-1 text-[11.5px] font-bold hover:bg-[#262626] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
-                        >
-                          <span>Generate Work Order</span>
-                          <ArrowRight size={12} />
-                        </button>
+                        {hasWO || woActivated ? (
+                          <button
+                            type="button"
+                            onClick={() => handleViewGates(cand)}
+                            style={{
+                              backgroundColor: woActivated ? '#F0FDF4' : '#FFFFFF',
+                              color: woActivated ? '#15803D' : '#0A0A0A',
+                              border: `1px solid ${woActivated ? '#BBF7D0' : '#E2E2DC'}`,
+                              borderRadius: 10,
+                            }}
+                            className="px-3 py-1 text-[11.5px] font-bold hover:opacity-85 transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
+                            title="Work order active — click to view activation gates and details"
+                          >
+                            <FileText size={12} className={woActivated ? 'text-[#16A34A]' : 'text-[#8A8A85]'} />
+                            <span>View Work Order</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleGenerateWorkOrder(cand)}
+                            style={{
+                              backgroundColor: isCompleted ? '#0A0A0A' : '#1A1A1A',
+                              color: '#FFFFFF',
+                              borderRadius: 10,
+                            }}
+                            className="px-3 py-1 text-[11.5px] font-bold hover:bg-[#262626] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+                          >
+                            <span>Generate Work Order</span>
+                            <ArrowRight size={12} />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleOpenOffboarding(cand)}

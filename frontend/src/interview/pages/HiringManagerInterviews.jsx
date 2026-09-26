@@ -32,6 +32,14 @@ import { CandidateRecordingPlayer } from '../components/CandidateRecordingPlayer
 import { EVALUATION_VERDICTS } from '../utils/interviewConstants';
 import { getMeetingRoomLink } from '../utils/credentialGenerator';
 
+function formatShortlistCountdown(totalSecs) {
+  if (totalSecs == null || totalSecs <= 0) return '00h 00m 00s';
+  const hrs = Math.floor(totalSecs / 3600);
+  const mins = Math.floor((totalSecs % 3600) / 60);
+  const secs = totalSecs % 60;
+  return `${String(hrs).padStart(2, '0')}h ${String(mins).padStart(2, '0')}m ${String(secs).padStart(2, '0')}s`;
+}
+
 export function HiringManagerInterviews() {
   const { token, user } = useAuth();
   const navigate = useNavigate();
@@ -69,11 +77,41 @@ export function HiringManagerInterviews() {
   const [sendingShortlist, setSendingShortlist] = useState(false);
   const [shortlistSuccessMsg, setShortlistSuccessMsg] = useState('');
   const [generatingShortlist, setGeneratingShortlist] = useState(false);
+  const [selectedReqId, setSelectedReqId] = useState('');
+  const [secondsRemaining, setSecondsRemaining] = useState(null);
+  const [showInstantNotesModal, setShowInstantNotesModal] = useState(false);
+  const [instantNotes, setInstantNotes] = useState('');
+
+  // Extract all distinct requisitions from loaded candidates
+  const availableRequisitions = useMemo(() => {
+    const map = new Map();
+    for (const c of candidatesSummary) {
+      if (c.requisition_id && !map.has(c.requisition_id)) {
+        map.set(c.requisition_id, {
+          id: c.requisition_id,
+          title: c.requisition_title || 'Requisition',
+        });
+      }
+    }
+    return Array.from(map.values());
+  }, [candidatesSummary]);
+
+  // Active requisition ID & title for shortlist operations
+  const activeReqId =
+    selectedReqId ||
+    selectedCandidate?.requisition_id ||
+    (availableRequisitions.length > 0 ? availableRequisitions[0].id : null);
+
+  const activeReqTitle =
+    availableRequisitions.find((r) => r.id === activeReqId)?.title ||
+    selectedCandidate?.requisition_title ||
+    'Active Requisition';
 
   // Fetch 48h shortlist status for requisition
   const fetchShortlistStatus = useCallback(async (reqId) => {
     if (!reqId) {
       setShortlistStatus(null);
+      setSecondsRemaining(null);
       return;
     }
     setLoadingShortlist(true);
@@ -81,6 +119,9 @@ export function HiringManagerInterviews() {
       const res = await interviewApi.getShortlistStatus(reqId, token);
       if (res && !res.error) {
         setShortlistStatus(res);
+        if (res.seconds_remaining != null) {
+          setSecondsRemaining(res.seconds_remaining);
+        }
       }
     } catch {
       // ignore
@@ -90,47 +131,65 @@ export function HiringManagerInterviews() {
   }, [token]);
 
   useEffect(() => {
-    if (selectedCandidate?.requisition_id) {
-      fetchShortlistStatus(selectedCandidate.requisition_id);
+    if (activeReqId) {
+      fetchShortlistStatus(activeReqId);
     } else {
       setShortlistStatus(null);
+      setSecondsRemaining(null);
     }
     setShortlistSuccessMsg('');
-  }, [selectedCandidate?.requisition_id, fetchShortlistStatus]);
+  }, [activeReqId, fetchShortlistStatus]);
 
-  const handleInstantSendShortlist = async () => {
-    if (!selectedCandidate?.requisition_id) return;
+  // Live countdown ticker (ticks every second for real-time 48h tracking)
+  useEffect(() => {
+    if (secondsRemaining == null || secondsRemaining <= 0 || shortlistStatus?.shortlist_dispatched) return;
+    const timer = setInterval(() => {
+      setSecondsRemaining((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [secondsRemaining, shortlistStatus?.shortlist_dispatched]);
+
+  const handleInstantSendShortlist = async (customNotes = '') => {
+    const targetReqId = activeReqId || selectedCandidate?.requisition_id;
+    if (!targetReqId) return;
     setSendingShortlist(true);
     setShortlistSuccessMsg('');
     setErrorMsg('');
     try {
+      const notesToSend =
+        typeof customNotes === 'string' && customNotes.trim()
+          ? customNotes.trim()
+          : (instantNotes.trim() || 'Instant dispatch requested from Interviews & AI Scores dashboard');
       const res = await interviewApi.sendShortlistInstant(
-        selectedCandidate.requisition_id,
-        'Instant dispatch requested from Interviews & AI Scores dashboard',
+        targetReqId,
+        notesToSend,
         token
       );
       setShortlistSuccessMsg(
-        res?.message || 'Candidate shortlist successfully sent to company hiring stakeholders!'
+        res?.message || 'Candidate shortlist successfully sent to Hiring Manager shortlist!'
       );
-      await fetchShortlistStatus(selectedCandidate.requisition_id);
+      setShowInstantNotesModal(false);
+      setInstantNotes('');
+      await fetchShortlistStatus(targetReqId);
       loadData();
     } catch (err) {
-      setErrorMsg(err?.message || 'Failed to dispatch shortlist to company.');
+      setErrorMsg(err?.message || 'Failed to dispatch shortlist to Hiring Manager.');
     } finally {
       setSendingShortlist(false);
     }
   };
 
   const handleGenerateShortlist = async () => {
-    if (!selectedCandidate?.requisition_id) return;
+    const targetReqId = activeReqId || selectedCandidate?.requisition_id;
+    if (!targetReqId) return;
     setGeneratingShortlist(true);
     setErrorMsg('');
     try {
-      await interviewApi.generateShortlist(selectedCandidate.requisition_id, token);
-      await fetchShortlistStatus(selectedCandidate.requisition_id);
+      await interviewApi.generateShortlist(targetReqId, token);
+      await fetchShortlistStatus(targetReqId);
       loadData();
     } catch (err) {
-      setErrorMsg(err?.message || 'Failed to re-generate candidate shortlist.');
+      setErrorMsg(err?.message || 'Failed to re-generate candidate shortlist rankings.');
     } finally {
       setGeneratingShortlist(false);
     }
@@ -453,6 +512,156 @@ export function HiringManagerInterviews() {
           </div>
         </div>
       </div>
+
+      {/* 48-Hour Shortlist Automation & Instant Dispatch Hub */}
+      {activeReqId && (
+        <div className="rounded-3xl bg-gradient-to-br from-zinc-950 via-slate-900 to-zinc-950 border border-zinc-800 text-white p-6 sm:p-7 shadow-2xl space-y-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 pb-5 border-b border-zinc-800/80">
+            {/* Title & Active Requisition Selector */}
+            <div className="space-y-2 flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                {shortlistStatus?.shortlist_dispatched ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-black uppercase tracking-wider shadow-xs">
+                    <CheckCircle2 size={13} className="text-emerald-400" />
+                    <span>Shortlist Delivered to Hiring Manager</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-black uppercase tracking-wider shadow-xs">
+                    <Clock size={13} className="text-amber-400 animate-pulse" />
+                    <span>48h Automated Sourcing Window Active</span>
+                  </span>
+                )}
+
+                {availableRequisitions.length > 1 ? (
+                  <div className="inline-flex items-center gap-1.5 bg-zinc-900 border border-zinc-700 rounded-xl px-2.5 py-1 text-xs">
+                    <span className="text-zinc-400 font-medium">Requisition:</span>
+                    <select
+                      value={activeReqId}
+                      onChange={(e) => setSelectedReqId(e.target.value)}
+                      className="bg-transparent text-white font-bold outline-none cursor-pointer"
+                    >
+                      {availableRequisitions.map((r) => (
+                        <option key={r.id} value={r.id} className="bg-zinc-900 text-white">
+                          {r.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-bold text-zinc-300">
+                    {activeReqTitle}
+                  </span>
+                )}
+              </div>
+
+              <div>
+                <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight flex items-center gap-3">
+                  <span>Candidate Shortlist Automation</span>
+                  <span className="text-xs px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono font-bold">
+                    {shortlistStatus?.shortlist_candidate_count ?? 0} Best Ranked
+                  </span>
+                </h2>
+                <p className="text-xs text-zinc-300 leading-relaxed mt-1 max-w-3xl">
+                  {shortlistStatus?.shortlist_dispatched ? (
+                    <span>
+                      ✓ The ranked shortlist has been dispatched to the Hiring Manager{' '}
+                      <strong className="text-white">
+                        {shortlistStatus.shortlist_dispatched_at ? `on ${new Date(shortlistStatus.shortlist_dispatched_at).toLocaleString()}` : ''}
+                      </strong>{' '}
+                      via {shortlistStatus.shortlist_dispatched_by || 'Auto-Window'}. All shortlisted candidates are active in the Hiring Manager dashboard.
+                    </span>
+                  ) : (
+                    <span>
+                      Candidates who completed the AI screening interview are algorithmically ranked (60% AI interview score + 40% resume match score). Once 48 hours elapse, the best candidates are <strong className="text-amber-300 font-bold">automatically delivered to the Hiring Manager's shortlist</strong>. Click <strong className="text-white">Instant Send</strong> to bypass the 48-hour wait and deliver immediately.
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Countdown Clock Box */}
+            <div className="p-4 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex items-center gap-4 shrink-0 shadow-inner">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-zinc-950 font-black text-2xl shadow-md">
+                ⏱
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+                  {shortlistStatus?.shortlist_dispatched ? 'Window Result' : '48h Window Countdown'}
+                </div>
+                <div className="font-mono text-xl sm:text-2xl font-black tracking-tight text-white mt-0.5">
+                  {shortlistStatus?.shortlist_dispatched
+                    ? 'Dispatched'
+                    : formatShortlistCountdown(secondsRemaining ?? shortlistStatus?.seconds_remaining)}
+                </div>
+                <div className="text-[11px] text-zinc-400">
+                  {shortlistStatus?.shortlist_dispatched
+                    ? 'Shortlist received by HM'
+                    : 'Auto-sends to HM at zero'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Buttons Row */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowInstantNotesModal(true)}
+                disabled={sendingShortlist}
+                className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 text-zinc-950 font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg shadow-amber-500/20 hover:scale-102 active:scale-98"
+              >
+                <Zap size={16} className="text-zinc-950 fill-current" />
+                <span>
+                  {sendingShortlist
+                    ? 'Dispatching Shortlist...'
+                    : shortlistStatus?.shortlist_dispatched
+                    ? '⚡ Re-Send Shortlist Update to Hiring Manager'
+                    : '⚡ Instant Send Shortlist to Hiring Manager'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGenerateShortlist}
+                disabled={generatingShortlist}
+                title="Re-run scoring algorithm to calculate composite scores (60% AI interview score + 40% resume match)"
+                className="px-4 py-3 rounded-2xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white font-bold text-xs flex items-center gap-2 transition cursor-pointer border border-zinc-700 shadow-xs"
+              >
+                <RefreshCw size={14} className={generatingShortlist ? 'animate-spin' : ''} />
+                <span>{generatingShortlist ? 'Ranking Candidates…' : '🔄 Run Shortlist Ranking Algorithm'}</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/candidates')}
+              className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer self-start sm:self-auto"
+            >
+              <span>View Hiring Manager Shortlist</span>
+              <ExternalLink size={13} />
+            </button>
+          </div>
+
+          {/* Success Banner */}
+          {shortlistSuccessMsg && (
+            <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+              <div className="flex items-center gap-2.5">
+                <CheckCircle2 size={18} className="text-emerald-400 shrink-0" />
+                <span className="font-semibold">{shortlistSuccessMsg}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/dashboard/candidates')}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shrink-0 flex items-center gap-1 transition cursor-pointer"
+              >
+                <span>Open HM Shortlist</span>
+                <ExternalLink size={12} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {errorMsg && (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-center gap-2">
@@ -839,7 +1048,7 @@ export function HiringManagerInterviews() {
                 );
               })()}
 
-              {/* Company Shortlist & 48-Hour Delivery Hub */}
+              {/* Requisition Shortlist & 48-Hour Delivery Hub */}
               {selectedCandidate.requisition_id && (
                 <div className="p-5 rounded-3xl bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 border border-zinc-800 text-white shadow-xl space-y-4">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -849,7 +1058,7 @@ export function HiringManagerInterviews() {
                         {shortlistStatus?.shortlist_dispatched ? (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-extrabold uppercase tracking-wider">
                             <CheckCircle2 size={13} className="text-emerald-400" />
-                            <span>Shortlist Delivered to Company</span>
+                            <span>Shortlist Delivered to Hiring Manager</span>
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[11px] font-extrabold uppercase tracking-wider">
@@ -863,16 +1072,16 @@ export function HiringManagerInterviews() {
                       </div>
 
                       <h3 className="text-lg font-extrabold tracking-tight text-white flex items-center gap-2">
-                        <span>Company Shortlist (Algorithm Powered)</span>
+                        <span>Hiring Manager Shortlist (Algorithm Powered)</span>
                         <span className="text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-mono font-bold">
-                          {shortlistStatus?.shortlist_candidate_count ?? 1} Ranked
+                          {shortlistStatus?.shortlist_candidate_count ?? 1} Best Ranked
                         </span>
                       </h3>
 
                       <p className="text-xs text-zinc-300 leading-relaxed max-w-2xl">
                         {shortlistStatus?.shortlist_dispatched ? (
                           <span>
-                            ✓ Ranked candidate list has been delivered to the hiring company stakeholders{' '}
+                            ✓ Ranked candidate list has been delivered to the Hiring Manager{' '}
                             <strong className="text-white">
                               {shortlistStatus.shortlist_dispatched_at ? `on ${new Date(shortlistStatus.shortlist_dispatched_at).toLocaleString()}` : ''}
                             </strong>{' '}
@@ -880,12 +1089,11 @@ export function HiringManagerInterviews() {
                           </span>
                         ) : (
                           <span>
-                            Shortlisted candidates are auto-generated using our AI scoring algorithm.{' '}
+                            Shortlists the best candidates who completed AI screening within 48 hours and sends directly to the Hiring Manager's shortlist.{' '}
                             <strong className="text-amber-300 font-bold">
-                              Automatically sends to company after 48hrs
+                              Automatically delivers after 48hrs
                             </strong>{' '}
-                            ({shortlistStatus?.hours_remaining ? `${shortlistStatus.hours_remaining} hrs left` : 'Timer active'}).
-                            Click Instant Send to deliver immediately.
+                            ({secondsRemaining != null ? formatShortlistCountdown(secondsRemaining) : (shortlistStatus?.hours_remaining ? `${shortlistStatus.hours_remaining} hrs left` : 'Timer active')}). Click Instant Send to deliver immediately.
                           </span>
                         )}
                       </p>
@@ -895,21 +1103,17 @@ export function HiringManagerInterviews() {
                     <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
                       <button
                         type="button"
-                        onClick={handleInstantSendShortlist}
-                        disabled={sendingShortlist || shortlistStatus?.shortlist_dispatched}
-                        className={`px-5 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg ${
-                          shortlistStatus?.shortlist_dispatched
-                            ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-zinc-700'
-                            : 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 text-zinc-950 shadow-amber-500/20 hover:scale-102 active:scale-98'
-                        }`}
+                        onClick={() => setShowInstantNotesModal(true)}
+                        disabled={sendingShortlist}
+                        className="px-5 py-3 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition cursor-pointer shadow-lg bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 text-zinc-950 shadow-amber-500/20 hover:scale-102 active:scale-98"
                       >
-                        <Zap size={16} className={shortlistStatus?.shortlist_dispatched ? 'text-zinc-500' : 'text-zinc-950 fill-current'} />
+                        <Zap size={16} className="text-zinc-950 fill-current" />
                         <span>
                           {sendingShortlist
                             ? 'Sending Shortlist...'
                             : shortlistStatus?.shortlist_dispatched
-                            ? 'Shortlist Already Sent'
-                            : '⚡ Instant Send Shortlist to Company'}
+                            ? '⚡ Re-Send Shortlist Update to Hiring Manager'
+                            : '⚡ Instant Send Shortlist to Hiring Manager'}
                         </span>
                       </button>
 
@@ -1517,6 +1721,76 @@ export function HiringManagerInterviews() {
                     <span>Confirm Rejection</span>
                   </>
                 )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Instant Send Notes Modal */}
+      {showInstantNotesModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 sm:p-7 max-w-lg w-full text-white shadow-2xl space-y-5 animate-scaleUp">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 flex items-center justify-center font-bold">
+                  ⚡
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-white">Instant Shortlist Dispatch</h3>
+                  <p className="text-[11px] text-zinc-400">Bypass 48-hour wait & deliver to Hiring Manager</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowInstantNotesModal(false)}
+                className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-2 text-xs text-zinc-300">
+              <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-1">
+                <div className="text-[11px] font-bold text-zinc-400 uppercase">Target Requisition</div>
+                <div className="text-sm font-black text-white">{activeReqTitle}</div>
+                <div className="text-[11px] text-emerald-400 font-medium">
+                  {shortlistStatus?.shortlist_candidate_count ?? 1} candidates qualified by AI screening score
+                </div>
+              </div>
+              <p className="leading-relaxed">
+                Dispatching will immediately send in-app notifications and email summaries to the company hiring team and place the shortlisted candidates directly into their active review queue.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-bold text-zinc-300 uppercase tracking-wider mb-2">
+                Optional Notes for Hiring Manager
+              </label>
+              <textarea
+                value={instantNotes}
+                onChange={(e) => setInstantNotes(e.target.value)}
+                placeholder="e.g. Here are the top candidates who cleared the technical AI screening interview with 80+ scores..."
+                rows={3}
+                className="w-full p-3 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowInstantNotesModal(false)}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-zinc-400 hover:text-white hover:bg-zinc-900 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleInstantSendShortlist(instantNotes)}
+                disabled={sendingShortlist}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-zinc-950 font-black text-xs flex items-center gap-1.5 transition cursor-pointer shadow-md"
+              >
+                <Zap size={14} className="fill-current" />
+                <span>{sendingShortlist ? 'Dispatching…' : '⚡ Dispatch to Hiring Manager Now'}</span>
               </button>
             </div>
           </div>

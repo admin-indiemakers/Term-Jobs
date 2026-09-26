@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import VendorBilling from './recruiter/VendorBilling';
+import CandidateOfferLetterSection from '../components/CandidateOfferLetterSection';
 import {
   Building2,
   Users,
@@ -25,23 +26,27 @@ import {
   PlusCircle,
   FileText,
   Receipt,
-  DollarSign
+  DollarSign,
+  Zap
 } from 'lucide-react';
 
 export default function SuperAdminCandidateManagement() {
   const { token, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') === 'billing' ? 'billing' : 'selections';
+  const rawTab = searchParams.get('tab');
+  const activeTab = rawTab === 'billing' ? 'billing' : rawTab === 'contracts' ? 'contracts' : 'selections';
 
   const handleTabChange = (tabKey) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (tabKey === 'billing') {
-      nextParams.set('tab', 'billing');
+    if (tabKey === 'billing' || tabKey === 'contracts') {
+      nextParams.set('tab', tabKey);
     } else {
       nextParams.delete('tab');
     }
     setSearchParams(nextParams);
   };
+
+  const [contractCandidate, setContractCandidate] = useState(null);
 
   const [selections, setSelections] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -203,18 +208,28 @@ export default function SuperAdminCandidateManagement() {
             <span>SUPER ADMIN CONSOLE</span>
             <span>•</span>
             <span className="text-emerald-600 font-black">
-              {activeTab === 'billing' ? 'CANDIDATE BILLING & WORK ORDERS' : 'CANDIDATE MANAGEMENT'}
+              {activeTab === 'billing'
+                ? 'CANDIDATE BILLING & WORK ORDERS'
+                : activeTab === 'contracts'
+                ? 'EMPLOYMENT CONTRACTS & OFFER LETTERS'
+                : 'CANDIDATE MANAGEMENT'}
             </span>
           </div>
           <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight flex items-center gap-2.5">
-            {activeTab === 'billing' ? 'Candidate Billing & Work Orders' : 'Candidate Management'}
+            {activeTab === 'billing'
+              ? 'Candidate Billing & Work Orders'
+              : activeTab === 'contracts'
+              ? 'Employment Contracts & Offer Letters'
+              : 'Candidate Management'}
             <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200/80">
-              {activeTab === 'billing' ? 'Work Orders & SOW' : 'Live Feed'}
+              {activeTab === 'billing' ? 'Work Orders & SOW' : activeTab === 'contracts' ? '5-Page Legal PDF' : 'Live Feed'}
             </span>
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
             {activeTab === 'billing'
               ? 'Candidate work order timesheets, contractor billings, approved overtime, and client SOW disbursements.'
+              : activeTab === 'contracts'
+              ? 'Review, customize CTC salary breakdowns & legal terms, and issue formal 5-page employment agreements to selected candidates.'
               : 'Real-time feed and oversight of candidates shortlisted and selected by hiring managers across partner companies. Filter instantly by company.'}
           </p>
 
@@ -243,6 +258,15 @@ export default function SuperAdminCandidateManagement() {
                 <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                 <span>Refresh</span>
               </button>
+
+              <Link
+                to="/dashboard/interviews"
+                className="px-3.5 py-2.5 rounded-xl border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-900 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer no-underline"
+                title="Open 48-Hour Shortlist Automation & Interview Scores"
+              >
+                <Zap size={14} className="text-amber-600 fill-current" />
+                <span>48h Shortlists & Scores</span>
+              </Link>
 
               <button
                 type="button"
@@ -288,6 +312,24 @@ export default function SuperAdminCandidateManagement() {
 
         <button
           type="button"
+          onClick={() => handleTabChange('contracts')}
+          className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
+            activeTab === 'contracts'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+          }`}
+        >
+          <FileText size={16} className={activeTab === 'contracts' ? 'text-white' : 'text-gray-500'} />
+          <span>Contracts & Offer Letters</span>
+          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${
+            activeTab === 'contracts' ? 'bg-white/20 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+          }`}>
+            5-Page Legal
+          </span>
+        </button>
+
+        <button
+          type="button"
           onClick={() => handleTabChange('billing')}
           className={`flex-1 flex items-center justify-center gap-2 px-5 py-3 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer ${
             activeTab === 'billing'
@@ -308,6 +350,156 @@ export default function SuperAdminCandidateManagement() {
       {activeTab === 'billing' ? (
         <div className="w-full">
           <VendorBilling isEmbedded={true} />
+        </div>
+      ) : activeTab === 'contracts' ? (
+        <div className="w-full space-y-6">
+          {/* Contracts Header / Selector */}
+          {contractCandidate ? (
+            <div className="space-y-4">
+              <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setContractCandidate(null)}
+                    className="px-3.5 py-2 rounded-xl border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <span>← All Selected Candidates</span>
+                  </button>
+                  <div className="h-6 w-px bg-gray-200" />
+                  <div>
+                    <div className="text-[10px] font-extrabold text-emerald-700 uppercase tracking-wider">
+                      SUPER ADMIN FORMAL EMPLOYMENT AGREEMENT
+                    </div>
+                    <div className="text-base sm:text-lg font-black text-gray-900 leading-tight">
+                      {contractCandidate.candidate_name} · <span className="text-emerald-700">{contractCandidate.company_name}</span>
+                    </div>
+                    <div className="text-xs text-gray-500 font-medium">
+                      {contractCandidate.requisition_title || 'Software Professional'} · {contractCandidate.candidate_email || 'No email'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 text-xs font-extrabold border border-emerald-200">
+                    <CheckCircle2 size={13} className="text-emerald-600" />
+                    <span>Accepted Candidate</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* 5-Page Corporate Employment Contract Editor & Dispatch */}
+              <CandidateOfferLetterSection
+                candidateId={contractCandidate.id || contractCandidate.selection_id || contractCandidate.submission_id}
+                candidateName={contractCandidate.candidate_name}
+                candidateEmail={contractCandidate.candidate_email}
+                jobTitle={contractCandidate.requisition_title || contractCandidate.candidate_title}
+                companyName={contractCandidate.company_name}
+                location={contractCandidate.location || 'Bengaluru / Hybrid'}
+                onOfferSent={() => {
+                  setSuccessMsg(`✓ Formal Employment Contract & Offer Letter sent to ${contractCandidate.candidate_name}!`);
+                  loadData(true);
+                }}
+              />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div className="text-[10px] font-extrabold text-emerald-700 tracking-wider uppercase mb-1 flex items-center gap-1.5">
+                    <span>SUPER ADMIN LEGAL CONSOLE</span>
+                    <span>•</span>
+                    <span>5-PAGE FORMAL AGREEMENTS</span>
+                  </div>
+                  <h2 className="text-xl font-black text-gray-900 tracking-tight">
+                    Candidate Contracts & Corporate Agreements
+                  </h2>
+                  <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
+                    Select any accepted candidate to review, customize CTC salary breakdowns, edit legal clauses, and dispatch formal 5-page employment agreements directly to their candidate portal.
+                  </p>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-extrabold border border-emerald-200">
+                    {selections.length} Candidates Available
+                  </span>
+                </div>
+              </div>
+
+              {selections.length === 0 ? (
+                <div className="bg-white border border-gray-200/90 rounded-2xl p-12 text-center space-y-3 shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-gray-50 text-gray-400 mx-auto flex items-center justify-center border border-gray-200">
+                    <FileText size={28} />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-800">
+                    No Candidates Selected Yet
+                  </h3>
+                  <p className="text-xs text-gray-500 max-w-md mx-auto">
+                    When hiring managers accept candidates, they appear here for Super Admin contract drafting and formal issuance.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {selections.map((cand) => (
+                    <div
+                      key={cand.id || cand.selection_id}
+                      className="bg-white border border-gray-200/90 hover:border-emerald-300 rounded-2xl p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between gap-4"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-extrabold border border-emerald-200">
+                            <CheckCircle2 size={11} className="text-emerald-600" />
+                            <span>{cand.company_name}</span>
+                          </span>
+                          <span className="text-[11px] text-gray-400 font-medium">
+                            {formatDate(cand.selected_at)}
+                          </span>
+                        </div>
+
+                        <div className="text-lg font-black text-gray-950">
+                          {cand.candidate_name}
+                        </div>
+
+                        <div className="text-xs text-gray-600 space-y-1">
+                          <div className="flex items-center gap-1.5 font-semibold text-gray-900">
+                            <Briefcase size={13} className="text-gray-400" />
+                            <span>{cand.requisition_title || 'Role'}</span>
+                          </div>
+                          {cand.candidate_email && (
+                            <div className="text-gray-400 text-xs">
+                              ✉ {cand.candidate_email}
+                            </div>
+                          )}
+                          <div className="text-gray-500 text-xs">
+                            Hiring Manager: <strong className="text-gray-700">{cand.hiring_manager_name || 'Hiring Manager'}</strong>
+                          </div>
+                        </div>
+
+                        {cand.notes && (
+                          <div className="bg-gray-50 rounded-xl p-2.5 text-xs text-gray-600 italic">
+                            "{cand.notes}"
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
+                        <div className="text-xs font-black text-emerald-700">
+                          {Math.round(cand.match_score || 92)}% Match Fit
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setContractCandidate(cand)}
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <FileText size={14} />
+                          <span>Draft & Issue Contract →</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <>
@@ -623,7 +815,20 @@ export default function SuperAdminCandidateManagement() {
                     <span>{Math.round(cand.match_score || 92)}% Fit</span>
                   </div>
 
-                  <div className="flex items-center gap-1 pt-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1.5 pt-1 opacity-90 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setContractCandidate(cand);
+                        handleTabChange('contracts');
+                      }}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      title="Draft & Issue Employment Contract"
+                    >
+                      <FileText size={13} />
+                      <span>Issue Contract</span>
+                    </button>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -705,14 +910,29 @@ export default function SuperAdminCandidateManagement() {
                       {formatDate(cand.selected_at)}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteSelection(cand.id || cand.selection_id, e)}
-                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                        title="Delete"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setContractCandidate(cand);
+                            handleTabChange('contracts');
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          title="Draft & Issue Employment Contract"
+                        >
+                          <FileText size={12} />
+                          <span>Contract</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleDeleteSelection(cand.id || cand.selection_id, e)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -785,22 +1005,38 @@ export default function SuperAdminCandidateManagement() {
               </div>
             </div>
 
-            <div className="pt-2 flex items-center justify-between gap-3 border-t border-gray-100">
+            <div className="pt-2 flex items-center justify-between gap-3 border-t border-gray-100 flex-wrap">
               <button
                 type="button"
                 onClick={(e) => handleDeleteSelection(activeCandidateDetail.id || activeCandidateDetail.selection_id, e)}
-                className="px-4 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition cursor-pointer"
+                className="px-3.5 py-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition cursor-pointer"
               >
                 Delete Record
               </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveCandidateDetail(null)}
-                className="px-5 py-2.5 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-800 transition cursor-pointer"
-              >
-                Done
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const cand = activeCandidateDetail;
+                    setActiveCandidateDetail(null);
+                    setContractCandidate(cand);
+                    handleTabChange('contracts');
+                  }}
+                  className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+                >
+                  <FileText size={14} />
+                  <span>Draft & Issue Contract →</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveCandidateDetail(null)}
+                  className="px-4 py-2.5 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-800 transition cursor-pointer"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>

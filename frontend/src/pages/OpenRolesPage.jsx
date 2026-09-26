@@ -109,6 +109,92 @@ export default function OpenRolesPage({ enabled = true }) {
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [activeNavTab, setActiveNavTab] = useState('home');
 
+  // Candidate agreements & offer letter state
+  const [candidateAgreements, setCandidateAgreements] = useState([]);
+  const [loadingAgreements, setLoadingAgreements] = useState(false);
+  const [selectedAgreement, setSelectedAgreement] = useState(null);
+  const [signingAgreement, setSigningAgreement] = useState(false);
+  const [signatureName, setSignatureName] = useState('');
+  const [signatureAgreed, setSignatureAgreed] = useState(false);
+  const [signSuccessMessage, setSignSuccessMessage] = useState('');
+  const [agreementLookupEmail, setAgreementLookupEmail] = useState('');
+
+  const loadCandidateAgreements = useCallback(async (customEmail = null) => {
+    setLoadingAgreements(true);
+    try {
+      const email = customEmail || candidateUser?.candidate_email || candidateUser?.email || agreementLookupEmail || '';
+      const cid = candidateUser?.id || candidateUser?.candidate_id || '';
+      const token = candidateAuth?.candidateToken;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const params = new URLSearchParams();
+      if (email) params.append('email', email);
+      if (cid) params.append('candidate_id', cid);
+      const res = await fetch(`${API_BASE_URL}/api/candidate-profile/agreements?${params.toString()}`, { headers });
+      const data = await res.json();
+      if (Array.isArray(data.agreements) && data.agreements.length > 0) {
+        setCandidateAgreements(data.agreements);
+      } else if (Array.isArray(candidateAuth?.agreements) && candidateAuth.agreements.length > 0) {
+        setCandidateAgreements(candidateAuth.agreements);
+      } else {
+        setCandidateAgreements(data.agreements || []);
+      }
+    } catch (err) {
+      console.error('Failed to load candidate agreements:', err);
+      if (Array.isArray(candidateAuth?.agreements)) {
+        setCandidateAgreements(candidateAuth.agreements);
+      }
+    } finally {
+      setLoadingAgreements(false);
+    }
+  }, [candidateUser, candidateAuth, agreementLookupEmail]);
+
+  useEffect(() => {
+    if (showAgreementModal) {
+      loadCandidateAgreements();
+    }
+  }, [showAgreementModal, loadCandidateAgreements]);
+
+  const handleSignAgreement = async (agrId) => {
+    if (!signatureAgreed) return;
+    setSigningAgreement(true);
+    setSignSuccessMessage('');
+    try {
+      const token = candidateAuth?.candidateToken;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const signName = signatureName.trim() || candidateUser?.candidate_name || selectedAgreement?.candidate_name || 'Candidate';
+      const email = candidateUser?.candidate_email || selectedAgreement?.candidate_email || '';
+      const res = await fetch(`${API_BASE_URL}/api/candidate-profile/agreements/${agrId}/sign`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          signature_name: signName,
+          email,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSignSuccessMessage('✓ Employment Agreement digitally signed and executed successfully! Your onboarding is now officially underway.');
+        setSelectedAgreement((prev) => ({
+          ...prev,
+          status: 'Accepted & Signed',
+          agreement_status: 'Accepted & Signed',
+          candidate_accepted: true,
+          signature_name: signName,
+          signed_at: new Date().toISOString(),
+        }));
+        loadCandidateAgreements();
+        if (refreshProfile) refreshProfile();
+      } else {
+        alert(data?.detail || 'Failed to sign agreement. Please try again.');
+      }
+    } catch (err) {
+      console.error('Sign agreement error:', err);
+    } finally {
+      setSigningAgreement(false);
+    }
+  };
+
   // Application form state
   const [applyForm, setApplyForm] = useState({
     name: '',
@@ -2303,7 +2389,7 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {showAgreementModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
-          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-white/[0.08] border border-white/10 flex items-center justify-center text-white shrink-0">
@@ -2311,7 +2397,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white leading-tight">Agreements & Contracts</h3>
-                  <p className="text-[11px] text-white/50">Master Services Agreements & Compliance</p>
+                  <p className="text-[11px] text-white/50">Formal Employment Offers & Digital Execution</p>
                 </div>
               </div>
               <button
@@ -2326,29 +2412,129 @@ export default function OpenRolesPage({ enabled = true }) {
               </button>
             </div>
 
-            <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
-              {applications.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
+            <div className="mt-4 space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+              {loadingAgreements ? (
+                <div className="py-12 text-center text-white/50 text-xs">
+                  <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-2" />
+                  Checking for active employment agreements…
+                </div>
+              ) : candidateAgreements.length > 0 ? (
+                <div className="space-y-3">
+                  {candidateAgreements.map((agr, i) => {
+                    const isSigned = agr.status === 'Accepted & Signed' || agr.agreement_status === 'Accepted & Signed' || agr.candidate_accepted;
+                    const ctc = agr.annexure?.total_fixed_annual
+                      ? `₹${Number(agr.annexure.total_fixed_annual).toLocaleString('en-IN')} / year`
+                      : '₹18,00,000 / year';
+
+                    return (
+                      <div
+                        key={agr._id || agr.candidate_id || i}
+                        className="p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-white/15 hover:border-white/25 transition space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white">{agr.job_title || 'Software Engineer'}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.08] text-white/70 font-semibold">
+                                {agr.company_name || 'Enterprise Client'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-white/50 mt-0.5">
+                              Addressed to: <strong className="text-white/80">{agr.candidate_name}</strong> ({agr.candidate_email})
+                            </div>
+                          </div>
+
+                          {isSigned ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              <CheckCircle2 size={12} />
+                              Signed & Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                              <AlertCircle size={12} />
+                              Action Required: Sign
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Terms Quick Summary */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-black/40 border border-white/5 text-[11px]">
+                          <div>
+                            <span className="text-white/40 block text-[9px] uppercase tracking-wider">Annual CTC</span>
+                            <span className="text-white font-bold">{ctc}</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block text-[9px] uppercase tracking-wider">Joining Date</span>
+                            <span className="text-white font-semibold">{agr.joining_date || 'Within 14 Days'}</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block text-[9px] uppercase tracking-wider">Location</span>
+                            <span className="text-white font-semibold">{agr.annexure?.work_location || 'Bengaluru / Hybrid'}</span>
+                          </div>
+                        </div>
+
+                        {/* CTA Buttons */}
+                        <div className="flex items-center justify-between pt-1 gap-2">
+                          <span className="text-[10px] text-white/40">
+                            Issued: {agr.offer_date || 'Recent'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAgreement(agr);
+                              setSignatureName(candidateUser?.candidate_name || agr.candidate_name || '');
+                              setSignatureAgreed(false);
+                              setSignSuccessMessage('');
+                            }}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                              isSigned
+                                ? 'bg-white/10 hover:bg-white/20 text-white'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 active:scale-98'
+                            }`}
+                          >
+                            <FileText size={14} />
+                            {isSigned ? 'View Executed Agreement' : 'Review & Sign Agreement →'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-8 text-center space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-white/50 mx-auto mb-2">
                     <FileText size={20} />
                   </div>
-                  <h4 className="text-sm font-bold text-white">No Active Agreements Pending</h4>
-                  <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
-                    Once an enterprise partner approves your application, your Master Services Agreement (MSA) and Statement of Work (SOW) will appear here for digital review and signing.
-                  </p>
-                </div>
-              ) : (
-                applications.map((app, i) => (
-                  <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
-                      <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'} · MSA Linked</div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
-                      Standard Terms
-                    </span>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">No Active Agreements Pending</h4>
+                    <p className="text-xs text-white/50 max-w-sm mx-auto leading-relaxed mt-1">
+                      Once an enterprise partner accepts your profile and issues an offer, your full Employment Agreement & Annexure will appear here for review and digital signature.
+                    </p>
                   </div>
-                ))
+
+                  {/* Guest Email Lookup Box if not authenticated */}
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 max-w-sm mx-auto text-left">
+                    <label className="text-[10px] uppercase font-bold text-white/60 block mb-1">
+                      Received an offer? Check with your email:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={agreementLookupEmail}
+                        onChange={(e) => setAgreementLookupEmail(e.target.value)}
+                        placeholder="e.g. arjunmheartitude@gmail.com"
+                        className="flex-1 bg-black/50 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-white/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => loadCandidateAgreements(agreementLookupEmail)}
+                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs cursor-pointer transition"
+                      >
+                        Check
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -2363,6 +2549,281 @@ export default function OpenRolesPage({ enabled = true }) {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 5B: FULL 5-PAGE AGREEMENT REVIEW & DIGITAL SIGNING MODAL*/}
+      {/* ============================================================ */}
+      {selectedAgreement && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-2xl animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-[#0f1117] border border-white/15 rounded-3xl max-w-4xl w-full my-6 p-4 sm:p-7 shadow-2xl relative flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
+                    Formal Employment Agreement & Offer Letter
+                  </h3>
+                  <p className="text-xs text-white/50">
+                    {selectedAgreement.company_name} · {selectedAgreement.job_title} · Ref: {selectedAgreement.candidate_id || selectedAgreement.submission_id || 'CND-OFFER'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white/80 hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAgreement(null)}
+                  className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Canvas Body */}
+            <div className="mt-4 flex-1 overflow-y-auto pr-2 space-y-6">
+              <div
+                className="bg-white text-slate-800 p-6 sm:p-10 rounded-2xl shadow-xl border border-slate-200 text-xs sm:text-sm leading-relaxed"
+                style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
+              >
+                {/* Letterhead */}
+                <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start flex-wrap gap-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                      {selectedAgreement.company_name || 'TCS'}
+                    </h2>
+                    <p className="text-xs text-slate-500 max-w-sm mt-1">
+                      {selectedAgreement.company_address || 'Corporate Technology Park, Outer Ring Road, Bengaluru, Karnataka 560103'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest block">Strictly Private & Confidential</span>
+                    <span className="text-xs font-bold text-slate-600 mt-1 block">Date: {selectedAgreement.offer_date || new Date().toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                {/* Candidate Addressee */}
+                <div className="mb-6">
+                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Candidate Name:</div>
+                  <div className="text-lg font-black text-slate-900">{selectedAgreement.candidate_name}</div>
+                  <div className="text-xs text-slate-600">Email: {selectedAgreement.candidate_email}</div>
+                </div>
+
+                {/* Heading */}
+                <div className="text-center my-6">
+                  <h3 className="text-base font-black text-slate-900 uppercase tracking-widest underline decoration-2 underline-offset-4">
+                    EMPLOYMENT OFFER
+                  </h3>
+                </div>
+
+                {/* Intro */}
+                <p className="mb-4 text-slate-700">
+                  We are pleased to present you with an offer of employment with <strong>{selectedAgreement.company_name}</strong> as <strong>{selectedAgreement.job_title}</strong>. Your employment with the Company will commence on <strong>{selectedAgreement.joining_date}</strong>.
+                </p>
+
+                {/* Terms Table */}
+                <table className="w-full border-collapse mb-6 border border-slate-300 text-xs">
+                  <tbody>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Joining Date</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.joining_date}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Contract Period</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.contract_period || 'Full Time / Unlimited'}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Mobility & Relocation</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.mobility_clause}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Notice Period & Termination</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.termination_employee_notice_days || 30} days notice period by either party</td>
+                    </tr>
+                    <tr>
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Probation Period</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.probation_period_months || 3} Months from joining</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Annexure A Compensation Details */}
+                <div className="border-t-2 border-slate-300 pt-6 mt-6">
+                  <div className="text-center mb-4">
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">ANNEXURE A — COMPENSATION DETAILS</h4>
+                    <span className="text-xs font-bold text-emerald-700 uppercase">Fixed Annual Cost to Company (CTC) Breakdown</span>
+                  </div>
+
+                  <table className="w-full border-collapse mb-6 border border-slate-300 text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-900">
+                        <th className="p-2.5 text-left font-bold">Salary Component</th>
+                        <th className="p-2.5 text-right font-bold">Monthly (INR ₹)</th>
+                        <th className="p-2.5 text-right font-bold">Annualized (INR ₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">Basic Salary (50%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.basic_salary_monthly || 75000).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.basic_salary_annual || 900000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">House Rent Allowance (HRA 25%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.hra_monthly || 37500).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.hra_annual || 450000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">Other & Special Allowance (15%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.other_allowance_monthly || 22500).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.other_allowance_annual || 270000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">Provident Fund (Employer PF 10%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.pf_monthly || 15000).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.pf_annual || 180000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="bg-emerald-50 font-black text-slate-900 border-t-2 border-emerald-600">
+                        <td className="p-2.5 text-emerald-900">Total Fixed CTC</td>
+                        <td className="p-2.5 text-right text-emerald-900">₹{Number(selectedAgreement.annexure?.total_fixed_monthly || 150000).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-emerald-900">₹{Number(selectedAgreement.annexure?.total_fixed_annual || 1800000).toLocaleString('en-IN')}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Benefits */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1 mb-6">
+                    <div><strong>Medical Insurance:</strong> {selectedAgreement.annexure?.medical_insurance_coverage || '₹5,00,000 family floater'}</div>
+                    <div><strong>Life Insurance:</strong> {selectedAgreement.annexure?.life_insurance_coverage || 'Group Life Policy up to 3x CTC'}</div>
+                    <div><strong>Bonus:</strong> {selectedAgreement.annexure?.annual_bonus_percentage || 10}% performance bonus eligibility</div>
+                  </div>
+                </div>
+
+                {/* Signatures */}
+                <div className="border-t-2 border-slate-300 pt-6 grid grid-cols-2 gap-8 text-xs">
+                  <div>
+                    <div className="text-slate-500 mb-6">Authorized Signatory:</div>
+                    <div className="border-t border-slate-900 pt-2">
+                      <div className="font-black text-slate-900">{selectedAgreement.hr_signatory_name || 'Rakesh Sharma'}</div>
+                      <div className="text-slate-500">{selectedAgreement.hr_signatory_title || 'VP – Human Resources'}</div>
+                      <div className="text-slate-500">{selectedAgreement.company_name}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500 mb-6">Agreed & Accepted by:</div>
+                    <div className="border-t border-slate-900 pt-2">
+                      <div className="font-black text-slate-900">
+                        {selectedAgreement.signature_name || selectedAgreement.candidate_name}
+                      </div>
+                      <div className="text-slate-500">Employee Signature</div>
+                      {selectedAgreement.signed_at && (
+                        <div className="text-emerald-700 font-bold text-[11px] mt-0.5">
+                          Digitally Signed: {new Date(selectedAgreement.signed_at).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Digital Signing Execution Footer */}
+              {signSuccessMessage && (
+                <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>{signSuccessMessage}</span>
+                </div>
+              )}
+
+              {selectedAgreement.status === 'Accepted & Signed' || selectedAgreement.agreement_status === 'Accepted & Signed' || selectedAgreement.candidate_accepted ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={18} />
+                    <span>This Employment Agreement has been digitally signed and executed. Onboarding is active.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgreement(null)}
+                    className="px-4 py-2 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 transition cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="p-5 rounded-2xl bg-white/[0.04] border border-white/15 space-y-4">
+                  <div className="flex items-center gap-2 text-white">
+                    <ShieldCheck size={18} className="text-emerald-400" />
+                    <span className="font-bold text-sm">Digital Signature & Execution</span>
+                  </div>
+                  <p className="text-xs text-white/50 leading-relaxed">
+                    By providing your digital signature and clicking below, you formally accept the employment terms, compensation breakdown, and standard policies specified in this document.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-white/60 block mb-1 uppercase tracking-wider">
+                        Full Legal Name (Digital Signature) *
+                      </label>
+                      <input
+                        type="text"
+                        value={signatureName}
+                        onChange={(e) => setSignatureName(e.target.value)}
+                        placeholder="e.g. Arjun M"
+                        className="w-full bg-black/50 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-2 text-xs text-white/80 cursor-pointer select-none pb-2">
+                        <input
+                          type="checkbox"
+                          checked={signatureAgreed}
+                          onChange={(e) => setSignatureAgreed(e.target.checked)}
+                          className="w-4 h-4 rounded border-white/30 text-emerald-500 focus:ring-emerald-500"
+                        />
+                        <span>I confirm that I agree to all terms of this agreement.</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAgreement(null)}
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!signatureAgreed || !signatureName.trim() || signingAgreement}
+                      onClick={() => handleSignAgreement(selectedAgreement._id || selectedAgreement.candidate_id)}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-black text-xs transition cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-98 flex items-center gap-2"
+                    >
+                      {signingAgreement ? (
+                        'Executing Agreement…'
+                      ) : (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>✓ Sign & Accept Employment Agreement</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>,

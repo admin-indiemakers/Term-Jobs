@@ -248,7 +248,18 @@ export default function CandidateSchedule() {
   }, [interview, currentOrigin]);
 
   const isOver = interview?.status === 'COMPLETED';
-  const recordedDecision = isOver ? interview?.decision || '' : '';
+  const recordedDecision =
+    interview?.decision ||
+    (candidate?.status === 'Accepted' || candidate?.status === 'Rejected' ? candidate.status : '') ||
+    (successMsg ? decision : '');
+
+  const isAcceptedNow =
+    (candidate?.status === 'Accepted' || interview?.decision === 'Accepted' || recordedDecision === 'Accepted' || (successMsg && decision === 'Accepted')) &&
+    decision === 'Accepted';
+
+  const isRejectedNow =
+    (candidate?.status === 'Rejected' || interview?.decision === 'Rejected' || recordedDecision === 'Rejected' || (successMsg && decision === 'Rejected')) &&
+    decision === 'Rejected';
 
   const copyLink = () => {
     if (!meetingLink) return;
@@ -269,6 +280,15 @@ export default function CandidateSchedule() {
         body: { decision, notes: remark, requisition_id: reqId },
       }).catch((err) => console.warn('Candidate decision warning:', err));
 
+      if (decision === 'Accepted') {
+        // Automatically dispatch formal employment offer letter & agreement to the candidate's agreements portal
+        await request(`/api/candidates/${encodeURIComponent(candidateId)}/offer-letter/send`, {
+          method: 'POST',
+          token,
+          body: { decision, notes: remark },
+        }).catch((err) => console.warn('Offer letter dispatch error:', err));
+      }
+
       if (interview) {
         // Complete interview record as well
         const res = await request(`/api/interviews/${interview.id}/complete`, {
@@ -276,7 +296,7 @@ export default function CandidateSchedule() {
           token,
           body: { final_remark: remark, decision },
         });
-        setInterview(res);
+        setInterview(res || { ...interview, status: 'COMPLETED', decision, final_remark: remark });
       } else {
         const newStatus = decision === 'Accepted' ? 'Accepted' : 'Rejected';
         await request(`/candidates/${candidateId}/status`, {
@@ -285,10 +305,17 @@ export default function CandidateSchedule() {
           body: { status: newStatus },
         });
       }
+
+      // Immediately update local candidate status so all UI elements react without delay
+      setCandidate((prev) => (prev ? { ...prev, status: decision, hiring_manager_notes: remark } : prev));
+      if (interview) {
+        setInterview((prev) => (prev ? { ...prev, decision, status: 'COMPLETED', final_remark: remark } : prev));
+      }
+
       setEditingDecision(false);
       setSuccessMsg(
         decision === 'Accepted'
-          ? `✓ ${candidate?.candidate_name || 'Candidate'} has been formally accepted & onboarded with Candidate ID! Super Admin notified.`
+          ? `✓ Candidate Accepted & Onboarded! Super Admin notified to issue contract and finalize onboarding.`
           : `✕ ${candidate?.candidate_name || 'Candidate'} has been rejected. Super Admin notified.`
       );
       // Refetch candidate data so the updated status (Accepted/Rejected) is reflected
@@ -573,6 +600,8 @@ export default function CandidateSchedule() {
             </div>
           </div>
 
+
+
           {/* Final Decision & Onboarding Panel */}
           {(isOver || !isReadOnly) && (
             <div style={{ background: PAPER, border: `1px solid ${LINE}`, borderRadius: '20px', padding: '28px 30px', marginTop: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.03)' }}>
@@ -736,31 +765,96 @@ export default function CandidateSchedule() {
                   />
                 </div>
 
-                {/* Submit Button */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
+                {/* Submit Button & Confirmation Feedback */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginTop: '22px' }}>
+                  {isAcceptedNow ? (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      background: '#ECFDF5',
+                      border: '1.5px solid #10B981',
+                      borderRadius: '12px',
+                      padding: '10px 18px',
+                      color: '#065F46',
+                      fontWeight: 800,
+                      fontSize: '0.88rem',
+                      boxShadow: '0 4px 14px rgba(16,185,129,0.15)',
+                    }}>
+                      <span style={{ fontSize: '1.25rem' }}>🎉</span>
+                      <span><strong>Candidate Accepted!</strong> Super Admin notified to issue contract & onboard.</span>
+                      <a
+                        href="/dashboard/candidates/accepted"
+                        style={{
+                          marginLeft: '8px',
+                          color: '#047857',
+                          textDecoration: 'underline',
+                          fontWeight: 800,
+                          fontSize: '0.82rem',
+                        }}
+                      >
+                        View in Accepted Candidates →
+                      </a>
+                    </div>
+                  ) : isRejectedNow ? (
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      background: '#FFF1F2',
+                      border: '1.5px solid #F43F5E',
+                      borderRadius: '12px',
+                      padding: '10px 18px',
+                      color: '#9F1239',
+                      fontWeight: 800,
+                      fontSize: '0.88rem',
+                    }}>
+                      <span style={{ fontSize: '1.15rem' }}>✕</span>
+                      <span><strong>Candidate Rejected.</strong> Rejection status recorded & Super Admin notified.</span>
+                    </div>
+                  ) : (
+                    <div />
+                  )}
+
                   <button
                     type="submit"
                     disabled={saving}
                     style={{
-                      background: decision === 'Accepted' ? '#059669' : '#E11D48',
+                      background: isAcceptedNow
+                        ? '#047857'
+                        : isRejectedNow
+                        ? '#BE123C'
+                        : decision === 'Accepted'
+                        ? '#059669'
+                        : '#E11D48',
                       color: '#FFFFFF',
                       border: 0,
-                      padding: '13px 32px',
+                      padding: '14px 34px',
                       borderRadius: '12px',
-                      fontSize: '0.9rem',
+                      fontSize: '0.94rem',
                       fontWeight: 800,
                       cursor: 'pointer',
-                      boxShadow: decision === 'Accepted'
+                      boxShadow: isAcceptedNow || decision === 'Accepted'
                         ? '0 8px 20px -6px rgba(5,150,105,0.45)'
                         : '0 8px 20px -6px rgba(225,29,72,0.45)',
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '8px',
-                      transition: 'all 0.15s ease'
+                      gap: '10px',
+                      transition: 'all 0.15s ease',
                     }}
                   >
                     {saving ? (
                       'Processing Decision & Onboarding…'
+                    ) : isAcceptedNow ? (
+                      <>
+                        <span style={{ fontSize: '1.15rem' }}>✓</span>
+                        <span>Candidate Accepted & Onboarded!</span>
+                      </>
+                    ) : isRejectedNow ? (
+                      <>
+                        <span style={{ fontSize: '1.15rem' }}>✕</span>
+                        <span>Candidate Rejected</span>
+                      </>
                     ) : decision === 'Accepted' ? (
                       <>
                         <span>✓</span>

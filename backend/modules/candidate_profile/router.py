@@ -462,6 +462,25 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
         ).sort("sent_at", -1)
     )
 
+    # Fetch formal agreements & offer letters
+    cand_id = candidate.get("id") or candidate.get("candidate_id") or ""
+    raw_id = cand_id.replace("CND-", "").strip() if cand_id else ""
+    agreements_cursor = list(
+        db["offer_letters"].find({
+            "$or": [
+                {"candidate_email": email},
+                {"candidate_id": cand_id},
+                {"submission_id": cand_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        }).sort("updated_at", -1)
+    )
+    agreements = []
+    for agr in agreements_cursor:
+        agr["_id"] = str(agr.get("_id"))
+        agreements.append(agr)
+
     has_resume = bool(candidate.get("resume_pdf") or candidate.get("filename"))
     profile_completed = bool(has_resume and candidate.get("candidate_phone"))
 
@@ -469,11 +488,131 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
         "status": "success",
         "candidate": sanitize_candidate_doc(candidate),
         "applications": applications,
+        "agreements": agreements,
         "outreach": outreach_records,
         "has_resume": has_resume,
         "profile_completed": profile_completed,
         "resume_filename": candidate.get("filename") or ("resume.pdf" if has_resume else None),
     }
+
+
+@router.get("/agreements")
+async def get_candidate_agreements_endpoint(
+    email: str | None = None,
+    candidate_id: str | None = None,
+    authorization: str | None = Header(None),
+) -> dict:
+    """Fetch active formal employment offer letters & agreements for candidate review."""
+    target_email = (email or "").strip().lower()
+    target_cid = candidate_id or ""
+
+    if not target_email and authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+        payload = decode_access_token(token)
+        if payload and payload.get("sub"):
+            target_email = payload.get("sub", "").strip().lower()
+            if payload.get("candidate_id"):
+                target_cid = payload.get("candidate_id")
+
+    query_or = []
+    if target_email:
+        query_or.append({"candidate_email": target_email})
+    if target_cid:
+        raw_id = target_cid.replace("CND-", "").strip()
+        query_or.extend([
+            {"candidate_id": target_cid},
+            {"submission_id": target_cid},
+            {"candidate_id": raw_id},
+            {"submission_id": raw_id},
+        ])
+
+    if not query_or:
+        return {"status": "success", "agreements": []}
+
+    docs = list(db["offer_letters"].find({"$or": query_or}).sort("updated_at", -1))
+    for d in docs:
+        d["_id"] = str(d.get("_id"))
+        if not d.get("agreement_id"):
+            d["agreement_id"] = str(d.get("_id"))
+
+    return {"status": "success", "agreements": docs}
+
+
+@router.post("/agreements/{agreement_id}/sign")
+async def sign_candidate_agreement_endpoint(
+    agreement_id: str,
+    payload: dict,
+    authorization: str | None = Header(None),
+) -> dict:
+    """Candidate digitally signs and executes the formal employment offer & agreement."""
+    from bson import ObjectId
+    now_iso = datetime.now(timezone.utc).isoformat()
+    signature_name = payload.get("signature_name") or "Candidate"
+    signer_email = payload.get("email") or ""
+
+    if authorization and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+        auth_data = decode_access_token(token)
+        if auth_data and auth_data.get("sub"):
+            signer_email = auth_data.get("sub")
+            if not payload.get("signature_name") and auth_data.get("name"):
+                signature_name = auth_data.get("name")
+
+    query_match = [
+        {"candidate_id": agreement_id},
+        {"submission_id": agreement_id},
+    ]
+    if ObjectId.is_valid(agreement_id):
+        query_match.append({"_id": ObjectId(agreement_id)})
+    if signer_email:
+        query_match.append({"candidate_email": signer_email.lower()})
+
+    # Update offer letter
+    db["offer_letters"].update_many(
+        {"$or": query_match},
+        {"$set": {
+            "status": "Accepted & Signed",
+            "agreement_status": "Accepted & Signed",
+            "signed_at": now_iso,
+            "signature_name": signature_name,
+            "candidate_accepted": True,
+            "updated_at": now_iso,
+        }}
+    )
+
+    # Update candidate submissions & candidate pool
+    db["candidate_submissions"].update_many(
+        {"$or": query_match},
+        {"$set": {
+            "status": "Accepted",
+            "agreement_status": "Accepted & Signed",
+            "agreement_signed_at": now_iso,
+            "updated_at": now_iso,
+        }}
+    )
+
+    db["candidates"].update_many(
+        {"$or": query_match},
+        {"$set": {
+            "status": "Accepted",
+            "agreement_status": "Accepted & Signed",
+            "agreement_signed_at": now_iso,
+            "updated_at": now_iso,
+        }}
+    )
+
+    # Super Admin & HR Notification
+    db["notifications"].insert_one({
+        "type": "AGREEMENT_SIGNED",
+        "candidate_id": agreement_id,
+        "actor": signature_name,
+        "title": "Employment Agreement Signed",
+        "message": f"Candidate {signature_name} has digitally signed and accepted the employment agreement!",
+        "created_at": now_iso,
+        "read": False
+    })
+
+    return {"status": "success", "message": "Employment agreement signed and accepted successfully!"}
 
 
 @router.post("/setup")
