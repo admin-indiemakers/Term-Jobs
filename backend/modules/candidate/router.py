@@ -404,7 +404,12 @@ def list_candidates(
     """List candidate submissions, optionally filtered by status and/or requisition."""
     query_filter = {}
     if status:
-        query_filter["status"] = status
+        if status == "Accepted":
+            query_filter["status"] = {"$in": ["Accepted", "Offer Extended", "Offer Accepted", "Hired"]}
+        elif status == "Shortlisted":
+            query_filter["status"] = {"$in": ["Shortlisted", "Accepted", "Offer Extended", "Offer Accepted", "Under Review", "Hired"]}
+        else:
+            query_filter["status"] = status
     if requisition_id:
         query_filter["requisition_id"] = requisition_id
     return _fetch_candidate_submissions_mongo(query_filter, current_user, include_details=include_details)
@@ -417,7 +422,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
     from modules.interview.domain.models import InterviewRound
 
     candidates = _fetch_candidate_submissions_mongo(
-        {"status": {"$in": ["Shortlisted", "Accepted", "Under Review", "Hired"]}},
+        {"status": {"$in": ["Shortlisted", "Accepted", "Offer Extended", "Offer Accepted", "Under Review", "Hired"]}},
         current_user
     )
 
@@ -450,7 +455,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
     for c in candidates:
         st = c.get("status")
         # Post-shortlist pipeline stages are preserved
-        if st in ("Accepted", "Hired", "Under Review"):
+        if st in ("Accepted", "Offer Extended", "Offer Accepted", "Hired", "Under Review"):
             verified.append(c)
             continue
 

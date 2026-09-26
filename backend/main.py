@@ -3203,7 +3203,7 @@ def save_candidate_offer_letter_endpoint(
             upsert=True
         )
         
-        # Also ensure candidate_submissions status is updated to Offer Extended
+        # Also ensure candidate_submissions status is updated to Accepted
         if cand_email or candidate_id:
             sub_filter = []
             if cand_email:
@@ -3214,7 +3214,7 @@ def save_candidate_offer_letter_endpoint(
                 sub_filter.extend([{"id": raw_id}, {"candidate_id": raw_id}])
             db["candidate_submissions"].update_many(
                 {"$or": sub_filter},
-                {"$set": {"status": "Offer Extended", "updated_at": now_iso}}
+                {"$set": {"status": "Accepted", "offer_status": "Offer Extended", "updated_at": now_iso}}
             )
     except Exception as e:
         logger.error(f"Failed to persist offer letter: {e}")
@@ -3298,7 +3298,8 @@ def send_candidate_offer_letter_endpoint(
         db["candidate_submissions"].update_many(
             {"$or": sub_or},
             {"$set": {
-                "status": "Offer Extended",
+                "status": "Accepted",
+                "offer_status": "Offer Extended",
                 "offer_extended_at": now_iso,
                 "updated_at": now_iso,
             }}
@@ -3306,7 +3307,7 @@ def send_candidate_offer_letter_endpoint(
 
         db["candidate_selections"].update_many(
             {"$or": sub_or},
-            {"$set": {"status": "Offer Extended", "updated_at": now_iso}}
+            {"$set": {"status": "Accepted", "offer_status": "Offer Extended", "updated_at": now_iso}}
         )
 
         db["notifications"].insert_one({

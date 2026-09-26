@@ -1602,13 +1602,20 @@ def get_director_work_orders(current_user: User = Depends(get_current_user)):
     sow_coll = db["sow_documents"]
     wo_coll = db["work_orders"]
 
+    comp_name = ""
+    if current_user.tenant_id:
+        t_doc = db["tenants"].find_one({"id": current_user.tenant_id})
+        if t_doc and t_doc.get("name"):
+            comp_name = t_doc["name"]
+    if not comp_name:
+        comp_name = getattr(current_user, "tenant_name", "") or ""
+
     query = {}
     if current_user.role != "Super Admin":
         tenant_match = []
         if current_user.tenant_id:
             tenant_match.append({"tenant_id": current_user.tenant_id})
             tenant_match.append({"sow_data.tenant_id": current_user.tenant_id})
-        comp_name = getattr(current_user, "tenant_name", "") or ""
         if comp_name:
             tenant_match.append({"company_name": {"$regex": f"^{comp_name}$", "$options": "i"}})
             tenant_match.append({"sow_data.company_name": {"$regex": f"^{comp_name}$", "$options": "i"}})
@@ -1623,7 +1630,6 @@ def get_director_work_orders(current_user: User = Depends(get_current_user)):
         wo_match = []
         if current_user.tenant_id:
             wo_match.append({"tenant_id": current_user.tenant_id})
-        comp_name = getattr(current_user, "tenant_name", "") or ""
         if comp_name:
             wo_match.append({"company_name": {"$regex": f"^{comp_name}$", "$options": "i"}})
         if wo_match:
@@ -1638,18 +1644,32 @@ def get_director_work_orders(current_user: User = Depends(get_current_user)):
             sow_res = get_worker_sow(cid, current_user=current_user)
             sow_payload = sow_res.get("sow_data") or {}
             
+            is_approved = bool(wo.get("director_approved")) or (
+                wo.get("status") in ("Approved by Director", "Approved") or wo.get("agreement_status") == "Approved"
+            )
+            s_status = (
+                "Approved by Director" if is_approved
+                else (wo.get("sow_status") if wo.get("sow_status") and wo.get("sow_status") not in ("Draft", "ACTIVE")
+                else (wo.get("agreement_status") if wo.get("agreement_status") and wo.get("agreement_status") not in ("Draft", "ACTIVE")
+                else "Pending Director Approval"))
+            )
+            sow_payload["status"] = s_status
+            sow_payload["director_approved"] = is_approved
+            sow_payload["procurement_authorized"] = wo.get("procurement_authorized", True)
+            sow_payload["procurement_approved_by"] = wo.get("procurement_approved_by", "Aditi (Procurement)")
+
             auto_doc = {
                 "candidate_id": cid,
                 "workorder_id": cid,
-                "tenant_id": current_user.tenant_id or wo.get("tenant_id") or "50c9753b-ad12-4783-b519-9080358f5359",
-                "company_name": wo.get("company_name") or getattr(current_user, "tenant_name", "") or "Bearitt",
+                "tenant_id": current_user.tenant_id or wo.get("tenant_id") or "13742004-bccc-45ba-86f7-c3513e28df43",
+                "company_name": wo.get("company_name") or comp_name or "Client Company",
                 "recruiter_id": wo.get("recruiter_id") or "recruiter_01",
-                "recruiter_name": wo.get("vendor_name") or "TalentBridge Staffing",
-                "status": wo.get("sow_status") or wo.get("agreement_status") or "Pending Director Approval",
+                "recruiter_name": wo.get("vendor_name") or sow_payload.get("supplier_name") or "Direct Applicant",
+                "status": s_status,
                 "submitted_at": wo.get("created_at") or datetime.now(timezone.utc).isoformat(),
                 "procurement_authorized": wo.get("procurement_authorized", True),
                 "procurement_approved_by": wo.get("procurement_approved_by", "Aditi (Procurement)"),
-                "director_approved": wo.get("director_approved", False),
+                "director_approved": is_approved,
                 "sow_data": sow_payload,
             }
             docs.append(auto_doc)

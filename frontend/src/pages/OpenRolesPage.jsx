@@ -127,7 +127,7 @@ export default function OpenRolesPage({ enabled = true }) {
         try {
           const storedUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
           email = (storedUser?.candidate_email || storedUser?.email || localStorage.getItem('candidate_email') || '').trim();
-        } catch (_) {}
+        } catch (_) { }
       }
       if (!email) {
         const urlParams = new URLSearchParams(window.location.search);
@@ -486,7 +486,7 @@ export default function OpenRolesPage({ enabled = true }) {
         });
         try {
           localStorage.setItem('tj_applied_jobs', JSON.stringify(Array.from(next)));
-        } catch (_) {}
+        } catch (_) { }
         return next;
       });
     }
@@ -745,7 +745,7 @@ export default function OpenRolesPage({ enabled = true }) {
           if (selectedJob._id) next.add(String(selectedJob._id));
           try {
             localStorage.setItem('tj_applied_jobs', JSON.stringify(Array.from(next)));
-          } catch (_) {}
+          } catch (_) { }
           return next;
         });
       }
@@ -1919,8 +1919,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               }}
                               onClick={() => fileInputRef.current?.click()}
                               className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${isDragging
-                                  ? 'border-white bg-white/[0.08]'
-                                  : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                                ? 'border-white bg-white/[0.08]'
+                                : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                                 }`}
                             >
                               <input
@@ -2375,8 +2375,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       onClick={() => poolFileInputRef.current?.click()}
                       className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
-                          ? 'border-white bg-white/[0.08]'
-                          : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                        ? 'border-white bg-white/[0.08]'
+                        : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                         }`}
                     >
                       <input
@@ -2563,11 +2563,10 @@ export default function OpenRolesPage({ enabled = true }) {
                               setSignatureAgreed(false);
                               setSignSuccessMessage('');
                             }}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                              isSigned
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${isSigned
                                 ? 'bg-white/10 hover:bg-white/20 text-white'
                                 : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 active:scale-98'
-                            }`}
+                              }`}
                           >
                             <FileText size={14} />
                             {isSigned ? 'View Executed Agreement' : 'Review & Sign Agreement →'}
@@ -2901,6 +2900,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   </div>
                 </div>
               )}
+
             </div>
           </div>
         </div>,
@@ -2969,8 +2969,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthError(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
-                    ? 'bg-white text-black shadow-xs'
-                    : 'text-white/60 hover:text-white'
+                  ? 'bg-white text-black shadow-xs'
+                  : 'text-white/60 hover:text-white'
                   }`}
               >
                 Sign In
@@ -2982,8 +2982,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthError(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
-                    ? 'bg-white text-black shadow-xs'
-                    : 'text-white/60 hover:text-white'
+                  ? 'bg-white text-black shadow-xs'
+                  : 'text-white/60 hover:text-white'
                   }`}
               >
                 Create Profile
