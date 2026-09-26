@@ -465,8 +465,32 @@ export default function OpenRolesPage({ enabled = true }) {
   );
   const currentResumeName = candidateAuth?.resumeFilename || candidateUser?.filename || 'profile_resume.pdf';
 
-  // Optimistic tracking of jobs applied in current session
-  const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => new Set());
+  // Persistent tracking of jobs applied on this device across sessions and reloads
+  const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('tj_applied_jobs');
+      return new Set(saved ? JSON.parse(saved) : []);
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Automatically sync applied jobs from candidate profile history into persistent storage
+  useEffect(() => {
+    if (Array.isArray(applications) && applications.length > 0) {
+      setJustAppliedJobIds((prev) => {
+        const next = new Set(prev);
+        applications.forEach((app) => {
+          if (app.requisition_id) next.add(String(app.requisition_id));
+          if (app.id) next.add(String(app.id));
+        });
+        try {
+          localStorage.setItem('tj_applied_jobs', JSON.stringify(Array.from(next)));
+        } catch (_) {}
+        return next;
+      });
+    }
+  }, [applications]);
 
   // Map of candidate's submitted applications for O(1) matching
   const appliedMap = useMemo(() => {
@@ -714,7 +738,16 @@ export default function OpenRolesPage({ enabled = true }) {
 
       setSubmitSuccess(result);
       if (selectedJob?.id) {
-        setJustAppliedJobIds((prev) => new Set([...prev, String(selectedJob.id)]));
+        const jid = String(selectedJob.id);
+        setJustAppliedJobIds((prev) => {
+          const next = new Set(prev);
+          next.add(jid);
+          if (selectedJob._id) next.add(String(selectedJob._id));
+          try {
+            localStorage.setItem('tj_applied_jobs', JSON.stringify(Array.from(next)));
+          } catch (_) {}
+          return next;
+        });
       }
       if (refreshProfile) {
         refreshProfile();
@@ -1227,7 +1260,11 @@ export default function OpenRolesPage({ enabled = true }) {
                   const isSaved = bookmarkedIds.includes(job.id);
                   const locDisplay = getLocationDisplay(job);
                   const existingApp = getJobApplication(job);
-                  const isApplied = Boolean(existingApp || justAppliedJobIds.has(String(job.id)));
+                  const isApplied = Boolean(
+                    existingApp ||
+                    justAppliedJobIds.has(String(job.id)) ||
+                    (job._id && justAppliedJobIds.has(String(job._id)))
+                  );
 
                   return (
                     <article
@@ -1342,10 +1379,10 @@ export default function OpenRolesPage({ enabled = true }) {
                               e.stopPropagation();
                               handleOpenJob(job);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[10px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold text-[10px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
                             title="Application Submitted · Click to view application status"
                           >
-                            <Check size={11} className="text-white" />
+                            <Check size={11} className="text-emerald-400" />
                             <span>Applied</span>
                           </button>
                         ) : (

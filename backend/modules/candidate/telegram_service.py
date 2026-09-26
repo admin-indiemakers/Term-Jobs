@@ -442,9 +442,20 @@ async def process_telegram_update(update: dict) -> None:
                 outreach_token = parts[1]
                 action = parts[2]
 
-                # Process via our central RSVP handler in outreach_service
+                # 1. Immediately acknowledge callback query to stop Telegram button spinner instantly (<150ms)
+                initial_toast = "⚡ Fast-Tracking your profile & generating link…" if action == "interested" else "Updating your profile status…"
+                try:
+                    async with httpx.AsyncClient(timeout=4.0) as quick_client:
+                        await quick_client.post(
+                            f"{TELEGRAM_API_BASE}/bot{token}/answerCallbackQuery",
+                            json={"callback_query_id": cb_id, "text": initial_toast, "show_alert": False}
+                        )
+                except Exception as ack_err:
+                    print(f"[TELEGRAM ACK ERROR] {ack_err}")
+
+                # 2. Process RSVP on worker thread to avoid blocking asyncio event loop
                 from modules.candidate.outreach_service import handle_candidate_rsvp
-                rsvp_result = handle_candidate_rsvp(outreach_token, action)
+                rsvp_result = await asyncio.to_thread(handle_candidate_rsvp, outreach_token, action)
 
                 cand_name = rsvp_result.get("candidate_name") or sender_name
                 req_title = rsvp_result.get("requisition_title") or "the position"
@@ -455,8 +466,6 @@ async def process_telegram_update(update: dict) -> None:
 
                 reply_markup = None
                 if action == "interested":
-                    toast_text = "🎉 Fast-Track Confirmed! Interview link ready."
-                    
                     interview_section = ""
                     if meeting_link:
                         interview_section = (
@@ -481,7 +490,6 @@ async def process_telegram_update(update: dict) -> None:
                             keyboard_buttons.append([{"text": "🚀 Candidate Portal Login", "url": portal_link}])
                         reply_markup = {"inline_keyboard": keyboard_buttons}
                 else:
-                    toast_text = "Profile updated: Marked as placed elsewhere."
                     updated_text = (
                         f"❌ *STATUS CONFIRMED: PLACED ELSEWHERE / UNAVAILABLE*\n\n"
                         f"Thank you for letting us know, *{cand_name}*!\n\n"
@@ -489,13 +497,10 @@ async def process_telegram_update(update: dict) -> None:
                         f"Best of luck in your current role!"
                     )
 
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    # 1. Answer callback query toast
-                    await client.post(
-                        f"{TELEGRAM_API_BASE}/bot{token}/answerCallbackQuery",
-                        json={"callback_query_id": cb_id, "text": toast_text, "show_alert": False}
-                    )
-                    # 2. Edit the original message to show confirmed status + interview buttons
+                # 3. Dispatch message edit and direct interview link concurrently in parallel
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    tasks = []
+
                     if chat_id and message_id:
                         edit_payload = {
                             "chat_id": chat_id,
@@ -505,11 +510,11 @@ async def process_telegram_update(update: dict) -> None:
                         }
                         if reply_markup:
                             edit_payload["reply_markup"] = reply_markup
-                        await client.post(
+                        tasks.append(client.post(
                             f"{TELEGRAM_API_BASE}/bot{token}/editMessageText",
                             json=edit_payload
-                        )
-                    # 3. Send a new direct alert message with the interview room link & button so the candidate gets notified
+                        ))
+
                     if action == "interested" and chat_id and meeting_link:
                         new_msg = (
                             f"🎉 *Here is your Live Interview Room Link!*\n\n"
@@ -519,7 +524,7 @@ async def process_telegram_update(update: dict) -> None:
                             f"🎥 *Meeting Room:*\n{meeting_link}\n\n"
                             f"Tap below to join the live video room:"
                         )
-                        await client.post(
+                        tasks.append(client.post(
                             f"{TELEGRAM_API_BASE}/bot{token}/sendMessage",
                             json={
                                 "chat_id": chat_id,
@@ -527,7 +532,11 @@ async def process_telegram_update(update: dict) -> None:
                                 "parse_mode": "Markdown",
                                 "reply_markup": reply_markup
                             }
-                        )
+                        ))
+
+                    if tasks:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+
                 print(f"[TELEGRAM RSVP PROCESSED] Token={outreach_token} Action={action} Candidate={cand_name} MeetingLink={meeting_link}")
                 return
 
@@ -576,7 +585,7 @@ async def telegram_polling_loop():
                     for update in updates:
                         offset = max(offset, update["update_id"] + 1)
                         try:
-                            await process_telegram_update(update)
+                            asyncio.create_task(process_telegram_update(update))
                         except Exception as update_err:
                             print(f"[TELEGRAM UPDATE PROCESS ERROR] {update_err}")
                 elif res.status_code == 409:
