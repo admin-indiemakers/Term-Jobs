@@ -3138,6 +3138,7 @@ def save_candidate_offer_letter_endpoint(
 ) -> dict:
     """Save or update custom editable employment offer letter for candidate."""
     from datetime import datetime, timezone
+    import re
     from modules.shared.db import db
     now_iso = datetime.now(timezone.utc).isoformat()
     
@@ -3145,13 +3146,76 @@ def save_candidate_offer_letter_endpoint(
     offer_data["candidate_id"] = candidate_id
     offer_data["updated_at"] = now_iso
     offer_data["updated_by"] = getattr(current_user, "email", None) or getattr(current_user, "name", None) or "HR"
+    if "status" not in offer_data:
+        offer_data["status"] = "Offer Extended"
+    if "agreement_status" not in offer_data:
+        offer_data["agreement_status"] = "Pending Signature"
+
+    cand_email = (offer_data.get("candidate_email") or "").strip().lower()
+    cand_name = (offer_data.get("candidate_name") or "").strip()
+    raw_id = candidate_id.replace("CND-", "").replace("BEAR-", "").strip()
+
+    match_or = [
+        {"candidate_id": candidate_id},
+        {"submission_id": candidate_id},
+        {"id": candidate_id},
+    ]
+    if raw_id:
+        match_or.extend([
+            {"candidate_id": raw_id},
+            {"submission_id": raw_id},
+            {"id": raw_id},
+        ])
+    if cand_email:
+        match_or.extend([
+            {"candidate_email": cand_email},
+            {"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}},
+            {"email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}},
+        ])
+
+    # Also resolve candidate's actual submission ID from DB if candidate_id is a synthetic selection ID
+    try:
+        cand_sub = db["candidate_submissions"].find_one({
+            "$or": [
+                {"id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}} if cand_email else {"id": candidate_id}
+            ]
+        })
+        if cand_sub:
+            real_sub_id = cand_sub.get("id") or cand_sub.get("submission_id")
+            if real_sub_id:
+                offer_data["submission_id"] = real_sub_id
+                match_or.append({"submission_id": real_sub_id})
+                match_or.append({"candidate_id": real_sub_id})
+            if not cand_email and cand_sub.get("candidate_email"):
+                cand_email = cand_sub["candidate_email"].strip().lower()
+                offer_data["candidate_email"] = cand_email
+            if not cand_name and cand_sub.get("candidate_name"):
+                offer_data["candidate_name"] = cand_sub["candidate_name"]
+    except Exception as e:
+        logger.warning(f"Error resolving candidate submission for offer letter: {e}")
 
     try:
         db["offer_letters"].update_one(
-            {"$or": [{"candidate_id": candidate_id}, {"submission_id": candidate_id}]},
+            {"$or": match_or},
             {"$set": offer_data},
             upsert=True
         )
+        
+        # Also ensure candidate_submissions status is updated to Offer Extended
+        if cand_email or candidate_id:
+            sub_filter = []
+            if cand_email:
+                sub_filter.append({"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}})
+            if candidate_id:
+                sub_filter.extend([{"id": candidate_id}, {"candidate_id": candidate_id}])
+            if raw_id:
+                sub_filter.extend([{"id": raw_id}, {"candidate_id": raw_id}])
+            db["candidate_submissions"].update_many(
+                {"$or": sub_filter},
+                {"$set": {"status": "Offer Extended", "updated_at": now_iso}}
+            )
     except Exception as e:
         logger.error(f"Failed to persist offer letter: {e}")
         return {"status": "error", "detail": str(e)}
@@ -3168,24 +3232,71 @@ def send_candidate_offer_letter_endpoint(
 ) -> dict:
     """Formally dispatch offer letter to candidate and update hiring pipeline."""
     from datetime import datetime, timezone
+    import re
     from modules.shared.db import db
     now_iso = datetime.now(timezone.utc).isoformat()
+    raw_id = candidate_id.replace("CND-", "").replace("BEAR-", "").strip()
+
+    target_email = ""
+    target_name = ""
+    try:
+        existing = db["offer_letters"].find_one({
+            "$or": [
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if existing:
+            target_email = (existing.get("candidate_email") or "").strip().lower()
+            target_name = existing.get("candidate_name") or ""
+        else:
+            sub = db["candidate_submissions"].find_one({
+                "$or": [
+                    {"id": candidate_id},
+                    {"candidate_id": candidate_id},
+                    {"id": raw_id},
+                    {"candidate_id": raw_id},
+                ]
+            })
+            if sub:
+                target_email = (sub.get("candidate_email") or "").strip().lower()
+                target_name = sub.get("candidate_name") or ""
+    except Exception as e:
+        logger.warning(f"Error checking candidate for send: {e}")
+
+    match_or = [
+        {"candidate_id": candidate_id},
+        {"submission_id": candidate_id},
+    ]
+    if raw_id:
+        match_or.extend([{"candidate_id": raw_id}, {"submission_id": raw_id}])
+    if target_email:
+        match_or.extend([
+            {"candidate_email": target_email},
+            {"candidate_email": {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}},
+            {"email": {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}},
+        ])
 
     try:
-        # Mark offer as sent
-        db["offer_letters"].update_one(
-            {"$or": [{"candidate_id": candidate_id}, {"submission_id": candidate_id}]},
+        db["offer_letters"].update_many(
+            {"$or": match_or},
             {"$set": {
                 "status": "Offer Extended",
+                "agreement_status": "Pending Signature",
                 "sent_at": now_iso,
                 "sent_by": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR"
-            }},
-            upsert=True
+            }}
         )
 
-        # Update candidate submission status
-        db["candidate_submissions"].update_one(
-            {"$or": [{"id": candidate_id}, {"candidate_id": candidate_id}]},
+        sub_or = [{"id": candidate_id}, {"candidate_id": candidate_id}]
+        if raw_id:
+            sub_or.extend([{"id": raw_id}, {"candidate_id": raw_id}])
+        if target_email:
+            sub_or.append({"candidate_email": {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}})
+        db["candidate_submissions"].update_many(
+            {"$or": sub_or},
             {"$set": {
                 "status": "Offer Extended",
                 "offer_extended_at": now_iso,
@@ -3193,13 +3304,18 @@ def send_candidate_offer_letter_endpoint(
             }}
         )
 
-        # Notify
+        db["candidate_selections"].update_many(
+            {"$or": sub_or},
+            {"$set": {"status": "Offer Extended", "updated_at": now_iso}}
+        )
+
         db["notifications"].insert_one({
             "type": "OFFER_LETTER_SENT",
             "candidate_id": candidate_id,
+            "candidate_email": target_email,
             "actor": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR",
             "title": "Formal Offer Letter Dispatched",
-            "message": f"Employment offer letter has been dispatched to candidate {candidate_id}.",
+            "message": f"Employment offer letter has been dispatched to {target_name or candidate_id}.",
             "created_at": now_iso,
             "read": False
         })

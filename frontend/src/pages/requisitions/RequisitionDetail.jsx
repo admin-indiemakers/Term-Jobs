@@ -132,6 +132,7 @@ export default function RequisitionDetail() {
   const structuredRole = draftRole || req?.structured_role;
 
   const isDirectorOrAdmin = user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin';
+  const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin';
   const isDirectorApproved = Boolean(req?.director_approved);
 
   const currentStepIndex = Math.max(
@@ -1004,17 +1005,26 @@ export default function RequisitionDetail() {
                           <span>Auto-Deadline:</span>
                           <span className="font-mono text-white font-bold">{formatDate(req?.shortlist_deadline)}</span>
                         </div>
-                        <div className="pt-1">
-                          <button
-                            type="button"
-                            onClick={handleInstantDispatchFromDetail}
-                            disabled={Boolean(busy)}
-                            className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                          >
-                            <span>⚡</span>
-                            <span>{busy === 'instant-shortlist' ? 'Dispatching...' : 'Send Shortlist Now (Instant)'}</span>
-                          </button>
-                        </div>
+                        {isAdmin ? (
+                          <div className="pt-1">
+                            <button
+                              type="button"
+                              onClick={handleInstantDispatchFromDetail}
+                              disabled={Boolean(busy)}
+                              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              <span>⚡</span>
+                              <span>{busy === 'instant-shortlist' ? 'Dispatching...' : 'Send Shortlist Now (Instant)'}</span>
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="pt-1">
+                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-[11px] text-slate-300 flex items-center gap-2">
+                              <Clock size={13} className="text-amber-400 shrink-0" />
+                              <span>Super Admin AI screening in progress. Shortlisted candidates will be delivered to your pipeline.</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

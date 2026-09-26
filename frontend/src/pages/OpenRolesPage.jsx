@@ -2412,7 +2412,31 @@ export default function OpenRolesPage({ enabled = true }) {
               </button>
             </div>
 
-            <div className="mt-4 space-y-3 max-h-[70vh] overflow-y-auto pr-1">
+            {/* Candidate Email Verification & Quick Switch */}
+            <div className="mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                <span className="text-[11px] text-white/50 shrink-0 font-medium">Candidate Email:</span>
+                <input
+                  type="email"
+                  value={agreementLookupEmail}
+                  onChange={(e) => setAgreementLookupEmail(e.target.value)}
+                  placeholder={candidateUser?.candidate_email || candidateUser?.email || "e.g. ashk68799@gmail.com"}
+                  className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-400 font-semibold"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = agreementLookupEmail || candidateUser?.candidate_email || candidateUser?.email;
+                  if (target) loadCandidateAgreements(target);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition cursor-pointer shrink-0 shadow-sm"
+              >
+                Fetch Agreements
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3 max-h-[65vh] overflow-y-auto pr-1">
               {loadingAgreements ? (
                 <div className="py-12 text-center text-white/50 text-xs">
                   <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-2" />

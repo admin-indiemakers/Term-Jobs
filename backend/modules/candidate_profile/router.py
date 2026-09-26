@@ -464,21 +464,52 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
 
     # Fetch formal agreements & offer letters
     cand_id = candidate.get("id") or candidate.get("candidate_id") or ""
-    raw_id = cand_id.replace("CND-", "").strip() if cand_id else ""
+    raw_id = cand_id.replace("CND-", "").replace("BEAR-", "").strip() if cand_id else ""
+    cand_email = (email or candidate.get("candidate_email") or "").strip().lower()
+    
+    agreements_query = []
+    if cand_email:
+        email_regex = {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}
+        agreements_query.append({"candidate_email": email_regex})
+        agreements_query.append({"email": email_regex})
+        try:
+            subs = list(db["candidate_submissions"].find({"candidate_email": email_regex}, {"id": 1, "candidate_id": 1, "submission_id": 1}))
+            for s in subs:
+                for k in ["id", "candidate_id", "submission_id"]:
+                    v = s.get(k)
+                    if v:
+                        v_str = str(v)
+                        agreements_query.extend([
+                            {"candidate_id": v_str},
+                            {"submission_id": v_str},
+                            {"id": v_str},
+                            {"candidate_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                            {"submission_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                        ])
+        except Exception:
+            pass
+
+    if cand_id:
+        agreements_query.extend([
+            {"candidate_id": cand_id},
+            {"submission_id": cand_id},
+            {"id": cand_id},
+        ])
+    if raw_id:
+        agreements_query.extend([
+            {"candidate_id": raw_id},
+            {"submission_id": raw_id},
+            {"id": raw_id},
+        ])
+
     agreements_cursor = list(
-        db["offer_letters"].find({
-            "$or": [
-                {"candidate_email": email},
-                {"candidate_id": cand_id},
-                {"submission_id": cand_id},
-                {"candidate_id": raw_id},
-                {"submission_id": raw_id},
-            ]
-        }).sort("updated_at", -1)
+        db["offer_letters"].find({"$or": agreements_query} if agreements_query else {}).sort("updated_at", -1)
     )
     agreements = []
     for agr in agreements_cursor:
         agr["_id"] = str(agr.get("_id"))
+        if not agr.get("agreement_id"):
+            agr["agreement_id"] = str(agr.get("_id"))
         agreements.append(agr)
 
     has_resume = bool(candidate.get("resume_pdf") or candidate.get("filename"))
@@ -516,14 +547,36 @@ async def get_candidate_agreements_endpoint(
 
     query_or = []
     if target_email:
-        query_or.append({"candidate_email": target_email})
+        email_regex = {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}
+        query_or.append({"candidate_email": email_regex})
+        query_or.append({"email": email_regex})
+        try:
+            subs = list(db["candidate_submissions"].find({"candidate_email": email_regex}, {"id": 1, "candidate_id": 1, "submission_id": 1}))
+            cands = list(db["candidates"].find({"candidate_email": email_regex}, {"id": 1, "candidate_id": 1}))
+            for s in subs + cands:
+                for k in ["id", "candidate_id", "submission_id"]:
+                    v = s.get(k)
+                    if v:
+                        v_str = str(v)
+                        query_or.extend([
+                            {"candidate_id": v_str},
+                            {"submission_id": v_str},
+                            {"id": v_str},
+                            {"candidate_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                            {"submission_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                        ])
+        except Exception as e:
+            logger.warning(f"Error finding candidate linked IDs for agreements: {e}")
+
     if target_cid:
-        raw_id = target_cid.replace("CND-", "").strip()
+        raw_id = target_cid.replace("CND-", "").replace("BEAR-", "").strip()
         query_or.extend([
             {"candidate_id": target_cid},
             {"submission_id": target_cid},
+            {"id": target_cid},
             {"candidate_id": raw_id},
             {"submission_id": raw_id},
+            {"id": raw_id},
         ])
 
     if not query_or:
