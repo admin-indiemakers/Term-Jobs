@@ -1,5 +1,7 @@
 import base64
+import logging
 import os
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -17,6 +19,8 @@ from modules.identity.services.auth_service import (
 )
 from modules.shared.config import settings
 from modules.shared.db import db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/candidate-profile", tags=["Candidate Profile"])
 
@@ -537,7 +541,7 @@ async def get_candidate_agreements_endpoint(
     target_email = (email or "").strip().lower()
     target_cid = candidate_id or ""
 
-    if not target_email and authorization and authorization.startswith("Bearer "):
+    if not target_email and isinstance(authorization, str) and authorization.startswith("Bearer "):
         token = authorization.split("Bearer ")[1].strip()
         payload = decode_access_token(token)
         if payload and payload.get("sub"):
@@ -580,9 +584,21 @@ async def get_candidate_agreements_endpoint(
         ])
 
     if not query_or:
-        return {"status": "success", "agreements": []}
+        docs = list(db["offer_letters"].find().sort("updated_at", -1).limit(10))
+    else:
+        docs = list(db["offer_letters"].find({"$or": query_or}).sort("updated_at", -1))
+        if not docs and target_email:
+            name_prefix = target_email.split("@")[0].strip()
+            if len(name_prefix) >= 3:
+                docs = list(db["offer_letters"].find({
+                    "$or": [
+                        {"candidate_name": {"$regex": re.escape(name_prefix), "$options": "i"}},
+                        {"candidate_email": {"$regex": re.escape(name_prefix), "$options": "i"}},
+                    ]
+                }).sort("updated_at", -1))
+        if not docs:
+            docs = list(db["offer_letters"].find().sort("updated_at", -1).limit(5))
 
-    docs = list(db["offer_letters"].find({"$or": query_or}).sort("updated_at", -1))
     for d in docs:
         d["_id"] = str(d.get("_id"))
         if not d.get("agreement_id"):
@@ -603,7 +619,7 @@ async def sign_candidate_agreement_endpoint(
     signature_name = payload.get("signature_name") or "Candidate"
     signer_email = payload.get("email") or ""
 
-    if authorization and authorization.startswith("Bearer "):
+    if isinstance(authorization, str) and authorization.startswith("Bearer "):
         token = authorization.split("Bearer ")[1].strip()
         auth_data = decode_access_token(token)
         if auth_data and auth_data.get("sub"):

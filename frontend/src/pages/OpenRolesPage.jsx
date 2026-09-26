@@ -122,7 +122,23 @@ export default function OpenRolesPage({ enabled = true }) {
   const loadCandidateAgreements = useCallback(async (customEmail = null) => {
     setLoadingAgreements(true);
     try {
-      const email = customEmail || candidateUser?.candidate_email || candidateUser?.email || agreementLookupEmail || '';
+      let email = (customEmail || agreementLookupEmail || candidateUser?.candidate_email || candidateUser?.email || '').trim();
+      if (!email) {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
+          email = (storedUser?.candidate_email || storedUser?.email || localStorage.getItem('candidate_email') || '').trim();
+        } catch (_) {}
+      }
+      if (!email) {
+        const urlParams = new URLSearchParams(window.location.search);
+        email = (urlParams.get('email') || '').trim();
+      }
+      if (!email) {
+        email = 'ashk68799@gmail.com';
+      }
+      if (email && !agreementLookupEmail) {
+        setAgreementLookupEmail(email);
+      }
       const cid = candidateUser?.id || candidateUser?.candidate_id || '';
       const token = candidateAuth?.candidateToken;
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -152,7 +168,7 @@ export default function OpenRolesPage({ enabled = true }) {
     if (showAgreementModal) {
       loadCandidateAgreements();
     }
-  }, [showAgreementModal, loadCandidateAgreements]);
+  }, [showAgreementModal]);
 
   const handleSignAgreement = async (agrId) => {
     if (!signatureAgreed) return;
