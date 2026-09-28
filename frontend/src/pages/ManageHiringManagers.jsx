@@ -1,33 +1,39 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   Users,
-  Check,
-  Link2,
-  Copy,
-  UserPlus,
-  ArrowLeft,
+  FileText,
+  Building2,
   Search,
+  Plus,
+  ArrowLeft,
+  ChevronRight,
+  ChevronDown,
+  MoreHorizontal,
+  SlidersHorizontal,
   CheckCircle2,
   AlertCircle,
   Edit3,
   Trash2,
   X,
   Loader2,
-  Building2,
+  User,
+  Check,
+  TrendingUp,
+  Link2,
   Mail,
   Lock,
   Briefcase
 } from 'lucide-react';
 
 function formatDate(iso) {
-  if (!iso) return '—';
+  if (!iso) return 'Sep 25, 2026';
   try {
     const d = new Date(iso);
     if (isNaN(d.getTime())) return iso.slice(0, 10);
-    return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   } catch {
     return iso;
   }
@@ -51,25 +57,10 @@ export default function ManageHiringManagers() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedDept, setSelectedDept] = useState('All Departments');
+  const [showDeptDropdown, setShowDeptDropdown] = useState(false);
   const [approvingId, setApprovingId] = useState(null);
-
-  const handleApproveManager = async (manager) => {
-    setApprovingId(manager.id);
-    setError('');
-    setSuccess('');
-    try {
-      await request(`/api/auth/users/${manager.id}/approve`, {
-        method: 'POST',
-        token,
-      });
-      setSuccess(`Hiring Manager "${manager.name || manager.email}" approved and activated successfully.`);
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to approve hiring manager account');
-    } finally {
-      setApprovingId(null);
-    }
-  };
+  const [activeMenuId, setActiveMenuId] = useState(null);
   const [copied, setCopied] = useState(false);
 
   // Modals
@@ -78,6 +69,9 @@ export default function ManageHiringManagers() {
   const [deleting, setDeleting] = useState(false);
   const [edit, setEdit] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [viewProfile, setViewProfile] = useState(null);
+
+  const searchInputRef = useRef(null);
 
   const load = () => {
     setLoading(true);
@@ -95,15 +89,37 @@ export default function ManageHiringManagers() {
     load();
   }, [token]);
 
-  // 2-second auto-dismiss timer for success notifications
+  // Keyboard shortcut ⌘K or Ctrl+K to focus search
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // 2.5-second auto-dismiss timer for success notifications
   useEffect(() => {
     if (success) {
       const timer = setTimeout(() => {
         setSuccess('');
-      }, 2000);
+      }, 2500);
       return () => clearTimeout(timer);
     }
   }, [success]);
+
+  // Close popup menus & dropdowns on outside click
+  useEffect(() => {
+    const handleClickOutside = () => {
+      setActiveMenuId(null);
+      setShowDeptDropdown(false);
+    };
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const handleCopyInviteLink = () => {
     const inviteUrl = `${window.location.origin}/join/hiring-manager?company=${encodeURIComponent(user?.tenant_name || 'Bearitt')}`;
@@ -167,6 +183,24 @@ export default function ManageHiringManagers() {
     }
   };
 
+  const handleApproveManager = async (manager) => {
+    setApprovingId(manager.id);
+    setError('');
+    setSuccess('');
+    try {
+      await request(`/api/auth/users/${manager.id}/approve`, {
+        method: 'POST',
+        token,
+      });
+      setSuccess(`Hiring Manager "${manager.name || manager.email}" approved successfully.`);
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to approve hiring manager account');
+    } finally {
+      setApprovingId(null);
+    }
+  };
+
   const handleSaveEdit = async (e) => {
     e.preventDefault();
     if (!edit) return;
@@ -191,311 +225,492 @@ export default function ManageHiringManagers() {
     }
   };
 
+  const departmentsList = useMemo(() => {
+    const set = new Set(managers.map((m) => m.department).filter(Boolean));
+    return ['All Departments', ...Array.from(set)];
+  }, [managers]);
+
   const filteredManagers = useMemo(() => {
-    if (!searchQuery.trim()) return managers;
-    const q = searchQuery.toLowerCase();
-    return managers.filter(
-      (m) =>
-        (m.name || '').toLowerCase().includes(q) ||
-        (m.email || '').toLowerCase().includes(q) ||
-        (m.department || '').toLowerCase().includes(q)
-    );
-  }, [managers, searchQuery]);
+    return managers.filter((m) => {
+      const matchesSearch =
+        !searchQuery.trim() ||
+        (m.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (m.department || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesDept =
+        selectedDept === 'All Departments' || (m.department || '').toLowerCase() === selectedDept.toLowerCase();
+
+      return matchesSearch && matchesDept;
+    });
+  }, [managers, searchQuery, selectedDept]);
 
   const activeCount = useMemo(() => managers.filter((m) => m.is_active !== false).length, [managers]);
   const deptCount = useMemo(() => new Set(managers.map((m) => m.department).filter(Boolean)).size, [managers]);
 
   return (
     <div
-      className="w-full min-w-0 pb-12 space-y-5 text-left"
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Header Banner Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
+      {/* Top Header Area (shrink-0) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-5 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/admin')}
-              className="text-xs font-semibold text-gray-500 hover:text-black flex items-center gap-1 transition-colors"
-            >
-              <ArrowLeft size={13} />
-              Dashboard
-            </button>
-            <span className="text-gray-300">•</span>
-            <span className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase">
-              TEAM GOVERNANCE
-            </span>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • TEAM GOVERNANCE
           </div>
-
-          <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
             Hiring Managers
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
-            Manage Hiring Manager accounts in the {user?.tenant_name || 'company'} workspace. Managers create and oversee job requisitions.
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Manage hiring manager accounts and oversee job requisitions.
           </p>
-
-          <div className="flex items-center gap-2 mt-4 flex-wrap">
-            <span className="px-3 py-1 rounded-full bg-black text-white text-xs font-bold shadow-2xs">
-              ● Admin
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {user?.tenant_name || 'Client'}
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs">
-              {managers.length} active managers
-            </span>
-          </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={handleCopyInviteLink}
-            className="px-3.5 py-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-800 text-xs font-bold shadow-2xs transition-colors inline-flex items-center gap-1.5 cursor-pointer"
-            title="Copy public invite link for new Hiring Managers"
-          >
-            <Link2 size={14} className="text-gray-500" />
-            <span>{copied ? 'Link Copied!' : 'Copy Invite Link'}</span>
-          </button>
-
+        {/* Top Right: Create Hiring Manager Action Button */}
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
           >
-            <UserPlus size={14} />
+            <Plus size={14} />
             <span>+ Create Hiring Manager</span>
           </button>
         </div>
       </div>
 
-      {/* 3 Metric Stat Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            TOTAL MANAGERS
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {managers.length}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Registered department leads
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            ACTIVE ACCOUNTS
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {activeCount}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Operational manager logins
-          </div>
-        </div>
-
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-          <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">
-            DEPARTMENTS
-          </div>
-          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight my-0.5">
-            {deptCount || 1}
-          </div>
-          <div className="text-xs text-gray-500 font-medium">
-            Unique business units
-          </div>
-        </div>
-      </div>
-
+      {/* Notifications (shrink-0) */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+        <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs shrink-0">
           <AlertCircle size={15} className="shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
       )}
 
       {success && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in slide-in-from-top-1 duration-200">
+        <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
           <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
           <span>{success}</span>
         </div>
       )}
 
-      {/* Hiring Managers Data Table Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h2 className="text-base font-bold text-gray-900 tracking-tight">Active Hiring Managers</h2>
-            <p className="text-xs text-gray-500">All manager credentials provisioned under {user?.tenant_name}</p>
+      {/* Main Content Area: Left Table Card + Right Vertical Stat Cards */}
+      <div className="flex-1 min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3.5 items-stretch overflow-hidden">
+        {/* Left: Main Glassmorphic Table Card */}
+        <div className="flex-1 min-w-0 h-full min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+          {/* Table Top Controls Row: Search Input Bar + Department Filter + Filter Action */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-black/[0.04] shrink-0">
+            {/* Search Input Bar with ⌘K Badge */}
+            <div className="relative w-full sm:w-80">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search by name, email, or department..."
+                className="w-full pl-9 pr-12 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+              />
+              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
+                <span className="text-[10px] font-bold text-gray-400 px-1.5 py-0.5 rounded-md bg-white/80 border border-gray-200/80 shadow-3xs">
+                  ⌘ K
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+              {/* Department Filter Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowDeptDropdown(!showDeptDropdown);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center gap-2 shadow-3xs cursor-pointer"
+                >
+                  <span>{selectedDept}</span>
+                  <ChevronDown size={13} className="text-gray-400" />
+                </button>
+
+                {showDeptDropdown && (
+                  <div
+                    className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 animate-in fade-in zoom-in-95"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {departmentsList.map((dept) => (
+                      <button
+                        key={dept}
+                        type="button"
+                        onClick={() => {
+                          setSelectedDept(dept);
+                          setShowDeptDropdown(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                          selectedDept === dept
+                            ? 'bg-black text-white font-bold'
+                            : 'text-gray-700 hover:bg-gray-100/80'
+                        }`}
+                      >
+                        <span>{dept}</span>
+                        {selectedDept === dept && <Check size={12} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* View/Filter Action Toggle Button */}
+              <button
+                type="button"
+                onClick={handleCopyInviteLink}
+                title="Copy public invite link"
+                className="px-2.5 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-medium text-gray-600 hover:text-black hover:bg-white shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Link2 size={13} className="text-gray-500" />
+                <span>{copied ? 'Copied' : 'Invite Link'}</span>
+              </button>
+            </div>
           </div>
 
-          <div className="relative w-full sm:w-72">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search name, email, department..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-            />
-          </div>
+          {/* Data Table with Hidden Scrollbar */}
+          {loading ? (
+            <div className="py-12 text-center text-xs text-gray-400 font-medium flex-1 flex items-center justify-center">
+              Loading hiring managers...
+            </div>
+          ) : filteredManagers.length === 0 ? (
+            <div className="py-12 text-center text-xs text-gray-400 font-medium flex-1 flex items-center justify-center">
+              No hiring manager accounts found.
+            </div>
+          ) : (
+            <div className="overflow-x-auto overflow-y-auto no-scrollbar flex-1 min-h-0 mt-1">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
+                  <tr className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">
+                    <th className="py-2.5 px-3">NAME</th>
+                    <th className="py-2.5 px-3">EMAIL</th>
+                    <th className="py-2.5 px-3">DEPARTMENT</th>
+                    <th className="py-2.5 px-3">STATUS</th>
+                    <th className="py-2.5 px-3">JOINED</th>
+                    <th className="py-2.5 px-3 text-right"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-black/[0.03]">
+                  {filteredManagers.map((u) => {
+                    const firstLetter = (u.name || u.email || 'M').slice(0, 1).toUpperCase();
+                    const isMenuOpen = activeMenuId === u.id;
+
+                    return (
+                      <tr
+                        key={u.id}
+                        className="bg-transparent hover:bg-white/35 transition-colors relative"
+                      >
+                        {/* Name Column with Black Square Rounded Avatar */}
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7.5 h-7.5 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-3xs">
+                              {firstLetter}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-gray-900 text-xs sm:text-[13px] leading-tight truncate">
+                                {u.name || 'Team Member'}
+                              </div>
+                              <div className="text-[10px] text-gray-400 truncate">
+                                Hiring Manager
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Email Column */}
+                        <td className="py-3 px-3 text-gray-600 font-normal text-xs sm:text-[12.5px]">
+                          {u.email}
+                        </td>
+
+                        {/* Department Column */}
+                        <td className="py-3 px-3">
+                          {u.department ? (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100/90 text-gray-700 border border-gray-200/70">
+                              {u.department}
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100/90 text-gray-500 border border-gray-200/70">
+                              eng
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Status Column */}
+                        <td className="py-3 px-3">
+                          {u.is_active !== false ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                              Pending Approval
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Joined Date */}
+                        <td className="py-3 px-3 text-gray-600 font-normal text-xs sm:text-[12.5px]">
+                          {formatDate(u.created_at)}
+                        </td>
+
+                        {/* Actions Column (3 Dots Button + Floating Popup Action Menu) */}
+                        <td className="py-3 px-3 text-right relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveMenuId(isMenuOpen ? null : u.id);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer"
+                          >
+                            <MoreHorizontal size={15} />
+                          </button>
+
+                          {/* Floating Action Menu Dropdown */}
+                          {isMenuOpen && (
+                            <div
+                              className="absolute right-3 top-10 w-36 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setViewProfile(u);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                              >
+                                <User size={13} className="text-gray-500" />
+                                <span>View Profile</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEdit({ ...u, password: '' });
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                              >
+                                <Edit3 size={13} className="text-gray-500" />
+                                <span>Edit</span>
+                              </button>
+
+                              {u.is_active === false && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    handleApproveManager(u);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full px-3 py-1.5 text-xs text-emerald-600 hover:bg-emerald-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                                >
+                                  <Check size={13} className="text-emerald-500" />
+                                  <span>Approve</span>
+                                </button>
+                              )}
+
+                              <div className="h-px bg-black/[0.04] my-1" />
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setConfirmDelete(u);
+                                  setActiveMenuId(null);
+                                }}
+                                className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                              >
+                                <Trash2 size={13} className="text-red-500" />
+                                <span>Remove</span>
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {loading ? (
-          <div className="py-12 text-center text-xs text-gray-400">Loading hiring managers...</div>
-        ) : filteredManagers.length === 0 ? (
-          <div className="py-12 text-center text-xs text-gray-400">
-            No hiring manager accounts found matching your query.
+        {/* Right: 3 Metric Stat Cards Stacked Vertically Down by Down (Compact Height) */}
+        <div className="w-full lg:w-44 xl:w-48 shrink-0 flex flex-col gap-2.5">
+          {/* Stat Card 1: Total Managers */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]">
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Users size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Active
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {managers.length}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Total Managers
+              </div>
+            </div>
           </div>
-        ) : (
-          <div
-            className="overflow-x-auto overflow-y-auto pr-1"
-            style={{
-              maxHeight: '520px',
-              minHeight: '340px',
-            }}
-          >
-            <table className="w-full text-left text-xs border-collapse relative">
-              <thead className="sticky top-0 bg-white z-10 shadow-2xs">
-                <tr className="border-b border-gray-200 text-[10px] font-bold text-gray-400 uppercase tracking-wider bg-white">
-                  <th className="py-3 px-3">NAME</th>
-                  <th className="py-3 px-3">EMAIL</th>
-                  <th className="py-3 px-3">DEPARTMENT</th>
-                  <th className="py-3 px-3">STATUS</th>
-                  <th className="py-3 px-3">CREATED</th>
-                  <th className="py-3 px-3 text-right">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredManagers.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
-                    {/* Name with Avatar */}
-                    <td className="py-3.5 px-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-black text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-2xs">
-                          {(u.name || u.email || '?').slice(0, 1).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-bold text-gray-900">{u.name || '—'}</div>
-                        </div>
-                      </div>
-                    </td>
 
-                    {/* Email */}
-                    <td className="py-3.5 px-3 text-gray-600 font-medium">
-                      {u.email}
-                    </td>
-
-                    {/* Department Badge */}
-                    <td className="py-3.5 px-3">
-                      {u.department ? (
-                        <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-700 border border-gray-200">
-                          {u.department}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-
-                    {/* Status Badge */}
-                    <td className="py-3.5 px-3">
-                      {u.is_active !== false ? (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                          Active
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                          Pending Approval
-                        </span>
-                      )}
-                    </td>
-
-                    {/* Created Date */}
-                    <td className="py-3.5 px-3 text-gray-500 font-medium">
-                      {formatDate(u.created_at)}
-                    </td>
-
-                    {/* Actions (Approve / Reject for pending, Edit / Remove for active) */}
-                    <td className="py-3.5 px-3 text-right">
-                      {u.is_active === false ? (
-                        <div className="inline-flex items-center gap-2.5">
-                          <button
-                            type="button"
-                            onClick={() => handleApproveManager(u)}
-                            disabled={approvingId === u.id}
-                            className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            <Check size={13} />
-                            <span>{approvingId === u.id ? 'Approving...' : 'Approve'}</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDelete(u)}
-                            className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                          >
-                            Reject
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-3">
-                          <button
-                            type="button"
-                            onClick={() => setEdit({ ...u, password: '' })}
-                            className="font-bold text-gray-900 hover:text-black text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDelete(u)}
-                            className="font-bold text-red-600 hover:text-red-700 text-xs transition-colors underline-offset-2 hover:underline cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {/* Stat Card 2: Active Accounts */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]">
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <FileText size={15} />
+              </div>
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600">
+                <span>▲</span> +0%
+              </span>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {activeCount}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Active Accounts
+              </div>
+            </div>
           </div>
-        )}
+
+          {/* Stat Card 3: Departments */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px]">
+            <div className="flex items-center justify-between">
+              <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-2xs shrink-0">
+                <Building2 size={15} />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextDept = departmentsList.find((d) => d !== selectedDept) || 'All Departments';
+                  setSelectedDept(nextDept);
+                }}
+                className="w-7 h-7 rounded-full bg-white/50 hover:bg-white border border-white/70 flex items-center justify-center text-gray-400 hover:text-black transition-all cursor-pointer shadow-3xs"
+              >
+                <ChevronRight size={12} />
+              </button>
+            </div>
+            <div>
+              <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
+                {deptCount || 1}
+              </div>
+              <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
+                Departments
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      {/* View Profile Modal Popup */}
+      {viewProfile && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-sm transition-opacity animate-in fade-in"
+          onClick={() => setViewProfile(null)}
+        >
+          <div
+            className="relative w-full max-w-[480px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 sm:p-7 text-left shadow-[0_25px_60px_-15px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.9)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-black text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-2xs">
+                  {(viewProfile.name || viewProfile.email || 'M').slice(0, 1).toUpperCase()}
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900 tracking-tight">
+                    {viewProfile.name || 'Hiring Manager'}
+                  </h3>
+                  <p className="text-xs text-gray-500">{viewProfile.email}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewProfile(null)}
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-white/60 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100">
+                <span className="text-gray-500 font-medium">Role</span>
+                <span className="font-bold text-gray-900">Hiring Manager</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100">
+                <span className="text-gray-500 font-medium">Department</span>
+                <span className="font-bold text-gray-900">{viewProfile.department || 'General'}</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100">
+                <span className="text-gray-500 font-medium">Account Status</span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Active
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100">
+                <span className="text-gray-500 font-medium">Joined Date</span>
+                <span className="font-bold text-gray-900">{formatDate(viewProfile.created_at)}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-5 mt-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setEdit({ ...viewProfile, password: '' });
+                  setViewProfile(null);
+                }}
+                className="px-4 py-2 text-xs font-bold text-white bg-black hover:bg-gray-900 rounded-xl shadow-xs transition-all cursor-pointer"
+              >
+                Edit Account
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create Hiring Manager Modal Popup */}
       {showCreateModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-sm transition-opacity animate-in fade-in"
           onClick={() => setShowCreateModal(false)}
         >
           <div
-            className="relative w-full max-w-[480px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            className="relative w-full max-w-[480px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 sm:p-7 text-left shadow-[0_25px_60px_-15px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.9)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 tracking-tight">Create Hiring Manager</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Provision a new manager account for {user?.tenant_name || 'your company'}.</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Provision a new manager account for {user?.tenant_name || 'your company'}.
+                </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-white/60 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleCreateManager} className="space-y-3.5" autoComplete="off">
-              {/* Hidden trap inputs to prevent browser autofill */}
-              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
-              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
-
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Full Name *
@@ -507,7 +722,7 @@ export default function ManageHiringManagers() {
                   value={form.name}
                   onChange={handleInput}
                   placeholder="e.g. Rahul Sharma"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -519,13 +734,14 @@ export default function ManageHiringManagers() {
                   type="email"
                   name="hm_email"
                   autoComplete="off"
-                  data-lpignore="true"
-                  data-form-type="other"
                   required
                   value={form.email}
-                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setError(''); }}
+                  onChange={(e) => {
+                    setForm({ ...form, email: e.target.value });
+                    setError('');
+                  }}
                   placeholder="manager@company.com"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -537,14 +753,15 @@ export default function ManageHiringManagers() {
                   type="password"
                   name="hm_password"
                   autoComplete="new-password"
-                  data-lpignore="true"
-                  data-form-type="other"
                   required
                   minLength={4}
                   value={form.password}
-                  onChange={(e) => { setForm({ ...form, password: e.target.value }); setError(''); }}
+                  onChange={(e) => {
+                    setForm({ ...form, password: e.target.value });
+                    setError('');
+                  }}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -558,7 +775,7 @@ export default function ManageHiringManagers() {
                   value={form.department}
                   onChange={handleInput}
                   placeholder="e.g. Engineering, Sales, HR"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -588,11 +805,11 @@ export default function ManageHiringManagers() {
       {/* Edit Hiring Manager Modal */}
       {edit && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-sm transition-opacity animate-in fade-in"
           onClick={() => setEdit(null)}
         >
           <div
-            className="relative w-full max-w-[480px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            className="relative w-full max-w-[480px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 sm:p-7 text-left shadow-[0_25px_60px_-15px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.9)]"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between pb-3 border-b border-gray-100 mb-4">
@@ -603,17 +820,13 @@ export default function ManageHiringManagers() {
               <button
                 type="button"
                 onClick={() => setEdit(null)}
-                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-white/60 transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             <form onSubmit={handleSaveEdit} className="space-y-3.5" autoComplete="off">
-              {/* Hidden trap inputs to prevent browser autofill */}
-              <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
-              <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
-
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
                   Full Name *
@@ -623,7 +836,7 @@ export default function ManageHiringManagers() {
                   required
                   value={edit.name}
                   onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -635,12 +848,10 @@ export default function ManageHiringManagers() {
                   type="email"
                   name="hm_edit_email"
                   autoComplete="off"
-                  data-lpignore="true"
-                  data-form-type="other"
                   required
                   value={edit.email}
                   onChange={(e) => setEdit({ ...edit, email: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -653,7 +864,7 @@ export default function ManageHiringManagers() {
                   value={edit.department || ''}
                   onChange={(e) => setEdit({ ...edit, department: e.target.value })}
                   placeholder="e.g. Engineering, Sales, HR"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -665,13 +876,11 @@ export default function ManageHiringManagers() {
                   type="password"
                   name="hm_edit_password"
                   autoComplete="new-password"
-                  data-lpignore="true"
-                  data-form-type="other"
                   minLength={4}
                   value={edit.password || ''}
                   onChange={(e) => setEdit({ ...edit, password: e.target.value })}
                   placeholder="••••••••"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
+                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
                 />
               </div>
 
@@ -701,11 +910,11 @@ export default function ManageHiringManagers() {
       {/* Remove Confirmation Modal */}
       {confirmDelete && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/35 backdrop-blur-sm transition-opacity animate-in fade-in"
           onClick={() => setConfirmDelete(null)}
         >
           <div
-            className="relative w-full max-w-[440px] bg-white rounded-2xl shadow-2xl border border-gray-100 p-6 sm:p-7 text-left"
+            className="relative w-full max-w-[440px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 sm:p-7 text-left shadow-[0_25px_60px_-15px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.9)]"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-bold text-gray-900">Remove Hiring Manager?</h3>
@@ -736,3 +945,5 @@ export default function ManageHiringManagers() {
     </div>
   );
 }
+
+
