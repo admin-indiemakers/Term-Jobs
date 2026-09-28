@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
@@ -41,7 +41,7 @@ const SECTION_CONFIG = {
   },
   drafted: {
     title: 'Drafted',
-    icon: FileText,
+    caption: 'Requisitions in progress — draft parameters and role specifications.',
     statuses: ['Draft', 'Drafted', 'Intake', 'Structuring'],
     to: '/dashboard/requisitions/drafted',
   },
@@ -156,20 +156,25 @@ export default function RequisitionOverview({ section }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [busyId, setBusyId] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const isFetchingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const prevTokenRef = useRef(token);
 
   useEffect(() => {
     setActiveTab(initialSection);
   }, [initialSection]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async (force = false) => {
+    if (isFetchingRef.current) return;
+    if (!force && hasLoadedRef.current && prevTokenRef.current === token) return;
+
+    isFetchingRef.current = true;
     setLoading(true);
     setError('');
     try {
       const [reqs, profiles] = await Promise.all([
-        request('/requisitions', { token }).catch(() => []),
-        request('/company-profiles', { token }).catch(() => []),
+        request('/api/requisitions', { token }).catch(() => []),
+        request('/api/company-profiles', { token }).catch(() => []),
       ]);
 
       const profileMap = Object.fromEntries(
@@ -183,39 +188,40 @@ export default function RequisitionOverview({ section }) {
       }));
 
       setRequisitions(rows);
+      hasLoadedRef.current = true;
+      prevTokenRef.current = token;
     } catch (err) {
       console.error('Failed to load requisitions:', err);
       setError(err.message || 'Unable to load requisitions.');
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [token, user?.tenant_name]);
 
   useEffect(() => {
-    loadData();
-  }, [token]);
+    if (!token) return;
+    if (prevTokenRef.current !== token) {
+      prevTokenRef.current = token;
+      hasLoadedRef.current = false;
+    }
+    if (!hasLoadedRef.current) {
+      loadData();
+    }
+  }, [token, loadData]);
 
-  // Close menus on outside click
-  useEffect(() => {
-    const handleClickOutside = () => {
-      setActiveMenuId(null);
-      setShowDeptDropdown(false);
-      setShowStatusDropdown(false);
-    };
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, []);
-
-  const handleDeleteRequisition = async () => {
-    if (!confirmDelete) return;
-    setDeleting(true);
+  const handleDelete = async (reqItem, e) => {
+    e?.stopPropagation();
+    if (!window.confirm(`Delete "${reqItem.title || 'this requisition'}" permanently? This cannot be undone.`)) {
+      return;
+    }
+    setBusyId(reqItem.id);
     setError('');
     setInfo('');
     try {
-      await request(`/requisitions/${confirmDelete.id}`, { method: 'DELETE', token });
-      setInfo(`Requisition "${confirmDelete.title || 'Untitled'}" deleted successfully.`);
-      setConfirmDelete(null);
-      loadData();
+      await request(`/api/requisitions/${reqItem.id}`, { method: 'DELETE', token });
+      setInfo(`Requisition "${reqItem.title}" deleted.`);
+      loadData(true);
     } catch (err) {
       setError(err.message || 'Failed to delete requisition.');
     } finally {
@@ -337,11 +343,10 @@ export default function RequisitionOverview({ section }) {
                 setActiveTab(key);
                 navigate(config.to);
               }}
-              className={`p-2.5 sm:p-3 rounded-2xl flex items-center justify-between gap-2 transition-all cursor-pointer ${
-                isActive
+              className={`p-2.5 sm:p-3 rounded-2xl flex items-center justify-between gap-2 transition-all cursor-pointer ${isActive
                   ? 'bg-black text-white shadow-xs'
                   : 'bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 text-gray-700 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]'
-              }`}
+                }`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <Icon size={15} className={isActive ? 'text-white' : 'text-gray-600'} />
@@ -349,11 +354,10 @@ export default function RequisitionOverview({ section }) {
               </div>
 
               <span
-                className={`px-2 py-0.5 rounded-full text-[10.5px] font-extrabold shrink-0 ${
-                  isActive
+                className={`px-2 py-0.5 rounded-full text-[10.5px] font-extrabold shrink-0 ${isActive
                     ? 'bg-white text-black shadow-2xs'
                     : 'bg-gray-200/80 text-gray-700'
-                }`}
+                  }`}
               >
                 {count}
               </span>
@@ -422,11 +426,10 @@ export default function RequisitionOverview({ section }) {
                         setSelectedDept(dept);
                         setShowDeptDropdown(false);
                       }}
-                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                        selectedDept === dept
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${selectedDept === dept
                           ? 'bg-black text-white font-bold'
                           : 'text-gray-700 hover:bg-gray-100/80'
-                      }`}
+                        }`}
                     >
                       <span>{dept}</span>
                       {selectedDept === dept && <Check size={12} />}
@@ -464,11 +467,10 @@ export default function RequisitionOverview({ section }) {
                         setSelectedStatus(st);
                         setShowStatusDropdown(false);
                       }}
-                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
-                        selectedStatus === st
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${selectedStatus === st
                           ? 'bg-black text-white font-bold'
                           : 'text-gray-700 hover:bg-gray-100/80'
-                      }`}
+                        }`}
                     >
                       <span>{st}</span>
                       {selectedStatus === st && <Check size={12} />}
@@ -494,9 +496,9 @@ export default function RequisitionOverview({ section }) {
             Loading requisitions...
           </div>
         ) : filteredRows.length === 0 ? (
-          <div className="py-16 text-center space-y-2 flex-1 flex flex-col items-center justify-center">
-            <div className="text-sm font-bold text-gray-800">No requisitions found</div>
-            <p className="text-xs text-gray-400 max-w-sm">
+          <div className="py-16 text-center space-y-2">
+            <div className="text-sm font-bold text-gray-800">No requisitions in {currentConfig.title}</div>
+            <p className="text-xs text-gray-400 max-w-sm mx-auto">
               Create a new contract requirement to start candidate sourcing.
             </p>
             <button

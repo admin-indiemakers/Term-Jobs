@@ -456,6 +456,27 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
     sow_doc = db["sow_documents"].find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}]}) or {}
     sow_doc.pop("_id", None)
 
+    # ── Approval chain & payment fields from the work order ──────────────────
+    approval_trail = {
+        # SOW / Procurement stage
+        "procurement_authorized": wo.get("procurement_authorized", False),
+        "procurement_approved_by": wo.get("procurement_approved_by") or "",
+        "procurement_approved_at": str(wo.get("procurement_approved_at") or ""),
+        # Director stage
+        "director_approved": wo.get("director_approved", False),
+        "director_approved_by": wo.get("approved_by") or wo.get("director_approved_by") or "",
+        "director_approved_at": str(wo.get("approved_at") or wo.get("director_approved_at") or ""),
+        # Finance / Payment stage
+        "payment_status": wo.get("payment_status") or "",
+        "payment_processed_by": wo.get("payment_processed_by") or "",
+        "payment_processed_at": str(wo.get("payment_processed_at") or ""),
+        "transaction_ref": wo.get("transaction_ref") or "",
+        # Rejection info (if any)
+        "rejected_by": wo.get("rejected_by") or "",
+        "rejected_at": str(wo.get("rejected_at") or ""),
+        "rejection_reason": wo.get("rejection_reason") or "",
+    }
+
     return {
         "candidate": {
             "name": cname,
@@ -472,6 +493,7 @@ def get_candidate_billing_breakdown(workorder_id: str, month_str: Optional[str] 
             "billing_cycle": agreement_data.get("billingCycle") or "Monthly",
             "supplier_margin": supplier_margin,
         },
+        "approval_trail": approval_trail,
         "period": target_month,
         "period_label": datetime.strptime(target_month, "%Y-%m").strftime("%B %Y") if len(target_month) == 7 else target_month,
         "weeks": weeks_data,

@@ -28,6 +28,14 @@ export const interviewApi = {
     });
   },
 
+  async recordCandidateDecision(candidateId, decision, notes = '', requisitionId = null, token) {
+    return request(`/api/interviews/candidates/${encodeURIComponent(candidateId)}/decision`, {
+      method: 'POST',
+      body: { decision, notes, requisition_id: requisitionId },
+      token,
+    });
+  },
+
   // Candidate Authentication & Portal
   async candidateLogin({ email, passcode, token }) {
     return request('/api/interviews/candidate/login', {

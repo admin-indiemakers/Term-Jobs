@@ -100,6 +100,8 @@ export default function RequisitionCandidates() {
   const [instantNotes, setInstantNotes] = useState('');
   const [instantSuccess, setInstantSuccess] = useState('');
 
+  const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin';
+
   const load = () => {
     setLoading(true);
     setError('');
@@ -418,33 +420,53 @@ export default function RequisitionCandidates() {
               </div>
             </div>
 
-            {/* Instant Send Button (Before 48h) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <button
-                type="button"
-                onClick={() => setShowInstantModal(true)}
-                disabled={sendingInstant || candidates.length === 0}
+            {/* Instant Send Button (Before 48h) - Admin Only */}
+            {isAdmin ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowInstantModal(true)}
+                  disabled={sendingInstant || candidates.length === 0}
+                  style={{
+                    background: candidates.length === 0 ? 'rgba(71, 85, 105, 0.5)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '0.88rem',
+                    padding: '10px 18px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(251, 191, 36, 0.5)',
+                    boxShadow: candidates.length === 0 ? 'none' : '0 4px 14px rgba(245, 158, 11, 0.35)',
+                    cursor: candidates.length === 0 ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s ease-in-out',
+                  }}
+                  title={candidates.length === 0 ? 'Submit or screen candidates first' : 'Dispatch current candidate shortlist right now before the 48h window'}
+                >
+                  <span style={{ fontSize: '1.05rem' }}>⚡</span>
+                  <span>Send Shortlist Now (Instant)</span>
+                </button>
+              </div>
+            ) : (
+              <div
                 style={{
-                  background: candidates.length === 0 ? 'rgba(71, 85, 105, 0.5)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  color: '#ffffff',
-                  fontWeight: 800,
-                  fontSize: '0.88rem',
-                  padding: '10px 18px',
-                  borderRadius: '10px',
-                  border: '1px solid rgba(251, 191, 36, 0.5)',
-                  boxShadow: candidates.length === 0 ? 'none' : '0 4px 14px rgba(245, 158, 11, 0.35)',
-                  cursor: candidates.length === 0 ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '8px',
-                  transition: 'all 0.15s ease-in-out',
+                  background: 'rgba(30, 41, 59, 0.7)',
+                  border: '1px solid rgba(148, 163, 184, 0.25)',
+                  padding: '9px 16px',
+                  borderRadius: '10px',
+                  fontSize: '0.78rem',
+                  color: '#cbd5e1',
+                  fontWeight: 600,
                 }}
-                title={candidates.length === 0 ? 'Submit or screen candidates first' : 'Dispatch current candidate shortlist right now before the 48h window'}
               >
-                <span style={{ fontSize: '1.05rem' }}>⚡</span>
-                <span>Send Shortlist Now (Instant)</span>
-              </button>
-            </div>
+                <span style={{ color: '#fbbf24', fontSize: '1rem' }}>⚡</span>
+                <span>Super Admin is screening candidates. Shortlisted profiles will arrive automatically.</span>
+              </div>
+            )}
           </div>
 
           <div

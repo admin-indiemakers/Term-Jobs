@@ -26,6 +26,7 @@ export function CandidateAuthProvider({ children }) {
   });
 
   const [applications, setApplications] = useState([]);
+  const [agreements, setAgreements] = useState([]);
   const [outreachHistory, setOutreachHistory] = useState([]);
   const [hasResume, setHasResume] = useState(false);
   const [profileCompleted, setProfileCompleted] = useState(false);
@@ -38,6 +39,7 @@ export function CandidateAuthProvider({ children }) {
     if (!token) {
       setCandidateUser(null);
       setApplications([]);
+      setAgreements([]);
       setProfileCompleted(false);
       setResumeFilename(null);
       setHasResume(false);
@@ -74,6 +76,9 @@ export function CandidateAuthProvider({ children }) {
       }
       if (Array.isArray(data.applications)) {
         setApplications(data.applications);
+      }
+      if (Array.isArray(data.agreements)) {
+        setAgreements(data.agreements);
       }
       if (Array.isArray(data.outreach)) {
         setOutreachHistory(data.outreach);
@@ -228,10 +233,19 @@ export function CandidateAuthProvider({ children }) {
     try {
       localStorage.removeItem(CANDIDATE_TOKEN_KEY);
       localStorage.removeItem(CANDIDATE_USER_KEY);
+      localStorage.removeItem('candidate_email');
+      localStorage.removeItem('candidate_profile_user');
+      localStorage.removeItem('tj_applied_jobs');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('tj_applied_jobs')) {
+          localStorage.removeItem(key);
+        }
+      });
     } catch {}
     setCandidateToken(null);
     setCandidateUser(null);
     setApplications([]);
+    setAgreements([]);
     setOutreachHistory([]);
     setHasResume(false);
     setProfileCompleted(false);
@@ -244,6 +258,8 @@ export function CandidateAuthProvider({ children }) {
     isAuthenticated: Boolean(candidateToken && candidateUser),
     candidateLoading,
     applications,
+    agreements,
+    setAgreements,
     outreachHistory,
     hasResume,
     profileCompleted,

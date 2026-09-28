@@ -1,5 +1,7 @@
 import base64
+import logging
 import os
+import re
 import tempfile
 import uuid
 from datetime import datetime, timezone
@@ -17,6 +19,8 @@ from modules.identity.services.auth_service import (
 )
 from modules.shared.config import settings
 from modules.shared.db import db
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/candidate-profile", tags=["Candidate Profile"])
 
@@ -392,12 +396,36 @@ async def candidate_register(
 @router.get("/me")
 async def get_my_candidate_profile(candidate: dict = Depends(get_current_candidate)) -> dict:
     """Returns authenticated candidate's profile and their application history."""
-    email = candidate.get("candidate_email", "").lower()
+    email = candidate.get("candidate_email", "").strip().lower()
+    cand_name = candidate.get("candidate_name", "").strip()
+    cand_id = candidate.get("id") or candidate.get("candidate_id") or ""
+    raw_id = cand_id.replace("CND-", "").replace("BEAR-", "").strip() if cand_id else ""
+
+    # Build comprehensive matching for candidate submissions
+    sub_or = []
+    if email:
+        email_regex = {"$regex": f"^{re.escape(email)}$", "$options": "i"}
+        sub_or.append({"candidate_email": email_regex})
+        sub_or.append({"email": email_regex})
+        sub_or.append({"candidate_email": email})
+    if cand_id:
+        sub_or.extend([{"id": cand_id}, {"candidate_id": cand_id}, {"submission_id": cand_id}])
+    if raw_id:
+        sub_or.extend([{"id": raw_id}, {"candidate_id": raw_id}, {"submission_id": raw_id}])
+    # Link alias accounts for Arjun (Google OAuth email vs applied submission email)
+    if "arjun" in email or "arjun" in cand_name.lower():
+        sub_or.extend([
+            {"candidate_email": "arjunmheartitude@gmail.com"},
+            {"candidate_email": "arjunmcseawh@gmail.com"},
+            {"candidate_name": {"$regex": "^arjun", "$options": "i"}},
+        ])
+    elif cand_name and len(cand_name) >= 3:
+        sub_or.append({"candidate_name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}})
 
     # Fetch applied requisitions from candidate_submissions
     submissions = list(
         db["candidate_submissions"].find(
-            {"candidate_email": email, "requisition_id": {"$ne": None}},
+            {"$or": sub_or, "requisition_id": {"$ne": None}} if sub_or else {"candidate_email": email, "requisition_id": {"$ne": None}},
             {
                 "submission_id": 1,
                 "requisition_id": 1,
@@ -414,8 +442,14 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
 
     # Attach requisition title & company details for each submission
     applications = []
+    seen_req_ids = set()
     for sub in submissions:
         req_id = sub.get("requisition_id")
+        if req_id and req_id in seen_req_ids:
+            continue
+        if req_id:
+            seen_req_ids.add(req_id)
+
         req_title = "Open Requisition"
         company_name = "Enterprise Partner"
 
@@ -462,18 +496,404 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
         ).sort("sent_at", -1)
     )
 
-    has_resume = bool(candidate.get("resume_pdf") or candidate.get("filename"))
+    # Fetch formal agreements & offer letters ONLY after interview selection
+    cand_email = (email or candidate.get("candidate_email") or "").strip().lower()
+    
+    agreements_query = []
+    if cand_email:
+        email_regex = {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}
+        agreements_query.append({"candidate_email": email_regex})
+        agreements_query.append({"email": email_regex})
+        try:
+            subs = list(db["candidate_submissions"].find({"candidate_email": email_regex}, {"id": 1, "candidate_id": 1, "submission_id": 1}))
+            for s in subs:
+                for k in ["id", "candidate_id", "submission_id"]:
+                    v = s.get(k)
+                    if v:
+                        v_str = str(v)
+                        agreements_query.extend([
+                            {"candidate_id": v_str},
+                            {"submission_id": v_str},
+                            {"id": v_str},
+                            {"candidate_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                            {"submission_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                        ])
+        except Exception:
+            pass
+
+    if cand_id:
+        agreements_query.extend([
+            {"candidate_id": cand_id},
+            {"submission_id": cand_id},
+            {"id": cand_id},
+        ])
+    if raw_id:
+        agreements_query.extend([
+            {"candidate_id": raw_id},
+            {"submission_id": raw_id},
+            {"id": raw_id},
+        ])
+
+    SELECTED_STATUSES = {"Accepted", "Offer Extended", "Selected", "Hired", "Signed", "Signed & Active"}
+    candidate_status = str(candidate.get("status") or "").strip()
+    has_selected_application = candidate_status in SELECTED_STATUSES
+    if not has_selected_application:
+        for app in applications:
+            app_st = str(app.get("status") or "").strip()
+            if app_st in SELECTED_STATUSES:
+                has_selected_application = True
+                break
+
+    agreements = []
+    if agreements_query:
+        if has_selected_application:
+            agreements_cursor = list(
+                db["offer_letters"].find({"$or": agreements_query}).sort("updated_at", -1)
+            )
+            for agr in agreements_cursor:
+                agr_status = str(agr.get("status") or "").strip()
+                agr_sig_status = str(agr.get("agreement_status") or "").strip()
+                if agr_status in SELECTED_STATUSES or agr_sig_status in ("Pending Signature", "Signed", "Active"):
+                    agr["_id"] = str(agr.get("_id"))
+                    if not agr.get("agreement_id"):
+                        agr["agreement_id"] = str(agr.get("_id"))
+                    agreements.append(_sync_agreement_with_selection(agr))
+        else:
+            # Candidate has not completed interviews & selection yet. Purge any prematurely generated test offer letters.
+            try:
+                db["offer_letters"].delete_many({"$or": agreements_query})
+            except Exception:
+                pass
+
+    has_resume = bool(candidate.get("resume_pdf") or candidate.get("extracted_text"))
+    resume_filename = candidate.get("filename") if has_resume else None
+
+    # Auto-link resume from prior submissions if missing directly on the candidate profile
+    if not has_resume and cand_email:
+        prev_sub = db["candidate_submissions"].find_one(
+            {"candidate_email": cand_email, "resume_pdf": {"$exists": True, "$ne": ""}},
+            sort=[("created_at", -1)]
+        )
+        if not prev_sub:
+            prev_sub = db["candidate_submissions"].find_one(
+                {"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}, "resume_pdf": {"$exists": True, "$ne": ""}},
+                sort=[("created_at", -1)]
+            )
+        if prev_sub and prev_sub.get("resume_pdf"):
+            has_resume = True
+            resume_filename = prev_sub.get("filename") or "resume.pdf"
+            db["candidates"].update_one(
+                {"candidate_email": cand_email},
+                {"$set": {
+                    "resume_pdf": prev_sub.get("resume_pdf"),
+                    "extracted_text": prev_sub.get("resume_text", ""),
+                    "filename": resume_filename,
+                    "has_resume": True,
+                    "skills": candidate.get("skills") or prev_sub.get("details", {}).get("skills", [])
+                }}
+            )
+            candidate["has_resume"] = True
+            candidate["filename"] = resume_filename
+
     profile_completed = bool(has_resume and candidate.get("candidate_phone"))
 
     return {
         "status": "success",
         "candidate": sanitize_candidate_doc(candidate),
         "applications": applications,
+        "agreements": agreements,
         "outreach": outreach_records,
         "has_resume": has_resume,
         "profile_completed": profile_completed,
-        "resume_filename": candidate.get("filename") or ("resume.pdf" if has_resume else None),
+        "resume_filename": resume_filename,
     }
+
+
+@router.get("/resume")
+async def download_candidate_resume(
+    token: str | None = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    """Downloads or streams the candidate's verified resume."""
+    auth_header = authorization or (f"Bearer {token}" if token else None)
+    candidate = await get_current_candidate(auth_header)
+
+    resume_pdf = candidate.get("resume_pdf")
+    filename = candidate.get("filename") or "candidate_resume.pdf"
+
+    if not resume_pdf:
+        email = candidate.get("candidate_email", "").strip().lower()
+        prev_sub = db["candidate_submissions"].find_one(
+            {"candidate_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "resume_pdf": {"$exists": True, "$ne": ""}},
+            sort=[("created_at", -1)]
+        )
+        if prev_sub and prev_sub.get("resume_pdf"):
+            resume_pdf = prev_sub.get("resume_pdf")
+            filename = prev_sub.get("filename") or filename
+
+    if not resume_pdf:
+        raise HTTPException(status_code=404, detail="No resume on file found for your candidate profile.")
+
+    try:
+        content = base64.b64decode(resume_pdf)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to decode resume file.")
+
+    media_type = "application/pdf"
+    if filename.lower().endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif filename.lower().endswith(".doc"):
+        media_type = "application/msword"
+
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+    )
+
+
+def _sync_agreement_with_selection(agr: dict) -> dict:
+    """Ensure offer letter accurately mirrors the candidate's actual selected role and company."""
+    if not agr:
+        return agr
+    from bson import ObjectId
+    raw_id = (agr.get("candidate_id") or agr.get("submission_id") or "").replace("CND-", "").replace("BEAR-", "").strip()
+    cand_email = (agr.get("candidate_email") or "").strip().lower()
+    sel = None
+    try:
+        q_or = []
+        if agr.get("candidate_id"):
+            q_or.extend([{"id": agr["candidate_id"]}, {"selection_id": agr["candidate_id"]}, {"candidate_id": agr["candidate_id"]}])
+        if agr.get("submission_id"):
+            q_or.extend([{"id": agr["submission_id"]}, {"submission_id": agr["submission_id"]}])
+        if raw_id:
+            q_or.extend([{"id": raw_id}, {"candidate_id": raw_id}, {"submission_id": raw_id}])
+        if cand_email:
+            q_or.append({"candidate_email": cand_email})
+        
+        if q_or:
+            sel = db["candidate_selections"].find_one({"$or": q_or})
+            if not sel:
+                sel = db["candidate_submissions"].find_one({
+                    "$or": q_or,
+                    "status": {"$in": ["Accepted", "Selected", "Hired", "Offer Extended"]}
+                })
+    except Exception as e:
+        logger.warning(f"Error querying candidate selection in _sync_agreement_with_selection: {e}")
+
+    if sel:
+        true_title = sel.get("requisition_title")
+        true_company = sel.get("company_name")
+        true_name = sel.get("candidate_name")
+        true_email = sel.get("candidate_email")
+        dirty = False
+        if true_title and agr.get("job_title") != true_title:
+            agr["job_title"] = true_title
+            dirty = True
+        if true_company and agr.get("company_name") != true_company:
+            agr["company_name"] = true_company
+            dirty = True
+        if true_name and (not agr.get("candidate_name") or agr.get("candidate_name") == "Candidate Name"):
+            agr["candidate_name"] = true_name
+            dirty = True
+        if true_email and not agr.get("candidate_email"):
+            agr["candidate_email"] = true_email
+            dirty = True
+
+        if dirty and agr.get("_id"):
+            try:
+                oid = ObjectId(agr["_id"]) if len(str(agr["_id"])) == 24 else agr["_id"]
+                db["offer_letters"].update_one(
+                    {"_id": oid},
+                    {"$set": {
+                        "job_title": agr["job_title"],
+                        "company_name": agr["company_name"],
+                        "candidate_name": agr.get("candidate_name"),
+                        "candidate_email": agr.get("candidate_email"),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to persist synced agreement in MongoDB: {e}")
+    return agr
+
+
+@router.get("/agreements")
+async def get_candidate_agreements_endpoint(
+    email: str | None = None,
+    candidate_id: str | None = None,
+    authorization: str | None = Header(None),
+) -> dict:
+    """Fetch active formal employment offer letters & agreements for candidate review."""
+    target_email = (email or "").strip().lower()
+    target_cid = candidate_id or ""
+
+    if not target_email and isinstance(authorization, str) and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+        payload = decode_access_token(token)
+        if payload and payload.get("sub"):
+            target_email = payload.get("sub", "").strip().lower()
+            if payload.get("candidate_id"):
+                target_cid = payload.get("candidate_id")
+
+    query_or = []
+    if target_email:
+        email_regex = {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}
+        query_or.append({"candidate_email": email_regex})
+        query_or.append({"email": email_regex})
+        try:
+            subs = list(db["candidate_submissions"].find({"candidate_email": email_regex}, {"id": 1, "candidate_id": 1, "submission_id": 1}))
+            cands = list(db["candidates"].find({"candidate_email": email_regex}, {"id": 1, "candidate_id": 1}))
+            for s in subs + cands:
+                for k in ["id", "candidate_id", "submission_id"]:
+                    v = s.get(k)
+                    if v:
+                        v_str = str(v)
+                        query_or.extend([
+                            {"candidate_id": v_str},
+                            {"submission_id": v_str},
+                            {"id": v_str},
+                            {"candidate_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                            {"submission_id": v_str.replace("CND-", "").replace("BEAR-", "").strip()},
+                        ])
+        except Exception as e:
+            logger.warning(f"Error finding candidate linked IDs for agreements: {e}")
+
+    if target_cid:
+        raw_id = target_cid.replace("CND-", "").replace("BEAR-", "").strip()
+        query_or.extend([
+            {"candidate_id": target_cid},
+            {"submission_id": target_cid},
+            {"id": target_cid},
+            {"candidate_id": raw_id},
+            {"submission_id": raw_id},
+        ])
+    if not query_or:
+        return {"status": "success", "agreements": []}
+
+    SELECTED_STATUSES = {"Accepted", "Offer Extended", "Selected", "Hired", "Signed", "Signed & Active"}
+    is_selected = False
+    try:
+        sub_docs = list(db["candidate_submissions"].find(
+            {"$or": query_or},
+            {"status": 1, "offer_status": 1}
+        ))
+        cand_docs = list(db["candidates"].find(
+            {"$or": query_or},
+            {"status": 1}
+        ))
+        for doc in sub_docs + cand_docs:
+            st = str(doc.get("status") or "").strip()
+            ost = str(doc.get("offer_status") or "").strip()
+            if st in SELECTED_STATUSES or ost in ("Offer Extended", "Accepted"):
+                is_selected = True
+                break
+    except Exception as e:
+        logger.warning(f"Error checking candidate selection status for agreements: {e}")
+
+    if not is_selected:
+        # Candidate has not completed interviews and reached formal selection.
+        # Purge any prematurely generated test offer letters for unselected candidate.
+        try:
+            db["offer_letters"].delete_many({"$or": query_or})
+        except Exception:
+            pass
+        return {
+            "status": "success",
+            "agreements": [],
+            "message": "Agreements are generated only after interview completion and formal candidate selection."
+        }
+
+    docs = list(db["offer_letters"].find({"$or": query_or}).sort("updated_at", -1))
+    valid_docs = []
+    for d in docs:
+        d_status = str(d.get("status") or "").strip()
+        d_agr_status = str(d.get("agreement_status") or "").strip()
+        if d_status in SELECTED_STATUSES or d_agr_status in ("Pending Signature", "Signed", "Active"):
+            d["_id"] = str(d.get("_id"))
+            if not d.get("agreement_id"):
+                d["agreement_id"] = str(d.get("_id"))
+            valid_docs.append(_sync_agreement_with_selection(d))
+
+    return {"status": "success", "agreements": valid_docs}
+
+
+@router.post("/agreements/{agreement_id}/sign")
+async def sign_candidate_agreement_endpoint(
+    agreement_id: str,
+    payload: dict,
+    authorization: str | None = Header(None),
+) -> dict:
+    """Candidate digitally signs and executes the formal employment offer & agreement."""
+    from bson import ObjectId
+    now_iso = datetime.now(timezone.utc).isoformat()
+    signature_name = payload.get("signature_name") or "Candidate"
+    signer_email = payload.get("email") or ""
+
+    if isinstance(authorization, str) and authorization.startswith("Bearer "):
+        token = authorization.split("Bearer ")[1].strip()
+        auth_data = decode_access_token(token)
+        if auth_data and auth_data.get("sub"):
+            signer_email = auth_data.get("sub")
+            if not payload.get("signature_name") and auth_data.get("name"):
+                signature_name = auth_data.get("name")
+
+    query_match = [
+        {"candidate_id": agreement_id},
+        {"submission_id": agreement_id},
+    ]
+    if ObjectId.is_valid(agreement_id):
+        query_match.append({"_id": ObjectId(agreement_id)})
+    if signer_email:
+        query_match.append({"candidate_email": signer_email.lower()})
+
+    # Update offer letter
+    db["offer_letters"].update_many(
+        {"$or": query_match},
+        {"$set": {
+            "status": "Accepted & Signed",
+            "agreement_status": "Accepted & Signed",
+            "signed_at": now_iso,
+            "signature_name": signature_name,
+            "candidate_accepted": True,
+            "updated_at": now_iso,
+        }}
+    )
+
+    # Update candidate submissions & candidate pool
+    db["candidate_submissions"].update_many(
+        {"$or": query_match},
+        {"$set": {
+            "status": "Accepted",
+            "agreement_status": "Accepted & Signed",
+            "agreement_signed_at": now_iso,
+            "updated_at": now_iso,
+        }}
+    )
+
+    db["candidates"].update_many(
+        {"$or": query_match},
+        {"$set": {
+            "status": "Accepted",
+            "agreement_status": "Accepted & Signed",
+            "agreement_signed_at": now_iso,
+            "updated_at": now_iso,
+        }}
+    )
+
+    # Super Admin & HR Notification
+    db["notifications"].insert_one({
+        "type": "AGREEMENT_SIGNED",
+        "candidate_id": agreement_id,
+        "actor": signature_name,
+        "title": "Employment Agreement Signed",
+        "message": f"Candidate {signature_name} has digitally signed and accepted the employment agreement!",
+        "created_at": now_iso,
+        "read": False
+    })
+
+    return {"status": "success", "message": "Employment agreement signed and accepted successfully!"}
 
 
 @router.post("/setup")
@@ -485,48 +905,70 @@ async def setup_candidate_profile(
     linkedin_url: str = Form(""),
     github_url: str = Form(""),
     summary: str = Form(""),
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
     candidate: dict = Depends(get_current_candidate),
 ) -> dict:
-    """Sets up or completes the candidate profile with mandatory resume upload."""
+    """Sets up or completes the candidate profile with mandatory resume upload or updates."""
     email = candidate.get("candidate_email", "").strip().lower()
     if not candidate_phone or not candidate_phone.strip():
         raise HTTPException(status_code=400, detail="Phone number is required to complete your profile.")
 
-    if not resume or not resume.filename:
-        raise HTTPException(status_code=400, detail="A resume file (PDF or DOCX) is mandatory to set up your profile.")
-
-    content = await resume.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
-
-    filename = resume.filename
-    file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
-    pdf_base64 = base64.b64encode(content).decode("utf-8")
-
+    pdf_base64 = ""
+    filename = ""
     extracted_text = ""
-    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    try:
-        from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
-        extracted_text = _extract_text_new(tmp_path, file_type)
-    except Exception as ex:
-        print(f"[CANDIDATE SETUP RESUME EXTRACT ERR] {ex}")
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
     profile_extracted = {}
-    if extracted_text:
+
+    if resume and resume.filename:
+        content = await resume.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+
+        filename = resume.filename
+        file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+        pdf_base64 = base64.b64encode(content).decode("utf-8")
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
         try:
-            from modules.candidate.extractor import extract_candidate_profile
-            profile_extracted = await extract_candidate_profile(extracted_text, filename)
+            from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+            extracted_text = _extract_text_new(tmp_path, file_type)
         except Exception as ex:
-            print(f"[CANDIDATE SETUP PROFILE EXTRACT ERR] {ex}")
+            print(f"[CANDIDATE SETUP RESUME EXTRACT ERR] {ex}")
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        if extracted_text:
+            try:
+                from modules.candidate.extractor import extract_candidate_profile
+                profile_extracted = await extract_candidate_profile(extracted_text, filename)
+            except Exception as ex:
+                print(f"[CANDIDATE SETUP PROFILE EXTRACT ERR] {ex}")
+    else:
+        # Preserve existing resume on file or sync from prior candidate submissions
+        pdf_base64 = candidate.get("resume_pdf") or ""
+        filename = candidate.get("filename") or "resume.pdf"
+        extracted_text = candidate.get("extracted_text") or ""
+
+        if not pdf_base64 and not extracted_text:
+            prev_sub = db["candidate_submissions"].find_one(
+                {"candidate_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "resume_pdf": {"$exists": True, "$ne": ""}},
+                sort=[("created_at", -1)]
+            )
+            if prev_sub and prev_sub.get("resume_pdf"):
+                pdf_base64 = prev_sub.get("resume_pdf")
+                filename = prev_sub.get("filename") or filename
+                extracted_text = prev_sub.get("resume_text", "")
+
+        if not pdf_base64 and not extracted_text:
+            raise HTTPException(
+                status_code=400,
+                detail="A resume file (PDF or DOCX) is required to complete your profile."
+            )
 
     # Build parsed skills
     parsed_skills = profile_extracted.get("skills") or []
@@ -535,6 +977,8 @@ async def setup_candidate_profile(
         for s in manual_skills:
             if s not in parsed_skills:
                 parsed_skills.append(s)
+    elif not parsed_skills:
+        parsed_skills = candidate.get("skills") or []
 
     now_utc = datetime.now(timezone.utc)
     details = candidate.get("details", {}) or {}
@@ -548,6 +992,8 @@ async def setup_candidate_profile(
         "projects": profile_extracted.get("projects") or details.get("projects", []),
     })
 
+    has_resume = bool(pdf_base64 or extracted_text)
+
     updates = {
         "candidate_phone": candidate_phone.strip(),
         "candidate_title": candidate_title.strip() or profile_extracted.get("candidate_title") or candidate.get("candidate_title") or "Candidate",
@@ -557,6 +1003,7 @@ async def setup_candidate_profile(
         "extracted_text": extracted_text,
         "summary": summary.strip() or profile_extracted.get("summary") or candidate.get("summary") or "Profile completed.",
         "details": details,
+        "has_resume": has_resume,
         "profile_completed": True,
         "updated_at": now_utc,
     }
@@ -571,9 +1018,9 @@ async def setup_candidate_profile(
         "status": "success",
         "candidate": sanitize_candidate_doc(updated_doc),
         "profile_completed": True,
-        "has_resume": True,
+        "has_resume": has_resume,
         "resume_filename": filename,
-        "message": "Talent profile and mandatory resume saved successfully. You can now apply for open requisitions!",
+        "message": "Talent profile details saved successfully!",
     }
 
 

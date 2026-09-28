@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
@@ -194,13 +194,15 @@ export default function DashboardLayout() {
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
+  const hasFetchedHmCountsRef = useRef(false);
 
   useEffect(() => {
-    if (user?.role === 'Hiring Manager' && token) {
+    if (user?.role === 'Hiring Manager' && token && !hasFetchedHmCountsRef.current) {
+      hasFetchedHmCountsRef.current = true;
       Promise.all([
-        request('/requisitions', { token }).catch(() => []),
-        request('/candidates/shortlisted', { token }).catch(() => []),
-        request('/candidates?status=Accepted', { token }).catch(() => []),
+        request('/api/requisitions', { token }).catch(() => []),
+        request('/api/candidates/shortlisted', { token }).catch(() => []),
+        request('/api/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
       ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
@@ -245,7 +247,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Procurement SOW billing orders
   const [procurementPendingSows, setProcurementPendingSows] = useState(0);
@@ -263,7 +265,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Finance pending work order payments
   const [financePendingPayments, setFinancePendingPayments] = useState(0);
@@ -276,7 +278,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Super Admin candidate pool
   const [superAdminCandidateCount, setSuperAdminCandidateCount] = useState(0);
@@ -289,7 +291,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Super Admin candidate management selections
   const [superAdminSelectedCount, setSuperAdminSelectedCount] = useState(0);
@@ -302,7 +304,23 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
+
+  // Listen to refresh-superadmin-data to refresh Super Admin sidebar badges dynamically
+  useEffect(() => {
+    const handleRefreshSuperAdminBadges = () => {
+      if ((user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') && token) {
+        request('/api/superadmin/candidate-pool', { token, forceRefresh: true })
+          .then((res) => setSuperAdminCandidateCount(res?.total_count || 0))
+          .catch(() => { });
+        request('/api/superadmin/candidate-management', { token, forceRefresh: true })
+          .then((res) => setSuperAdminSelectedCount(res?.total_count || 0))
+          .catch(() => { });
+      }
+    };
+    window.addEventListener('refresh-superadmin-data', handleRefreshSuperAdminBadges);
+    return () => window.removeEventListener('refresh-superadmin-data', handleRefreshSuperAdminBadges);
+  }, [user?.role, token]);
 
   // Close mobile drawer on route change
   useEffect(() => {

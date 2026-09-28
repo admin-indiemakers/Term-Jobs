@@ -36,8 +36,9 @@ import {
   Check,
   LogIn,
   Home,
+  Download,
 } from 'lucide-react';
-import { API_BASE_URL } from '../api/client';
+import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
@@ -71,9 +72,24 @@ export default function OpenRolesPage({ enabled = true }) {
   const login = candidateAuth?.login;
   const register = candidateAuth?.register;
 
-  // Job search & filters
-  const [requisitions, setRequisitions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const isCandidateAuthenticated = Boolean(candidateAuth?.candidateToken && candidateUser);
+  const candidateEmail = (candidateUser?.candidate_email || candidateUser?.email || '').trim().toLowerCase();
+  const appliedStorageKey = candidateEmail ? `tj_applied_jobs_${candidateEmail}` : null;
+
+  // Job search & filters - hydrate instantly from session cache if available (0ms render)
+  const [requisitions, setRequisitions] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_requisitions');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
+          return parsed.data;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => requisitions.length === 0);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
@@ -109,6 +125,106 @@ export default function OpenRolesPage({ enabled = true }) {
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [activeNavTab, setActiveNavTab] = useState('home');
 
+  // Candidate agreements & offer letter state
+  const [candidateAgreements, setCandidateAgreements] = useState([]);
+  const [loadingAgreements, setLoadingAgreements] = useState(false);
+  const [selectedAgreement, setSelectedAgreement] = useState(null);
+  const [signingAgreement, setSigningAgreement] = useState(false);
+  const [signatureName, setSignatureName] = useState('');
+  const [signatureAgreed, setSignatureAgreed] = useState(false);
+  const [signSuccessMessage, setSignSuccessMessage] = useState('');
+  const [agreementLookupEmail, setAgreementLookupEmail] = useState('');
+
+  const loadCandidateAgreements = useCallback(async (customEmail = null) => {
+    setLoadingAgreements(true);
+    try {
+      let email = (customEmail || agreementLookupEmail || candidateUser?.candidate_email || candidateUser?.email || '').trim();
+      if (!email) {
+        try {
+          const storedUser = JSON.parse(localStorage.getItem('candidate_profile_user') || '{}');
+          email = (storedUser?.candidate_email || storedUser?.email || localStorage.getItem('candidate_email') || '').trim();
+        } catch (_) { }
+      }
+      if (!email) {
+        const urlParams = new URLSearchParams(window.location.search);
+        email = (urlParams.get('email') || '').trim();
+      }
+      if (!email) {
+        setCandidateAgreements([]);
+        setLoadingAgreements(false);
+        return;
+      }
+      if (email && !agreementLookupEmail) {
+        setAgreementLookupEmail(email);
+      }
+      const cid = candidateUser?.id || candidateUser?.candidate_id || '';
+      const token = candidateAuth?.candidateToken;
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const params = new URLSearchParams();
+      if (email) params.append('email', email);
+      if (cid) params.append('candidate_id', cid);
+      const res = await fetch(`${API_BASE_URL}/api/candidate-profile/agreements?${params.toString()}`, { headers });
+      const data = await res.json();
+      if (Array.isArray(data.agreements) && data.agreements.length > 0) {
+        setCandidateAgreements(data.agreements);
+      } else {
+        setCandidateAgreements([]);
+      }
+    } catch (err) {
+      console.error('Failed to load candidate agreements:', err);
+      setCandidateAgreements([]);
+    } finally {
+      setLoadingAgreements(false);
+    }
+  }, [candidateUser, candidateAuth, agreementLookupEmail]);
+
+  useEffect(() => {
+    if (showAgreementModal) {
+      loadCandidateAgreements();
+    }
+  }, [showAgreementModal]);
+
+  const handleSignAgreement = async (agrId) => {
+    if (!signatureAgreed) return;
+    setSigningAgreement(true);
+    setSignSuccessMessage('');
+    try {
+      const token = candidateAuth?.candidateToken;
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const signName = signatureName.trim() || candidateUser?.candidate_name || selectedAgreement?.candidate_name || 'Candidate';
+      const email = candidateUser?.candidate_email || selectedAgreement?.candidate_email || '';
+      const res = await fetch(`${API_BASE_URL}/api/candidate-profile/agreements/${agrId}/sign`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          signature_name: signName,
+          email,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSignSuccessMessage('✓ Employment Agreement digitally signed and executed successfully! Your onboarding is now officially underway.');
+        setSelectedAgreement((prev) => ({
+          ...prev,
+          status: 'Accepted & Signed',
+          agreement_status: 'Accepted & Signed',
+          candidate_accepted: true,
+          signature_name: signName,
+          signed_at: new Date().toISOString(),
+        }));
+        loadCandidateAgreements();
+        if (refreshProfile) refreshProfile();
+      } else {
+        alert(data?.detail || 'Failed to sign agreement. Please try again.');
+      }
+    } catch (err) {
+      console.error('Sign agreement error:', err);
+    } finally {
+      setSigningAgreement(false);
+    }
+  };
+
   // Application form state
   const [applyForm, setApplyForm] = useState({
     name: '',
@@ -137,6 +253,7 @@ export default function OpenRolesPage({ enabled = true }) {
     summary: '',
   });
   const [setupResumeFile, setSetupResumeFile] = useState(null);
+  const setupFileInputRef = useRef(null);
   const [setupSubmitting, setSetupSubmitting] = useState(false);
   const [setupError, setSetupError] = useState(null);
   const [setupSuccess, setSetupSuccess] = useState(false);
@@ -177,8 +294,9 @@ export default function OpenRolesPage({ enabled = true }) {
   const [regSkills, setRegSkills] = useState('');
   const [regResume, setRegResume] = useState(null);
 
-  // Load Google Identity Services SDK on mount
+  // Load Google Identity Services SDK only when auth modal is open
   useEffect(() => {
+    if (!showAuthModal) return;
     if (document.getElementById('google-jssdk')) return;
     const script = document.createElement('script');
     script.id = 'google-jssdk';
@@ -186,6 +304,35 @@ export default function OpenRolesPage({ enabled = true }) {
     script.async = true;
     script.defer = true;
     document.body.appendChild(script);
+  }, [showAuthModal]);
+
+  // Helper to ensure Google SDK is ready when user clicks Google Sign-In
+  const ensureGoogleSdk = useCallback(() => {
+    return new Promise((resolve) => {
+      if (window.google?.accounts?.oauth2) return resolve(true);
+      let script = document.getElementById('google-jssdk');
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'google-jssdk';
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+      }
+      script.addEventListener('load', () => resolve(true), { once: true });
+      script.addEventListener('error', () => resolve(false), { once: true });
+      let tries = 0;
+      const interval = setInterval(() => {
+        tries++;
+        if (window.google?.accounts?.oauth2) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (tries > 40) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+    });
   }, []);
 
   // Listen for query params, hash, or candidate path opening candidate auth
@@ -207,7 +354,7 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   // Trigger Google OAuth popup
-  const handleGoogleSignIn = (onSuccess) => {
+  const handleGoogleSignIn = async (onSuccess) => {
     setAuthError(null);
 
     if (!GOOGLE_CLIENT_ID) {
@@ -216,8 +363,13 @@ export default function OpenRolesPage({ enabled = true }) {
     }
 
     if (!window.google?.accounts?.oauth2) {
-      setAuthError('Google Sign-In SDK is loading. Please try again in a few moments.');
-      return;
+      setAuthLoading(true);
+      const loaded = await ensureGoogleSdk();
+      setAuthLoading(false);
+      if (!loaded || !window.google?.accounts?.oauth2) {
+        setAuthError('Google Sign-In SDK is loading. Please try again in a few moments.');
+        return;
+      }
     }
 
     try {
@@ -347,11 +499,8 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Derive candidate profile state
   const hasResume = Boolean(
-    candidateAuth?.hasResume ||
-    candidateAuth?.resumeFilename ||
-    candidateUser?.has_resume ||
-    candidateUser?.filename ||
-    candidateUser?.resume_pdf
+    candidateAuth?.hasResume &&
+    (candidateAuth?.resumeFilename || candidateUser?.filename || candidateUser?.has_resume)
   );
   const hasPhone = Boolean(
     candidateUser?.candidate_phone ||
@@ -363,13 +512,75 @@ export default function OpenRolesPage({ enabled = true }) {
   );
   const currentResumeName = candidateAuth?.resumeFilename || candidateUser?.filename || 'profile_resume.pdf';
 
-  // Optimistic tracking of jobs applied in current session
-  const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => new Set());
+  // Persistent tracking of jobs applied by the CURRENT authenticated candidate
+  const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => {
+    if (!isCandidateAuthenticated || !appliedStorageKey) return new Set();
+    try {
+      const saved = localStorage.getItem(appliedStorageKey);
+      return new Set(saved ? JSON.parse(saved) : []);
+    } catch {
+      return new Set();
+    }
+  });
 
-  // Map of candidate's submitted applications for O(1) matching
+  // Keep justAppliedJobIds strictly synchronized with authentication state
+  useEffect(() => {
+    if (!isCandidateAuthenticated || !appliedStorageKey) {
+      setJustAppliedJobIds(new Set());
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(appliedStorageKey);
+      setJustAppliedJobIds(new Set(saved ? JSON.parse(saved) : []));
+    } catch {
+      setJustAppliedJobIds(new Set());
+    }
+  }, [isCandidateAuthenticated, appliedStorageKey]);
+
+  // Dedicated candidate logout handler that cleanly purges device applied jobs tracking
+  const handleCandidateLogout = useCallback(() => {
+    try {
+      localStorage.removeItem('tj_applied_jobs');
+      if (appliedStorageKey) {
+        localStorage.removeItem(appliedStorageKey);
+      }
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('tj_applied_jobs')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (_) {}
+    setJustAppliedJobIds(new Set());
+    if (typeof logout === 'function') {
+      logout();
+    }
+  }, [logout, appliedStorageKey]);
+
+  // Automatically sync applied jobs from candidate profile history into candidate-scoped storage
+  useEffect(() => {
+    if (!isCandidateAuthenticated || !appliedStorageKey) {
+      setJustAppliedJobIds(new Set());
+      return;
+    }
+    if (Array.isArray(applications) && applications.length > 0) {
+      setJustAppliedJobIds((prev) => {
+        const next = new Set(prev);
+        applications.forEach((app) => {
+          if (app.requisition_id) next.add(String(app.requisition_id));
+          if (app.id) next.add(String(app.id));
+        });
+        try {
+          localStorage.setItem(appliedStorageKey, JSON.stringify(Array.from(next)));
+        } catch (_) { }
+        return next;
+      });
+    }
+  }, [applications, isCandidateAuthenticated, appliedStorageKey]);
+
+  // Map of candidate's submitted applications for O(1) matching - strictly for authenticated candidate
   const appliedMap = useMemo(() => {
     const map = new Map();
-    if (!Array.isArray(applications)) return map;
+    if (!isCandidateAuthenticated || !Array.isArray(applications)) return map;
     applications.forEach((app) => {
       if (app.requisition_id) {
         map.set(String(app.requisition_id), app);
@@ -382,17 +593,17 @@ export default function OpenRolesPage({ enabled = true }) {
       }
     });
     return map;
-  }, [applications]);
+  }, [applications, isCandidateAuthenticated]);
 
   const getJobApplication = useCallback((job) => {
-    if (!job) return null;
+    if (!job || !isCandidateAuthenticated) return null;
     return (
       appliedMap.get(String(job.id)) ||
       (job._id && appliedMap.get(String(job._id))) ||
       (job.title && appliedMap.get(job.title.toLowerCase().trim())) ||
       null
     );
-  }, [appliedMap]);
+  }, [appliedMap, isCandidateAuthenticated]);
 
   // Auto-populate candidate details
   useEffect(() => {
@@ -427,35 +638,70 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [candidateUser, selectedJob]);
 
-  // Fetch published requisitions
+  // Fetch published requisitions only when Open Roles is active/enabled
   useEffect(() => {
-    let isMounted = true;
-    async function fetchJobs() {
+    if (!enabled) return;
+
+    let cancelled = false;
+    if (requisitions.length === 0) {
       setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/public/requisitions`);
-        if (!res.ok) {
-          throw new Error(`Failed to load open roles (${res.status})`);
-        }
-        const data = await res.json();
-        if (isMounted) {
-          setRequisitions(Array.isArray(data) ? data : []);
-        }
-      } catch (err) {
-        console.error('Error fetching public requisitions:', err);
-        if (isMounted) {
-          setError(err.message || 'Could not load open roles.');
-        }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
     }
-    fetchJobs();
-    return () => {
-      isMounted = false;
+    setError(null);
+
+    const onDataLoaded = (data) => {
+      if (cancelled) return;
+      if (Array.isArray(data)) {
+        setRequisitions(data);
+        setLoading(false);
+        try {
+          sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data }));
+        } catch (e) {}
+      }
     };
-  }, []);
+
+    // 1. Consume early speculatively prefetched request from <head> if present
+    if (typeof window !== 'undefined' && window.__PREFETCHED_REQUISITIONS__) {
+      const earlyPromise = window.__PREFETCHED_REQUISITIONS__;
+      window.__PREFETCHED_REQUISITIONS__ = null; // consume once
+      earlyPromise
+        .then((data) => {
+          if (data && Array.isArray(data) && data.length > 0) {
+            onDataLoaded(data);
+          } else {
+            // fallback to client request
+            return request('/api/public/requisitions').then(onDataLoaded);
+          }
+        })
+        .catch(() => {
+          request('/api/public/requisitions').then(onDataLoaded).catch((err) => {
+            if (!cancelled) {
+              if (requisitions.length === 0) setError(err.message || 'Could not load open roles.');
+              setLoading(false);
+            }
+          });
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // 2. Standard request with SWR cache
+    request('/api/public/requisitions')
+      .then(onDataLoaded)
+      .catch((err) => {
+        console.error('Error fetching public requisitions:', err);
+        if (!cancelled) {
+          if (requisitions.length === 0) {
+            setError(err.message || 'Could not load open roles.');
+          }
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
 
   // Filtered job list
   const filteredJobs = useMemo(() => {
@@ -507,35 +753,68 @@ export default function OpenRolesPage({ enabled = true }) {
     return Array.from(set);
   }, [requisitions]);
 
-  // Locations for filter dropdown
+  // Locations for filter dropdown - strictly geographic locations (Work modes like Remote/Hybrid/Onsite are handled by All Modes)
   const availableLocations = useMemo(() => {
+    const WORK_MODES = new Set([
+      'remote',
+      'hybrid',
+      'onsite',
+      'on-site',
+      'in-office',
+      'wfh',
+      'remote / hybrid',
+      'hybrid / remote',
+      'work from home',
+    ]);
     const set = new Set();
     requisitions.forEach((j) => {
       const loc = j.structured_role?.location || j.location || j.company_location;
+      const addGeoLocation = (val) => {
+        if (!val || typeof val !== 'string') return;
+        const trimmed = val.trim();
+        if (!trimmed) return;
+        if (!WORK_MODES.has(trimmed.toLowerCase())) {
+          set.add(trimmed);
+        }
+      };
+
       if (Array.isArray(loc)) {
-        loc.forEach((l) => l && set.add(l));
+        loc.forEach((l) => addGeoLocation(l));
       } else if (loc && typeof loc === 'string') {
-        set.add(loc);
+        addGeoLocation(loc);
       }
     });
-    return Array.from(set);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [requisitions]);
+
+  // Guard: if selectedLocation ever holds a work mode, reset it to 'ALL'
+  useEffect(() => {
+    const WORK_MODES = new Set(['remote', 'hybrid', 'onsite', 'on-site', 'in-office']);
+    if (WORK_MODES.has(selectedLocation.toLowerCase())) {
+      setSelectedLocation('ALL');
+    }
+  }, [selectedLocation]);
 
   const getLocationDisplay = (job) => {
     const role = job.structured_role || {};
-    if (Array.isArray(role.location) && role.location.length > 0) {
-      return role.location[0];
+    const WORK_MODES = new Set(['remote', 'hybrid', 'onsite', 'on-site', 'in-office']);
+
+    const candidates = [];
+    if (Array.isArray(role.location)) {
+      candidates.push(...role.location);
+    } else if (role.location && typeof role.location === 'string') {
+      candidates.push(role.location);
     }
-    if (role.location && typeof role.location === 'string') {
-      return role.location;
+    if (job.location) candidates.push(job.location);
+    if (job.company_location) candidates.push(job.company_location);
+
+    const geoMatch = candidates.find((c) => c && typeof c === 'string' && !WORK_MODES.has(c.trim().toLowerCase()));
+    if (geoMatch) {
+      return geoMatch.trim();
     }
-    if (job.company_location) {
-      return job.company_location;
-    }
-    if (job.location) {
-      return job.location;
-    }
-    return (role.work_mode || 'Remote').toLowerCase() === 'remote' ? 'Remote' : 'Hybrid';
+
+    const mode = (role.work_mode || 'Remote').trim();
+    return mode.toLowerCase() === 'remote' ? 'Remote' : mode;
   };
 
   const handleOpenJob = (job) => {
@@ -543,6 +822,7 @@ export default function OpenRolesPage({ enabled = true }) {
     setSubmitSuccess(null);
     setSubmitError(null);
     setResumeFile(null);
+    setUseCustomResume(!hasResume);
   };
 
   const handleApplySubmit = async (e) => {
@@ -552,11 +832,6 @@ export default function OpenRolesPage({ enabled = true }) {
     if (!candidateUser) {
       setSubmitError('Candidate sign-in or registration is mandatory to submit an application. Please sign in or create your profile.');
       setShowAuthModal(true);
-      return;
-    }
-
-    if (!isProfileComplete && !useCustomResume && !resumeFile && !hasResume) {
-      setShowSetupModal(true);
       return;
     }
 
@@ -573,13 +848,12 @@ export default function OpenRolesPage({ enabled = true }) {
       return;
     }
 
-    if (!hasResume && !resumeFile) {
-      setSubmitError('Please choose or drop your resume file (PDF or DOCX) to complete your application.');
-      return;
-    }
-
-    if (useCustomResume && !resumeFile) {
-      setSubmitError('Please choose a resume file to upload, or uncheck to use your saved profile resume.');
+    if (!resumeFile && (!hasResume || useCustomResume)) {
+      if (hasResume) {
+        setSubmitError('Please choose a resume file to upload, or switch to your saved profile resume.');
+      } else {
+        setSubmitError('Please upload your resume file (PDF or DOCX) to complete your application.');
+      }
       return;
     }
 
@@ -605,24 +879,79 @@ export default function OpenRolesPage({ enabled = true }) {
         body: formData,
       });
 
-      const result = await res.json();
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (_) {
+        result = null;
+      }
+
       if (!res.ok) {
-        throw new Error(result.detail || 'Failed to submit application. Please try again.');
+        const errorText = formatApiErrorMessage(result, `Failed to submit application (${res.status}).`);
+        throw new Error(errorText);
       }
 
       setSubmitSuccess(result);
       if (selectedJob?.id) {
-        setJustAppliedJobIds((prev) => new Set([...prev, String(selectedJob.id)]));
+        const jid = String(selectedJob.id);
+        setJustAppliedJobIds((prev) => {
+          const next = new Set(prev);
+          next.add(jid);
+          if (selectedJob._id) next.add(String(selectedJob._id));
+          if (appliedStorageKey) {
+            try {
+              localStorage.setItem(appliedStorageKey, JSON.stringify(Array.from(next)));
+            } catch (_) { }
+          }
+          return next;
+        });
       }
       if (refreshProfile) {
         refreshProfile();
       }
     } catch (err) {
       console.error('Error applying to requisition:', err);
-      setSubmitError(err.message || 'An unexpected error occurred while submitting your application.');
+      const displayMsg = formatApiErrorMessage(err?.message || err, 'An unexpected error occurred while submitting your application.');
+      setSubmitError(displayMsg);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Helper to extract clean human-readable error messages from API responses (preventing [object Object])
+  const formatApiErrorMessage = (errOrResult, fallback = 'Operation failed. Please try again.') => {
+    if (!errOrResult) return fallback;
+    if (typeof errOrResult === 'string') {
+      if (errOrResult === '[object Object]' || errOrResult.trim() === '') return fallback;
+      return errOrResult;
+    }
+    const detail = errOrResult.detail !== undefined ? errOrResult.detail : errOrResult;
+    if (typeof detail === 'string') {
+      if (detail === '[object Object]' || detail.trim() === '') return fallback;
+      return detail;
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      return detail
+        .map((d) => {
+          if (typeof d === 'string') return d;
+          if (d && typeof d === 'object') {
+            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : '';
+            const msg = d.msg || d.message || JSON.stringify(d);
+            return field && field !== 'body' ? `${field}: ${msg}` : msg;
+          }
+          return String(d);
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+    if (detail && typeof detail === 'object') {
+      return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+    }
+    if (typeof errOrResult.message === 'string' && errOrResult.message !== '[object Object]') {
+      return errOrResult.message;
+    }
+    if (typeof errOrResult.error === 'string') return errOrResult.error;
+    return fallback;
   };
 
   const handleSetupSubmit = async (e) => {
@@ -662,7 +991,7 @@ export default function OpenRolesPage({ enabled = true }) {
         setSetupSuccess(false);
       }, 1200);
     } catch (err) {
-      setSetupError(err.message || 'Could not update profile.');
+      setSetupError(formatApiErrorMessage(err?.message || err, 'Could not update profile.'));
     } finally {
       setSetupSubmitting(false);
     }
@@ -695,22 +1024,30 @@ export default function OpenRolesPage({ enabled = true }) {
         body: formData,
       });
 
-      const result = await res.json();
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (_) {
+        result = null;
+      }
+
       if (!res.ok) {
-        throw new Error(result.detail || 'Could not join talent pool.');
+        const errorText = formatApiErrorMessage(result, `Could not join talent pool (${res.status}).`);
+        throw new Error(errorText);
       }
       setPoolSuccess(result);
       if (refreshProfile) {
         refreshProfile();
       }
     } catch (err) {
-      setPoolError(err.message || 'Failed to submit profile.');
+      const displayMsg = formatApiErrorMessage(err?.message || err, 'Failed to submit profile. Please ensure all required fields are filled out.');
+      setPoolError(displayMsg);
     } finally {
       setPoolSubmitting(false);
     }
   };
 
-  const selectedJobApp = selectedJob
+  const selectedJobApp = (selectedJob && isCandidateAuthenticated)
     ? getJobApplication(selectedJob) || (justAppliedJobIds.has(String(selectedJob.id)) ? { status: 'Screened' } : null)
     : null;
   const isSelectedJobApplied = Boolean(selectedJobApp);
@@ -895,7 +1232,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   </a>
                   <button
                     type="button"
-                    onClick={logout}
+                    onClick={handleCandidateLogout}
                     className="p-1 text-paper/50 hover:text-white transition cursor-pointer"
                     title="Sign out"
                   >
@@ -1125,7 +1462,13 @@ export default function OpenRolesPage({ enabled = true }) {
                   const isSaved = bookmarkedIds.includes(job.id);
                   const locDisplay = getLocationDisplay(job);
                   const existingApp = getJobApplication(job);
-                  const isApplied = Boolean(existingApp || justAppliedJobIds.has(String(job.id)));
+                  const isApplied = Boolean(
+                    isCandidateAuthenticated && (
+                      existingApp ||
+                      justAppliedJobIds.has(String(job.id)) ||
+                      (job._id && justAppliedJobIds.has(String(job._id)))
+                    )
+                  );
 
                   return (
                     <article
@@ -1240,10 +1583,10 @@ export default function OpenRolesPage({ enabled = true }) {
                               e.stopPropagation();
                               handleOpenJob(job);
                             }}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/20 text-white font-semibold text-[10px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
+                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 font-bold text-[10px] tracking-tight transition shadow-sm cursor-pointer shrink-0"
                             title="Application Submitted · Click to view application status"
                           >
-                            <Check size={11} className="text-white" />
+                            <Check size={11} className="text-emerald-400" />
                             <span>Applied</span>
                           </button>
                         ) : (
@@ -1667,7 +2010,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           </div>
                           <button
                             type="button"
-                            onClick={logout}
+                            onClick={handleCandidateLogout}
                             className="text-[11px] text-white/50 hover:text-rose-400 transition cursor-pointer"
                           >
                             Sign out
@@ -1780,8 +2123,8 @@ export default function OpenRolesPage({ enabled = true }) {
                               }}
                               onClick={() => fileInputRef.current?.click()}
                               className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${isDragging
-                                  ? 'border-white bg-white/[0.08]'
-                                  : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                                ? 'border-white bg-white/[0.08]'
+                                : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                                 }`}
                             >
                               <input
@@ -1811,6 +2154,12 @@ export default function OpenRolesPage({ enabled = true }) {
                                   <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
                                 </>
                               )}
+                            </div>
+                          )}
+
+                          {!hasResume && (
+                            <div className="mt-2 text-[10.5px] text-emerald-400/90 flex items-center gap-1.5 font-medium">
+                              <span>✓ This resume will be automatically saved to your profile for future 1-click applications.</span>
                             </div>
                           )}
 
@@ -2009,15 +2358,92 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Resume File (PDF/DOCX)</label>
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.doc"
-                    onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700"
-                  />
-                  {hasResume && !setupResumeFile && (
-                    <div className="text-[10px] text-white/60 mt-1">Existing resume: {currentResumeName}</div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-semibold text-white/70 uppercase">Master Resume (On File)</label>
+                    {hasResume ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        <Check size={11} /> Verified Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        Upload Required
+                      </span>
+                    )}
+                  </div>
+
+                  {hasResume ? (
+                    <div className="space-y-2">
+                      <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/15 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/15 text-white flex items-center justify-center shrink-0">
+                            <FileText size={18} />
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <div className="text-xs font-bold text-white truncate">{currentResumeName || 'candidate_resume.pdf'}</div>
+                            <div className="text-[10.5px] text-white/50">Ready for instant 1-click applications</div>
+                          </div>
+                        </div>
+                        {candidateAuth?.candidateToken && (
+                          <a
+                            href={`${API_BASE_URL}/api/candidate-profile/resume?token=${candidateAuth.candidateToken}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 text-[11px] font-semibold text-white transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                            title="View or download your master resume"
+                          >
+                            <Download size={12} />
+                            <span>View / Download</span>
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="pt-1">
+                        <label className="block text-[10.5px] font-semibold text-white/50 uppercase mb-1">
+                          Update / Replace Resume File (Optional)
+                        </label>
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.doc"
+                          onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
+                          className="w-full text-xs text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 transition cursor-pointer"
+                        />
+                        {setupResumeFile && (
+                          <div className="mt-1 text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                            <Check size={12} /> Selected for update: {setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div
+                        onClick={() => setupFileInputRef.current?.click()}
+                        className="p-5 border-2 border-dashed border-white/20 hover:border-white/40 bg-white/[0.02] hover:bg-white/[0.05] rounded-2xl text-center cursor-pointer transition"
+                      >
+                        <input
+                          type="file"
+                          ref={setupFileInputRef}
+                          accept=".pdf,.docx,.doc"
+                          onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                        <Upload size={22} className="text-white/40 mx-auto mb-1.5" />
+                        {setupResumeFile ? (
+                          <div className="text-xs font-bold text-white flex items-center justify-center gap-1.5">
+                            <Check size={14} className="text-emerald-400" />
+                            <span>{setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-xs font-semibold text-white">Click or drag resume here to upload</div>
+                            <div className="text-[10px] text-white/40 mt-0.5">PDF or DOCX (up to 10MB)</div>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-[10.5px] text-white/40 mt-1.5">
+                        Uploading a resume enables 1-click applications across all enterprise partner roles.
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -2130,7 +2556,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {poolError && (
                   <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
                     <AlertCircle size={15} className="shrink-0" />
-                    <span>{poolError}</span>
+                    <span>{typeof poolError === 'string' ? poolError : formatApiErrorMessage(poolError)}</span>
                   </div>
                 )}
 
@@ -2236,8 +2662,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       onClick={() => poolFileInputRef.current?.click()}
                       className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
-                          ? 'border-white bg-white/[0.08]'
-                          : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                        ? 'border-white bg-white/[0.08]'
+                        : 'border-white/15 bg-white/[0.02] hover:border-white/30'
                         }`}
                     >
                       <input
@@ -2303,7 +2729,7 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {showAgreementModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
-          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
+          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-xl w-full p-6 sm:p-7 shadow-2xl">
             <div className="flex items-center justify-between pb-4 border-b border-white/10">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-white/[0.08] border border-white/10 flex items-center justify-center text-white shrink-0">
@@ -2311,7 +2737,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white leading-tight">Agreements & Contracts</h3>
-                  <p className="text-[11px] text-white/50">Master Services Agreements & Compliance</p>
+                  <p className="text-[11px] text-white/50">Formal Employment Offers & Execution (Available Post-Interview Selection)</p>
                 </div>
               </div>
               <button
@@ -2326,29 +2752,152 @@ export default function OpenRolesPage({ enabled = true }) {
               </button>
             </div>
 
-            <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
-              {applications.length === 0 ? (
-                <div className="py-8 text-center space-y-2">
+            {/* Candidate Email Verification & Quick Switch */}
+            <div className="mt-3 p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-2 flex-1 min-w-[240px]">
+                <span className="text-[11px] text-white/50 shrink-0 font-medium">Candidate Email:</span>
+                <input
+                  type="email"
+                  value={agreementLookupEmail}
+                  onChange={(e) => setAgreementLookupEmail(e.target.value)}
+                  placeholder={candidateUser?.candidate_email || candidateUser?.email || "e.g. yourname@example.com"}
+                  className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-400 font-semibold"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const target = agreementLookupEmail || candidateUser?.candidate_email || candidateUser?.email;
+                  if (target) loadCandidateAgreements(target);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition cursor-pointer shrink-0 shadow-sm"
+              >
+                Fetch Agreements
+              </button>
+            </div>
+
+            <div className="mt-3 space-y-3 max-h-[65vh] overflow-y-auto pr-1">
+              {loadingAgreements ? (
+                <div className="py-12 text-center text-white/50 text-xs">
+                  <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin mx-auto mb-2" />
+                  Checking for active employment agreements…
+                </div>
+              ) : candidateAgreements.length > 0 ? (
+                <div className="space-y-3">
+                  {candidateAgreements.map((agr, i) => {
+                    const isSigned = agr.status === 'Accepted & Signed' || agr.agreement_status === 'Accepted & Signed' || agr.candidate_accepted;
+                    const ctc = agr.annexure?.total_fixed_annual
+                      ? `₹${Number(agr.annexure.total_fixed_annual).toLocaleString('en-IN')} / year`
+                      : '₹18,00,000 / year';
+
+                    return (
+                      <div
+                        key={agr._id || agr.candidate_id || i}
+                        className="p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-white/15 hover:border-white/25 transition space-y-3"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-white">{agr.job_title || 'Software Engineer'}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-md bg-white/[0.08] text-white/70 font-semibold">
+                                {agr.company_name || 'Enterprise Client'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] text-white/50 mt-0.5">
+                              Addressed to: <strong className="text-white/80">{agr.candidate_name}</strong> ({agr.candidate_email})
+                            </div>
+                          </div>
+
+                          {isSigned ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              <CheckCircle2 size={12} />
+                              Signed & Active
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                              <AlertCircle size={12} />
+                              Action Required: Sign
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Terms Quick Summary */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-2 px-3 rounded-xl bg-black/40 border border-white/5 text-[11px]">
+                          <div>
+                            <span className="text-white/40 block text-[9px] uppercase tracking-wider">Annual CTC</span>
+                            <span className="text-white font-bold">{ctc}</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block text-[9px] uppercase tracking-wider">Joining Date</span>
+                            <span className="text-white font-semibold">{agr.joining_date || 'Within 14 Days'}</span>
+                          </div>
+                          <div>
+                            <span className="text-white/40 block text-[9px] uppercase tracking-wider">Location</span>
+                            <span className="text-white font-semibold">{agr.annexure?.work_location || 'Bengaluru / Hybrid'}</span>
+                          </div>
+                        </div>
+
+                        {/* CTA Buttons */}
+                        <div className="flex items-center justify-between pt-1 gap-2">
+                          <span className="text-[10px] text-white/40">
+                            Issued: {agr.offer_date || 'Recent'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAgreement(agr);
+                              setSignatureName(candidateUser?.candidate_name || agr.candidate_name || '');
+                              setSignatureAgreed(false);
+                              setSignSuccessMessage('');
+                            }}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${isSigned
+                                ? 'bg-white/10 hover:bg-white/20 text-white'
+                                : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-lg shadow-emerald-500/20 active:scale-98'
+                              }`}
+                          >
+                            <FileText size={14} />
+                            {isSigned ? 'View Executed Agreement' : 'Review & Sign Agreement →'}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-8 text-center space-y-4">
                   <div className="w-12 h-12 rounded-2xl bg-white/[0.05] border border-white/10 flex items-center justify-center text-white/50 mx-auto mb-2">
                     <FileText size={20} />
                   </div>
-                  <h4 className="text-sm font-bold text-white">No Active Agreements Pending</h4>
-                  <p className="text-xs text-white/50 max-w-xs mx-auto leading-relaxed">
-                    Once an enterprise partner approves your application, your Master Services Agreement (MSA) and Statement of Work (SOW) will appear here for digital review and signing.
-                  </p>
-                </div>
-              ) : (
-                applications.map((app, i) => (
-                  <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
-                    <div>
-                      <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
-                      <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'} · MSA Linked</div>
-                    </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
-                      Standard Terms
-                    </span>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">No Active Agreements Issued Yet</h4>
+                    <p className="text-xs text-white/50 max-w-sm mx-auto leading-relaxed mt-1">
+                      Agreements and formal employment contracts are generated exclusively after you complete your interview rounds and receive an official selection / offer from the hiring partner.
+                    </p>
                   </div>
-                ))
+
+                  {/* Guest Email Lookup Box if not authenticated */}
+                  <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 max-w-sm mx-auto text-left">
+                    <label className="text-[10px] uppercase font-bold text-white/60 block mb-1">
+                      Received an offer? Check with your email:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="email"
+                        value={agreementLookupEmail}
+                        onChange={(e) => setAgreementLookupEmail(e.target.value)}
+                        placeholder="e.g. arjunmheartitude@gmail.com"
+                        className="flex-1 bg-black/50 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-white/40"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => loadCandidateAgreements(agreementLookupEmail)}
+                        className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs cursor-pointer transition"
+                      >
+                        Check
+                      </button>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -2363,6 +2912,282 @@ export default function OpenRolesPage({ enabled = true }) {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* ============================================================ */}
+      {/* MODAL 5B: FULL 5-PAGE AGREEMENT REVIEW & DIGITAL SIGNING MODAL*/}
+      {/* ============================================================ */}
+      {selectedAgreement && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-2xl animate-in fade-in duration-200 overflow-y-auto">
+          <div className="bg-[#0f1117] border border-white/15 rounded-3xl max-w-4xl w-full my-6 p-4 sm:p-7 shadow-2xl relative flex flex-col max-h-[92vh]">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-white/10 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white leading-tight">
+                    Formal Employment Agreement & Offer Letter
+                  </h3>
+                  <p className="text-xs text-white/50">
+                    {selectedAgreement.company_name} · {selectedAgreement.job_title} · Ref: {selectedAgreement.candidate_id || selectedAgreement.submission_id || 'CND-OFFER'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white/80 hover:text-white text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+                >
+                  Print / Save PDF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAgreement(null)}
+                  className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Canvas Body */}
+            <div className="mt-4 flex-1 overflow-y-auto pr-2 space-y-6">
+              <div
+                className="bg-white text-slate-800 p-6 sm:p-10 rounded-2xl shadow-xl border border-slate-200 text-xs sm:text-sm leading-relaxed"
+                style={{ fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' }}
+              >
+                {/* Letterhead */}
+                <div className="border-b-2 border-slate-900 pb-4 mb-6 flex justify-between items-start flex-wrap gap-4">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                      {selectedAgreement.company_name || 'TCS'}
+                    </h2>
+                    <p className="text-xs text-slate-500 max-w-sm mt-1">
+                      {selectedAgreement.company_address || 'Corporate Technology Park, Outer Ring Road, Bengaluru, Karnataka 560103'}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-bold text-rose-600 uppercase tracking-widest block">Strictly Private & Confidential</span>
+                    <span className="text-xs font-bold text-slate-600 mt-1 block">Date: {selectedAgreement.offer_date || new Date().toLocaleDateString()}</span>
+                  </div>
+                </div>
+
+                {/* Candidate Addressee */}
+                <div className="mb-6">
+                  <div className="text-xs text-slate-500 font-bold uppercase tracking-wider">Candidate Name:</div>
+                  <div className="text-lg font-black text-slate-900">{selectedAgreement.candidate_name}</div>
+                  <div className="text-xs text-slate-600">Email: {selectedAgreement.candidate_email}</div>
+                </div>
+
+                {/* Heading */}
+                <div className="text-center my-6">
+                  <h3 className="text-base font-black text-slate-900 uppercase tracking-widest underline decoration-2 underline-offset-4">
+                    EMPLOYMENT OFFER
+                  </h3>
+                </div>
+
+                {/* Intro */}
+                <p className="mb-4 text-slate-700">
+                  We are pleased to present you with an offer of employment with <strong>{selectedAgreement.company_name}</strong> as <strong>{selectedAgreement.job_title}</strong>. Your employment with the Company will commence on <strong>{selectedAgreement.joining_date}</strong>.
+                </p>
+
+                {/* Terms Table */}
+                <table className="w-full border-collapse mb-6 border border-slate-300 text-xs">
+                  <tbody>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Joining Date</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.joining_date}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Contract Period</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.contract_period || 'Full Time / Unlimited'}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Mobility & Relocation</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.mobility_clause}</td>
+                    </tr>
+                    <tr className="border-b border-slate-200">
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Notice Period & Termination</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.termination_employee_notice_days || 30} days notice period by either party</td>
+                    </tr>
+                    <tr>
+                      <td className="w-1/3 p-2.5 bg-slate-50 font-bold text-slate-900 border-r border-slate-200">Probation Period</td>
+                      <td className="p-2.5 text-slate-700">{selectedAgreement.probation_period_months || 3} Months from joining</td>
+                    </tr>
+                  </tbody>
+                </table>
+
+                {/* Annexure A Compensation Details */}
+                <div className="border-t-2 border-slate-300 pt-6 mt-6">
+                  <div className="text-center mb-4">
+                    <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">ANNEXURE A — COMPENSATION DETAILS</h4>
+                    <span className="text-xs font-bold text-emerald-700 uppercase">Fixed Annual Cost to Company (CTC) Breakdown</span>
+                  </div>
+
+                  <table className="w-full border-collapse mb-6 border border-slate-300 text-xs">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 text-slate-900">
+                        <th className="p-2.5 text-left font-bold">Salary Component</th>
+                        <th className="p-2.5 text-right font-bold">Monthly (INR ₹)</th>
+                        <th className="p-2.5 text-right font-bold">Annualized (INR ₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">Basic Salary (50%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.basic_salary_monthly || 75000).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.basic_salary_annual || 900000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">House Rent Allowance (HRA 25%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.hra_monthly || 37500).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.hra_annual || 450000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">Other & Special Allowance (15%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.other_allowance_monthly || 22500).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.other_allowance_annual || 270000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="border-b border-slate-200">
+                        <td className="p-2.5 text-slate-800 font-medium">Provident Fund (Employer PF 10%)</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.pf_monthly || 15000).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-slate-700">₹{Number(selectedAgreement.annexure?.pf_annual || 180000).toLocaleString('en-IN')}</td>
+                      </tr>
+                      <tr className="bg-emerald-50 font-black text-slate-900 border-t-2 border-emerald-600">
+                        <td className="p-2.5 text-emerald-900">Total Fixed CTC</td>
+                        <td className="p-2.5 text-right text-emerald-900">₹{Number(selectedAgreement.annexure?.total_fixed_monthly || 150000).toLocaleString('en-IN')}</td>
+                        <td className="p-2.5 text-right text-emerald-900">₹{Number(selectedAgreement.annexure?.total_fixed_annual || 1800000).toLocaleString('en-IN')}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Benefits */}
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1 mb-6">
+                    <div><strong>Medical Insurance:</strong> {selectedAgreement.annexure?.medical_insurance_coverage || '₹5,00,000 family floater'}</div>
+                    <div><strong>Life Insurance:</strong> {selectedAgreement.annexure?.life_insurance_coverage || 'Group Life Policy up to 3x CTC'}</div>
+                    <div><strong>Bonus:</strong> {selectedAgreement.annexure?.annual_bonus_percentage || 10}% performance bonus eligibility</div>
+                  </div>
+                </div>
+
+                {/* Signatures */}
+                <div className="border-t-2 border-slate-300 pt-6 grid grid-cols-2 gap-8 text-xs">
+                  <div>
+                    <div className="text-slate-500 mb-6">Authorized Signatory:</div>
+                    <div className="border-t border-slate-900 pt-2">
+                      <div className="font-black text-slate-900">{selectedAgreement.hr_signatory_name || 'Rakesh Sharma'}</div>
+                      <div className="text-slate-500">{selectedAgreement.hr_signatory_title || 'VP – Human Resources'}</div>
+                      <div className="text-slate-500">{selectedAgreement.company_name}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-500 mb-6">Agreed & Accepted by:</div>
+                    <div className="border-t border-slate-900 pt-2">
+                      <div className="font-black text-slate-900">
+                        {selectedAgreement.signature_name || selectedAgreement.candidate_name}
+                      </div>
+                      <div className="text-slate-500">Employee Signature</div>
+                      {selectedAgreement.signed_at && (
+                        <div className="text-emerald-700 font-bold text-[11px] mt-0.5">
+                          Digitally Signed: {new Date(selectedAgreement.signed_at).toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Digital Signing Execution Footer */}
+              {signSuccessMessage && (
+                <div className="p-4 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold flex items-center gap-2">
+                  <CheckCircle2 size={16} />
+                  <span>{signSuccessMessage}</span>
+                </div>
+              )}
+
+              {selectedAgreement.status === 'Accepted & Signed' || selectedAgreement.agreement_status === 'Accepted & Signed' || selectedAgreement.candidate_accepted ? (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={18} />
+                    <span>This Employment Agreement has been digitally signed and executed. Onboarding is active.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAgreement(null)}
+                    className="px-4 py-2 rounded-xl bg-white text-black font-bold text-xs hover:bg-neutral-200 transition cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              ) : (
+                <div className="p-5 rounded-2xl bg-white/[0.04] border border-white/15 space-y-4">
+                  <div className="flex items-center gap-2 text-white">
+                    <ShieldCheck size={18} className="text-emerald-400" />
+                    <span className="font-bold text-sm">Digital Signature & Execution</span>
+                  </div>
+                  <p className="text-xs text-white/50 leading-relaxed">
+                    By providing your digital signature and clicking below, you formally accept the employment terms, compensation breakdown, and standard policies specified in this document.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-white/60 block mb-1 uppercase tracking-wider">
+                        Full Legal Name (Digital Signature) *
+                      </label>
+                      <input
+                        type="text"
+                        value={signatureName}
+                        onChange={(e) => setSignatureName(e.target.value)}
+                        placeholder="e.g. Arjun M"
+                        className="w-full bg-black/50 border border-white/15 rounded-xl px-3.5 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <label className="flex items-center gap-2 text-xs text-white/80 cursor-pointer select-none pb-2">
+                        <input
+                          type="checkbox"
+                          checked={signatureAgreed}
+                          onChange={(e) => setSignatureAgreed(e.target.checked)}
+                          className="w-4 h-4 rounded border-white/30 text-emerald-500 focus:ring-emerald-500"
+                        />
+                        <span>I confirm that I agree to all terms of this agreement.</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedAgreement(null)}
+                      className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold transition cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!signatureAgreed || !signatureName.trim() || signingAgreement}
+                      onClick={() => handleSignAgreement(selectedAgreement._id || selectedAgreement.candidate_id)}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed text-black font-black text-xs transition cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-98 flex items-center gap-2"
+                    >
+                      {signingAgreement ? (
+                        'Executing Agreement…'
+                      ) : (
+                        <>
+                          <CheckCircle2 size={15} />
+                          <span>✓ Sign & Accept Employment Agreement</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
             </div>
           </div>
         </div>,
@@ -2431,8 +3256,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthError(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
-                    ? 'bg-white text-black shadow-xs'
-                    : 'text-white/60 hover:text-white'
+                  ? 'bg-white text-black shadow-xs'
+                  : 'text-white/60 hover:text-white'
                   }`}
               >
                 Sign In
@@ -2444,8 +3269,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthError(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
-                    ? 'bg-white text-black shadow-xs'
-                    : 'text-white/60 hover:text-white'
+                  ? 'bg-white text-black shadow-xs'
+                  : 'text-white/60 hover:text-white'
                   }`}
               >
                 Create Profile

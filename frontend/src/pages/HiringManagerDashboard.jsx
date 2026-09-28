@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -76,14 +76,22 @@ export default function HiringManagerDashboard() {
   const [wfStats, setWfStats] = useState(null);
   const [interviewSummary, setInterviewSummary] = useState([]);
 
-  const loadDashboardData = async () => {
+  const isFetchingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const prevTokenRef = useRef(token);
+
+  const loadDashboardData = useCallback(async (force = false) => {
+    if (isFetchingRef.current) return;
+    if (!force && hasLoadedRef.current && prevTokenRef.current === token) return;
+
+    isFetchingRef.current = true;
     setLoading(true);
     setError('');
     try {
       const [reqsData, shortlistedData, acceptedData, obData, issuesData, wfData, interviewSummaryData] = await Promise.all([
-        request('/requisitions', { token }).catch(() => []),
-        request('/candidates/shortlisted', { token }).catch(() => []),
-        request('/candidates?status=Accepted', { token }).catch(() => []),
+        request('/api/requisitions', { token }).catch(() => []),
+        request('/api/candidates/shortlisted', { token }).catch(() => []),
+        request('/api/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
@@ -107,17 +115,27 @@ export default function HiringManagerDashboard() {
 
       if (wfData) setWfStats(wfData);
       setInterviewSummary(Array.isArray(interviewSummaryData) ? interviewSummaryData : []);
+      hasLoadedRef.current = true;
+      prevTokenRef.current = token;
     } catch (err) {
       console.error('Failed to load hiring manager dashboard data:', err);
       setError(err.message || 'Unable to load live dashboard statistics.');
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [token]);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [token]);
+    if (!token) return;
+    if (prevTokenRef.current !== token) {
+      prevTokenRef.current = token;
+      hasLoadedRef.current = false;
+    }
+    if (!hasLoadedRef.current) {
+      loadDashboardData();
+    }
+  }, [token, loadDashboardData]);
 
   // Derived Exact Real Metrics from Live Backend Data
   const liveRequisitions = useMemo(() => {
@@ -437,7 +455,7 @@ export default function HiringManagerDashboard() {
                       {draftCount > 0 ? (
                         <>
                           <span>{draftRequisitions[0]?.title || 'Requisition'}</span>{' '}
-                          <span className="font-normal text-gray-600">needs review / intake</span>
+                          <span className="font-normal text-gray-600">needs review</span>
                         </>
                       ) : (
                         <span>All requisitions structured</span>

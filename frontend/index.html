@@ -46,6 +46,31 @@
     <!-- Fonts Preconnect & Async Non-Blocking Load -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="http://localhost:8000" />
+    <link rel="dns-prefetch" href="http://localhost:8000" />
+
+    <!-- Zero-Latency Speculative Prefetch for Public Requisitions (starts at 0ms in parallel with JS bundles) -->
+    <script>
+      (function() {
+        try {
+          var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+          var base = isLocal ? 'http://' + location.hostname + ':8000' : '';
+          var url = base + '/api/public/requisitions';
+          window.__PREFETCHED_REQUISITIONS__ = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+              if (data && Array.isArray(data)) {
+                try {
+                  sessionStorage.setItem('tj_cache:anon:' + url, JSON.stringify({ timestamp: Date.now(), data: data }));
+                  sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data: data }));
+                } catch(e) {}
+              }
+              return data;
+            })
+            .catch(function() { return null; });
+        } catch(e) {}
+      })();
+    </script>
     <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" />
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" media="print" onload="this.media='all'" />
     <noscript>

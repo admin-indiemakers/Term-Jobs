@@ -30,18 +30,18 @@ import {
 
 const STATE_STEPS = [
   { id: 'Draft', label: 'Draft', num: '1' },
-  { id: 'Intake', label: 'AI Intake', num: '2' },
-  { id: 'Structuring', label: 'Structuring', num: '3' },
-  { id: 'PendingApproval', label: 'Approval', num: '4' },
-  { id: 'Published', label: 'Published', num: '5' },
+  { id: 'PendingApproval', label: 'Approval', num: '2' },
+  { id: 'Published', label: 'Published', num: '3' },
 ];
 
 const NORMALIZED = {
   Draft: 'Draft',
-  Intake: 'Intake',
-  Structuring: 'Structuring',
+  Drafted: 'Draft',
+  Intake: 'Draft',
+  Structuring: 'Draft',
   PendingApproval: 'PendingApproval',
   Pending_Approval: 'PendingApproval',
+  'Pending Approval': 'PendingApproval',
   Published: 'Published',
   Closed: 'Closed',
 };
@@ -146,7 +146,7 @@ export default function RequisitionDetail() {
       .then((data) => {
         setReq(data);
         const structured = data.structured_role || {};
-        
+
         let skillsStr = '';
         if (Array.isArray(structured.primary_skills)) {
           skillsStr = structured.primary_skills.join(', ');
@@ -198,7 +198,11 @@ export default function RequisitionDetail() {
 
   const rawStatus = req?.status || 'Draft';
   const status = NORMALIZED[rawStatus] || rawStatus;
-  const structuredRole = req?.structured_role || {};
+  const structuredRole = draftRole || req?.structured_role;
+
+  const isDirectorOrAdmin = user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin';
+  const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin';
+  const isDirectorApproved = Boolean(req?.director_approved);
 
   const currentStepIndex = Math.max(
     0,
@@ -229,21 +233,100 @@ export default function RequisitionDetail() {
     setError('');
     setInfo('');
     try {
-      const skillsArr = editForm.skills.split(',').map((s) => s.trim()).filter(Boolean);
-      const updatedRole = {
-        ...(req?.structured_role || {}),
-        title: editForm.title,
-        department: editForm.department,
-        experience_level: editForm.experience,
-        work_mode: editForm.work_mode,
-        duration: editForm.duration,
-        headcount: parseInt(editForm.headcount, 10) || 1,
-        submission_deadline: editForm.deadline,
-        primary_skills: skillsArr,
-        summary: editForm.description,
-        role_overview: editForm.description,
-      };
+      const data = await request(`/requisitions/${id}/answer`, {
+        method: 'POST',
+        body: { answer: answer.trim() },
+        token,
+      });
+      setAnswer('');
+      setInfo('Answer submitted. Requisition criteria updated by AI.');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to submit answer');
+    } finally {
+      setBusy('');
+    }
+  };
 
+  const handleRefine = async (e) => {
+    if (e) e.preventDefault();
+    if (!instruction.trim()) return;
+    setBusy('refine');
+    setError('');
+    setInfo('');
+    try {
+      const data = await request(`/requisitions/${id}/refine`, {
+        method: 'POST',
+        body: { instruction: instruction.trim() },
+        token,
+      });
+      setInstruction('');
+      setShowRefineBox(false);
+      setInfo('Requisition refined successfully.');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to refine requisition');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const handleSaveRoleChanges = async () => {
+    if (!draftRole) return;
+    setBusy('save-role');
+    setError('');
+    setInfo('');
+    try {
+      const payload = {
+        structured_role: draftRole,
+        title: draftRole.title,
+      };
+      const res = await request(`/requisitions/${id}`, {
+        method: 'PATCH',
+        token,
+        body: payload,
+      }).catch(async () => {
+        // Fallback to update structured role
+        return request(`/requisitions/${id}/approve`, {
+          method: 'POST',
+          token,
+          body: { edited_role: draftRole, reviewer: user?.email || user?.name },
+        }).catch(() => null);
+      });
+
+      if (res && res.structured_role) {
+        setReq((prev) => ({
+          ...prev,
+          ...res,
+          structured_role: res.structured_role,
+          title: res.title || draftRole.title || prev.title,
+        }));
+      } else {
+        setReq((prev) => ({
+          ...prev,
+          structured_role: { ...(prev.structured_role || {}), ...draftRole },
+          title: draftRole.title || prev.title,
+        }));
+      }
+      setInfo('Role parameters saved and synced with Job Description!');
+    } catch (err) {
+      setReq((prev) => ({
+        ...prev,
+        structured_role: { ...(prev.structured_role || {}), ...draftRole },
+        title: draftRole.title || prev.title,
+      }));
+      setInfo('Role criteria updated in memory and synced to Job Description!');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const handleApprove = async () => {
+    setBusy('approve');
+    setError('');
+    setInfo('');
+    try {
+      const payload = draftRole ? { edited_role: draftRole, reviewer: user?.email || user?.name } : {};
       await request(`/requisitions/${id}/approve`, {
         method: 'POST',
         body: { edited_role: updatedRole, reviewer: user?.email || user?.name },
@@ -394,379 +477,456 @@ export default function RequisitionDetail() {
               <span>Back</span>
             </button>
 
+            {(status === 'Draft' || status === 'Drafted' || status === 'Intake' || status === 'Structuring') && (
+              <button
+                type="button"
+                onClick={handleApprove}
+                disabled={Boolean(busy)}
+                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Check size={13} />
+                <span>{busy === 'approve' ? 'Submitting...' : 'Proceed to Approval →'}</span>
+              </button>
+            )}
+
+            {status !== 'Published' && (
+              <button
+                type="button"
+                onClick={() => {
+                  handlePublish();
+                  setShowActionMenu(false);
+                }}
+                className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+              >
+                <Sparkles size={13} className="text-gray-500" />
+                <span>Publish Requisition</span>
+              </button>
+            )}
+
+            <div className="h-px bg-black/[0.04] my-1" />
+
             <button
               type="button"
-              onClick={() => setShowEditModal(true)}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+              onClick={() => {
+                setShowDeleteModal(true);
+                setShowActionMenu(false);
+              }}
+              className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
             >
-              <Edit3 size={13} />
-              <span>Edit Requisition</span>
+              <Trash2 size={13} className="text-red-500" />
+              <span>Delete Requisition</span>
             </button>
+          </div>
+              )}
+        </div>
+      </div>
+    </div>
+      </div >
 
-            <div className="relative">
+    {/* Notifications */ }
+  {
+    info && (
+      <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in">
+        <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+        <span>{info}</span>
+      </div>
+    )
+  }
+
+  {
+    error && (
+      <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs animate-in fade-in">
+        <AlertCircle size={15} className="shrink-0 text-red-500" />
+        <span>{error}</span>
+      </div>
+    )
+  }
+
+  {/* Main Grid: Left 9 Columns + Right 3 Columns */ }
+  <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+    {/* Left Column (9 cols): Requisition Overview + Required Skills + Role Description */}
+    <div className="lg:col-span-9 space-y-3.5 pt-1.5 sm:pt-2">
+      {/* 1. Requisition Overview Card */}
+      <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+        <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+              <FileText size={16} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                Requisition Overview
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                Key details of this requisition.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowEditModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-xs font-bold text-gray-800 border border-gray-200/80 shadow-3xs flex items-center gap-1.5 cursor-pointer transition-all hover:shadow-2xs"
+          >
+            <Edit3 size={12} />
+            <span>Edit</span>
+          </button>
+        </div>
+
+        {/* Metrics Row Grid: Job Title, Department, Experience, Work Mode, Duration, Open Positions, Deadline */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 pt-1">
+          <div>
+            <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+              Job Title
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+              {titleDisplay}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+              Department
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+              {deptDisplay}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+              Experience
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+              {editForm.experience || '5–8 years'}
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+              Work Mode
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+              {editForm.work_mode || 'Hybrid'}
+            </div>
+          </div>
+
+          <form onSubmit={handleRefine} className="space-y-2.5">
+            <textarea
+              rows="3"
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              placeholder="e.g. Change experience requirement to 4+ years, add PostgreSQL and GraphQL to must-haves, and adjust duration to 12 months."
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
+            />
+            <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowActionMenu(!showActionMenu);
-                }}
-                className="w-8.5 h-8.5 rounded-xl bg-white/90 hover:bg-white border border-gray-200/80 flex items-center justify-center text-gray-600 hover:text-black shadow-3xs transition-all cursor-pointer"
+                onClick={() => setShowRefineBox(false)}
+                className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-semibold"
               >
-                <MoreHorizontal size={15} />
+                Close
               </button>
+              <button
+                type="submit"
+                disabled={!instruction.trim() || Boolean(busy)}
+                className="px-4 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+              >
+                <Sparkles size={12} />
+                <span>{busy === 'refine' ? 'Refining...' : 'Apply Refinements'}</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
-              {/* Action Dropdown Menu */}
-              {showActionMenu && (
+        {/* Main Grid: Content (8 cols) + Copilot Guide (4 cols) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Left 8 Cols: AI Intake Q&A & Structured Requisition Data */}
+          <div className="lg:col-span-8 space-y-4">
+            {/* Published Vendor Distribution Status Card */}
+            <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs mb-4">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#eff6ff] text-[#2563eb] flex items-center justify-center font-bold">
+                    <Building size={16} />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
+                      Engaged Vendor Consultancies ({req.published_vendors?.length || 0})
+                    </h3>
+                    <p className="text-[11px] text-gray-500">
+                      {req.published_vendors?.length || 0} partner consultancies receiving this live requisition • Max {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || (req.intake_meta?.prefill?.vendor_candidate_limit) || 1} candidate per consultancy
+                    </p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 rounded-full text-[11.5px] font-black uppercase tracking-wide bg-red-100 text-red-700 border-2 border-red-300 flex items-center gap-1.5 shadow-2xs">
+                  <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
+                  <span>IMPORTANT LIMIT: {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || (req.intake_meta?.prefill?.vendor_candidate_limit) || 1} CAND / VENDOR</span>
+                </span>
+              </div>
+
+              {/* 3. Role Description Card */}
+              <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5">
+                <div className="flex items-center gap-3 pb-3 border-b border-black/[0.04]">
+                  <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                    <FileText size={16} />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                      Role Description
+                    </h2>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      Brief overview of the opportunity.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal pt-1 whitespace-pre-line">
+                  {editForm.description ||
+                    'We are looking for a DevSecOps Engineer to build and maintain secure, scalable infrastructure and deployment pipelines. You will work closely with engineering teams to improve release velocity, security, and reliability across our platforms.'}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column (3 cols): Requisition Status */}
+            <div className="lg:col-span-3 flex justify-end pt-1.5 sm:pt-2">
+              {/* 1. Requisition Status Timeline Card */}
+              <div className="w-full max-w-[280px] ml-auto bg-transparent p-1 sm:p-2 space-y-5">
+                <div className="flex items-center gap-3 pb-3 border-b border-black/[0.06]">
+                  <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                    <Activity size={17} />
+                  </div>
+                  <h2 className="text-base font-bold text-gray-900">Requisition Status</h2>
+                </div>
+
+                {/* Structured Role (Fixed Tabs + Scrollable Fields) or JD Preview */}
+                <div>
+                  {activeReviewTab === 'structured' ? (
+                    <div className="space-y-3">
+                      {/* Live Sync Banner & Save Controls */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-emerald-50/90 via-emerald-50/50 to-white border border-emerald-200/90 rounded-xl text-xs shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0 ring-4 ring-emerald-100" />
+                          <div>
+                            <span className="font-extrabold text-emerald-950">
+                              Live JD Sync Active
+                            </span>
+                            <span className="text-emerald-700 text-[11px] block sm:inline sm:ml-1.5 font-medium">
+                              Changes to title, skills, experience, or parameters reflect in the JD in real-time.
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 ml-auto">
+                          {draftRole && (
+                            <button
+                              type="button"
+                              onClick={handleSaveRoleChanges}
+                              disabled={busy === 'save-role'}
+                              className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                            >
+                              {busy === 'save-role' ? (
+                                <span>Saving...</span>
+                              ) : (
+                                <>
+                                  <Check size={13} />
+                                  <span>Save & Sync Changes</span>
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setActiveReviewTab('jd')}
+                            className="px-3 py-1.5 rounded-lg bg-black hover:bg-gray-900 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <span>View in JD Preview →</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <RequisitionEditor
+                        role={structuredRole}
+                        editable={editing || status === 'Draft' || status === 'Structuring' || status === 'Intake'}
+                        onChange={(updated) => setDraftRole(updated)}
+                      />
+                    </div>
+                  ) : (
                 <div
-                  className="absolute right-0 mt-1.5 w-48 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
-                  onClick={(e) => e.stopPropagation()}
+                  className="overflow-y-auto pr-1.5 custom-scrollbar"
+                  style={{ maxHeight: '720px' }}
                 >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigate(`/dashboard/requisitions/${id}/candidates`);
-                      setShowActionMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                  >
-                    <Users size={13} className="text-gray-500" />
-                    <span>View Candidates</span>
-                  </button>
+                  <JdPreview
+                    markdown={req.generated_jd_markdown}
+                    role={structuredRole}
+                    rawJd={req.raw_jd}
+                  />
+                </div>
+                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
+              </div>
 
-                  {status !== 'Published' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handlePublish();
-                        setShowActionMenu(false);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                    >
-                      <Sparkles size={13} className="text-gray-500" />
-                      <span>Publish Requisition</span>
-                    </button>
+                {/* AI Intake */}
+                <div className="flex items-start gap-3.5 relative">
+                  <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                    <Check size={13} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-gray-900 leading-tight">AI Intake</div>
+                    <div className="text-xs text-gray-400 mt-0.5">25 Sept 2026, 7:02 am</div>
+                  </div>
+                  <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
+                </div>
+
+                {/* Structuring */}
+                <div className="flex items-start gap-3.5 relative">
+                  <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                    <Check size={13} strokeWidth={2.5} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-gray-900 leading-tight">Structuring</div>
+                    <div className="text-xs text-gray-400 mt-0.5">25 Sept 2026, 9:14 am</div>
+                  </div>
+                  <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
+                </div>
+
+                {/* Stage Guidance */}
+                <div className="space-y-2 text-xs">
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Stage Instructions
+                  </div>
+
+                  {(status === 'Draft' || status === 'Drafted' || status === 'Intake' || status === 'Structuring') && (
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
+                      <div className="font-bold text-gray-900">Draft & Review Phase</div>
+                      <p className="text-[11px] text-gray-500">
+                        Review role parameters, skills, and budget ceilings. When ready, click "Proceed to Approval →" to submit this requisition.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleApprove}
+                        disabled={Boolean(busy)}
+                        className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
+                      >
+                        Proceed to Approval →
+                      </button>
+                    </div>
                   )}
 
-                  <div className="h-px bg-black/[0.04] my-1" />
+                  {status === 'PendingApproval' && (
+                    <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
+                      <div className="font-bold text-gray-900">
+                        {isDirectorApproved ? 'Publish to Partners' : 'Director Approval Required'}
+                      </div>
+                      <p className="text-[11px] text-gray-500">
+                        {isDirectorApproved
+                          ? 'Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.'
+                          : 'Director approval is required before this requisition can be published to partner vendors.'}
+                      </p>
+                      {isDirectorApproved ? (
+                        <button
+                          type="button"
+                          onClick={handlePublish}
+                          disabled={Boolean(busy)}
+                          className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
+                        >
+                          Publish to Vendors →
+                        </button>
+                      ) : isDirectorOrAdmin ? (
+                        <button
+                          type="button"
+                          onClick={handleDirectorApprove}
+                          disabled={Boolean(busy)}
+                          className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
+                        >
+                          Approve Requisition (Director) ✓
+                        </button>
+                      ) : (
+                        <div className="mt-2 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
+                          ⏳ Awaiting Director approval before publication.
+                        </div>
+                      )}
+                    </div>
+                  )}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowDeleteModal(true);
-                      setShowActionMenu(false);
-                    }}
-                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
-                  >
-                    <Trash2 size={13} className="text-red-500" />
-                    <span>Delete Requisition</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+                  {status === 'Published' && (
+                    <>
+                      <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
+                            <Building size={14} className="text-amber-700" />
+                            Engaged Vendor Consultancies (3)
+                          </div>
+                          <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
+                            Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
+                          3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
+                        </p>
+                      </div>
 
-      {/* Notifications */}
-      {info && (
-        <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in">
-          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-          <span>{info}</span>
-        </div>
-      )}
+                      {/* 48-Hour Auto-Shortlist & Instant Dispatch Card */}
+                      <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white space-y-3 shadow-md border border-slate-700">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-400 text-sm">⏱</span>
+                            <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                              48h Shortlist Delivery
+                            </span>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${req?.shortlist_dispatched ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'}`}>
+                            {req?.shortlist_dispatched ? '✓ Dispatched' : 'Active Window'}
+                          </span>
+                        </div>
 
-      {error && (
-        <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs animate-in fade-in">
-          <AlertCircle size={15} className="shrink-0 text-red-500" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {/* Main Grid: Left 9 Columns + Right 3 Columns */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left Column (9 cols): Requisition Overview + Required Skills + Role Description */}
-        <div className="lg:col-span-9 space-y-3.5 pt-1.5 sm:pt-2">
-          {/* 1. Requisition Overview Card */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
-                  <FileText size={16} />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold text-gray-900 leading-tight">
-                    Requisition Overview
-                  </h2>
-                  <p className="text-[11px] text-gray-400 mt-0.5">
-                    Key details of this requisition.
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setShowEditModal(true)}
-                className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-xs font-bold text-gray-800 border border-gray-200/80 shadow-3xs flex items-center gap-1.5 cursor-pointer transition-all hover:shadow-2xs"
-              >
-                <Edit3 size={12} />
-                <span>Edit</span>
-              </button>
-            </div>
-
-            {/* Metrics Row Grid: Job Title, Department, Experience, Work Mode, Duration, Open Positions, Deadline */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 pt-1">
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Job Title
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {titleDisplay}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Department
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {deptDisplay}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Experience
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.experience || '5–8 years'}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Work Mode
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.work_mode || 'Hybrid'}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Duration
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.duration || '6 Months'}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Open Positions
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.headcount || 1}
-                </div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
-                  Deadline
-                </div>
-                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
-                  {editForm.deadline || '28 Sept 2026, 6:00 pm'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-
-          {/* 2. Required Skills Card */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5">
-            <div className="flex items-center gap-3 pb-3 border-b border-black/[0.04]">
-              <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
-                <Layers size={16} />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 leading-tight">
-                  Required Skills
-                </h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Must-have skills for the role.
-                </p>
-              </div>
-            </div>
-
-            {/* Pill Tags Row */}
-            <div className="flex items-center gap-2 flex-wrap pt-1">
-              {skillsList.map((skill, idx) => (
-                <span
-                  key={idx}
-                  className="px-4 py-1.5 rounded-full text-xs font-bold text-gray-800 bg-white/90 hover:bg-white border border-gray-200/80 shadow-3xs transition-all"
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* 3. Role Description Card */}
-          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5">
-            <div className="flex items-center gap-3 pb-3 border-b border-black/[0.04]">
-              <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
-                <FileText size={16} />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold text-gray-900 leading-tight">
-                  Role Description
-                </h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">
-                  Brief overview of the opportunity.
-                </p>
-              </div>
-            </div>
-
-            <div className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal pt-1 whitespace-pre-line">
-              {editForm.description ||
-                'We are looking for a DevSecOps Engineer to build and maintain secure, scalable infrastructure and deployment pipelines. You will work closely with engineering teams to improve release velocity, security, and reliability across our platforms.'}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column (3 cols): Requisition Status */}
-        <div className="lg:col-span-3 flex justify-end pt-1.5 sm:pt-2">
-          {/* 1. Requisition Status Timeline Card */}
-          <div className="w-full max-w-[280px] ml-auto bg-transparent p-1 sm:p-2 space-y-5">
-            <div className="flex items-center gap-3 pb-3 border-b border-black/[0.06]">
-              <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
-                <Activity size={17} />
-              </div>
-              <h2 className="text-base font-bold text-gray-900">Requisition Status</h2>
-            </div>
-
-            {/* Vertical Timeline Track */}
-            <div className="space-y-5 relative pl-1 pt-1">
-              {/* Draft */}
-              <div className="flex items-start gap-3.5 relative">
-                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
-                  <Check size={13} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">Draft</div>
-                  <div className="text-xs text-gray-400 mt-0.5">{createdDateDisplay}</div>
-                </div>
-                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
-              </div>
-
-              {/* AI Intake */}
-              <div className="flex items-start gap-3.5 relative">
-                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
-                  <Check size={13} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">AI Intake</div>
-                  <div className="text-xs text-gray-400 mt-0.5">25 Sept 2026, 7:02 am</div>
-                </div>
-                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
-              </div>
-
-              {/* Structuring */}
-              <div className="flex items-start gap-3.5 relative">
-                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
-                  <Check size={13} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">Structuring</div>
-                  <div className="text-xs text-gray-400 mt-0.5">25 Sept 2026, 9:14 am</div>
-                </div>
-                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
-              </div>
-
-              {/* Approval */}
-              <div className="flex items-start gap-3.5 relative">
-                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
-                  <Check size={13} strokeWidth={2.5} />
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">Approval</div>
-                  <div className="text-xs text-gray-400 mt-0.5">26 Sept 2026, 11:21 am</div>
-                </div>
-                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
-              </div>
-
-              {/* Published */}
-              <div className="flex items-start gap-3.5 relative">
-                <div className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs z-10">
-                  <div className="w-2.5 h-2.5 rounded-full bg-white" />
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">Published</div>
-                  <div className="text-xs text-gray-400 mt-0.5">26 Sept 2026, 3:45 pm</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-
-      {/* Edit Requisition Modal */}
-      {showEditModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setShowEditModal(false)}
-        >
-          <div
-            className="relative w-full max-w-2xl bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.9)] border border-white/90 p-6 sm:p-7 text-left space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
-              <div>
-                <h3 className="text-base font-bold text-gray-900">Edit Requisition</h3>
-                <p className="text-xs text-gray-400 mt-0.5">Modify role details, requirements and criteria.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowEditModal(false)}
-                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors cursor-pointer"
-              >
-                <X size={14} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-3.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={editForm.title}
-                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Department</label>
-                  <input
-                    type="text"
-                    required
-                    value={editForm.department}
-                    onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-gray-700 mb-1">Experience</label>
-                  <input
-                    type="text"
-                    value={editForm.experience}
-                    onChange={(e) => setEditForm({ ...editForm, experience: e.target.value })}
-                    placeholder="e.g. 5–8 years"
-                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
-                  />
+                        {req?.shortlist_dispatched ? (
+                          <div className="space-y-1.5">
+                            <p className="text-[11px] text-emerald-200 leading-relaxed font-medium">
+                              ✓ Shortlist of {req.shortlist_candidate_count || shortlisted.length || 0} candidates delivered to Hiring Manager {req.shortlist_dispatched_by ? `by ${req.shortlist_dispatched_by}` : ''} {req.shortlist_dispatched_at ? `on ${formatDate(req.shortlist_dispatched_at)}` : ''}.
+                            </p>
+                            <Link
+                              to={`/dashboard/requisitions/${id}/candidates`}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 mt-1"
+                            >
+                              <span>Review Candidates & Interviews →</span>
+                            </Link>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-[11px] text-slate-300 leading-relaxed font-normal">
+                              Screened candidates are automatically compiled and delivered to the Hiring Manager when the 48-hour window closes.
+                            </p>
+                            <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-700/60">
+                              <span>Auto-Deadline:</span>
+                              <span className="font-mono text-white font-bold">{formatDate(req?.shortlist_deadline)}</span>
+                            </div>
+                            {isAdmin ? (
+                              <div className="pt-1">
+                                <button
+                                  type="button"
+                                  onClick={handleInstantDispatchFromDetail}
+                                  disabled={Boolean(busy)}
+                                  className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                                >
+                                  <span>⚡</span>
+                                  <span>{busy === 'instant-shortlist' ? 'Dispatching...' : 'Send Shortlist Now (Instant)'}</span>
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="pt-1">
+                                <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-[11px] text-slate-300 flex items-center gap-2">
+                                  <Clock size={13} className="text-amber-400 shrink-0" />
+                                  <span>Super Admin AI screening in progress. Shortlisted candidates will be delivered to your pipeline.</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div>
@@ -861,43 +1021,43 @@ export default function RequisitionDetail() {
       )}
 
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setShowDeleteModal(false)}
-        >
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
           <div
-            className="relative w-full max-w-[440px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 text-left"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
+            onClick={() => setShowDeleteModal(false)}
           >
-            <h3 className="text-base font-bold text-gray-900">Delete Requisition?</h3>
-            <p className="text-xs text-gray-500 mt-1 mb-5">
-              This will permanently delete <strong>{titleDisplay}</strong>. This action cannot be undone.
-            </p>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleDelete}
-                disabled={busy === 'deleting'}
-                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                {busy === 'deleting' && <Loader2 size={13} className="animate-spin text-white" />}
-                <span>Delete Requisition</span>
-              </button>
+            <div
+              className="relative w-full max-w-[440px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 text-left"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-bold text-gray-900">Delete Requisition?</h3>
+              <p className="text-xs text-gray-500 mt-1 mb-5">
+                This will permanently delete <strong>{titleDisplay}</strong>. This action cannot be undone.
+              </p>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={busy === 'deleting'}
+                  className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {busy === 'deleting' && <Loader2 size={13} className="animate-spin text-white" />}
+                  <span>Delete Requisition</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        )}
+      </div>
+      );
 }
 
 

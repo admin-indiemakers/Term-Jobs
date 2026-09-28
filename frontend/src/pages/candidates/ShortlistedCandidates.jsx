@@ -10,6 +10,7 @@ export default function ShortlistedCandidates() {
   const navigate = useNavigate();
 
   const [candidates, setCandidates] = useState([]);
+  const [acceptedCount, setAcceptedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [schedulingCandidate, setSchedulingCandidate] = useState(null);
@@ -25,13 +26,18 @@ export default function ShortlistedCandidates() {
   const tenantName = user?.tenant_name || 'Bearitt';
   const userName = user?.name || 'HR';
 
-  // Fetch real shortlisted candidates
+  // Fetch real shortlisted candidates and accepted count
   const loadShortlistedData = async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await request('/candidates/shortlisted', { token }).catch(() => []);
+      const [data, acceptedData] = await Promise.all([
+        request('/candidates/shortlisted', { token }).catch(() => []),
+        request('/candidates?status=Accepted', { token }).catch(() => []),
+      ]);
       const list = Array.isArray(data) ? data : data?.shortlisted_candidates || [];
+      const acceptedList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
+      setAcceptedCount(acceptedList.length);
 
       // Sort by match score descending (best first)
       const sorted = [...list].sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
@@ -291,9 +297,14 @@ export default function ShortlistedCandidates() {
             borderRadius: 9999,
             border: '1px solid #E2E2DC',
           }}
-          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
+          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs flex items-center gap-1.5"
         >
-          Accepted
+          <span>Accepted</span>
+          {acceptedCount > 0 && (
+            <span style={{ backgroundColor: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0', padding: '1px 6px', borderRadius: '999px', fontSize: '0.68rem', fontWeight: 800 }}>
+              {acceptedCount}
+            </span>
+          )}
         </button>
 
         <button

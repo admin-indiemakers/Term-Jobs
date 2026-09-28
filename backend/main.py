@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
@@ -74,19 +75,20 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
 
-    # Launch 48-Hour Shortlist auto-dispatch background worker
+    # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
     worker_task = None
-    async def _shortlist_worker():
+    async def _background_worker():
         while True:
             try:
                 await asyncio.sleep(60)
+                _auto_close_expired()
                 from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
                 auto_check_and_dispatch_48h_shortlists()
             except asyncio.CancelledError:
                 break
             except Exception:
                 pass
-    worker_task = asyncio.create_task(_shortlist_worker())
+    worker_task = asyncio.create_task(_background_worker())
 
     yield
 
@@ -123,12 +125,23 @@ async def custom_404_handler(request: Request, exc):
         }
     )
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*",
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "https://termjobs.in",
+        "https://www.termjobs.in",
+        "https://termjobs.vercel.app",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$|^https://.*\.vercel\.app$|^https://(www\.)?termjobs\.in$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=86400,
 )
 
 @app.middleware("http")
@@ -643,6 +656,7 @@ def _auto_check_shortlists_48h() -> None:
 
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
+@app.post("/api/company-profiles", status_code=201)
 def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
 
@@ -655,6 +669,7 @@ def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(
 
 
 @app.get("/company-profiles")
+@app.get("/api/company-profiles")
 def list_company_profiles(current_user: User = Depends(get_current_user)) -> list[dict]:
     with get_session() as session:
         query = session.query(models.CompanyProfile).order_by(models.CompanyProfile.created_at.desc())
@@ -918,6 +933,7 @@ def delete_template(template_id: str, current_user: User = Depends(get_current_u
 
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
+@app.post("/api/requisitions", status_code=201)
 def create_requisition(
     body: RequisitionIn,
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -1005,7 +1021,6 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         return _cached
 
     _auto_close_expired()
-    _auto_check_shortlists_48h()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
         if current_user.role == "Super Admin":
@@ -1075,6 +1090,10 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
 @app.get("/api/public/requisitions")
 def list_public_requisitions() -> list[dict]:
     """Public endpoint listing all live published requisitions across all companies."""
+    _cached = _cache.get("public_requisitions")
+    if _cached is not None:
+        return _cached
+
     _auto_close_expired()
     with get_session() as session:
         rows = (
@@ -1184,6 +1203,7 @@ def list_public_requisitions() -> list[dict]:
                 "generated_jd_markdown": r.generated_jd_markdown or "",
                 "created_at": _format_datetime(r.created_at),
             })
+        _cache.set("public_requisitions", result, ttl=30)
         return result
 
 
@@ -1387,10 +1407,27 @@ async def apply_to_requisition(
         # Candidate is applying using their saved profile resume
         existing_cand = db["candidates"].find_one({"candidate_email": clean_email})
         if not existing_cand or (not existing_cand.get("resume_pdf") and not existing_cand.get("extracted_text")):
-            raise HTTPException(
-                status_code=400,
-                detail="No resume on file found for your profile. Please complete your profile and upload your resume first."
+            # Fallback: check candidate submissions for any prior uploaded resume
+            prev_sub = db["candidate_submissions"].find_one(
+                {"candidate_email": clean_email, "resume_pdf": {"$exists": True, "$ne": ""}},
+                sort=[("created_at", -1)]
             )
+            if prev_sub and prev_sub.get("resume_pdf"):
+                db["candidates"].update_one(
+                    {"candidate_email": clean_email},
+                    {"$set": {
+                        "resume_pdf": prev_sub.get("resume_pdf"),
+                        "extracted_text": prev_sub.get("resume_text", ""),
+                        "filename": prev_sub.get("filename", "resume.pdf"),
+                        "has_resume": True
+                    }}
+                )
+                existing_cand = db["candidates"].find_one({"candidate_email": clean_email})
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Please upload or attach your resume (PDF or DOCX) to complete your application."
+                )
 
         pdf_base64 = existing_cand.get("resume_pdf", "")
         filename = existing_cand.get("filename") or "resume.pdf"
@@ -1534,7 +1571,7 @@ async def register_public_candidate(
     github_url: str = Form(""),
     skills: str = Form(""),
     cover_note: str = Form(""),
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
 ) -> dict:
     """Allow any prospective candidate to register their profile and resume to join the talent pool."""
     import tempfile
@@ -1543,28 +1580,52 @@ async def register_public_candidate(
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.shared.db import db
 
-    content = await resume.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+    content = None
+    if resume and hasattr(resume, "read"):
+        content = await resume.read()
 
-    filename = resume.filename or "resume.pdf"
+    filename = (resume.filename if resume else None) or "resume.pdf"
     file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
-    pdf_base64 = base64.b64encode(content).decode("utf-8")
-
+    pdf_base64 = ""
     extracted_text = ""
-    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
 
-    try:
-        extracted_text = _extract_text_new(tmp_path, file_type)
-    except Exception as ex:
-        print(f"[PORTAL REGISTER RESUME EXTRACT ERROR] {ex}")
-    finally:
+    if content:
+        pdf_base64 = base64.b64encode(content).decode("utf-8")
+        with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
         try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
+            extracted_text = _extract_text_new(tmp_path, file_type)
+        except Exception as ex:
+            print(f"[PORTAL REGISTER RESUME EXTRACT ERROR] {ex}")
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+    else:
+        # Check if existing candidate profile has a resume on file
+        existing_cand = db["candidates"].find_one({
+            "$or": [
+                {"candidate_email": email.strip().lower()},
+                {"email": email.strip().lower()},
+            ]
+        })
+        if not existing_cand or not existing_cand.get("resume_pdf"):
+            existing_cand = db["candidate_submissions"].find_one({
+                "$or": [
+                    {"candidate_email": email.strip().lower()},
+                    {"email": email.strip().lower()},
+                ],
+                "resume_pdf": {"$exists": True, "$ne": ""}
+            })
+        if existing_cand and existing_cand.get("resume_pdf"):
+            pdf_base64 = existing_cand.get("resume_pdf")
+            filename = existing_cand.get("filename") or "resume.pdf"
+            extracted_text = existing_cand.get("extracted_text") or existing_cand.get("resume_text") or ""
+        else:
+            raise HTTPException(status_code=400, detail="Please upload your resume file (PDF or DOCX).")
 
     profile = {}
     if extracted_text:
@@ -2688,6 +2749,41 @@ def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: Use
     return _interrupt_payload(state, interrupt)
 
 
+class UpdateRequisitionRoleIn(BaseModel):
+    structured_role: dict | None = None
+    title: str | None = None
+    generated_jd_markdown: str | None = None
+
+
+@app.patch("/requisitions/{requisition_id}")
+@app.patch("/api/requisitions/{requisition_id}")
+def update_requisition_role(
+    requisition_id: str,
+    body: UpdateRequisitionRoleIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    _require_writable(current_user)
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if not db_req:
+            raise HTTPException(status_code=404, detail="Requisition not found")
+        if body.structured_role:
+            cur = dict(db_req.structured_role or {})
+            cur.update(body.structured_role)
+            db_req.structured_role = cur
+            if not body.title and cur.get("title"):
+                db_req.title = cur.get("title")
+        if body.title:
+            db_req.title = body.title
+        if body.generated_jd_markdown:
+            db_req.generated_jd_markdown = body.generated_jd_markdown
+        session.commit()
+    _cache.clear()
+    return _requisition_dict(requisition_id)
+
+
 @app.post("/requisitions/{requisition_id}/approve")
 @app.post("/api/requisitions/{requisition_id}/approve")
 def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:
@@ -2953,8 +3049,462 @@ def generate_requisition_shortlist_endpoint(
     return res
 
 
+# --- Candidate Employment Offer Letter Endpoints ---
+
+@app.get("/api/candidates/{candidate_id}/offer-letter")
+@app.get("/candidates/{candidate_id}/offer-letter")
+def get_candidate_offer_letter_endpoint(
+    candidate_id: str,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Retrieve existing or generated formal employment offer letter for candidate."""
+    from datetime import datetime, timezone, timedelta
+    from modules.shared.db import db, get_session
+    from modules.candidate.domain.models import CandidateSubmission
+    now = datetime.now(timezone.utc)
+    
+    raw_id = candidate_id.replace("CND-", "").strip()
+
+    cand_name = "Candidate Name"
+    cand_email = ""
+    req_title = ""
+    req_id = ""
+    company_name = ""
+
+    # 1. Query candidate_selections collection FIRST (official hiring manager selections)
+    try:
+        sel = db["candidate_selections"].find_one({
+            "$or": [
+                {"id": candidate_id},
+                {"selection_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"id": raw_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if sel:
+            if sel.get("candidate_name"):
+                cand_name = sel.get("candidate_name")
+            if sel.get("candidate_email"):
+                cand_email = sel.get("candidate_email")
+            if sel.get("requisition_title"):
+                req_title = sel.get("requisition_title")
+            if sel.get("company_name"):
+                company_name = sel.get("company_name")
+            if sel.get("requisition_id"):
+                req_id = sel.get("requisition_id")
+    except Exception as e:
+        logger.warning(f"Error checking candidate_selections for offer letter: {e}")
+    
+    # 2. Query SQLite CandidateSubmission
+    try:
+        with get_session() as session:
+            sub = session.get(CandidateSubmission, candidate_id)
+            if not sub:
+                sub = session.query(CandidateSubmission).filter(
+                    (CandidateSubmission.id == candidate_id) |
+                    (CandidateSubmission.id == raw_id) |
+                    (CandidateSubmission.id.like(f"%{raw_id}%"))
+                ).first()
+            if sub:
+                if sub.candidate_name and (cand_name == "Candidate Name" or not cand_name):
+                    cand_name = sub.candidate_name
+                if sub.candidate_email and not cand_email:
+                    cand_email = sub.candidate_email
+                if sub.requisition_id and not req_id:
+                    req_id = sub.requisition_id
+    except Exception as e:
+        logger.warning(f"Error checking SQLite CandidateSubmission for offer letter: {e}")
+
+    # 3. Query MongoDB candidate_submissions and candidates
+    try:
+        cand_doc = db["candidate_submissions"].find_one({
+            "$or": [
+                {"id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"id": raw_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if not cand_doc:
+            cand_doc = db["candidates"].find_one({
+                "$or": [
+                    {"id": candidate_id},
+                    {"candidate_id": candidate_id},
+                    {"id": raw_id},
+                ]
+            })
+        if cand_doc:
+            if cand_doc.get("candidate_name") and (cand_name == "Candidate Name" or not cand_name):
+                cand_name = cand_doc.get("candidate_name")
+            if not cand_email:
+                cand_email = cand_doc.get("candidate_email") or cand_doc.get("email") or ""
+            if not req_id:
+                req_id = cand_doc.get("requisition_id") or ""
+            if cand_doc.get("requisition_title") and not req_title:
+                req_title = cand_doc.get("requisition_title")
+            if cand_doc.get("company_name") and not company_name:
+                company_name = cand_doc.get("company_name")
+    except Exception as e:
+        logger.warning(f"Error checking Mongo for candidate offer letter: {e}")
+
+    # 4. Lookup requisition title & company name from requisition record
+    if req_id:
+        try:
+            from modules.requisition.domain.models import Requisition
+            with get_session() as session:
+                req_obj = session.get(Requisition, req_id)
+                if req_obj:
+                    if not req_title or req_title == "DevSecOps Engineer":
+                        req_title = req_obj.title or req_title
+                    comp_struct = req_obj.structured_role or {}
+                    if not company_name or company_name == "TCS":
+                        company_name = comp_struct.get("company_name") or req_obj.company_name or company_name
+        except Exception as e:
+            logger.warning(f"Error checking Requisition for offer letter: {e}")
+
+    # Fallbacks if still unresolved
+    if not req_title:
+        req_title = "Senior Software Engineer"
+    if not company_name:
+        company_name = getattr(current_user, "tenant_name", None) or "Enterprise Partner"
+
+    # 5. Check existing offer letter in MongoDB
+    try:
+        from bson import ObjectId
+        existing = db["offer_letters"].find_one({
+            "$or": [
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+                {"candidate_email": cand_email.lower()} if cand_email else {"candidate_id": candidate_id},
+            ]
+        })
+        if existing:
+            mongo_id = existing.get("_id")
+            existing["_id"] = str(mongo_id)
+            dirty = False
+            # Upgrade placeholder candidate name or empty email
+            if cand_name and cand_name != "Candidate Name" and (not existing.get("candidate_name") or existing.get("candidate_name") == "Candidate Name"):
+                existing["candidate_name"] = cand_name
+                dirty = True
+            if cand_email and not existing.get("candidate_email"):
+                existing["candidate_email"] = cand_email
+                dirty = True
+            # Correct mismatched or defaulted job_title (e.g. was DevSecOps Engineer when candidate was selected for Senior Backend)
+            if req_title and req_title != existing.get("job_title"):
+                # If existing is DevSecOps Engineer or generic fallback, replace with true selected role
+                if existing.get("job_title") in ["DevSecOps Engineer", "Position", "Software Professional", "", None] or req_title:
+                    existing["job_title"] = req_title
+                    dirty = True
+            # Correct mismatched or defaulted company name (e.g. was TCS when candidate was selected for Private A)
+            if company_name and company_name != existing.get("company_name"):
+                if existing.get("company_name") in ["TCS", "Enterprise Partner", "", None] or company_name:
+                    existing["company_name"] = company_name
+                    dirty = True
+            if dirty and mongo_id:
+                try:
+                    db["offer_letters"].update_one(
+                        {"_id": mongo_id},
+                        {"$set": {
+                            "candidate_name": existing.get("candidate_name"),
+                            "candidate_email": existing.get("candidate_email"),
+                            "job_title": existing.get("job_title"),
+                            "company_name": existing.get("company_name"),
+                            "updated_at": now.isoformat(),
+                        }}
+                    )
+                except Exception as update_err:
+                    logger.warning(f"Error auto-syncing offer letter fields: {update_err}")
+            return {"status": "success", "offer": existing}
+    except Exception as e:
+        logger.warning(f"Error checking existing offer letter: {e}")
+
+    default_joining = (now + timedelta(days=14)).strftime("%d %B %Y")
+    today_str = now.strftime("%d %B %Y")
+
+    # Determine department based on job title
+    dept = "Platform & Software Engineering"
+    title_lower = (req_title or "").lower()
+    if any(k in title_lower for k in ["qa", "test", "automation", "quality"]):
+        dept = "Quality Assurance & Testing"
+    elif any(k in title_lower for k in ["backend", "python", "fastapi", "django", "node", "golang", "java", "sql"]):
+        dept = "Backend & Systems Engineering"
+    elif any(k in title_lower for k in ["frontend", "react", "vue", "web", "ui"]):
+        dept = "Frontend & Product Engineering"
+    elif any(k in title_lower for k in ["devops", "cloud", "aws", "sre", "infrastructure", "devsecops"]):
+        dept = "Cloud & Platform Engineering"
+
+    # Standard Annexure A compensation breakdown: Total CTC 18,00,000 INR
+    annual_ctc = 1800000
+    monthly_ctc = annual_ctc // 12
+    basic_annual = int(annual_ctc * 0.50)
+    hra_annual = int(annual_ctc * 0.25)
+    other_annual = int(annual_ctc * 0.15)
+    pf_annual = int(annual_ctc * 0.10)
+
+    default_offer = {
+        "candidate_id": candidate_id,
+        "submission_id": candidate_id,
+        "company_name": company_name,
+        "company_address": "Corporate Technology Park, Outer Ring Road, Bengaluru, Karnataka 560103",
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "job_title": req_title,
+        "offer_date": today_str,
+        "joining_date": default_joining,
+        "mobility_clause": "You should be aware that you might be subject to transfer to another city or location where the Company operates a business or will operate a business in the future, to carry on similar responsibilities whenever the requirement arises.",
+        "contract_period": "Full Time / Unlimited",
+        "leave_policy": {
+            "earned_leave": 18,
+            "casual_leave": 12,
+            "sick_leave": 12,
+            "restricted_holidays": 3,
+        },
+        "termination_company_notice_days": 30,
+        "termination_employee_notice_days": 30,
+        "probation_period_months": 3,
+        "non_compete_period": "12 months",
+        "annexure": {
+            "grade": "Band L4 / Senior Specialist",
+            "department": dept,
+            "reporting_to": "Engineering Director / Hiring Lead",
+            "work_location": "Bengaluru / Hybrid",
+            "contract_type": "Full Time",
+            "currency": "INR (₹)",
+            "basic_salary_annual": basic_annual,
+            "basic_salary_monthly": basic_annual // 12,
+            "hra_annual": hra_annual,
+            "hra_monthly": hra_annual // 12,
+            "other_allowance_annual": other_annual,
+            "other_allowance_monthly": other_annual // 12,
+            "pf_annual": pf_annual,
+            "pf_monthly": pf_annual // 12,
+            "total_fixed_annual": annual_ctc,
+            "total_fixed_monthly": monthly_ctc,
+            "meal_voucher_monthly": 3000,
+            "annual_bonus_percentage": 10,
+            "medical_insurance_coverage": "₹5,00,000 for employee, spouse, children & parents",
+            "life_insurance_coverage": "Group Life Insurance policy up to 3x Annual CTC",
+            "gratuity_terms": "As per Payment of Gratuity Act, 1972",
+        },
+        "hr_signatory_name": getattr(current_user, "name", None) or "Rakesh Sharma",
+        "hr_signatory_title": "VP – Human Resources",
+        "status": "Draft",
+        "created_at": now.isoformat(),
+        "updated_at": now.isoformat(),
+    }
+
+    return {"status": "success", "offer": default_offer}
+
+
+@app.post("/api/candidates/{candidate_id}/offer-letter")
+@app.post("/candidates/{candidate_id}/offer-letter")
+def save_candidate_offer_letter_endpoint(
+    candidate_id: str,
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Save or update custom editable employment offer letter for candidate."""
+    from datetime import datetime, timezone
+    import re
+    from modules.shared.db import db
+    now_iso = datetime.now(timezone.utc).isoformat()
+    
+    offer_data = payload.get("offer", payload)
+    offer_data["candidate_id"] = candidate_id
+    offer_data["updated_at"] = now_iso
+    offer_data["updated_by"] = getattr(current_user, "email", None) or getattr(current_user, "name", None) or "HR"
+    if "status" not in offer_data:
+        offer_data["status"] = "Offer Extended"
+    if "agreement_status" not in offer_data:
+        offer_data["agreement_status"] = "Pending Signature"
+
+    cand_email = (offer_data.get("candidate_email") or "").strip().lower()
+    cand_name = (offer_data.get("candidate_name") or "").strip()
+    raw_id = candidate_id.replace("CND-", "").replace("BEAR-", "").strip()
+
+    match_or = [
+        {"candidate_id": candidate_id},
+        {"submission_id": candidate_id},
+        {"id": candidate_id},
+    ]
+    if raw_id:
+        match_or.extend([
+            {"candidate_id": raw_id},
+            {"submission_id": raw_id},
+            {"id": raw_id},
+        ])
+    if cand_email:
+        match_or.extend([
+            {"candidate_email": cand_email},
+            {"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}},
+            {"email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}},
+        ])
+
+    # Also resolve candidate's actual submission ID from DB if candidate_id is a synthetic selection ID
+    try:
+        cand_sub = db["candidate_submissions"].find_one({
+            "$or": [
+                {"id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}} if cand_email else {"id": candidate_id}
+            ]
+        })
+        if cand_sub:
+            real_sub_id = cand_sub.get("id") or cand_sub.get("submission_id")
+            if real_sub_id:
+                offer_data["submission_id"] = real_sub_id
+                match_or.append({"submission_id": real_sub_id})
+                match_or.append({"candidate_id": real_sub_id})
+            if not cand_email and cand_sub.get("candidate_email"):
+                cand_email = cand_sub["candidate_email"].strip().lower()
+                offer_data["candidate_email"] = cand_email
+            if not cand_name and cand_sub.get("candidate_name"):
+                offer_data["candidate_name"] = cand_sub["candidate_name"]
+    except Exception as e:
+        logger.warning(f"Error resolving candidate submission for offer letter: {e}")
+
+    try:
+        db["offer_letters"].update_one(
+            {"$or": match_or},
+            {"$set": offer_data},
+            upsert=True
+        )
+        
+        # Also ensure candidate_submissions status is updated to Accepted
+        if cand_email or candidate_id:
+            sub_filter = []
+            if cand_email:
+                sub_filter.append({"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}})
+            if candidate_id:
+                sub_filter.extend([{"id": candidate_id}, {"candidate_id": candidate_id}])
+            if raw_id:
+                sub_filter.extend([{"id": raw_id}, {"candidate_id": raw_id}])
+            db["candidate_submissions"].update_many(
+                {"$or": sub_filter},
+                {"$set": {"status": "Accepted", "offer_status": "Offer Extended", "updated_at": now_iso}}
+            )
+    except Exception as e:
+        logger.error(f"Failed to persist offer letter: {e}")
+        return {"status": "error", "detail": str(e)}
+
+    return {"status": "success", "message": "Offer letter saved successfully.", "offer": offer_data}
+
+
+@app.post("/api/candidates/{candidate_id}/offer-letter/send")
+@app.post("/candidates/{candidate_id}/offer-letter/send")
+def send_candidate_offer_letter_endpoint(
+    candidate_id: str,
+    payload: dict | None = None,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Formally dispatch offer letter to candidate and update hiring pipeline."""
+    from datetime import datetime, timezone
+    import re
+    from modules.shared.db import db
+    now_iso = datetime.now(timezone.utc).isoformat()
+    raw_id = candidate_id.replace("CND-", "").replace("BEAR-", "").strip()
+
+    target_email = ""
+    target_name = ""
+    try:
+        existing = db["offer_letters"].find_one({
+            "$or": [
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if existing:
+            target_email = (existing.get("candidate_email") or "").strip().lower()
+            target_name = existing.get("candidate_name") or ""
+        else:
+            sub = db["candidate_submissions"].find_one({
+                "$or": [
+                    {"id": candidate_id},
+                    {"candidate_id": candidate_id},
+                    {"id": raw_id},
+                    {"candidate_id": raw_id},
+                ]
+            })
+            if sub:
+                target_email = (sub.get("candidate_email") or "").strip().lower()
+                target_name = sub.get("candidate_name") or ""
+    except Exception as e:
+        logger.warning(f"Error checking candidate for send: {e}")
+
+    match_or = [
+        {"candidate_id": candidate_id},
+        {"submission_id": candidate_id},
+    ]
+    if raw_id:
+        match_or.extend([{"candidate_id": raw_id}, {"submission_id": raw_id}])
+    if target_email:
+        match_or.extend([
+            {"candidate_email": target_email},
+            {"candidate_email": {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}},
+            {"email": {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}},
+        ])
+
+    try:
+        db["offer_letters"].update_many(
+            {"$or": match_or},
+            {"$set": {
+                "status": "Offer Extended",
+                "agreement_status": "Pending Signature",
+                "sent_at": now_iso,
+                "sent_by": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR"
+            }}
+        )
+
+        sub_or = [{"id": candidate_id}, {"candidate_id": candidate_id}]
+        if raw_id:
+            sub_or.extend([{"id": raw_id}, {"candidate_id": raw_id}])
+        if target_email:
+            sub_or.append({"candidate_email": {"$regex": f"^{re.escape(target_email)}$", "$options": "i"}})
+        db["candidate_submissions"].update_many(
+            {"$or": sub_or},
+            {"$set": {
+                "status": "Accepted",
+                "offer_status": "Offer Extended",
+                "offer_extended_at": now_iso,
+                "updated_at": now_iso,
+            }}
+        )
+
+        db["candidate_selections"].update_many(
+            {"$or": sub_or},
+            {"$set": {"status": "Accepted", "offer_status": "Offer Extended", "updated_at": now_iso}}
+        )
+
+        db["notifications"].insert_one({
+            "type": "OFFER_LETTER_SENT",
+            "candidate_id": candidate_id,
+            "candidate_email": target_email,
+            "actor": getattr(current_user, "name", None) or getattr(current_user, "email", None) or "HR",
+            "title": "Formal Offer Letter Dispatched",
+            "message": f"Employment offer letter has been dispatched to {target_name or candidate_id}.",
+            "created_at": now_iso,
+            "read": False
+        })
+    except Exception as e:
+        logger.error(f"Failed to send offer letter: {e}")
+        return {"status": "error", "detail": str(e)}
+
+    return {"status": "success", "message": "Offer letter formally sent to candidate!"}
+
+
+
 
 @app.post("/requisitions/{requisition_id}/close")
+@app.post("/api/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
@@ -2964,6 +3514,7 @@ def close_requisition(requisition_id: str, current_user: User = Depends(get_curr
 
 
 @app.post("/requisitions/{requisition_id}/reset")
+@app.post("/api/requisitions/{requisition_id}/reset")
 def reset_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
@@ -2973,6 +3524,7 @@ def reset_requisition(requisition_id: str, current_user: User = Depends(get_curr
 
 
 @app.delete("/requisitions/{requisition_id}", status_code=204)
+@app.delete("/api/requisitions/{requisition_id}", status_code=204)
 def delete_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> None:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)

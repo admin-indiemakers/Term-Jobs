@@ -49,6 +49,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [candidates, setCandidates] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [workOrders, setWorkOrders] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -78,17 +79,20 @@ export default function DirectorDashboard({ view = 'overview' }) {
       request('/candidates/shortlisted', { token }).catch(() => []),
       request('/api/auth/vendors', { token }).catch(() => []),
       request('/templates', { token }).catch(() => []),
+      request('/api/workforce/director/work-orders', { token }).catch(() => ({ work_orders: [] })),
     ])
-      .then(([reqsRes, candsRes, vendorsRes, templatesRes]) => {
+      .then(([reqsRes, candsRes, vendorsRes, templatesRes, wosRes]) => {
         const reqList = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.requisitions || []);
         const candList = Array.isArray(candsRes) ? candsRes : (candsRes?.shortlisted_candidates || candsRes?.candidates || []);
         const vendorList = Array.isArray(vendorsRes) ? vendorsRes : (vendorsRes?.vendors || []);
         const templateList = Array.isArray(templatesRes) ? templatesRes : (templatesRes?.templates || []);
+        const woList = Array.isArray(wosRes?.work_orders) ? wosRes.work_orders : (Array.isArray(wosRes) ? wosRes : []);
 
         setRequisitions(reqList);
         setCandidates(candList);
         setVendors(vendorList);
         setTemplates(templateList);
+        setWorkOrders(woList);
         setError('');
       })
       .catch((err) => setError(err?.message || 'Failed to load dashboard data'))
@@ -228,6 +232,31 @@ export default function DirectorDashboard({ view = 'overview' }) {
       (r) => (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved
     );
   }, [requisitions]);
+
+  const pendingWorkOrders = useMemo(() => {
+    const list = Array.isArray(workOrders) ? workOrders : [];
+    return list.filter((w) => {
+      const st = (w.status || w.sow_data?.status || '').toLowerCase();
+      const isApproved = st.includes('approved') || st === 'active' || w.director_approved === true || w.sow_data?.director_approved === true;
+      return !isApproved;
+    });
+  }, [workOrders]);
+
+  const handleApproveWorkOrder = async (cid) => {
+    setApprovingId(cid);
+    try {
+      await request(`/api/workforce/procurement/sow/${encodeURIComponent(cid)}/director-approve`, {
+        method: 'POST',
+        token,
+      });
+      setTemplateMsg(`Work Order for candidate ${cid} approved successfully!`);
+      loadAll();
+    } catch (err) {
+      setError(err?.message || 'Failed to approve Work Order.');
+    } finally {
+      setApprovingId('');
+    }
+  };
 
   const approvedList = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
@@ -400,16 +429,18 @@ export default function DirectorDashboard({ view = 'overview' }) {
         </div>
 
         <div className={`border rounded-2xl p-4 shadow-xs transition-all ${
-          pendingApprovalsList.length > 0
+          (pendingApprovalsList.length + pendingWorkOrders.length) > 0
             ? 'bg-gradient-to-br from-amber-50 to-white border-amber-300 ring-2 ring-amber-400/20'
             : 'bg-white border-gray-200/90'
         }`}>
           <div className="flex items-center justify-between text-amber-700 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900">Pending Approval</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900">Pending Sign-off</span>
             <Clock size={16} className="text-amber-600" />
           </div>
-          <div className="text-2xl font-black text-amber-950">{pendingApprovalsList.length}</div>
-          <div className="text-[11px] text-amber-800 mt-1 font-medium">Requires Director sign-off</div>
+          <div className="text-2xl font-black text-amber-950">{pendingApprovalsList.length + pendingWorkOrders.length}</div>
+          <div className="text-[11px] text-amber-800 mt-1 font-medium">
+            {pendingApprovalsList.length} Req · {pendingWorkOrders.length} Work Orders
+          </div>
         </div>
 
         <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs">
@@ -551,6 +582,95 @@ export default function DirectorDashboard({ view = 'overview' }) {
         </div>
       )}
 
+      {/* SECTION 1.5: PENDING WORK ORDERS / CANDIDATE PLACEMENTS */}
+      {(activeTab === 'approvals' || activeTab === 'overview') && pendingWorkOrders.length > 0 && (
+        <div className="bg-white border border-indigo-200/80 rounded-3xl p-6 shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-gray-100">
+            <div>
+              <div className="flex items-center gap-2 text-indigo-800 text-xs font-bold uppercase tracking-wider">
+                <FileCheck size={16} className="text-indigo-600" />
+                <span>Work Orders — Director Sign-Off</span>
+              </div>
+              <h2 className="text-lg font-extrabold text-gray-900 mt-0.5">
+                Candidate Placements Awaiting Approval ({pendingWorkOrders.length})
+              </h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/director/work-orders')}
+              className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl hover:bg-indigo-100 transition-colors cursor-pointer"
+            >
+              View All Work Orders →
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+            {pendingWorkOrders.map((wo) => {
+              const cid = wo.candidate_id || wo.workorder_id;
+              const sow = wo.sow_data || {};
+              const name = sow.deployed_personnel || wo.candidate_name || wo.recruiter_name || 'Candidate';
+              const role = sow.role || wo.company_name || 'Specialist';
+              const company = sow.company_name || wo.company_name || 'Client Company';
+              const vendor = sow.supplier_name || wo.recruiter_name || 'Direct Applicant';
+              const rate = sow.charge_rate || wo.bill_rate || '—';
+              const duration = sow.duration || '—';
+              const isProcessing = approvingId === cid;
+              return (
+                <div
+                  key={cid}
+                  className="bg-gradient-to-br from-indigo-50/30 via-white to-white border border-indigo-200/60 hover:border-indigo-400 rounded-2xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-extrabold text-indigo-900 uppercase tracking-wider">
+                      <span>WO #{(cid || '').slice(0, 12)}</span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold flex items-center gap-1">
+                        <Clock size={11} /> Pending Approval
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className="text-base font-extrabold text-gray-900">{name}</h3>
+                      <p className="text-xs text-gray-500 font-medium mt-0.5">{role} · {company}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Vendor: {vendor}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                      {rate && (
+                        <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-800 text-[11px] font-semibold">
+                          💰 {rate}
+                        </span>
+                      )}
+                      {duration && (
+                        <span className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-700 text-[11px] font-semibold">
+                          ⏱️ {duration}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate('/dashboard/director/work-orders')}
+                      className="px-3 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      Review SOW →
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleApproveWorkOrder(cid)}
+                      disabled={isProcessing}
+                      className="px-3.5 py-1.5 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <Check size={13} />
+                      <span>{isProcessing ? 'Approving...' : 'Approve ✓'}</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* SECTION 2: ROLE TEMPLATES */}
       {(activeTab === 'overview') && (
         <div className="bg-white border border-gray-200/90 rounded-3xl p-6 shadow-xs space-y-4">
@@ -561,6 +681,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 Upload JSON templates so hiring managers can pre-fill new job requisitions instantly with standardized criteria.
               </p>
             </div>
+
 
             <input
               ref={templateFileRef}

@@ -629,7 +629,15 @@ def get_director_agreements(
     for d in docs:
         wid = d.get("workorder_id") or d.get("candidate_id") or d.get("id")
         ag = d.get("agreement_data") or {}
-        st = d.get("agreement_status") or d.get("status") or "ACTIVE"
+        is_approved = bool(d.get("director_approved")) or d.get("agreement_status") == "Approved" or (d.get("status") == "Approved")
+        if is_approved:
+            st = "Approved"
+        elif d.get("agreement_status") in ["Pending Director Approval", "Submitted", "Revision Requested", "Rejected"]:
+            st = d.get("agreement_status")
+        elif d.get("status") in ["Pending Director Approval", "Submitted", "Revision Requested", "Rejected"]:
+            st = d.get("status")
+        else:
+            st = "Pending Director Approval"
 
         results.append({
             "id": str(d.get("id") or d.get("_id") or wid),
