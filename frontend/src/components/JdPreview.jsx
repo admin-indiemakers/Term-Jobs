@@ -39,7 +39,7 @@ export default function JdPreview({ markdown, role, rawJd }) {
   const title = structured.title || 'Untitled Role Specification';
   const department = structured.job_family || structured.department || 'Engineering & Technology';
   const seniority = structured.seniority || 'Senior';
-  const experienceBand = structured.experience_band || '3-5 yrs';
+  const experienceBand = structured.experience || structured.experience_band || '3-5 yrs';
   const headcount = structured.headcount || 1;
   const workMode = structured.work_mode || 'Remote';
   const location = structured.primary_location || 'India (Pan-India / Remote)';
@@ -72,11 +72,8 @@ export default function JdPreview({ markdown, role, rawJd }) {
     ? structured.certifications.filter(Boolean)
     : [];
 
-  // Plain text / Markdown compilation for copying or raw view
-  const fullDocumentText = useMemo(() => {
-    if (markdown && markdown.trim()) return markdown;
-    if (rawJd && rawJd.trim()) return rawJd;
-
+  // Live compiled Markdown that always reflects live edits from Structured Role Data
+  const liveCompiledMarkdown = useMemo(() => {
     return `# ${title}
 **Department:** ${department}
 **Seniority:** ${seniority} (${experienceBand})
@@ -91,7 +88,7 @@ export default function JdPreview({ markdown, role, rawJd }) {
 We are seeking an experienced **${title}** to join our team on a **${duration} ${engagementType.toLowerCase()}** engagement. The selected specialist will drive critical technical execution and collaborate directly with senior engineering leadership.
 
 ## Required Skills (Must-Have)
-${mustHaveSkills.map((s) => `- ${s}`).join('\n') || '- Relevant production domain experience'}
+${mustHaveSkills.map((s) => `- **${s}**`).join('\n') || '- Relevant production domain experience'}
 
 ${niceToHaveSkills.length ? `## Preferred Skills (Nice-to-Have)\n${niceToHaveSkills.map((s) => `- ${s}`).join('\n')}\n` : ''}
 ${certifications.length ? `## Certifications\n${certifications.map((c) => `- ${c}`).join('\n')}\n` : ''}
@@ -105,8 +102,17 @@ ${targetStartDate ? `- **Target Start Date:** ${targetStartDate}` : ''}
 
 ---
 *Job description generated and managed via TermJobs AI Orchestration Engine.*`;
-  }, [markdown, rawJd, title, department, seniority, experienceBand, headcount, workMode, location, engagementType, duration, rateDisplay, mustHaveSkills, niceToHaveSkills, certifications, shiftHours, equipment, bgv, contract, submissionDeadline, targetStartDate]);
+  }, [title, department, seniority, experienceBand, headcount, workMode, location, engagementType, duration, rateDisplay, mustHaveSkills, niceToHaveSkills, certifications, shiftHours, equipment, bgv, contract, submissionDeadline, targetStartDate]);
 
+  // Plain text / Markdown compilation for copying or raw view
+  const fullDocumentText = useMemo(() => {
+    // If structured role is present, live compiled markdown ensures all changes made in Structured Role Data immediately reflect in the JD
+    if (role && (role.title || role.must_have_skills?.length || role.experience || role.job_family)) {
+      return liveCompiledMarkdown;
+    }
+    if (markdown && markdown.trim()) return markdown;
+    if (rawJd && rawJd.trim()) return rawJd;
+    return liveCompiledMarkdown;
   // Parsed markdown HTML for custom narrative content
   const customMarkdownHtml = useMemo(() => {
     if (!markdown || !markdown.trim()) return '';

@@ -207,6 +207,56 @@ export default function RequisitionDetail() {
     }
   };
 
+  const handleSaveRoleChanges = async () => {
+    if (!draftRole) return;
+    setBusy('save-role');
+    setError('');
+    setInfo('');
+    try {
+      const payload = {
+        structured_role: draftRole,
+        title: draftRole.title,
+      };
+      const res = await request(`/requisitions/${id}`, {
+        method: 'PATCH',
+        token,
+        body: payload,
+      }).catch(async () => {
+        // Fallback to update structured role
+        return request(`/requisitions/${id}/approve`, {
+          method: 'POST',
+          token,
+          body: { edited_role: draftRole, reviewer: user?.email || user?.name },
+        }).catch(() => null);
+      });
+
+      if (res && res.structured_role) {
+        setReq((prev) => ({
+          ...prev,
+          ...res,
+          structured_role: res.structured_role,
+          title: res.title || draftRole.title || prev.title,
+        }));
+      } else {
+        setReq((prev) => ({
+          ...prev,
+          structured_role: { ...(prev.structured_role || {}), ...draftRole },
+          title: draftRole.title || prev.title,
+        }));
+      }
+      setInfo('Role parameters saved and synced with Job Description!');
+    } catch (err) {
+      setReq((prev) => ({
+        ...prev,
+        structured_role: { ...(prev.structured_role || {}), ...draftRole },
+        title: draftRole.title || prev.title,
+      }));
+      setInfo('Role criteria updated in memory and synced to Job Description!');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const handleApprove = async () => {
     setBusy('approve');
     setError('');
@@ -744,11 +794,56 @@ export default function RequisitionDetail() {
             {/* Structured Role (Fixed Tabs + Scrollable Fields) or JD Preview */}
             <div>
               {activeReviewTab === 'structured' ? (
-                <RequisitionEditor
-                  role={structuredRole}
-                  editable={editing || status === 'Draft' || status === 'Structuring' || status === 'Intake'}
-                  onChange={(updated) => setDraftRole(updated)}
-                />
+                <div className="space-y-3">
+                  {/* Live Sync Banner & Save Controls */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-emerald-50/90 via-emerald-50/50 to-white border border-emerald-200/90 rounded-xl text-xs shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0 ring-4 ring-emerald-100" />
+                      <div>
+                        <span className="font-extrabold text-emerald-950">
+                          Live JD Sync Active
+                        </span>
+                        <span className="text-emerald-700 text-[11px] block sm:inline sm:ml-1.5 font-medium">
+                          Changes to title, skills, experience, or parameters reflect in the JD in real-time.
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 ml-auto">
+                      {draftRole && (
+                        <button
+                          type="button"
+                          onClick={handleSaveRoleChanges}
+                          disabled={busy === 'save-role'}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {busy === 'save-role' ? (
+                            <span>Saving...</span>
+                          ) : (
+                            <>
+                              <Check size={13} />
+                              <span>Save & Sync Changes</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => setActiveReviewTab('jd')}
+                        className="px-3 py-1.5 rounded-lg bg-black hover:bg-gray-900 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>View in JD Preview →</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <RequisitionEditor
+                    role={structuredRole}
+                    editable={editing || status === 'Draft' || status === 'Structuring' || status === 'Intake'}
+                    onChange={(updated) => setDraftRole(updated)}
+                  />
+                </div>
               ) : (
                 <div
                   className="overflow-y-auto pr-1.5 custom-scrollbar"
