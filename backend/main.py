@@ -31,6 +31,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
@@ -74,19 +75,20 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
 
-    # Launch 48-Hour Shortlist auto-dispatch background worker
+    # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
     worker_task = None
-    async def _shortlist_worker():
+    async def _background_worker():
         while True:
             try:
                 await asyncio.sleep(60)
+                _auto_close_expired()
                 from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
                 auto_check_and_dispatch_48h_shortlists()
             except asyncio.CancelledError:
                 break
             except Exception:
                 pass
-    worker_task = asyncio.create_task(_shortlist_worker())
+    worker_task = asyncio.create_task(_background_worker())
 
     yield
 
@@ -123,12 +125,23 @@ async def custom_404_handler(request: Request, exc):
         }
     )
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*",
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "https://termjobs.in",
+        "https://www.termjobs.in",
+        "https://termjobs.vercel.app",
+    ],
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?$|^https://.*\.vercel\.app$|^https://(www\.)?termjobs\.in$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=86400,
 )
 
 @app.middleware("http")
@@ -1008,7 +1021,6 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         return _cached
 
     _auto_close_expired()
-    _auto_check_shortlists_48h()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
         if current_user.role == "Super Admin":
@@ -1078,6 +1090,10 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
 @app.get("/api/public/requisitions")
 def list_public_requisitions() -> list[dict]:
     """Public endpoint listing all live published requisitions across all companies."""
+    _cached = _cache.get("public_requisitions")
+    if _cached is not None:
+        return _cached
+
     _auto_close_expired()
     with get_session() as session:
         rows = (
@@ -1187,6 +1203,7 @@ def list_public_requisitions() -> list[dict]:
                 "generated_jd_markdown": r.generated_jd_markdown or "",
                 "created_at": _format_datetime(r.created_at),
             })
+        _cache.set("public_requisitions", result, ttl=30)
         return result
 
 

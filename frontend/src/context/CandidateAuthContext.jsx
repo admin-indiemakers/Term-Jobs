@@ -233,10 +233,19 @@ export function CandidateAuthProvider({ children }) {
     try {
       localStorage.removeItem(CANDIDATE_TOKEN_KEY);
       localStorage.removeItem(CANDIDATE_USER_KEY);
+      localStorage.removeItem('candidate_email');
+      localStorage.removeItem('candidate_profile_user');
+      localStorage.removeItem('tj_applied_jobs');
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('tj_applied_jobs')) {
+          localStorage.removeItem(key);
+        }
+      });
     } catch {}
     setCandidateToken(null);
     setCandidateUser(null);
     setApplications([]);
+    setAgreements([]);
     setOutreachHistory([]);
     setHasResume(false);
     setProfileCompleted(false);

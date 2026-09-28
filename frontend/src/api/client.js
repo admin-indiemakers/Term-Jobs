@@ -46,13 +46,20 @@ export class ApiError extends Error {
 // In-flight GET request deduplication map (shares 1 active promise for identical concurrent requests)
 const inflightGetRequests = new Map();
 
-// Short-term deduplication cache for GET requests (absorbs StrictMode double-mount & rapid duplicate calls)
-const shortTermGetCache = new Map();
-const CACHE_TTL_MS = 1200; // 1.2 seconds
+// Multi-tier cache for GET requests:
+// 1. Fresh Cache (20s): returns instantly in 0ms without hitting the network.
+// 2. Stale-While-Revalidate (SWR, 3 min): returns cached data instantly in 0ms, revalidates silently in background.
+const apiGetCache = new Map();
+const FRESH_CACHE_TTL_MS = 20000; // 20 seconds fresh
+const STALE_CACHE_TTL_MS = 180000; // 3 minutes stale-while-revalidate
 
 export function clearApiCache() {
-  shortTermGetCache.clear();
+  apiGetCache.clear();
   inflightGetRequests.clear();
+}
+
+export function prefetch(path, options = {}) {
+  return request(path, { ...options, method: 'GET' }).catch(() => null);
 }
 
 export async function request(path, { 
@@ -67,9 +74,9 @@ export async function request(path, {
   const upperMethod = method.toUpperCase();
   const payloadBody = body !== undefined ? body : requestData;
 
-  // On any mutating method (POST, PUT, PATCH, DELETE), clear short term cache
+  // On any mutating method (POST, PUT, PATCH, DELETE), clear cache immediately
   if (upperMethod !== 'GET') {
-    shortTermGetCache.clear();
+    apiGetCache.clear();
   }
 
   let normalizedPath = String(path || '');
@@ -101,17 +108,7 @@ export async function request(path, {
 
   const fullUrl = `${API_BASE_URL}${normalizedPath}`;
   const cacheKey = `${token || 'anon'}:${fullUrl}`;
-
-  // Check if identical GET request is cached or currently in flight
-  if (upperMethod === 'GET' && !forceRefresh && !noCache) {
-    const cached = shortTermGetCache.get(cacheKey);
-    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
-      return cached.data;
-    }
-    if (inflightGetRequests.has(cacheKey)) {
-      return inflightGetRequests.get(cacheKey);
-    }
-  }
+  const sessionCacheKey = `tj_cache:${cacheKey}`;
 
   const executeFetch = async () => {
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
@@ -201,13 +198,56 @@ export async function request(path, {
     console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${upperMethod} ${fullUrl}`, resData);
 
     if (upperMethod === 'GET' && !noCache) {
-      shortTermGetCache.set(cacheKey, { timestamp: Date.now(), data: resData });
+      const cachePayload = { timestamp: Date.now(), data: resData };
+      apiGetCache.set(cacheKey, cachePayload);
+      try {
+        sessionStorage.setItem(sessionCacheKey, JSON.stringify(cachePayload));
+      } catch (e) {}
     }
 
     return resData;
   };
 
+  // SWR: Check if identical GET request is fresh or stale in memory or sessionStorage
   if (upperMethod === 'GET' && !forceRefresh && !noCache) {
+    let cached = apiGetCache.get(cacheKey);
+    if (!cached && typeof window !== 'undefined') {
+      try {
+        const item = sessionStorage.getItem(sessionCacheKey);
+        if (item) {
+          cached = JSON.parse(item);
+          if (cached && cached.data) {
+            apiGetCache.set(cacheKey, cached);
+          }
+        }
+      } catch (e) {}
+    }
+
+    const now = Date.now();
+    if (cached) {
+      const age = now - cached.timestamp;
+      if (age < FRESH_CACHE_TTL_MS) {
+        // Return fresh data immediately (0ms)
+        return cached.data;
+      }
+      if (age < STALE_CACHE_TTL_MS) {
+        // Return stale data immediately in 0ms, and revalidate in background
+        if (!inflightGetRequests.has(cacheKey)) {
+          const bgPromise = executeFetch()
+            .catch(() => {})
+            .finally(() => {
+              inflightGetRequests.delete(cacheKey);
+            });
+          inflightGetRequests.set(cacheKey, bgPromise);
+        }
+        return cached.data;
+      }
+    }
+
+    if (inflightGetRequests.has(cacheKey)) {
+      return inflightGetRequests.get(cacheKey);
+    }
+
     const requestPromise = executeFetch().finally(() => {
       inflightGetRequests.delete(cacheKey);
     });

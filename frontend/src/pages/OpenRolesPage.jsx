@@ -72,9 +72,24 @@ export default function OpenRolesPage({ enabled = true }) {
   const login = candidateAuth?.login;
   const register = candidateAuth?.register;
 
-  // Job search & filters
-  const [requisitions, setRequisitions] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const isCandidateAuthenticated = Boolean(candidateAuth?.candidateToken && candidateUser);
+  const candidateEmail = (candidateUser?.candidate_email || candidateUser?.email || '').trim().toLowerCase();
+  const appliedStorageKey = candidateEmail ? `tj_applied_jobs_${candidateEmail}` : null;
+
+  // Job search & filters - hydrate instantly from session cache if available (0ms render)
+  const [requisitions, setRequisitions] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_requisitions');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed?.data) && parsed.data.length > 0) {
+          return parsed.data;
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => requisitions.length === 0);
   const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
@@ -497,18 +512,56 @@ export default function OpenRolesPage({ enabled = true }) {
   );
   const currentResumeName = candidateAuth?.resumeFilename || candidateUser?.filename || 'profile_resume.pdf';
 
-  // Persistent tracking of jobs applied on this device across sessions and reloads
+  // Persistent tracking of jobs applied by the CURRENT authenticated candidate
   const [justAppliedJobIds, setJustAppliedJobIds] = useState(() => {
+    if (!isCandidateAuthenticated || !appliedStorageKey) return new Set();
     try {
-      const saved = localStorage.getItem('tj_applied_jobs');
+      const saved = localStorage.getItem(appliedStorageKey);
       return new Set(saved ? JSON.parse(saved) : []);
     } catch {
       return new Set();
     }
   });
 
-  // Automatically sync applied jobs from candidate profile history into persistent storage
+  // Keep justAppliedJobIds strictly synchronized with authentication state
   useEffect(() => {
+    if (!isCandidateAuthenticated || !appliedStorageKey) {
+      setJustAppliedJobIds(new Set());
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(appliedStorageKey);
+      setJustAppliedJobIds(new Set(saved ? JSON.parse(saved) : []));
+    } catch {
+      setJustAppliedJobIds(new Set());
+    }
+  }, [isCandidateAuthenticated, appliedStorageKey]);
+
+  // Dedicated candidate logout handler that cleanly purges device applied jobs tracking
+  const handleCandidateLogout = useCallback(() => {
+    try {
+      localStorage.removeItem('tj_applied_jobs');
+      if (appliedStorageKey) {
+        localStorage.removeItem(appliedStorageKey);
+      }
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('tj_applied_jobs')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (_) {}
+    setJustAppliedJobIds(new Set());
+    if (typeof logout === 'function') {
+      logout();
+    }
+  }, [logout, appliedStorageKey]);
+
+  // Automatically sync applied jobs from candidate profile history into candidate-scoped storage
+  useEffect(() => {
+    if (!isCandidateAuthenticated || !appliedStorageKey) {
+      setJustAppliedJobIds(new Set());
+      return;
+    }
     if (Array.isArray(applications) && applications.length > 0) {
       setJustAppliedJobIds((prev) => {
         const next = new Set(prev);
@@ -517,17 +570,17 @@ export default function OpenRolesPage({ enabled = true }) {
           if (app.id) next.add(String(app.id));
         });
         try {
-          localStorage.setItem('tj_applied_jobs', JSON.stringify(Array.from(next)));
+          localStorage.setItem(appliedStorageKey, JSON.stringify(Array.from(next)));
         } catch (_) { }
         return next;
       });
     }
-  }, [applications]);
+  }, [applications, isCandidateAuthenticated, appliedStorageKey]);
 
-  // Map of candidate's submitted applications for O(1) matching
+  // Map of candidate's submitted applications for O(1) matching - strictly for authenticated candidate
   const appliedMap = useMemo(() => {
     const map = new Map();
-    if (!Array.isArray(applications)) return map;
+    if (!isCandidateAuthenticated || !Array.isArray(applications)) return map;
     applications.forEach((app) => {
       if (app.requisition_id) {
         map.set(String(app.requisition_id), app);
@@ -540,17 +593,17 @@ export default function OpenRolesPage({ enabled = true }) {
       }
     });
     return map;
-  }, [applications]);
+  }, [applications, isCandidateAuthenticated]);
 
   const getJobApplication = useCallback((job) => {
-    if (!job) return null;
+    if (!job || !isCandidateAuthenticated) return null;
     return (
       appliedMap.get(String(job.id)) ||
       (job._id && appliedMap.get(String(job._id))) ||
       (job.title && appliedMap.get(job.title.toLowerCase().trim())) ||
       null
     );
-  }, [appliedMap]);
+  }, [appliedMap, isCandidateAuthenticated]);
 
   // Auto-populate candidate details
   useEffect(() => {
@@ -590,20 +643,57 @@ export default function OpenRolesPage({ enabled = true }) {
     if (!enabled) return;
 
     let cancelled = false;
-    setLoading(true);
+    if (requisitions.length === 0) {
+      setLoading(true);
+    }
     setError(null);
 
+    const onDataLoaded = (data) => {
+      if (cancelled) return;
+      if (Array.isArray(data)) {
+        setRequisitions(data);
+        setLoading(false);
+        try {
+          sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data }));
+        } catch (e) {}
+      }
+    };
+
+    // 1. Consume early speculatively prefetched request from <head> if present
+    if (typeof window !== 'undefined' && window.__PREFETCHED_REQUISITIONS__) {
+      const earlyPromise = window.__PREFETCHED_REQUISITIONS__;
+      window.__PREFETCHED_REQUISITIONS__ = null; // consume once
+      earlyPromise
+        .then((data) => {
+          if (data && Array.isArray(data) && data.length > 0) {
+            onDataLoaded(data);
+          } else {
+            // fallback to client request
+            return request('/api/public/requisitions').then(onDataLoaded);
+          }
+        })
+        .catch(() => {
+          request('/api/public/requisitions').then(onDataLoaded).catch((err) => {
+            if (!cancelled) {
+              if (requisitions.length === 0) setError(err.message || 'Could not load open roles.');
+              setLoading(false);
+            }
+          });
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    // 2. Standard request with SWR cache
     request('/api/public/requisitions')
-      .then((data) => {
-        if (!cancelled) {
-          setRequisitions(Array.isArray(data) ? data : []);
-          setLoading(false);
-        }
-      })
+      .then(onDataLoaded)
       .catch((err) => {
         console.error('Error fetching public requisitions:', err);
         if (!cancelled) {
-          setError(err.message || 'Could not load open roles.');
+          if (requisitions.length === 0) {
+            setError(err.message || 'Could not load open roles.');
+          }
           setLoading(false);
         }
       });
@@ -663,35 +753,68 @@ export default function OpenRolesPage({ enabled = true }) {
     return Array.from(set);
   }, [requisitions]);
 
-  // Locations for filter dropdown
+  // Locations for filter dropdown - strictly geographic locations (Work modes like Remote/Hybrid/Onsite are handled by All Modes)
   const availableLocations = useMemo(() => {
+    const WORK_MODES = new Set([
+      'remote',
+      'hybrid',
+      'onsite',
+      'on-site',
+      'in-office',
+      'wfh',
+      'remote / hybrid',
+      'hybrid / remote',
+      'work from home',
+    ]);
     const set = new Set();
     requisitions.forEach((j) => {
       const loc = j.structured_role?.location || j.location || j.company_location;
+      const addGeoLocation = (val) => {
+        if (!val || typeof val !== 'string') return;
+        const trimmed = val.trim();
+        if (!trimmed) return;
+        if (!WORK_MODES.has(trimmed.toLowerCase())) {
+          set.add(trimmed);
+        }
+      };
+
       if (Array.isArray(loc)) {
-        loc.forEach((l) => l && set.add(l));
+        loc.forEach((l) => addGeoLocation(l));
       } else if (loc && typeof loc === 'string') {
-        set.add(loc);
+        addGeoLocation(loc);
       }
     });
-    return Array.from(set);
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [requisitions]);
+
+  // Guard: if selectedLocation ever holds a work mode, reset it to 'ALL'
+  useEffect(() => {
+    const WORK_MODES = new Set(['remote', 'hybrid', 'onsite', 'on-site', 'in-office']);
+    if (WORK_MODES.has(selectedLocation.toLowerCase())) {
+      setSelectedLocation('ALL');
+    }
+  }, [selectedLocation]);
 
   const getLocationDisplay = (job) => {
     const role = job.structured_role || {};
-    if (Array.isArray(role.location) && role.location.length > 0) {
-      return role.location[0];
+    const WORK_MODES = new Set(['remote', 'hybrid', 'onsite', 'on-site', 'in-office']);
+
+    const candidates = [];
+    if (Array.isArray(role.location)) {
+      candidates.push(...role.location);
+    } else if (role.location && typeof role.location === 'string') {
+      candidates.push(role.location);
     }
-    if (role.location && typeof role.location === 'string') {
-      return role.location;
+    if (job.location) candidates.push(job.location);
+    if (job.company_location) candidates.push(job.company_location);
+
+    const geoMatch = candidates.find((c) => c && typeof c === 'string' && !WORK_MODES.has(c.trim().toLowerCase()));
+    if (geoMatch) {
+      return geoMatch.trim();
     }
-    if (job.company_location) {
-      return job.company_location;
-    }
-    if (job.location) {
-      return job.location;
-    }
-    return (role.work_mode || 'Remote').toLowerCase() === 'remote' ? 'Remote' : 'Hybrid';
+
+    const mode = (role.work_mode || 'Remote').trim();
+    return mode.toLowerCase() === 'remote' ? 'Remote' : mode;
   };
 
   const handleOpenJob = (job) => {
@@ -768,9 +891,11 @@ export default function OpenRolesPage({ enabled = true }) {
           const next = new Set(prev);
           next.add(jid);
           if (selectedJob._id) next.add(String(selectedJob._id));
-          try {
-            localStorage.setItem('tj_applied_jobs', JSON.stringify(Array.from(next)));
-          } catch (_) { }
+          if (appliedStorageKey) {
+            try {
+              localStorage.setItem(appliedStorageKey, JSON.stringify(Array.from(next)));
+            } catch (_) { }
+          }
           return next;
         });
       }
@@ -870,7 +995,7 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   };
 
-  const selectedJobApp = selectedJob
+  const selectedJobApp = (selectedJob && isCandidateAuthenticated)
     ? getJobApplication(selectedJob) || (justAppliedJobIds.has(String(selectedJob.id)) ? { status: 'Screened' } : null)
     : null;
   const isSelectedJobApplied = Boolean(selectedJobApp);
@@ -1055,7 +1180,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   </a>
                   <button
                     type="button"
-                    onClick={logout}
+                    onClick={handleCandidateLogout}
                     className="p-1 text-paper/50 hover:text-white transition cursor-pointer"
                     title="Sign out"
                   >
@@ -1286,9 +1411,11 @@ export default function OpenRolesPage({ enabled = true }) {
                   const locDisplay = getLocationDisplay(job);
                   const existingApp = getJobApplication(job);
                   const isApplied = Boolean(
-                    existingApp ||
-                    justAppliedJobIds.has(String(job.id)) ||
-                    (job._id && justAppliedJobIds.has(String(job._id)))
+                    isCandidateAuthenticated && (
+                      existingApp ||
+                      justAppliedJobIds.has(String(job.id)) ||
+                      (job._id && justAppliedJobIds.has(String(job._id)))
+                    )
                   );
 
                   return (
@@ -1831,7 +1958,7 @@ export default function OpenRolesPage({ enabled = true }) {
                           </div>
                           <button
                             type="button"
-                            onClick={logout}
+                            onClick={handleCandidateLogout}
                             className="text-[11px] text-white/50 hover:text-rose-400 transition cursor-pointer"
                           >
                             Sign out
