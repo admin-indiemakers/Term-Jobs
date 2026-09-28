@@ -36,8 +36,9 @@ import {
   Check,
   LogIn,
   Home,
+  Download,
 } from 'lucide-react';
-import { API_BASE_URL } from '../api/client';
+import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
@@ -134,7 +135,9 @@ export default function OpenRolesPage({ enabled = true }) {
         email = (urlParams.get('email') || '').trim();
       }
       if (!email) {
-        email = 'ashk68799@gmail.com';
+        setCandidateAgreements([]);
+        setLoadingAgreements(false);
+        return;
       }
       if (email && !agreementLookupEmail) {
         setAgreementLookupEmail(email);
@@ -149,16 +152,12 @@ export default function OpenRolesPage({ enabled = true }) {
       const data = await res.json();
       if (Array.isArray(data.agreements) && data.agreements.length > 0) {
         setCandidateAgreements(data.agreements);
-      } else if (Array.isArray(candidateAuth?.agreements) && candidateAuth.agreements.length > 0) {
-        setCandidateAgreements(candidateAuth.agreements);
       } else {
-        setCandidateAgreements(data.agreements || []);
+        setCandidateAgreements([]);
       }
     } catch (err) {
       console.error('Failed to load candidate agreements:', err);
-      if (Array.isArray(candidateAuth?.agreements)) {
-        setCandidateAgreements(candidateAuth.agreements);
-      }
+      setCandidateAgreements([]);
     } finally {
       setLoadingAgreements(false);
     }
@@ -239,6 +238,7 @@ export default function OpenRolesPage({ enabled = true }) {
     summary: '',
   });
   const [setupResumeFile, setSetupResumeFile] = useState(null);
+  const setupFileInputRef = useRef(null);
   const [setupSubmitting, setSetupSubmitting] = useState(false);
   const [setupError, setSetupError] = useState(null);
   const [setupSuccess, setSetupSuccess] = useState(false);
@@ -484,11 +484,8 @@ export default function OpenRolesPage({ enabled = true }) {
 
   // Derive candidate profile state
   const hasResume = Boolean(
-    candidateAuth?.hasResume ||
-    candidateAuth?.resumeFilename ||
-    candidateUser?.has_resume ||
-    candidateUser?.filename ||
-    candidateUser?.resume_pdf
+    candidateAuth?.hasResume &&
+    (candidateAuth?.resumeFilename || candidateUser?.filename || candidateUser?.has_resume)
   );
   const hasPhone = Boolean(
     candidateUser?.candidate_phone ||
@@ -588,39 +585,31 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [candidateUser, selectedJob]);
 
-  const hasFetchedJobsRef = useRef(false);
-
   // Fetch published requisitions only when Open Roles is active/enabled
   useEffect(() => {
     if (!enabled) return;
-    if (hasFetchedJobsRef.current) return;
-    hasFetchedJobsRef.current = true;
 
-    let isMounted = true;
-    async function fetchJobs() {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/public/requisitions`);
-        if (!res.ok) {
-          throw new Error(`Failed to load open roles (${res.status})`);
-        }
-        const data = await res.json();
-        if (isMounted) {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+
+    request('/api/public/requisitions')
+      .then((data) => {
+        if (!cancelled) {
           setRequisitions(Array.isArray(data) ? data : []);
+          setLoading(false);
         }
-      } catch (err) {
+      })
+      .catch((err) => {
         console.error('Error fetching public requisitions:', err);
-        if (isMounted) {
+        if (!cancelled) {
           setError(err.message || 'Could not load open roles.');
+          setLoading(false);
         }
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    }
-    fetchJobs();
+      });
+
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
   }, [enabled]);
 
@@ -710,6 +699,7 @@ export default function OpenRolesPage({ enabled = true }) {
     setSubmitSuccess(null);
     setSubmitError(null);
     setResumeFile(null);
+    setUseCustomResume(!hasResume);
   };
 
   const handleApplySubmit = async (e) => {
@@ -719,11 +709,6 @@ export default function OpenRolesPage({ enabled = true }) {
     if (!candidateUser) {
       setSubmitError('Candidate sign-in or registration is mandatory to submit an application. Please sign in or create your profile.');
       setShowAuthModal(true);
-      return;
-    }
-
-    if (!isProfileComplete && !useCustomResume && !resumeFile && !hasResume) {
-      setShowSetupModal(true);
       return;
     }
 
@@ -740,13 +725,12 @@ export default function OpenRolesPage({ enabled = true }) {
       return;
     }
 
-    if (!hasResume && !resumeFile) {
-      setSubmitError('Please choose or drop your resume file (PDF or DOCX) to complete your application.');
-      return;
-    }
-
-    if (useCustomResume && !resumeFile) {
-      setSubmitError('Please choose a resume file to upload, or uncheck to use your saved profile resume.');
+    if (!resumeFile && (!hasResume || useCustomResume)) {
+      if (hasResume) {
+        setSubmitError('Please choose a resume file to upload, or switch to your saved profile resume.');
+      } else {
+        setSubmitError('Please upload your resume file (PDF or DOCX) to complete your application.');
+      }
       return;
     }
 
@@ -1994,6 +1978,12 @@ export default function OpenRolesPage({ enabled = true }) {
                             </div>
                           )}
 
+                          {!hasResume && (
+                            <div className="mt-2 text-[10.5px] text-emerald-400/90 flex items-center gap-1.5 font-medium">
+                              <span>✓ This resume will be automatically saved to your profile for future 1-click applications.</span>
+                            </div>
+                          )}
+
                           {useCustomResume && hasResume && (
                             <button
                               type="button"
@@ -2189,15 +2179,92 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Resume File (PDF/DOCX)</label>
-                  <input
-                    type="file"
-                    accept=".pdf,.docx,.doc"
-                    onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-zinc-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-zinc-800 file:text-white hover:file:bg-zinc-700"
-                  />
-                  {hasResume && !setupResumeFile && (
-                    <div className="text-[10px] text-white/60 mt-1">Existing resume: {currentResumeName}</div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[11px] font-semibold text-white/70 uppercase">Master Resume (On File)</label>
+                    {hasResume ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                        <Check size={11} /> Verified Active
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                        Upload Required
+                      </span>
+                    )}
+                  </div>
+
+                  {hasResume ? (
+                    <div className="space-y-2">
+                      <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/15 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/15 text-white flex items-center justify-center shrink-0">
+                            <FileText size={18} />
+                          </div>
+                          <div className="min-w-0 text-left">
+                            <div className="text-xs font-bold text-white truncate">{currentResumeName || 'candidate_resume.pdf'}</div>
+                            <div className="text-[10.5px] text-white/50">Ready for instant 1-click applications</div>
+                          </div>
+                        </div>
+                        {candidateAuth?.candidateToken && (
+                          <a
+                            href={`${API_BASE_URL}/api/candidate-profile/resume?token=${candidateAuth.candidateToken}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 text-[11px] font-semibold text-white transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                            title="View or download your master resume"
+                          >
+                            <Download size={12} />
+                            <span>View / Download</span>
+                          </a>
+                        )}
+                      </div>
+
+                      <div className="pt-1">
+                        <label className="block text-[10.5px] font-semibold text-white/50 uppercase mb-1">
+                          Update / Replace Resume File (Optional)
+                        </label>
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.doc"
+                          onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
+                          className="w-full text-xs text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 transition cursor-pointer"
+                        />
+                        {setupResumeFile && (
+                          <div className="mt-1 text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                            <Check size={12} /> Selected for update: {setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div
+                        onClick={() => setupFileInputRef.current?.click()}
+                        className="p-5 border-2 border-dashed border-white/20 hover:border-white/40 bg-white/[0.02] hover:bg-white/[0.05] rounded-2xl text-center cursor-pointer transition"
+                      >
+                        <input
+                          type="file"
+                          ref={setupFileInputRef}
+                          accept=".pdf,.docx,.doc"
+                          onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
+                          className="hidden"
+                        />
+                        <Upload size={22} className="text-white/40 mx-auto mb-1.5" />
+                        {setupResumeFile ? (
+                          <div className="text-xs font-bold text-white flex items-center justify-center gap-1.5">
+                            <Check size={14} className="text-emerald-400" />
+                            <span>{setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-xs font-semibold text-white">Click or drag resume here to upload</div>
+                            <div className="text-[10px] text-white/40 mt-0.5">PDF or DOCX (up to 10MB)</div>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-[10.5px] text-white/40 mt-1.5">
+                        Uploading a resume enables 1-click applications across all enterprise partner roles.
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -2491,7 +2558,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-white leading-tight">Agreements & Contracts</h3>
-                  <p className="text-[11px] text-white/50">Formal Employment Offers & Digital Execution</p>
+                  <p className="text-[11px] text-white/50">Formal Employment Offers & Execution (Available Post-Interview Selection)</p>
                 </div>
               </div>
               <button
@@ -2514,7 +2581,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   type="email"
                   value={agreementLookupEmail}
                   onChange={(e) => setAgreementLookupEmail(e.target.value)}
-                  placeholder={candidateUser?.candidate_email || candidateUser?.email || "e.g. ashk68799@gmail.com"}
+                  placeholder={candidateUser?.candidate_email || candidateUser?.email || "e.g. yourname@example.com"}
                   className="flex-1 bg-black/40 border border-white/15 rounded-xl px-3 py-1.5 text-xs text-white outline-none focus:border-emerald-400 font-semibold"
                 />
               </div>
@@ -2623,9 +2690,9 @@ export default function OpenRolesPage({ enabled = true }) {
                     <FileText size={20} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">No Active Agreements Pending</h4>
+                    <h4 className="text-sm font-bold text-white">No Active Agreements Issued Yet</h4>
                     <p className="text-xs text-white/50 max-w-sm mx-auto leading-relaxed mt-1">
-                      Once an enterprise partner accepts your profile and issues an offer, your full Employment Agreement & Annexure will appear here for review and digital signature.
+                      Agreements and formal employment contracts are generated exclusively after you complete your interview rounds and receive an official selection / offer from the hiring partner.
                     </p>
                   </div>
 

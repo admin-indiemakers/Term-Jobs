@@ -491,12 +491,12 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
     # Also check candidate_outreach records
     outreach_records = list(
         db["candidate_outreach"].find(
-            {"$or": [{"candidate_email": email}, {"candidate_email": "arjunmheartitude@gmail.com"}]} if "arjun" in email else {"candidate_email": email},
+            {"candidate_email": email},
             {"_id": 0, "token": 0}
         ).sort("sent_at", -1)
     )
 
-    # Fetch formal agreements & offer letters
+    # Fetch formal agreements & offer letters ONLY after interview selection
     cand_email = (email or candidate.get("candidate_email") or "").strip().lower()
     
     agreements_query = []
@@ -533,27 +533,68 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
             {"submission_id": raw_id},
             {"id": raw_id},
         ])
-    if "arjun" in cand_email or "arjun" in cand_name.lower():
-        agreements_query.extend([
-            {"candidate_email": "arjunmheartitude@gmail.com"},
-            {"candidate_email": "arjunmcseawh@gmail.com"},
-            {"candidate_name": {"$regex": "^arjun", "$options": "i"}},
-        ])
 
-    agreements_cursor = list(
-        db["offer_letters"].find({"$or": agreements_query} if agreements_query else {}).sort("updated_at", -1)
-    )
-    if not agreements_cursor:
-        agreements_cursor = list(db["offer_letters"].find().sort("updated_at", -1).limit(5))
+    SELECTED_STATUSES = {"Accepted", "Offer Extended", "Selected", "Hired", "Signed", "Signed & Active"}
+    candidate_status = str(candidate.get("status") or "").strip()
+    has_selected_application = candidate_status in SELECTED_STATUSES
+    if not has_selected_application:
+        for app in applications:
+            app_st = str(app.get("status") or "").strip()
+            if app_st in SELECTED_STATUSES:
+                has_selected_application = True
+                break
 
     agreements = []
-    for agr in agreements_cursor:
-        agr["_id"] = str(agr.get("_id"))
-        if not agr.get("agreement_id"):
-            agr["agreement_id"] = str(agr.get("_id"))
-        agreements.append(agr)
+    if agreements_query:
+        if has_selected_application:
+            agreements_cursor = list(
+                db["offer_letters"].find({"$or": agreements_query}).sort("updated_at", -1)
+            )
+            for agr in agreements_cursor:
+                agr_status = str(agr.get("status") or "").strip()
+                agr_sig_status = str(agr.get("agreement_status") or "").strip()
+                if agr_status in SELECTED_STATUSES or agr_sig_status in ("Pending Signature", "Signed", "Active"):
+                    agr["_id"] = str(agr.get("_id"))
+                    if not agr.get("agreement_id"):
+                        agr["agreement_id"] = str(agr.get("_id"))
+                    agreements.append(agr)
+        else:
+            # Candidate has not completed interviews & selection yet. Purge any prematurely generated test offer letters.
+            try:
+                db["offer_letters"].delete_many({"$or": agreements_query})
+            except Exception:
+                pass
 
-    has_resume = bool(candidate.get("resume_pdf") or candidate.get("filename"))
+    has_resume = bool(candidate.get("resume_pdf") or candidate.get("extracted_text"))
+    resume_filename = candidate.get("filename") if has_resume else None
+
+    # Auto-link resume from prior submissions if missing directly on the candidate profile
+    if not has_resume and cand_email:
+        prev_sub = db["candidate_submissions"].find_one(
+            {"candidate_email": cand_email, "resume_pdf": {"$exists": True, "$ne": ""}},
+            sort=[("created_at", -1)]
+        )
+        if not prev_sub:
+            prev_sub = db["candidate_submissions"].find_one(
+                {"candidate_email": {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}, "resume_pdf": {"$exists": True, "$ne": ""}},
+                sort=[("created_at", -1)]
+            )
+        if prev_sub and prev_sub.get("resume_pdf"):
+            has_resume = True
+            resume_filename = prev_sub.get("filename") or "resume.pdf"
+            db["candidates"].update_one(
+                {"candidate_email": cand_email},
+                {"$set": {
+                    "resume_pdf": prev_sub.get("resume_pdf"),
+                    "extracted_text": prev_sub.get("resume_text", ""),
+                    "filename": resume_filename,
+                    "has_resume": True,
+                    "skills": candidate.get("skills") or prev_sub.get("details", {}).get("skills", [])
+                }}
+            )
+            candidate["has_resume"] = True
+            candidate["filename"] = resume_filename
+
     profile_completed = bool(has_resume and candidate.get("candidate_phone"))
 
     return {
@@ -564,8 +605,52 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
         "outreach": outreach_records,
         "has_resume": has_resume,
         "profile_completed": profile_completed,
-        "resume_filename": candidate.get("filename") or ("resume.pdf" if has_resume else None),
+        "resume_filename": resume_filename,
     }
+
+
+@router.get("/resume")
+async def download_candidate_resume(
+    token: str | None = None,
+    authorization: str | None = Header(None, alias="Authorization"),
+):
+    """Downloads or streams the candidate's verified resume."""
+    auth_header = authorization or (f"Bearer {token}" if token else None)
+    candidate = await get_current_candidate(auth_header)
+
+    resume_pdf = candidate.get("resume_pdf")
+    filename = candidate.get("filename") or "candidate_resume.pdf"
+
+    if not resume_pdf:
+        email = candidate.get("candidate_email", "").strip().lower()
+        prev_sub = db["candidate_submissions"].find_one(
+            {"candidate_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "resume_pdf": {"$exists": True, "$ne": ""}},
+            sort=[("created_at", -1)]
+        )
+        if prev_sub and prev_sub.get("resume_pdf"):
+            resume_pdf = prev_sub.get("resume_pdf")
+            filename = prev_sub.get("filename") or filename
+
+    if not resume_pdf:
+        raise HTTPException(status_code=404, detail="No resume on file found for your candidate profile.")
+
+    try:
+        content = base64.b64decode(resume_pdf)
+    except Exception:
+        raise HTTPException(status_code=500, detail="Failed to decode resume file.")
+
+    media_type = "application/pdf"
+    if filename.lower().endswith(".docx"):
+        media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif filename.lower().endswith(".doc"):
+        media_type = "application/msword"
+
+    from fastapi.responses import Response
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{filename}"'}
+    )
 
 
 @router.get("/agreements")
@@ -618,35 +703,54 @@ async def get_candidate_agreements_endpoint(
             {"candidate_id": raw_id},
             {"submission_id": raw_id},
         ])
-    if "arjun" in target_email:
-        query_or.extend([
-            {"candidate_email": "arjunmheartitude@gmail.com"},
-            {"candidate_email": "arjunmcseawh@gmail.com"},
-            {"candidate_name": {"$regex": "^arjun", "$options": "i"}},
-        ])
-
     if not query_or:
-        docs = list(db["offer_letters"].find().sort("updated_at", -1).limit(10))
-    else:
-        docs = list(db["offer_letters"].find({"$or": query_or}).sort("updated_at", -1))
-        if not docs and target_email:
-            name_prefix = target_email.split("@")[0].strip()
-            if len(name_prefix) >= 3:
-                docs = list(db["offer_letters"].find({
-                    "$or": [
-                        {"candidate_name": {"$regex": re.escape(name_prefix), "$options": "i"}},
-                        {"candidate_email": {"$regex": re.escape(name_prefix), "$options": "i"}},
-                    ]
-                }).sort("updated_at", -1))
-        if not docs:
-            docs = list(db["offer_letters"].find().sort("updated_at", -1).limit(5))
+        return {"status": "success", "agreements": []}
 
+    SELECTED_STATUSES = {"Accepted", "Offer Extended", "Selected", "Hired", "Signed", "Signed & Active"}
+    is_selected = False
+    try:
+        sub_docs = list(db["candidate_submissions"].find(
+            {"$or": query_or},
+            {"status": 1, "offer_status": 1}
+        ))
+        cand_docs = list(db["candidates"].find(
+            {"$or": query_or},
+            {"status": 1}
+        ))
+        for doc in sub_docs + cand_docs:
+            st = str(doc.get("status") or "").strip()
+            ost = str(doc.get("offer_status") or "").strip()
+            if st in SELECTED_STATUSES or ost in ("Offer Extended", "Accepted"):
+                is_selected = True
+                break
+    except Exception as e:
+        logger.warning(f"Error checking candidate selection status for agreements: {e}")
+
+    if not is_selected:
+        # Candidate has not completed interviews and reached formal selection.
+        # Purge any prematurely generated test offer letters for unselected candidate.
+        try:
+            db["offer_letters"].delete_many({"$or": query_or})
+        except Exception:
+            pass
+        return {
+            "status": "success",
+            "agreements": [],
+            "message": "Agreements are generated only after interview completion and formal candidate selection."
+        }
+
+    docs = list(db["offer_letters"].find({"$or": query_or}).sort("updated_at", -1))
+    valid_docs = []
     for d in docs:
-        d["_id"] = str(d.get("_id"))
-        if not d.get("agreement_id"):
-            d["agreement_id"] = str(d.get("_id"))
+        d_status = str(d.get("status") or "").strip()
+        d_agr_status = str(d.get("agreement_status") or "").strip()
+        if d_status in SELECTED_STATUSES or d_agr_status in ("Pending Signature", "Signed", "Active"):
+            d["_id"] = str(d.get("_id"))
+            if not d.get("agreement_id"):
+                d["agreement_id"] = str(d.get("_id"))
+            valid_docs.append(d)
 
-    return {"status": "success", "agreements": docs}
+    return {"status": "success", "agreements": valid_docs}
 
 
 @router.post("/agreements/{agreement_id}/sign")
@@ -735,48 +839,70 @@ async def setup_candidate_profile(
     linkedin_url: str = Form(""),
     github_url: str = Form(""),
     summary: str = Form(""),
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
     candidate: dict = Depends(get_current_candidate),
 ) -> dict:
-    """Sets up or completes the candidate profile with mandatory resume upload."""
+    """Sets up or completes the candidate profile with mandatory resume upload or updates."""
     email = candidate.get("candidate_email", "").strip().lower()
     if not candidate_phone or not candidate_phone.strip():
         raise HTTPException(status_code=400, detail="Phone number is required to complete your profile.")
 
-    if not resume or not resume.filename:
-        raise HTTPException(status_code=400, detail="A resume file (PDF or DOCX) is mandatory to set up your profile.")
-
-    content = await resume.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
-
-    filename = resume.filename
-    file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
-    pdf_base64 = base64.b64encode(content).decode("utf-8")
-
+    pdf_base64 = ""
+    filename = ""
     extracted_text = ""
-    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
-
-    try:
-        from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
-        extracted_text = _extract_text_new(tmp_path, file_type)
-    except Exception as ex:
-        print(f"[CANDIDATE SETUP RESUME EXTRACT ERR] {ex}")
-    finally:
-        try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
-
     profile_extracted = {}
-    if extracted_text:
+
+    if resume and resume.filename:
+        content = await resume.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+
+        filename = resume.filename
+        file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
+        pdf_base64 = base64.b64encode(content).decode("utf-8")
+
+        with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
         try:
-            from modules.candidate.extractor import extract_candidate_profile
-            profile_extracted = await extract_candidate_profile(extracted_text, filename)
+            from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
+            extracted_text = _extract_text_new(tmp_path, file_type)
         except Exception as ex:
-            print(f"[CANDIDATE SETUP PROFILE EXTRACT ERR] {ex}")
+            print(f"[CANDIDATE SETUP RESUME EXTRACT ERR] {ex}")
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+
+        if extracted_text:
+            try:
+                from modules.candidate.extractor import extract_candidate_profile
+                profile_extracted = await extract_candidate_profile(extracted_text, filename)
+            except Exception as ex:
+                print(f"[CANDIDATE SETUP PROFILE EXTRACT ERR] {ex}")
+    else:
+        # Preserve existing resume on file or sync from prior candidate submissions
+        pdf_base64 = candidate.get("resume_pdf") or ""
+        filename = candidate.get("filename") or "resume.pdf"
+        extracted_text = candidate.get("extracted_text") or ""
+
+        if not pdf_base64 and not extracted_text:
+            prev_sub = db["candidate_submissions"].find_one(
+                {"candidate_email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}, "resume_pdf": {"$exists": True, "$ne": ""}},
+                sort=[("created_at", -1)]
+            )
+            if prev_sub and prev_sub.get("resume_pdf"):
+                pdf_base64 = prev_sub.get("resume_pdf")
+                filename = prev_sub.get("filename") or filename
+                extracted_text = prev_sub.get("resume_text", "")
+
+        if not pdf_base64 and not extracted_text:
+            raise HTTPException(
+                status_code=400,
+                detail="A resume file (PDF or DOCX) is required to complete your profile."
+            )
 
     # Build parsed skills
     parsed_skills = profile_extracted.get("skills") or []
@@ -785,6 +911,8 @@ async def setup_candidate_profile(
         for s in manual_skills:
             if s not in parsed_skills:
                 parsed_skills.append(s)
+    elif not parsed_skills:
+        parsed_skills = candidate.get("skills") or []
 
     now_utc = datetime.now(timezone.utc)
     details = candidate.get("details", {}) or {}
@@ -798,6 +926,8 @@ async def setup_candidate_profile(
         "projects": profile_extracted.get("projects") or details.get("projects", []),
     })
 
+    has_resume = bool(pdf_base64 or extracted_text)
+
     updates = {
         "candidate_phone": candidate_phone.strip(),
         "candidate_title": candidate_title.strip() or profile_extracted.get("candidate_title") or candidate.get("candidate_title") or "Candidate",
@@ -807,6 +937,7 @@ async def setup_candidate_profile(
         "extracted_text": extracted_text,
         "summary": summary.strip() or profile_extracted.get("summary") or candidate.get("summary") or "Profile completed.",
         "details": details,
+        "has_resume": has_resume,
         "profile_completed": True,
         "updated_at": now_utc,
     }
@@ -821,9 +952,9 @@ async def setup_candidate_profile(
         "status": "success",
         "candidate": sanitize_candidate_doc(updated_doc),
         "profile_completed": True,
-        "has_resume": True,
+        "has_resume": has_resume,
         "resume_filename": filename,
-        "message": "Talent profile and mandatory resume saved successfully. You can now apply for open requisitions!",
+        "message": "Talent profile details saved successfully!",
     }
 
 

@@ -43,8 +43,34 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(path, { method = 'GET', body, data: requestData, token, timeout = 180000 } = {}) {
+// In-flight GET request deduplication map (shares 1 active promise for identical concurrent requests)
+const inflightGetRequests = new Map();
+
+// Short-term deduplication cache for GET requests (absorbs StrictMode double-mount & rapid duplicate calls)
+const shortTermGetCache = new Map();
+const CACHE_TTL_MS = 1200; // 1.2 seconds
+
+export function clearApiCache() {
+  shortTermGetCache.clear();
+  inflightGetRequests.clear();
+}
+
+export async function request(path, { 
+  method = 'GET', 
+  body, 
+  data: requestData, 
+  token, 
+  timeout = 180000,
+  forceRefresh = false,
+  noCache = false
+} = {}) {
+  const upperMethod = method.toUpperCase();
   const payloadBody = body !== undefined ? body : requestData;
+
+  // On any mutating method (POST, PUT, PATCH, DELETE), clear short term cache
+  if (upperMethod !== 'GET') {
+    shortTermGetCache.clear();
+  }
 
   let normalizedPath = String(path || '');
   if (!normalizedPath.startsWith('http://') && !normalizedPath.startsWith('https://')) {
@@ -74,91 +100,120 @@ export async function request(path, { method = 'GET', body, data: requestData, t
   }
 
   const fullUrl = `${API_BASE_URL}${normalizedPath}`;
-  const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
+  const cacheKey = `${token || 'anon'}:${fullUrl}`;
 
-  const isFormData = typeof FormData !== 'undefined' && payloadBody instanceof FormData;
-  const headers = {};
-  if (!isFormData) {
-    headers['Content-Type'] = 'application/json';
+  // Check if identical GET request is cached or currently in flight
+  if (upperMethod === 'GET' && !forceRefresh && !noCache) {
+    const cached = shortTermGetCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp < CACHE_TTL_MS)) {
+      return cached.data;
+    }
+    if (inflightGetRequests.has(cacheKey)) {
+      return inflightGetRequests.get(cacheKey);
+    }
   }
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
 
-  console.log(`🚀 [API REQUEST] ${method} ${fullUrl}`, {
-    origin: currentOrigin,
-    apiBaseUrl: API_BASE_URL,
-    path,
-    method,
-    headers,
-    body: isFormData ? '[FormData]' : (payloadBody !== undefined ? payloadBody : null),
-  });
+  const executeFetch = async () => {
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
+    const isFormData = typeof FormData !== 'undefined' && payloadBody instanceof FormData;
+    const headers = {};
+    if (!isFormData) {
+      headers['Content-Type'] = 'application/json';
+    }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeout);
-
-  let response;
-  try {
-    response = await fetch(fullUrl, {
-      method,
-      headers,
-      body: payloadBody !== undefined ? (isFormData ? payloadBody : JSON.stringify(payloadBody)) : undefined,
-      signal: controller.signal,
-    });
-  } catch (err) {
-    console.error(`❌ [API NETWORK / CORS ERROR] ${method} ${fullUrl}`, {
+    console.log(`🚀 [API REQUEST] ${upperMethod} ${fullUrl}`, {
       origin: currentOrigin,
       apiBaseUrl: API_BASE_URL,
       path,
-      errorMessage: err?.message || err,
-      errorName: err?.name,
-      hint: 'If status shows net::ERR_FAILED / CORS blocked, check origin headers and preflight handling.',
+      method: upperMethod,
+      headers,
+      body: isFormData ? '[FormData]' : (payloadBody !== undefined ? payloadBody : null),
     });
 
-    if (err && err.name === 'AbortError') {
-      throw new ApiError('Request timed out. Please try again.', 0);
-    }
-    throw new ApiError('Unable to reach the server. Is the backend running or is CORS blocking the request?', 0);
-  } finally {
-    clearTimeout(timer);
-  }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
 
-  if (response.status === 204) {
-    console.log(`✅ [API RESPONSE 204 No Content] ${method} ${fullUrl}`);
-    return null;
-  }
+    let response;
+    try {
+      response = await fetch(fullUrl, {
+        method: upperMethod,
+        headers,
+        body: payloadBody !== undefined ? (isFormData ? payloadBody : JSON.stringify(payloadBody)) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      console.error(`❌ [API NETWORK / CORS ERROR] ${upperMethod} ${fullUrl}`, {
+        origin: currentOrigin,
+        apiBaseUrl: API_BASE_URL,
+        path,
+        errorMessage: err?.message || err,
+        errorName: err?.name,
+        hint: 'If status shows net::ERR_FAILED / CORS blocked, check origin headers and preflight handling.',
+      });
 
-  let resData = null;
-  try {
-    resData = await response.json();
-  } catch (parseErr) {
-    console.warn(`⚠️ [API JSON PARSE WARNING] Unable to parse response as JSON for ${fullUrl}:`, parseErr);
-    resData = null;
-  }
-
-  if (!response.ok) {
-    let detail = `Request failed (${response.status})`;
-    if (resData) {
-      if (typeof resData.detail === 'string') {
-        detail = resData.detail;
-      } else if (Array.isArray(resData.detail) && resData.detail.length > 0) {
-        detail = resData.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join(', ');
-      } else if (typeof resData.message === 'string') {
-        detail = resData.message;
-      } else if (typeof resData.error === 'string') {
-        detail = resData.error === 'Route Not Found' ? `Route Not Found (${method} ${path})` : resData.error;
+      if (err && err.name === 'AbortError') {
+        throw new ApiError('Request timed out. Please try again.', 0);
       }
+      throw new ApiError('Unable to reach the server. Is the backend running or is CORS blocking the request?', 0);
+    } finally {
+      clearTimeout(timer);
     }
 
-    console.error(`🚨 [API ERROR RESPONSE ${response.status}] ${method} ${fullUrl}`, {
-      status: response.status,
-      detail,
-      responseBody: resData,
-    });
+    if (response.status === 204) {
+      console.log(`✅ [API RESPONSE 204 No Content] ${upperMethod} ${fullUrl}`);
+      return null;
+    }
 
-    throw new ApiError(detail, response.status);
+    let resData = null;
+    try {
+      resData = await response.json();
+    } catch (parseErr) {
+      console.warn(`⚠️ [API JSON PARSE WARNING] Unable to parse response as JSON for ${fullUrl}:`, parseErr);
+      resData = null;
+    }
+
+    if (!response.ok) {
+      let detail = `Request failed (${response.status})`;
+      if (resData) {
+        if (typeof resData.detail === 'string') {
+          detail = resData.detail;
+        } else if (Array.isArray(resData.detail) && resData.detail.length > 0) {
+          detail = resData.detail.map(d => d.msg || d.detail || JSON.stringify(d)).join(', ');
+        } else if (typeof resData.message === 'string') {
+          detail = resData.message;
+        } else if (typeof resData.error === 'string') {
+          detail = resData.error === 'Route Not Found' ? `Route Not Found (${upperMethod} ${path})` : resData.error;
+        }
+      }
+
+      console.error(`🚨 [API ERROR RESPONSE ${response.status}] ${upperMethod} ${fullUrl}`, {
+        status: response.status,
+        detail,
+        responseBody: resData,
+      });
+
+      throw new ApiError(detail, response.status);
+    }
+
+    console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${upperMethod} ${fullUrl}`, resData);
+
+    if (upperMethod === 'GET' && !noCache) {
+      shortTermGetCache.set(cacheKey, { timestamp: Date.now(), data: resData });
+    }
+
+    return resData;
+  };
+
+  if (upperMethod === 'GET' && !forceRefresh && !noCache) {
+    const requestPromise = executeFetch().finally(() => {
+      inflightGetRequests.delete(cacheKey);
+    });
+    inflightGetRequests.set(cacheKey, requestPromise);
+    return await requestPromise;
   }
 
-  console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${method} ${fullUrl}`, resData);
-  return resData;
+  return await executeFetch();
 }

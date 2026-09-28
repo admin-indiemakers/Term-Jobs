@@ -113,6 +113,8 @@ ${targetStartDate ? `- **Target Start Date:** ${targetStartDate}` : ''}
     if (markdown && markdown.trim()) return markdown;
     if (rawJd && rawJd.trim()) return rawJd;
     return liveCompiledMarkdown;
+  }, [role, liveCompiledMarkdown, markdown, rawJd]);
+
   // Parsed markdown HTML for custom narrative content
   const customMarkdownHtml = useMemo(() => {
     if (!markdown || !markdown.trim()) return '';

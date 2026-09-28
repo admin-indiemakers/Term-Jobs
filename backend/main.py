@@ -1390,10 +1390,27 @@ async def apply_to_requisition(
         # Candidate is applying using their saved profile resume
         existing_cand = db["candidates"].find_one({"candidate_email": clean_email})
         if not existing_cand or (not existing_cand.get("resume_pdf") and not existing_cand.get("extracted_text")):
-            raise HTTPException(
-                status_code=400,
-                detail="No resume on file found for your profile. Please complete your profile and upload your resume first."
+            # Fallback: check candidate submissions for any prior uploaded resume
+            prev_sub = db["candidate_submissions"].find_one(
+                {"candidate_email": clean_email, "resume_pdf": {"$exists": True, "$ne": ""}},
+                sort=[("created_at", -1)]
             )
+            if prev_sub and prev_sub.get("resume_pdf"):
+                db["candidates"].update_one(
+                    {"candidate_email": clean_email},
+                    {"$set": {
+                        "resume_pdf": prev_sub.get("resume_pdf"),
+                        "extracted_text": prev_sub.get("resume_text", ""),
+                        "filename": prev_sub.get("filename", "resume.pdf"),
+                        "has_resume": True
+                    }}
+                )
+                existing_cand = db["candidates"].find_one({"candidate_email": clean_email})
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Please upload or attach your resume (PDF or DOCX) to complete your application."
+                )
 
         pdf_base64 = existing_cand.get("resume_pdf", "")
         filename = existing_cand.get("filename") or "resume.pdf"

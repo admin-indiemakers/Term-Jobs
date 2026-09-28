@@ -204,7 +204,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Procurement SOW billing orders
   const [procurementPendingSows, setProcurementPendingSows] = useState(0);
@@ -222,7 +222,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Finance pending work order payments
   const [financePendingPayments, setFinancePendingPayments] = useState(0);
@@ -235,7 +235,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Super Admin candidate pool
   const [superAdminCandidateCount, setSuperAdminCandidateCount] = useState(0);
@@ -248,7 +248,7 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
 
   // Dynamic live count for Super Admin candidate management selections
   const [superAdminSelectedCount, setSuperAdminSelectedCount] = useState(0);
@@ -261,7 +261,23 @@ export default function DashboardLayout() {
         })
         .catch(() => { });
     }
-  }, [user?.role, token, location.pathname]);
+  }, [user?.role, token]);
+
+  // Listen to refresh-superadmin-data to refresh Super Admin sidebar badges dynamically
+  useEffect(() => {
+    const handleRefreshSuperAdminBadges = () => {
+      if ((user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') && token) {
+        request('/api/superadmin/candidate-pool', { token, forceRefresh: true })
+          .then((res) => setSuperAdminCandidateCount(res?.total_count || 0))
+          .catch(() => { });
+        request('/api/superadmin/candidate-management', { token, forceRefresh: true })
+          .then((res) => setSuperAdminSelectedCount(res?.total_count || 0))
+          .catch(() => { });
+      }
+    };
+    window.addEventListener('refresh-superadmin-data', handleRefreshSuperAdminBadges);
+    return () => window.removeEventListener('refresh-superadmin-data', handleRefreshSuperAdminBadges);
+  }, [user?.role, token]);
 
   // Close mobile drawer on route change
   useEffect(() => {

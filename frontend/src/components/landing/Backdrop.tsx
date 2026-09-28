@@ -77,11 +77,7 @@ export function Backdrop({ tone = "light" }: { tone?: "light" | "dark" | "sideba
               fill="none"
               stroke="oklch(0.2 0 0 / 0.08)"
               strokeWidth="1"
-              animate={reduced ? {} : { d: [
-                `M-20 ${240 + i * 160} C 120 ${190 + i * 150}, 300 ${320 + i * 120}, 520 ${260 + i * 150}`,
-                `M-20 ${260 + i * 160} C 140 ${220 + i * 150}, 320 ${290 + i * 120}, 520 ${290 + i * 150}`,
-                `M-20 ${240 + i * 160} C 120 ${190 + i * 150}, 300 ${320 + i * 120}, 520 ${260 + i * 150}`,
-              ] }}
+              animate={reduced ? {} : { y: [0, 18, 0], opacity: [0.6, 1, 0.6] }}
               transition={{ duration: 22 + i * 5, repeat: Infinity, ease: "easeInOut" }}
             />
           ))}
@@ -95,11 +91,7 @@ export function Backdrop({ tone = "light" }: { tone?: "light" | "dark" | "sideba
               fill="none"
               stroke={dark ? "oklch(0.98 0 0 / 0.1)" : "oklch(0.2 0 0 / 0.08)"}
               strokeWidth="1"
-              animate={reduced ? {} : { d: [
-                `M-100 ${260 + i * 150} C 250 ${180 + i * 140}, 600 ${420 + i * 90}, 1300 ${240 + i * 160}`,
-                `M-100 ${290 + i * 150} C 280 ${250 + i * 140}, 640 ${340 + i * 90}, 1300 ${300 + i * 160}`,
-                `M-100 ${260 + i * 150} C 250 ${180 + i * 140}, 600 ${420 + i * 90}, 1300 ${240 + i * 160}`,
-              ] }}
+              animate={reduced ? {} : { y: [0, 24, 0], opacity: [0.5, 0.9, 0.5] }}
               transition={{ duration: 22 + i * 5, repeat: Infinity, ease: "easeInOut" }}
             />
           ))}
