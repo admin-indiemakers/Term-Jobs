@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
@@ -151,13 +151,15 @@ export default function DashboardLayout() {
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
+  const hasFetchedHmCountsRef = useRef(false);
 
   useEffect(() => {
-    if (user?.role === 'Hiring Manager' && token) {
+    if (user?.role === 'Hiring Manager' && token && !hasFetchedHmCountsRef.current) {
+      hasFetchedHmCountsRef.current = true;
       Promise.all([
-        request('/requisitions', { token }).catch(() => []),
-        request('/candidates/shortlisted', { token }).catch(() => []),
-        request('/candidates?status=Accepted', { token }).catch(() => []),
+        request('/api/requisitions', { token }).catch(() => []),
+        request('/api/candidates/shortlisted', { token }).catch(() => []),
+        request('/api/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
       ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {

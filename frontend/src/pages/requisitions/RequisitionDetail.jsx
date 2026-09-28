@@ -752,7 +752,7 @@ export default function RequisitionDetail() {
               ) : (
                 <div
                   className="overflow-y-auto pr-1.5 custom-scrollbar"
-                  style={{ maxHeight: '380px' }}
+                  style={{ maxHeight: '720px' }}
                 >
                   <JdPreview
                     markdown={req.generated_jd_markdown}

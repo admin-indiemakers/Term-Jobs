@@ -2691,6 +2691,41 @@ def refine_requisition_jd(requisition_id: str, body: RefineIn, current_user: Use
     return _interrupt_payload(state, interrupt)
 
 
+class UpdateRequisitionRoleIn(BaseModel):
+    structured_role: dict | None = None
+    title: str | None = None
+    generated_jd_markdown: str | None = None
+
+
+@app.patch("/requisitions/{requisition_id}")
+@app.patch("/api/requisitions/{requisition_id}")
+def update_requisition_role(
+    requisition_id: str,
+    body: UpdateRequisitionRoleIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    _require_writable(current_user)
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if not db_req:
+            raise HTTPException(status_code=404, detail="Requisition not found")
+        if body.structured_role:
+            cur = dict(db_req.structured_role or {})
+            cur.update(body.structured_role)
+            db_req.structured_role = cur
+            if not body.title and cur.get("title"):
+                db_req.title = cur.get("title")
+        if body.title:
+            db_req.title = body.title
+        if body.generated_jd_markdown:
+            db_req.generated_jd_markdown = body.generated_jd_markdown
+        session.commit()
+    _cache.clear()
+    return _requisition_dict(requisition_id)
+
+
 @app.post("/requisitions/{requisition_id}/approve")
 @app.post("/api/requisitions/{requisition_id}/approve")
 def approve_requisition(requisition_id: str, body: ApproveIn | None = None, current_user: User = Depends(get_current_user)) -> dict:

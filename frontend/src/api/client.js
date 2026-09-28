@@ -46,21 +46,30 @@ export class ApiError extends Error {
 export async function request(path, { method = 'GET', body, data: requestData, token, timeout = 180000 } = {}) {
   const payloadBody = body !== undefined ? body : requestData;
 
-  // Ensure relative endpoints carry /api prefix so Vercel proxies them to the backend rather than serving index.html
   let normalizedPath = String(path || '');
-  if (
-    !normalizedPath.startsWith('http://') &&
-    !normalizedPath.startsWith('https://')
-  ) {
+  if (!normalizedPath.startsWith('http://') && !normalizedPath.startsWith('https://')) {
     if (!normalizedPath.startsWith('/')) {
       normalizedPath = `/${normalizedPath}`;
     }
-    if (
-      !normalizedPath.startsWith('/api/') &&
-      normalizedPath !== '/api' &&
-      !normalizedPath.startsWith('/health')
-    ) {
-      normalizedPath = `/api${normalizedPath}`;
+
+    const isLocalBackend = API_BASE_URL.includes('localhost') || API_BASE_URL.includes('127.0.0.1');
+
+    if (isLocalBackend) {
+      // Local uvicorn process registers /requisitions, /company-profiles, /templates, /candidates at root
+      normalizedPath = normalizedPath
+        .replace(/^\/api\/requisitions/, '/requisitions')
+        .replace(/^\/api\/company-profiles/, '/company-profiles')
+        .replace(/^\/api\/templates/, '/templates')
+        .replace(/^\/api\/candidates/, '/candidates');
+    } else {
+      // On production Vercel, relative requests need /api prefix to be proxied to backend instead of serving index.html
+      if (
+        !normalizedPath.startsWith('/api/') &&
+        normalizedPath !== '/api' &&
+        !normalizedPath.startsWith('/health')
+      ) {
+        normalizedPath = `/api${normalizedPath}`;
+      }
     }
   }
 

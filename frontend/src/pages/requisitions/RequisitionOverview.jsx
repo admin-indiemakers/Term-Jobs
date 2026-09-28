@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
@@ -86,18 +86,25 @@ export default function RequisitionOverview({ section }) {
   const [info, setInfo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [busyId, setBusyId] = useState('');
+  const isFetchingRef = useRef(false);
+  const hasLoadedRef = useRef(false);
+  const prevTokenRef = useRef(token);
 
   useEffect(() => {
     setActiveTab(initialSection);
   }, [initialSection]);
 
-  const loadData = async () => {
+  const loadData = useCallback(async (force = false) => {
+    if (isFetchingRef.current) return;
+    if (!force && hasLoadedRef.current && prevTokenRef.current === token) return;
+
+    isFetchingRef.current = true;
     setLoading(true);
     setError('');
     try {
       const [reqs, profiles] = await Promise.all([
-        request('/requisitions', { token }).catch(() => []),
-        request('/company-profiles', { token }).catch(() => []),
+        request('/api/requisitions', { token }).catch(() => []),
+        request('/api/company-profiles', { token }).catch(() => []),
       ]);
 
       const profileMap = Object.fromEntries(
@@ -111,17 +118,27 @@ export default function RequisitionOverview({ section }) {
       }));
 
       setRequisitions(rows);
+      hasLoadedRef.current = true;
+      prevTokenRef.current = token;
     } catch (err) {
       console.error('Failed to load requisitions:', err);
       setError(err.message || 'Unable to load requisitions.');
     } finally {
       setLoading(false);
+      isFetchingRef.current = false;
     }
-  };
+  }, [token, user?.tenant_name]);
 
   useEffect(() => {
-    loadData();
-  }, [token]);
+    if (!token) return;
+    if (prevTokenRef.current !== token) {
+      prevTokenRef.current = token;
+      hasLoadedRef.current = false;
+    }
+    if (!hasLoadedRef.current) {
+      loadData();
+    }
+  }, [token, loadData]);
 
   const handleDelete = async (reqItem, e) => {
     e?.stopPropagation();
@@ -132,9 +149,9 @@ export default function RequisitionOverview({ section }) {
     setError('');
     setInfo('');
     try {
-      await request(`/requisitions/${reqItem.id}`, { method: 'DELETE', token });
+      await request(`/api/requisitions/${reqItem.id}`, { method: 'DELETE', token });
       setInfo(`Requisition "${reqItem.title}" deleted.`);
-      loadData();
+      loadData(true);
     } catch (err) {
       setError(err.message || 'Failed to delete requisition.');
     } finally {
