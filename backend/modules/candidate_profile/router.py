@@ -557,7 +557,7 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
                     agr["_id"] = str(agr.get("_id"))
                     if not agr.get("agreement_id"):
                         agr["agreement_id"] = str(agr.get("_id"))
-                    agreements.append(agr)
+                    agreements.append(_sync_agreement_with_selection(agr))
         else:
             # Candidate has not completed interviews & selection yet. Purge any prematurely generated test offer letters.
             try:
@@ -651,6 +651,72 @@ async def download_candidate_resume(
         media_type=media_type,
         headers={"Content-Disposition": f'inline; filename="{filename}"'}
     )
+
+
+def _sync_agreement_with_selection(agr: dict) -> dict:
+    """Ensure offer letter accurately mirrors the candidate's actual selected role and company."""
+    if not agr:
+        return agr
+    from bson import ObjectId
+    raw_id = (agr.get("candidate_id") or agr.get("submission_id") or "").replace("CND-", "").replace("BEAR-", "").strip()
+    cand_email = (agr.get("candidate_email") or "").strip().lower()
+    sel = None
+    try:
+        q_or = []
+        if agr.get("candidate_id"):
+            q_or.extend([{"id": agr["candidate_id"]}, {"selection_id": agr["candidate_id"]}, {"candidate_id": agr["candidate_id"]}])
+        if agr.get("submission_id"):
+            q_or.extend([{"id": agr["submission_id"]}, {"submission_id": agr["submission_id"]}])
+        if raw_id:
+            q_or.extend([{"id": raw_id}, {"candidate_id": raw_id}, {"submission_id": raw_id}])
+        if cand_email:
+            q_or.append({"candidate_email": cand_email})
+        
+        if q_or:
+            sel = db["candidate_selections"].find_one({"$or": q_or})
+            if not sel:
+                sel = db["candidate_submissions"].find_one({
+                    "$or": q_or,
+                    "status": {"$in": ["Accepted", "Selected", "Hired", "Offer Extended"]}
+                })
+    except Exception as e:
+        logger.warning(f"Error querying candidate selection in _sync_agreement_with_selection: {e}")
+
+    if sel:
+        true_title = sel.get("requisition_title")
+        true_company = sel.get("company_name")
+        true_name = sel.get("candidate_name")
+        true_email = sel.get("candidate_email")
+        dirty = False
+        if true_title and agr.get("job_title") != true_title:
+            agr["job_title"] = true_title
+            dirty = True
+        if true_company and agr.get("company_name") != true_company:
+            agr["company_name"] = true_company
+            dirty = True
+        if true_name and (not agr.get("candidate_name") or agr.get("candidate_name") == "Candidate Name"):
+            agr["candidate_name"] = true_name
+            dirty = True
+        if true_email and not agr.get("candidate_email"):
+            agr["candidate_email"] = true_email
+            dirty = True
+
+        if dirty and agr.get("_id"):
+            try:
+                oid = ObjectId(agr["_id"]) if len(str(agr["_id"])) == 24 else agr["_id"]
+                db["offer_letters"].update_one(
+                    {"_id": oid},
+                    {"$set": {
+                        "job_title": agr["job_title"],
+                        "company_name": agr["company_name"],
+                        "candidate_name": agr.get("candidate_name"),
+                        "candidate_email": agr.get("candidate_email"),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to persist synced agreement in MongoDB: {e}")
+    return agr
 
 
 @router.get("/agreements")
@@ -748,7 +814,7 @@ async def get_candidate_agreements_endpoint(
             d["_id"] = str(d.get("_id"))
             if not d.get("agreement_id"):
                 d["agreement_id"] = str(d.get("_id"))
-            valid_docs.append(d)
+            valid_docs.append(_sync_agreement_with_selection(d))
 
     return {"status": "success", "agreements": valid_docs}
 

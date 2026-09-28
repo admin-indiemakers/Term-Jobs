@@ -1571,7 +1571,7 @@ async def register_public_candidate(
     github_url: str = Form(""),
     skills: str = Form(""),
     cover_note: str = Form(""),
-    resume: UploadFile = File(...),
+    resume: UploadFile | None = File(None),
 ) -> dict:
     """Allow any prospective candidate to register their profile and resume to join the talent pool."""
     import tempfile
@@ -1580,28 +1580,52 @@ async def register_public_candidate(
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.shared.db import db
 
-    content = await resume.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="Uploaded resume file is empty.")
+    content = None
+    if resume and hasattr(resume, "read"):
+        content = await resume.read()
 
-    filename = resume.filename or "resume.pdf"
+    filename = (resume.filename if resume else None) or "resume.pdf"
     file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
-    pdf_base64 = base64.b64encode(content).decode("utf-8")
-
+    pdf_base64 = ""
     extracted_text = ""
-    with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
 
-    try:
-        extracted_text = _extract_text_new(tmp_path, file_type)
-    except Exception as ex:
-        print(f"[PORTAL REGISTER RESUME EXTRACT ERROR] {ex}")
-    finally:
+    if content:
+        pdf_base64 = base64.b64encode(content).decode("utf-8")
+        with tempfile.NamedTemporaryFile(suffix=f".{file_type}", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
         try:
-            os.remove(tmp_path)
-        except Exception:
-            pass
+            extracted_text = _extract_text_new(tmp_path, file_type)
+        except Exception as ex:
+            print(f"[PORTAL REGISTER RESUME EXTRACT ERROR] {ex}")
+        finally:
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
+    else:
+        # Check if existing candidate profile has a resume on file
+        existing_cand = db["candidates"].find_one({
+            "$or": [
+                {"candidate_email": email.strip().lower()},
+                {"email": email.strip().lower()},
+            ]
+        })
+        if not existing_cand or not existing_cand.get("resume_pdf"):
+            existing_cand = db["candidate_submissions"].find_one({
+                "$or": [
+                    {"candidate_email": email.strip().lower()},
+                    {"email": email.strip().lower()},
+                ],
+                "resume_pdf": {"$exists": True, "$ne": ""}
+            })
+        if existing_cand and existing_cand.get("resume_pdf"):
+            pdf_base64 = existing_cand.get("resume_pdf")
+            filename = existing_cand.get("filename") or "resume.pdf"
+            extracted_text = existing_cand.get("extracted_text") or existing_cand.get("resume_text") or ""
+        else:
+            raise HTTPException(status_code=400, detail="Please upload your resume file (PDF or DOCX).")
 
     profile = {}
     if extracted_text:
@@ -3041,14 +3065,40 @@ def get_candidate_offer_letter_endpoint(
     
     raw_id = candidate_id.replace("CND-", "").strip()
 
-    # 1. Lookup candidate details from DB first so we have the real name & email
     cand_name = "Candidate Name"
     cand_email = ""
-    req_title = "DevSecOps Engineer"
+    req_title = ""
     req_id = ""
-    company_name = getattr(current_user, "tenant_name", None) or "TCS"
+    company_name = ""
+
+    # 1. Query candidate_selections collection FIRST (official hiring manager selections)
+    try:
+        sel = db["candidate_selections"].find_one({
+            "$or": [
+                {"id": candidate_id},
+                {"selection_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"id": raw_id},
+                {"candidate_id": raw_id},
+                {"submission_id": raw_id},
+            ]
+        })
+        if sel:
+            if sel.get("candidate_name"):
+                cand_name = sel.get("candidate_name")
+            if sel.get("candidate_email"):
+                cand_email = sel.get("candidate_email")
+            if sel.get("requisition_title"):
+                req_title = sel.get("requisition_title")
+            if sel.get("company_name"):
+                company_name = sel.get("company_name")
+            if sel.get("requisition_id"):
+                req_id = sel.get("requisition_id")
+    except Exception as e:
+        logger.warning(f"Error checking candidate_selections for offer letter: {e}")
     
-    # 1a. Query SQLite CandidateSubmission
+    # 2. Query SQLite CandidateSubmission
     try:
         with get_session() as session:
             sub = session.get(CandidateSubmission, candidate_id)
@@ -3059,16 +3109,16 @@ def get_candidate_offer_letter_endpoint(
                     (CandidateSubmission.id.like(f"%{raw_id}%"))
                 ).first()
             if sub:
-                if sub.candidate_name:
+                if sub.candidate_name and (cand_name == "Candidate Name" or not cand_name):
                     cand_name = sub.candidate_name
-                if sub.candidate_email:
+                if sub.candidate_email and not cand_email:
                     cand_email = sub.candidate_email
-                if sub.requisition_id:
+                if sub.requisition_id and not req_id:
                     req_id = sub.requisition_id
     except Exception as e:
         logger.warning(f"Error checking SQLite CandidateSubmission for offer letter: {e}")
 
-    # 1b. Query MongoDB candidate_submissions
+    # 3. Query MongoDB candidate_submissions and candidates
     try:
         cand_doc = db["candidate_submissions"].find_one({
             "$or": [
@@ -3095,48 +3145,100 @@ def get_candidate_offer_letter_endpoint(
                 cand_email = cand_doc.get("candidate_email") or cand_doc.get("email") or ""
             if not req_id:
                 req_id = cand_doc.get("requisition_id") or ""
-            if cand_doc.get("requisition_title"):
+            if cand_doc.get("requisition_title") and not req_title:
                 req_title = cand_doc.get("requisition_title")
+            if cand_doc.get("company_name") and not company_name:
+                company_name = cand_doc.get("company_name")
     except Exception as e:
         logger.warning(f"Error checking Mongo for candidate offer letter: {e}")
 
-    # 1c. Lookup requisition title & company name
+    # 4. Lookup requisition title & company name from requisition record
     if req_id:
         try:
             from modules.requisition.domain.models import Requisition
             with get_session() as session:
                 req_obj = session.get(Requisition, req_id)
                 if req_obj:
-                    req_title = req_obj.title or req_title
+                    if not req_title or req_title == "DevSecOps Engineer":
+                        req_title = req_obj.title or req_title
                     comp_struct = req_obj.structured_role or {}
-                    if comp_struct.get("company_name"):
-                        company_name = comp_struct["company_name"]
+                    if not company_name or company_name == "TCS":
+                        company_name = comp_struct.get("company_name") or req_obj.company_name or company_name
         except Exception as e:
             logger.warning(f"Error checking Requisition for offer letter: {e}")
 
-    # 2. Check existing offer letter in MongoDB
+    # Fallbacks if still unresolved
+    if not req_title:
+        req_title = "Senior Software Engineer"
+    if not company_name:
+        company_name = getattr(current_user, "tenant_name", None) or "Enterprise Partner"
+
+    # 5. Check existing offer letter in MongoDB
     try:
+        from bson import ObjectId
         existing = db["offer_letters"].find_one({
             "$or": [
                 {"candidate_id": candidate_id},
                 {"submission_id": candidate_id},
                 {"candidate_id": raw_id},
                 {"submission_id": raw_id},
+                {"candidate_email": cand_email.lower()} if cand_email else {"candidate_id": candidate_id},
             ]
         })
         if existing:
-            existing["_id"] = str(existing.get("_id"))
-            # Upgrade placeholder candidate name or empty email if real data is available
-            if (not existing.get("candidate_name") or existing.get("candidate_name") == "Candidate Name") and cand_name != "Candidate Name":
+            mongo_id = existing.get("_id")
+            existing["_id"] = str(mongo_id)
+            dirty = False
+            # Upgrade placeholder candidate name or empty email
+            if cand_name and cand_name != "Candidate Name" and (not existing.get("candidate_name") or existing.get("candidate_name") == "Candidate Name"):
                 existing["candidate_name"] = cand_name
-            if not existing.get("candidate_email") and cand_email:
+                dirty = True
+            if cand_email and not existing.get("candidate_email"):
                 existing["candidate_email"] = cand_email
+                dirty = True
+            # Correct mismatched or defaulted job_title (e.g. was DevSecOps Engineer when candidate was selected for Senior Backend)
+            if req_title and req_title != existing.get("job_title"):
+                # If existing is DevSecOps Engineer or generic fallback, replace with true selected role
+                if existing.get("job_title") in ["DevSecOps Engineer", "Position", "Software Professional", "", None] or req_title:
+                    existing["job_title"] = req_title
+                    dirty = True
+            # Correct mismatched or defaulted company name (e.g. was TCS when candidate was selected for Private A)
+            if company_name and company_name != existing.get("company_name"):
+                if existing.get("company_name") in ["TCS", "Enterprise Partner", "", None] or company_name:
+                    existing["company_name"] = company_name
+                    dirty = True
+            if dirty and mongo_id:
+                try:
+                    db["offer_letters"].update_one(
+                        {"_id": mongo_id},
+                        {"$set": {
+                            "candidate_name": existing.get("candidate_name"),
+                            "candidate_email": existing.get("candidate_email"),
+                            "job_title": existing.get("job_title"),
+                            "company_name": existing.get("company_name"),
+                            "updated_at": now.isoformat(),
+                        }}
+                    )
+                except Exception as update_err:
+                    logger.warning(f"Error auto-syncing offer letter fields: {update_err}")
             return {"status": "success", "offer": existing}
     except Exception as e:
         logger.warning(f"Error checking existing offer letter: {e}")
 
     default_joining = (now + timedelta(days=14)).strftime("%d %B %Y")
     today_str = now.strftime("%d %B %Y")
+
+    # Determine department based on job title
+    dept = "Platform & Software Engineering"
+    title_lower = (req_title or "").lower()
+    if any(k in title_lower for k in ["qa", "test", "automation", "quality"]):
+        dept = "Quality Assurance & Testing"
+    elif any(k in title_lower for k in ["backend", "python", "fastapi", "django", "node", "golang", "java", "sql"]):
+        dept = "Backend & Systems Engineering"
+    elif any(k in title_lower for k in ["frontend", "react", "vue", "web", "ui"]):
+        dept = "Frontend & Product Engineering"
+    elif any(k in title_lower for k in ["devops", "cloud", "aws", "sre", "infrastructure", "devsecops"]):
+        dept = "Cloud & Platform Engineering"
 
     # Standard Annexure A compensation breakdown: Total CTC 18,00,000 INR
     annual_ctc = 1800000
@@ -3170,7 +3272,7 @@ def get_candidate_offer_letter_endpoint(
         "non_compete_period": "12 months",
         "annexure": {
             "grade": "Band L4 / Senior Specialist",
-            "department": "Platform & Software Engineering",
+            "department": dept,
             "reporting_to": "Engineering Director / Hiring Lead",
             "work_location": "Bengaluru / Hybrid",
             "contract_type": "Full Time",

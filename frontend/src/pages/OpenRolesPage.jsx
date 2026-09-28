@@ -879,9 +879,16 @@ export default function OpenRolesPage({ enabled = true }) {
         body: formData,
       });
 
-      const result = await res.json();
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (_) {
+        result = null;
+      }
+
       if (!res.ok) {
-        throw new Error(result.detail || 'Failed to submit application. Please try again.');
+        const errorText = formatApiErrorMessage(result, `Failed to submit application (${res.status}).`);
+        throw new Error(errorText);
       }
 
       setSubmitSuccess(result);
@@ -904,10 +911,47 @@ export default function OpenRolesPage({ enabled = true }) {
       }
     } catch (err) {
       console.error('Error applying to requisition:', err);
-      setSubmitError(err.message || 'An unexpected error occurred while submitting your application.');
+      const displayMsg = formatApiErrorMessage(err?.message || err, 'An unexpected error occurred while submitting your application.');
+      setSubmitError(displayMsg);
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Helper to extract clean human-readable error messages from API responses (preventing [object Object])
+  const formatApiErrorMessage = (errOrResult, fallback = 'Operation failed. Please try again.') => {
+    if (!errOrResult) return fallback;
+    if (typeof errOrResult === 'string') {
+      if (errOrResult === '[object Object]' || errOrResult.trim() === '') return fallback;
+      return errOrResult;
+    }
+    const detail = errOrResult.detail !== undefined ? errOrResult.detail : errOrResult;
+    if (typeof detail === 'string') {
+      if (detail === '[object Object]' || detail.trim() === '') return fallback;
+      return detail;
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      return detail
+        .map((d) => {
+          if (typeof d === 'string') return d;
+          if (d && typeof d === 'object') {
+            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : '';
+            const msg = d.msg || d.message || JSON.stringify(d);
+            return field && field !== 'body' ? `${field}: ${msg}` : msg;
+          }
+          return String(d);
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+    if (detail && typeof detail === 'object') {
+      return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+    }
+    if (typeof errOrResult.message === 'string' && errOrResult.message !== '[object Object]') {
+      return errOrResult.message;
+    }
+    if (typeof errOrResult.error === 'string') return errOrResult.error;
+    return fallback;
   };
 
   const handleSetupSubmit = async (e) => {
@@ -947,7 +991,7 @@ export default function OpenRolesPage({ enabled = true }) {
         setSetupSuccess(false);
       }, 1200);
     } catch (err) {
-      setSetupError(err.message || 'Could not update profile.');
+      setSetupError(formatApiErrorMessage(err?.message || err, 'Could not update profile.'));
     } finally {
       setSetupSubmitting(false);
     }
@@ -980,16 +1024,24 @@ export default function OpenRolesPage({ enabled = true }) {
         body: formData,
       });
 
-      const result = await res.json();
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (_) {
+        result = null;
+      }
+
       if (!res.ok) {
-        throw new Error(result.detail || 'Could not join talent pool.');
+        const errorText = formatApiErrorMessage(result, `Could not join talent pool (${res.status}).`);
+        throw new Error(errorText);
       }
       setPoolSuccess(result);
       if (refreshProfile) {
         refreshProfile();
       }
     } catch (err) {
-      setPoolError(err.message || 'Failed to submit profile.');
+      const displayMsg = formatApiErrorMessage(err?.message || err, 'Failed to submit profile. Please ensure all required fields are filled out.');
+      setPoolError(displayMsg);
     } finally {
       setPoolSubmitting(false);
     }
@@ -2504,7 +2556,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 {poolError && (
                   <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
                     <AlertCircle size={15} className="shrink-0" />
-                    <span>{poolError}</span>
+                    <span>{typeof poolError === 'string' ? poolError : formatApiErrorMessage(poolError)}</span>
                   </div>
                 )}
 

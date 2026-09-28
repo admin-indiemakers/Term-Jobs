@@ -347,30 +347,74 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
     }
   };
 
+  const formatApiErrorMessage = (errOrResult, fallback = 'Operation failed. Please try again.') => {
+    if (!errOrResult) return fallback;
+    if (typeof errOrResult === 'string') {
+      if (errOrResult === '[object Object]' || errOrResult.trim() === '') return fallback;
+      return errOrResult;
+    }
+    const detail = errOrResult.detail !== undefined ? errOrResult.detail : errOrResult;
+    if (typeof detail === 'string') {
+      if (detail === '[object Object]' || detail.trim() === '') return fallback;
+      return detail;
+    }
+    if (Array.isArray(detail) && detail.length > 0) {
+      return detail
+        .map((d) => {
+          if (typeof d === 'string') return d;
+          if (d && typeof d === 'object') {
+            const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : '';
+            const msg = d.msg || d.message || JSON.stringify(d);
+            return field && field !== 'body' ? `${field}: ${msg}` : msg;
+          }
+          return String(d);
+        })
+        .filter(Boolean)
+        .join(', ');
+    }
+    if (detail && typeof detail === 'object') {
+      return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+    }
+    if (typeof errOrResult.message === 'string' && errOrResult.message !== '[object Object]') {
+      return errOrResult.message;
+    }
+    if (typeof errOrResult.error === 'string') return errOrResult.error;
+    return fallback;
+  };
+
   const handleApplySubmit = async (e) => {
     e.preventDefault();
-    if (!selectedJob) return;
+    if (isSubmitting) return;
+
+    if (!selectedJob) {
+      setSubmitError('No job selected.');
+      return;
+    }
 
     if (!isProfileComplete) {
       setShowSetupModal(true);
       return;
     }
 
-    const applicantName = applyForm.name.trim() || candidateUser?.candidate_name || '';
-    const applicantEmail = applyForm.email.trim() || candidateUser?.candidate_email || '';
-    const applicantPhone = applyForm.phone.trim() || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '';
+    const applicantName = (applyForm.name || candidateUser?.candidate_name || '').trim();
+    const applicantEmail = (applyForm.email || candidateUser?.candidate_email || candidateUser?.email || '').trim();
+    const applicantPhone = (applyForm.phone || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '').trim();
 
     if (!applicantName) {
       setSubmitError('Please enter your full name.');
       return;
     }
     if (!applicantEmail) {
-      setSubmitError('Please enter your email address.');
+      setSubmitError('Please enter a valid email address.');
+      return;
+    }
+    if (!applicantPhone) {
+      setSubmitError('Please enter your contact phone number.');
       return;
     }
 
-    if (useCustomResume && !resumeFile) {
-      setSubmitError('Please choose a resume file to upload, or uncheck to use your saved profile resume.');
+    if (!hasResume && !resumeFile) {
+      setSubmitError('Please upload your resume (PDF or DOCX).');
       return;
     }
 
@@ -395,9 +439,15 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
         body: formData,
       });
 
-      const result = await res.json();
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (_) {
+        result = null;
+      }
+
       if (!res.ok) {
-        throw new Error(result.detail || 'Failed to submit application. Please try again.');
+        throw new Error(formatApiErrorMessage(result, `Failed to submit application (${res.status}).`));
       }
 
       setSubmitSuccess(result);
@@ -406,7 +456,7 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       }
     } catch (err) {
       console.error('Error applying to requisition:', err);
-      setSubmitError(err.message || 'An unexpected error occurred while submitting your application.');
+      setSubmitError(formatApiErrorMessage(err?.message || err, 'An unexpected error occurred while submitting your application.'));
     } finally {
       setSubmitting(false);
     }
@@ -432,17 +482,24 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       formData.append('cover_note', poolForm.cover_note.trim());
       formData.append('resume', poolResume);
 
-      const res = await fetch(`${API_BASE_URL}/api/public/candidate/register`, {
+      const res = await fetch(`${API_BASE_URL}/api/public/talent-pool/join`, {
         method: 'POST',
         body: formData,
       });
-      const result = await res.json();
+
+      let result = null;
+      try {
+        result = await res.json();
+      } catch (_) {
+        result = null;
+      }
+
       if (!res.ok) {
-        throw new Error(result.detail || 'Failed to submit profile.');
+        throw new Error(formatApiErrorMessage(result, `Failed to submit profile (${res.status}).`));
       }
       setPoolSuccess(result);
     } catch (err) {
-      setPoolError(err.message || 'Error joining talent pool');
+      setPoolError(formatApiErrorMessage(err?.message || err, 'Failed to join talent network. Please check your form details.'));
     } finally {
       setPoolSubmitting(false);
     }

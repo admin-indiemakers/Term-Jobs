@@ -127,13 +127,23 @@ export default function CandidateOfferLetterSection({
   const [isEditing, setIsEditing] = useState(true);
   const [isSectionOpen, setIsSectionOpen] = useState(true);
 
+  // Helper to determine department from role
+  const getDept = (title) => {
+    const t = (title || '').toLowerCase();
+    if (t.includes('qa') || t.includes('test') || t.includes('automation') || t.includes('quality')) return 'Quality Assurance & Testing';
+    if (t.includes('backend') || t.includes('python') || t.includes('fastapi') || t.includes('django') || t.includes('node') || t.includes('golang') || t.includes('java') || t.includes('sql')) return 'Backend & Systems Engineering';
+    if (t.includes('frontend') || t.includes('react') || t.includes('vue') || t.includes('ui') || t.includes('web')) return 'Frontend & Product Engineering';
+    if (t.includes('devops') || t.includes('cloud') || t.includes('aws') || t.includes('sre') || t.includes('infrastructure') || t.includes('devsecops')) return 'Cloud & Platform Engineering';
+    return 'Engineering & Technology';
+  };
+
   // Offer Letter Data model matching all 5 pages of the PDF
   const [offer, setOffer] = useState({
     candidate_id: candidateId,
-    candidate_name: candidateName || 'Arjun M',
+    candidate_name: candidateName || 'Candidate Name',
     candidate_email: candidateEmail || '',
-    job_title: jobTitle || 'DevSecOps Engineer',
-    company_name: companyName || user?.tenant_name || 'TCS',
+    job_title: jobTitle || 'Position',
+    company_name: companyName || user?.tenant_name || 'Enterprise Partner',
     company_address: 'Corporate Technology Park, Outer Ring Road, Bengaluru, Karnataka 560103',
     offer_date: new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
     joining_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toLocaleDateString('en-GB', {
@@ -156,7 +166,7 @@ export default function CandidateOfferLetterSection({
     non_compete_period: '12 months',
     annexure: {
       grade: 'Band L4 / Senior Specialist',
-      department: 'Cloud & Platform Engineering',
+      department: getDept(jobTitle),
       reporting_to: 'Engineering Director / Hiring Lead',
       work_location: location || 'Bengaluru / Hybrid',
       contract_type: 'Full Time',
@@ -191,21 +201,34 @@ export default function CandidateOfferLetterSection({
       const res = await request(`/api/candidates/${encodeURIComponent(candidateId)}/offer-letter`, { token });
       if (res && res.offer) {
         const fetched = res.offer;
-        const resolvedName = (fetched.candidate_name && fetched.candidate_name !== 'Candidate Name')
-          ? fetched.candidate_name
-          : (candidateName || 'Arjun M');
-        const resolvedEmail = fetched.candidate_email || candidateEmail || '';
+        
+        // Prioritize actual selection props over old stale defaults in fetched document
+        const resolvedJobTitle = (jobTitle && jobTitle !== 'DevSecOps Engineer')
+          ? jobTitle
+          : (fetched.job_title && fetched.job_title !== 'DevSecOps Engineer' ? fetched.job_title : (jobTitle || fetched.job_title || 'Position'));
+          
+        const resolvedCompany = (companyName && companyName !== 'TCS')
+          ? companyName
+          : (fetched.company_name && fetched.company_name !== 'TCS' ? fetched.company_name : (companyName || fetched.company_name || 'Enterprise Partner'));
+
+        const resolvedName = (candidateName && candidateName !== 'Candidate Name' && candidateName !== 'Arjun M')
+          ? candidateName
+          : (fetched.candidate_name && fetched.candidate_name !== 'Candidate Name' && fetched.candidate_name !== 'Arjun M' ? fetched.candidate_name : (candidateName || 'Candidate Name'));
+
+        const resolvedEmail = candidateEmail || fetched.candidate_email || '';
 
         setOffer((prev) => ({
           ...prev,
           ...fetched,
           candidate_name: resolvedName,
           candidate_email: resolvedEmail,
-          job_title: fetched.job_title || jobTitle || prev.job_title,
-          company_name: fetched.company_name || companyName || prev.company_name,
+          job_title: resolvedJobTitle,
+          company_name: resolvedCompany,
           annexure: {
             ...prev.annexure,
             ...(fetched.annexure || {}),
+            department: getDept(resolvedJobTitle),
+            work_location: location || fetched.annexure?.work_location || prev.annexure?.work_location || 'Bengaluru / Hybrid',
           },
           leave_policy: {
             ...prev.leave_policy,
@@ -224,24 +247,26 @@ export default function CandidateOfferLetterSection({
     loadOfferLetter();
   }, [candidateId, token]);
 
-  // Synchronize when parent finishes loading candidate details asynchronously
+  // Synchronize immediately when parent passes or updates candidate details
   useEffect(() => {
     setOffer((prev) => {
       let changed = false;
       const next = { ...prev };
-      if (candidateName && (!prev.candidate_name || prev.candidate_name === 'Candidate Name')) {
+      if (candidateName && candidateName !== 'Candidate Name' && next.candidate_name !== candidateName) {
         next.candidate_name = candidateName;
         changed = true;
       }
-      if (candidateEmail && !prev.candidate_email) {
+      if (candidateEmail && next.candidate_email !== candidateEmail) {
         next.candidate_email = candidateEmail;
         changed = true;
       }
-      if (jobTitle && (!prev.job_title || prev.job_title === 'DevSecOps Engineer')) {
+      if (jobTitle && jobTitle !== 'Position' && next.job_title !== jobTitle) {
         next.job_title = jobTitle;
+        if (!next.annexure) next.annexure = {};
+        next.annexure = { ...next.annexure, department: getDept(jobTitle) };
         changed = true;
       }
-      if (companyName && (!prev.company_name || prev.company_name === 'TCS')) {
+      if (companyName && next.company_name !== companyName) {
         next.company_name = companyName;
         changed = true;
       }
