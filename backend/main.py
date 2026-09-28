@@ -643,6 +643,7 @@ def _auto_check_shortlists_48h() -> None:
 
 # --- company profile endpoints ----------------------------------------------
 @app.post("/company-profiles", status_code=201)
+@app.post("/api/company-profiles", status_code=201)
 def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
 
@@ -655,6 +656,7 @@ def create_company_profile(body: CompanyProfileIn, current_user: User = Depends(
 
 
 @app.get("/company-profiles")
+@app.get("/api/company-profiles")
 def list_company_profiles(current_user: User = Depends(get_current_user)) -> list[dict]:
     with get_session() as session:
         query = session.query(models.CompanyProfile).order_by(models.CompanyProfile.created_at.desc())
@@ -918,6 +920,7 @@ def delete_template(template_id: str, current_user: User = Depends(get_current_u
 
 # --- requisition lifecycle --------------------------------------------------
 @app.post("/requisitions", status_code=201)
+@app.post("/api/requisitions", status_code=201)
 def create_requisition(
     body: RequisitionIn,
     background_tasks: BackgroundTasks = BackgroundTasks(),
@@ -3330,6 +3333,7 @@ def send_candidate_offer_letter_endpoint(
 
 
 @app.post("/requisitions/{requisition_id}/close")
+@app.post("/api/requisitions/{requisition_id}/close")
 def close_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
@@ -3339,6 +3343,7 @@ def close_requisition(requisition_id: str, current_user: User = Depends(get_curr
 
 
 @app.post("/requisitions/{requisition_id}/reset")
+@app.post("/api/requisitions/{requisition_id}/reset")
 def reset_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)
@@ -3348,6 +3353,7 @@ def reset_requisition(requisition_id: str, current_user: User = Depends(get_curr
 
 
 @app.delete("/requisitions/{requisition_id}", status_code=204)
+@app.delete("/api/requisitions/{requisition_id}", status_code=204)
 def delete_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> None:
     _require_writable(current_user)
     _require_tenant(_get_requisition(requisition_id), current_user)

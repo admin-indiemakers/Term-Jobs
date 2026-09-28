@@ -45,7 +45,26 @@ export class ApiError extends Error {
 
 export async function request(path, { method = 'GET', body, data: requestData, token, timeout = 180000 } = {}) {
   const payloadBody = body !== undefined ? body : requestData;
-  const fullUrl = `${API_BASE_URL}${path}`;
+
+  // Ensure relative endpoints carry /api prefix so Vercel proxies them to the backend rather than serving index.html
+  let normalizedPath = String(path || '');
+  if (
+    !normalizedPath.startsWith('http://') &&
+    !normalizedPath.startsWith('https://')
+  ) {
+    if (!normalizedPath.startsWith('/')) {
+      normalizedPath = `/${normalizedPath}`;
+    }
+    if (
+      !normalizedPath.startsWith('/api/') &&
+      normalizedPath !== '/api' &&
+      !normalizedPath.startsWith('/health')
+    ) {
+      normalizedPath = `/api${normalizedPath}`;
+    }
+  }
+
+  const fullUrl = `${API_BASE_URL}${normalizedPath}`;
   const currentOrigin = typeof window !== 'undefined' ? window.location.origin : 'N/A';
 
   const isFormData = typeof FormData !== 'undefined' && payloadBody instanceof FormData;

@@ -2,7 +2,7 @@ import InterviewRequests from './pages/recruiter/InterviewRequests';
 import VendorAgreements from './pages/recruiter/VendorAgreements';
 import VendorBilling from './pages/recruiter/VendorBilling';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
 import { CandidateAuthProvider } from './context/CandidateAuthContext';
@@ -122,6 +122,22 @@ function HorizontalTransitionLayout() {
   const rolesScrollRef = useRef(null);
   const authScrollRef = useRef(null);
 
+  // Defer mounting until the user navigates to the respective subpage
+  const [hasVisitedRoles, setHasVisitedRoles] = useState(isRoles);
+  const [hasVisitedLogin, setHasVisitedLogin] = useState(isLogin);
+
+  useEffect(() => {
+    if (isRoles && !hasVisitedRoles) {
+      setHasVisitedRoles(true);
+    }
+  }, [isRoles, hasVisitedRoles]);
+
+  useEffect(() => {
+    if (isLogin && !hasVisitedLogin) {
+      setHasVisitedLogin(true);
+    }
+  }, [isLogin, hasVisitedLogin]);
+
   // When returning to Landing page, reset subpage scrolls to top so they are clean on return
   useEffect(() => {
     if (isLanding) {
@@ -152,7 +168,7 @@ function HorizontalTransitionLayout() {
           ref={authScrollRef}
           className="absolute inset-0 -left-[100vw] w-screen h-dvh overflow-y-auto overflow-x-hidden"
         >
-          <AuthPage />
+          {hasVisitedLogin && <AuthPage />}
         </div>
 
         {/* Center Slot: Landing Page (at 0vw) */}
@@ -165,7 +181,7 @@ function HorizontalTransitionLayout() {
           ref={rolesScrollRef}
           className="absolute inset-0 left-[100vw] w-screen h-dvh overflow-y-auto overflow-x-hidden"
         >
-          <OpenRolesPage enabled={isRoles} />
+          {hasVisitedRoles && <OpenRolesPage enabled={isRoles} />}
         </div>
       </motion.div>
     </div>

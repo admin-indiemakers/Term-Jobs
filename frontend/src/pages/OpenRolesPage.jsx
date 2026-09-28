@@ -279,8 +279,9 @@ export default function OpenRolesPage({ enabled = true }) {
   const [regSkills, setRegSkills] = useState('');
   const [regResume, setRegResume] = useState(null);
 
-  // Load Google Identity Services SDK on mount
+  // Load Google Identity Services SDK only when auth modal is open
   useEffect(() => {
+    if (!showAuthModal) return;
     if (document.getElementById('google-jssdk')) return;
     const script = document.createElement('script');
     script.id = 'google-jssdk';
@@ -288,6 +289,35 @@ export default function OpenRolesPage({ enabled = true }) {
     script.async = true;
     script.defer = true;
     document.body.appendChild(script);
+  }, [showAuthModal]);
+
+  // Helper to ensure Google SDK is ready when user clicks Google Sign-In
+  const ensureGoogleSdk = useCallback(() => {
+    return new Promise((resolve) => {
+      if (window.google?.accounts?.oauth2) return resolve(true);
+      let script = document.getElementById('google-jssdk');
+      if (!script) {
+        script = document.createElement('script');
+        script.id = 'google-jssdk';
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        document.body.appendChild(script);
+      }
+      script.addEventListener('load', () => resolve(true), { once: true });
+      script.addEventListener('error', () => resolve(false), { once: true });
+      let tries = 0;
+      const interval = setInterval(() => {
+        tries++;
+        if (window.google?.accounts?.oauth2) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (tries > 40) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+    });
   }, []);
 
   // Listen for query params, hash, or candidate path opening candidate auth
@@ -309,7 +339,7 @@ export default function OpenRolesPage({ enabled = true }) {
   }, []);
 
   // Trigger Google OAuth popup
-  const handleGoogleSignIn = (onSuccess) => {
+  const handleGoogleSignIn = async (onSuccess) => {
     setAuthError(null);
 
     if (!GOOGLE_CLIENT_ID) {
@@ -318,8 +348,13 @@ export default function OpenRolesPage({ enabled = true }) {
     }
 
     if (!window.google?.accounts?.oauth2) {
-      setAuthError('Google Sign-In SDK is loading. Please try again in a few moments.');
-      return;
+      setAuthLoading(true);
+      const loaded = await ensureGoogleSdk();
+      setAuthLoading(false);
+      if (!loaded || !window.google?.accounts?.oauth2) {
+        setAuthError('Google Sign-In SDK is loading. Please try again in a few moments.');
+        return;
+      }
     }
 
     try {
@@ -553,8 +588,14 @@ export default function OpenRolesPage({ enabled = true }) {
     }
   }, [candidateUser, selectedJob]);
 
-  // Fetch published requisitions
+  const hasFetchedJobsRef = useRef(false);
+
+  // Fetch published requisitions only when Open Roles is active/enabled
   useEffect(() => {
+    if (!enabled) return;
+    if (hasFetchedJobsRef.current) return;
+    hasFetchedJobsRef.current = true;
+
     let isMounted = true;
     async function fetchJobs() {
       setLoading(true);
@@ -581,7 +622,7 @@ export default function OpenRolesPage({ enabled = true }) {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [enabled]);
 
   // Filtered job list
   const filteredJobs = useMemo(() => {
