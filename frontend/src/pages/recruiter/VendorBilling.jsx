@@ -809,6 +809,19 @@ export default function VendorBilling({ isEmbedded = false }) {
                   <Clock className="w-3.5 h-3.5 text-blue-400" />
                   <span>Timesheet & Calculations</span>
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawerTab('transaction')}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                    activeDrawerTab === 'transaction'
+                      ? 'bg-indigo-700 text-white shadow-xs'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Receipt className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>Transaction Details</span>
+                </button>
               </div>
             </div>
 
@@ -1276,6 +1289,312 @@ export default function VendorBilling({ isEmbedded = false }) {
                         </div>
                         <div className="text-gray-600 mt-1 font-medium">For {docForm.company_name || 'Client Company'}</div>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              ) : activeDrawerTab === 'transaction' ? (
+                /* TAB 3: TRANSACTION DETAILS */
+                <div className="space-y-5">
+                  {/* Transaction Header */}
+                  <div className="bg-gradient-to-br from-indigo-950 to-indigo-900 text-white p-5 rounded-2xl border border-indigo-700/40 shadow-md space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Receipt className="w-4 h-4 text-indigo-300" />
+                        <span className="text-xs font-bold text-indigo-300 uppercase tracking-wider">Transaction Record</span>
+                      </div>
+                      <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-500/40 border border-indigo-400/40 text-indigo-200">
+                        {breakdownData?.period_label || selectedMonth}
+                      </span>
+                    </div>
+
+                    {/* Primary IDs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="bg-white/8 rounded-xl p-3 border border-white/10">
+                        <div className="text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">Work Order ID</div>
+                        <div className="font-mono text-sm font-extrabold text-white break-all">
+                          {breakdownData?.candidate?.workorder_id || selectedCandidateId}
+                        </div>
+                      </div>
+                      <div className="bg-white/8 rounded-xl p-3 border border-white/10">
+                        <div className="text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">Work Order Number</div>
+                        <div className="font-mono text-sm font-extrabold text-white">
+                          {docForm.ws_number || breakdownData?.candidate?.work_order_number || '—'}
+                        </div>
+                      </div>
+                      <div className="bg-white/8 rounded-xl p-3 border border-white/10">
+                        <div className="text-[10px] text-indigo-300 uppercase tracking-wider font-bold mb-1">MSA Reference</div>
+                        <div className="font-mono text-sm font-extrabold text-white">
+                          {breakdownData?.candidate?.msa_ref || docForm.msa_ref || '—'}
+                        </div>
+                      </div>
+                      {/* TRANSACTION REF — prominent */}
+                      <div className={`rounded-xl p-3 border ${breakdownData?.approval_trail?.transaction_ref ? 'bg-emerald-500/20 border-emerald-400/40' : 'bg-white/8 border-white/10'}`}>
+                        <div className="text-[10px] text-emerald-300 uppercase tracking-wider font-bold mb-1">Transaction ID</div>
+                        <div className="font-mono text-sm font-extrabold text-white break-all">
+                          {breakdownData?.approval_trail?.transaction_ref || '— Pending'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ── APPROVAL TRAIL ─────────────────────────────── */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <ShieldCheck className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">Approval Trail</span>
+                      <span className="ml-auto text-[10px] font-bold text-gray-400">4-Stage Governance</span>
+                    </div>
+
+                    <div className="space-y-3">
+                      {/* Stage 1: SOW / Recruitment */}
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-black mt-0.5 ${breakdownData?.approval_trail?.procurement_authorized ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-400'}`}>
+                          {breakdownData?.approval_trail?.procurement_authorized ? '✓' : '1'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-gray-800">SOW Issued</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${breakdownData?.approval_trail?.procurement_authorized ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                              {breakdownData?.approval_trail?.procurement_authorized ? 'Verified & Authorized' : 'Pending'}
+                            </span>
+                          </div>
+                          {breakdownData?.approval_trail?.procurement_approved_by && (
+                            <p className="text-[11px] text-gray-500 mt-0.5">
+                              By: <span className="font-semibold text-gray-700">{breakdownData.approval_trail.procurement_approved_by}</span>
+                              {breakdownData.approval_trail.procurement_approved_at && (
+                                <span className="ml-1 text-gray-400">· {breakdownData.approval_trail.procurement_approved_at.slice(0, 10)}</span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stage 2: Director */}
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-100">
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-black mt-0.5 ${breakdownData?.approval_trail?.director_approved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-600'}`}>
+                          {breakdownData?.approval_trail?.director_approved ? '✓' : '2'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-gray-800">Director Approval</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${breakdownData?.approval_trail?.director_approved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                              {breakdownData?.approval_trail?.director_approved ? 'Executive Sign-off ✓' : 'Pending'}
+                            </span>
+                          </div>
+                          {breakdownData?.approval_trail?.director_approved_by && (
+                            <p className="text-[11px] text-gray-500 mt-0.5">
+                              By: <span className="font-semibold text-gray-700">{breakdownData.approval_trail.director_approved_by}</span>
+                              {breakdownData.approval_trail.director_approved_at && (
+                                <span className="ml-1 text-gray-400">· {breakdownData.approval_trail.director_approved_at.slice(0, 10)}</span>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Stage 3: Finance / Payment */}
+                      <div className={`flex items-start gap-3 p-3 rounded-xl border ${breakdownData?.approval_trail?.payment_status === 'Paid' ? 'bg-emerald-50 border-emerald-200' : 'bg-gray-50 border-gray-100'}`}>
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-xs font-black mt-0.5 ${breakdownData?.approval_trail?.payment_status === 'Paid' ? 'bg-emerald-500 text-white' : 'bg-gray-200 text-gray-400'}`}>
+                          {breakdownData?.approval_trail?.payment_status === 'Paid' ? '✓' : '3'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-xs font-extrabold text-gray-800">Finance — Disbursement & Payment</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${breakdownData?.approval_trail?.payment_status === 'Paid' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-400'}`}>
+                              {breakdownData?.approval_trail?.payment_status || 'Pending'}
+                            </span>
+                          </div>
+                          {breakdownData?.approval_trail?.payment_processed_by && (
+                            <p className="text-[11px] text-gray-600 mt-0.5">
+                              Approved by: <span className="font-semibold text-gray-800">{breakdownData.approval_trail.payment_processed_by}</span>
+                              {breakdownData.approval_trail.payment_processed_at && (
+                                <span className="ml-1 text-gray-400">· {breakdownData.approval_trail.payment_processed_at.slice(0, 10)}</span>
+                              )}
+                            </p>
+                          )}
+                          {breakdownData?.approval_trail?.transaction_ref && (
+                            <div className="mt-1.5 flex items-center gap-1.5">
+                              <span className="text-[10px] text-gray-400 font-bold">TXN REF:</span>
+                              <span className="font-mono text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                {breakdownData.approval_trail.transaction_ref}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+
+                  {/* Financial Summary */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      <span className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">Financial Summary</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {[
+                        { label: 'Regular Subtotal', value: `₹${Number(breakdownData?.financials?.regular_subtotal || 0).toLocaleString()}`, color: 'text-gray-900' },
+                        { label: 'Overtime Subtotal', value: `₹${Number(breakdownData?.financials?.overtime_subtotal || 0).toLocaleString()}`, color: 'text-amber-700' },
+                        { label: 'Expenses', value: `₹${Number(breakdownData?.financials?.expenses_subtotal || 0).toLocaleString()}`, color: 'text-gray-700' },
+                        { label: 'Total Invoice', value: `₹${Number(breakdownData?.financials?.total_invoice_amount || 0).toLocaleString()}`, color: 'text-emerald-700' },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="text-[10px] text-gray-400 uppercase tracking-wider font-bold">{label}</div>
+                          <div className={`text-base font-extrabold mt-1 ${color}`}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Rate Card */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <TrendingUp className="w-4 h-4 text-indigo-600" />
+                      <span className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">Rate Card</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div className="bg-indigo-50 rounded-xl p-3 border border-indigo-100">
+                        <div className="text-[10px] text-indigo-500 font-bold uppercase">Hourly Rate</div>
+                        <div className="text-sm font-extrabold text-indigo-900 mt-1">
+                          {breakdownData?.rates?.curr_symbol || '₹'}{breakdownData?.rates?.hourly_rate || '—'}/hr
+                        </div>
+                      </div>
+                      <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                        <div className="text-[10px] text-amber-600 font-bold uppercase">OT Rate ({breakdownData?.rates?.multiplier || '1.5×'})</div>
+                        <div className="text-sm font-extrabold text-amber-900 mt-1">
+                          {breakdownData?.rates?.curr_symbol || '₹'}{breakdownData?.rates?.overtime_rate || '—'}/hr
+                        </div>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <div className="text-[10px] text-gray-400 font-bold uppercase">Currency</div>
+                        <div className="text-sm font-extrabold text-gray-900 mt-1">{breakdownData?.rates?.currency || 'INR'}</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <div className="text-[10px] text-gray-400 font-bold uppercase">Supplier Margin</div>
+                        <div className="text-sm font-extrabold text-gray-900 mt-1">{breakdownData?.candidate?.supplier_margin || docForm.supplier_margin || '—'}</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <div className="text-[10px] text-gray-400 font-bold uppercase">Payment Terms</div>
+                        <div className="text-sm font-extrabold text-gray-900 mt-1">{breakdownData?.candidate?.payment_terms || docForm.payment_terms || '—'}</div>
+                      </div>
+                      <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                        <div className="text-[10px] text-gray-400 font-bold uppercase">Regular Hours</div>
+                        <div className="text-sm font-extrabold text-gray-900 mt-1">{breakdownData?.summary?.regular_hours || 0}h</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Timesheet Transaction Log */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">Timesheet Transaction Log</span>
+                    </div>
+                    <div className="space-y-2">
+                      {(breakdownData?.weeks || []).map((week, i) => (
+                        <div
+                          key={week.id || i}
+                          className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl border text-xs ${
+                            week.status === 'APPROVED'
+                              ? 'bg-emerald-50 border-emerald-200'
+                              : week.status === 'PENDING'
+                              ? 'bg-amber-50 border-amber-200'
+                              : 'bg-gray-50 border-gray-100'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-700 w-14 shrink-0">{week.week_label}</span>
+                            <span className="text-gray-400">{week.week_period}</span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                            {week.id && (
+                              <span className="font-mono text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                                {week.id}
+                              </span>
+                            )}
+                            {week.timesheet_number && (
+                              <span className="font-mono text-[10px] text-gray-600 bg-white border border-gray-200 px-2 py-0.5 rounded-md">
+                                {week.timesheet_number}
+                              </span>
+                            )}
+                            <span className="font-bold text-gray-800">{week.hours}h</span>
+                            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                              week.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' :
+                              week.status === 'PENDING' ? 'bg-amber-100 text-amber-800' :
+                              'bg-gray-100 text-gray-500'
+                            }`}>
+                              {week.status}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                      {(!breakdownData?.weeks || breakdownData.weeks.length === 0) && (
+                        <div className="text-center py-6 text-gray-400 text-sm">No timesheet records found for this period</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Invoice / Payment Status */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <ShieldCheck className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">Invoice & Payment Status</span>
+                    </div>
+                    {breakdownData?.invoice ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Invoice #</div>
+                          <div className="font-mono text-sm font-extrabold text-gray-900 mt-1">{breakdownData.invoice.invoice_number || '—'}</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Invoice Date</div>
+                          <div className="text-sm font-extrabold text-gray-900 mt-1">{breakdownData.invoice.created_at?.slice(0, 10) || '—'}</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Status</div>
+                          <div className="text-sm font-extrabold text-emerald-700 mt-1">{breakdownData.invoice.status || '—'}</div>
+                        </div>
+                        <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Amount</div>
+                          <div className="text-sm font-extrabold text-gray-900 mt-1">₹{Number(breakdownData.invoice.amount || 0).toLocaleString()}</div>
+                        </div>
+                        {breakdownData.invoice.paid_at && (
+                          <div className="bg-emerald-50 rounded-xl p-3 border border-emerald-100">
+                            <div className="text-[10px] text-emerald-600 font-bold uppercase">Paid On</div>
+                            <div className="text-sm font-extrabold text-emerald-800 mt-1">{breakdownData.invoice.paid_at?.slice(0, 10)}</div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-8 text-gray-400 text-sm gap-2">
+                        <Receipt className="w-8 h-8 opacity-30" />
+                        <span>No invoice generated yet for this billing period.</span>
+                        <span className="text-xs text-gray-300">Invoice will be created once the Work Order is fully approved.</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Contract Meta */}
+                  <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                    <div className="flex items-center gap-2 border-b border-gray-100 pb-3">
+                      <Building2 className="w-4 h-4 text-gray-600" />
+                      <span className="text-xs font-extrabold text-gray-900 uppercase tracking-wider">Contract Details</span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {[
+                        { label: 'Candidate', value: breakdownData?.candidate?.name || '—' },
+                        { label: 'Email', value: breakdownData?.candidate?.email || '—' },
+                        { label: 'Company / Client', value: breakdownData?.candidate?.company_name || '—' },
+                        { label: 'Vendor', value: breakdownData?.candidate?.vendor_name || 'Direct Applicant' },
+                        { label: 'Start Date', value: breakdownData?.candidate?.start_date || '—' },
+                        { label: 'End Date', value: breakdownData?.candidate?.end_date || '—' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">{label}</div>
+                          <div className="text-xs font-extrabold text-gray-900 mt-1 break-all">{value}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
