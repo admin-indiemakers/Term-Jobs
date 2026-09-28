@@ -31,18 +31,18 @@ import {
 
 const STATE_STEPS = [
   { id: 'Draft', label: 'Draft', num: '1' },
-  { id: 'Intake', label: 'AI Intake', num: '2' },
-  { id: 'Structuring', label: 'Structuring', num: '3' },
-  { id: 'PendingApproval', label: 'Approval', num: '4' },
-  { id: 'Published', label: 'Published', num: '5' },
+  { id: 'PendingApproval', label: 'Approval', num: '2' },
+  { id: 'Published', label: 'Published', num: '3' },
 ];
 
 const NORMALIZED = {
   Draft: 'Draft',
-  Intake: 'Intake',
-  Structuring: 'Structuring',
+  Drafted: 'Draft',
+  Intake: 'Draft',
+  Structuring: 'Draft',
   PendingApproval: 'PendingApproval',
   Pending_Approval: 'PendingApproval',
+  'Pending Approval': 'PendingApproval',
   Published: 'Published',
   Closed: 'Closed',
 };
@@ -421,39 +421,16 @@ export default function RequisitionDetail() {
             Back
           </button>
 
-          {status === 'Draft' && (
+          {(status === 'Draft' || status === 'Drafted' || status === 'Intake' || status === 'Structuring') && (
             <button
               type="button"
-              onClick={handleStart}
+              onClick={handleApprove}
               disabled={Boolean(busy)}
               className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Sparkles size={13} />
-              <span>{busy === 'start' ? 'Starting AI...' : 'Start AI Intake →'}</span>
+              <Check size={13} />
+              <span>{busy === 'approve' ? 'Submitting...' : 'Proceed to Approval →'}</span>
             </button>
-          )}
-
-          {(status === 'Intake' || status === 'Structuring') && (
-            <>
-              <button
-                type="button"
-                onClick={() => setShowRefineBox(!showRefineBox)}
-                className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <Sparkles size={13} />
-                <span>Refine with AI</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleApprove}
-                disabled={Boolean(busy)}
-                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Check size={13} />
-                <span>{busy === 'approve' ? 'Approving...' : 'Proceed to Approval →'}</span>
-              </button>
-            </>
           )}
 
           {status === 'PendingApproval' && (
@@ -679,66 +656,6 @@ export default function RequisitionDetail() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left 8 Cols: AI Intake Q&A & Structured Requisition Data */}
         <div className="lg:col-span-8 space-y-4">
-          {/* AI Intake Q&A Card (When in Intake or Draft state) - Ultra Compact & Modern */}
-          {(status === 'Intake' || status === 'Draft' || currentQuestion) && (
-            <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-4.5 shadow-xs space-y-2.5">
-              <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 rounded-md bg-black text-white flex items-center justify-center shrink-0">
-                    <Sparkles size={11} />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                      AI Intake Assistant
-                    </h3>
-                  </div>
-                </div>
-                <span className="text-[10px] text-gray-400 font-medium">Targeted Gap Question</span>
-              </div>
-
-              {currentQuestion ? (
-                <div className="space-y-2">
-                  <div className="px-3.5 py-2.5 rounded-xl bg-gray-50/90 border border-gray-200/80 text-xs text-gray-900 leading-relaxed font-semibold">
-                    {currentQuestion}
-                  </div>
-
-                  <form onSubmit={handleAnswer} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="Type your answer (e.g. 2-4 years with production experience)..."
-                      className="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all font-medium"
-                    />
-                    <button
-                      type="submit"
-                      disabled={!answer.trim() || Boolean(busy)}
-                      className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5 shrink-0"
-                    >
-                      <Send size={12} />
-                      <span>{busy === 'answer' ? 'Submitting...' : 'Submit'}</span>
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs text-gray-600 flex items-center justify-between gap-2 flex-wrap">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
-                    <span>All intake questions answered. Ready to proceed to approval.</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={Boolean(busy)}
-                    className="px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-2xs transition-colors cursor-pointer"
-                  >
-                    Proceed to Approval →
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
           {/* Published Vendor Distribution Status Card */}
           <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs mb-4">
             <div className="flex items-center justify-between gap-2 mb-3">
@@ -874,20 +791,11 @@ export default function RequisitionDetail() {
                 Stage Instructions
               </div>
 
-              {status === 'Draft' && (
+              {(status === 'Draft' || status === 'Drafted' || status === 'Intake' || status === 'Structuring') && (
                 <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Drafting Phase</div>
+                  <div className="font-bold text-gray-900">Draft & Review Phase</div>
                   <p className="text-[11px] text-gray-500">
-                    Review basic job criteria. When ready, click "Start AI Intake" to allow AI to generate targeted gap questions.
-                  </p>
-                </div>
-              )}
-
-              {status === 'Intake' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Answering Intake / Structuring</div>
-                  <p className="text-[11px] text-gray-500">
-                    Once intake questions are answered, click "Proceed to Approval →" to lock the criteria.
+                    Review role parameters, skills, and budget ceilings. When ready, click "Proceed to Approval →" to submit this requisition.
                   </p>
                   <button
                     type="button"
@@ -896,23 +804,6 @@ export default function RequisitionDetail() {
                     className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
                   >
                     Proceed to Approval →
-                  </button>
-                </div>
-              )}
-
-              {status === 'Structuring' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Review & Approve</div>
-                  <p className="text-[11px] text-gray-500">
-                    Verify the structured criteria and JD preview. Click "Approve Requisition" once you're satisfied.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={Boolean(busy)}
-                    className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                  >
-                    Approve Requisition →
                   </button>
                 </div>
               )}

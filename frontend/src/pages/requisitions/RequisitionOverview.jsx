@@ -35,7 +35,7 @@ const SECTION_CONFIG = {
   },
   drafted: {
     title: 'Drafted',
-    caption: 'Requisitions in progress — AI assistant intake and role structuring.',
+    caption: 'Requisitions in progress — draft parameters and role specifications.',
     statuses: ['Draft', 'Drafted', 'Intake', 'Structuring'],
     to: '/dashboard/requisitions/drafted',
   },
@@ -306,7 +306,7 @@ export default function RequisitionOverview({ section }) {
           <div className="py-16 text-center space-y-2">
             <div className="text-sm font-bold text-gray-800">No requisitions in {currentConfig.title}</div>
             <p className="text-xs text-gray-400 max-w-sm mx-auto">
-              Create a new contract requirement to start candidate sourcing and AI intake.
+              Create a new contract requirement to start candidate sourcing.
             </p>
             <button
               type="button"

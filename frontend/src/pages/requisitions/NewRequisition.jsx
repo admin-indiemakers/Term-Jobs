@@ -65,11 +65,9 @@ const addDuration = (duration, startDate) => {
 };
 
 const WORKFLOW_STEPS = [
-  { id: 'Draft', label: 'Draft', num: '1', active: true },
-  { id: 'Intake', label: 'AI Intake', num: '2' },
-  { id: 'Structuring', label: 'Structuring', num: '3' },
-  { id: 'PendingApproval', label: 'Approval', num: '4' },
-  { id: 'Published', label: 'Published', num: '5' },
+  { id: 'Draft', label: 'Role Parameters', num: '1', active: true },
+  { id: 'PendingApproval', label: 'Review & Approval', num: '2' },
+  { id: 'Published', label: 'Live Distribution', num: '3' },
 ];
 
 export default function NewRequisition() {
@@ -866,10 +864,6 @@ const PREDEFINED_ROLES = [
 
       const newId = res.id || res.requisition_id;
       if (newId) {
-        // Automatically start AI intake
-        try {
-          await request(`/requisitions/${newId}/start`, { method: 'POST', token });
-        } catch (e) {}
         navigate(`/dashboard/requisitions/${newId}`);
       } else {
         navigate('/dashboard/requisitions/drafted');
@@ -901,7 +895,7 @@ const PREDEFINED_ROLES = [
             New Contract Requirement
           </h1>
           <p className="text-xs text-gray-500 font-normal mt-0.5 max-w-2xl">
-            Define role parameters and budget ceilings. The AI agent will auto-structure the JD and ask targeted intake questions.
+            Define role parameters, skills, and budget ceilings for your contract requirement.
           </p>
 
           {/* Workflow Step Indicator */}
@@ -941,7 +935,7 @@ const PREDEFINED_ROLES = [
             className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
           >
             <Sparkles size={13} />
-            <span>{submitting ? 'Creating...' : 'Start AI Intake →'}</span>
+            <span>{submitting ? 'Creating...' : 'Create Requisition →'}</span>
           </button>
         </div>
       </div>
@@ -1623,9 +1617,9 @@ const PREDEFINED_ROLES = [
                     3
                   </span>
                   <div>
-                    <div className="font-bold text-gray-900 text-[11.5px]">Launch AI Intake</div>
+                    <div className="font-bold text-gray-900 text-[11.5px]">Create & Review</div>
                     <div className="text-[10.5px] text-gray-500">
-                      Click below to generate targeted screening questions and candidate matching criteria.
+                      Click below to create this requisition draft and review it for approval.
                     </div>
                   </div>
                 </div>
@@ -1678,7 +1672,7 @@ const PREDEFINED_ROLES = [
                 className="w-full py-2.5 px-3.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Sparkles size={13} />
-                <span>{submitting ? 'Creating...' : 'Create & Start AI Intake →'}</span>
+                <span>{submitting ? 'Creating...' : 'Create Requisition →'}</span>
               </button>
             </div>
           </div>

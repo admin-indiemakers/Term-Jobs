@@ -437,7 +437,7 @@ export default function HiringManagerDashboard() {
                       {draftCount > 0 ? (
                         <>
                           <span>{draftRequisitions[0]?.title || 'Requisition'}</span>{' '}
-                          <span className="font-normal text-gray-600">needs review / intake</span>
+                          <span className="font-normal text-gray-600">needs review</span>
                         </>
                       ) : (
                         <span>All requisitions structured</span>
