@@ -1571,10 +1571,12 @@ async def register_public_candidate(
     github_url: str = Form(""),
     skills: str = Form(""),
     cover_note: str = Form(""),
+    candidate_id: str = Form(""),
     resume: UploadFile | None = File(None),
 ) -> dict:
     """Allow any prospective candidate to register their profile and resume to join the talent pool."""
     import tempfile
+    import re
     from datetime import datetime, timezone
     from modules.candidate.extractor import extract_candidate_profile
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
@@ -1582,7 +1584,10 @@ async def register_public_candidate(
 
     content = None
     if resume and hasattr(resume, "read"):
-        content = await resume.read()
+        try:
+            content = await resume.read()
+        except Exception:
+            content = None
 
     filename = (resume.filename if resume else None) or "resume.pdf"
     file_type = "docx" if filename.lower().endswith(".docx") else "pdf"
@@ -1605,21 +1610,35 @@ async def register_public_candidate(
             except Exception:
                 pass
     else:
-        # Check if existing candidate profile has a resume on file
+        # Check if existing candidate profile has a resume on file (by email or candidate_id)
+        cand_email = email.strip().lower()
+        cand_email_regex = {"$regex": f"^{re.escape(cand_email)}$", "$options": "i"}
+        lookup_or = [
+            {"candidate_email": cand_email_regex},
+            {"email": cand_email_regex},
+        ]
+        if candidate_id:
+            raw_cid = candidate_id.replace("CND-", "").strip()
+            lookup_or.extend([
+                {"id": candidate_id},
+                {"candidate_id": candidate_id},
+                {"submission_id": candidate_id},
+                {"id": raw_cid},
+                {"candidate_id": raw_cid},
+            ])
+
         existing_cand = db["candidates"].find_one({
-            "$or": [
-                {"candidate_email": email.strip().lower()},
-                {"email": email.strip().lower()},
-            ]
+            "$or": lookup_or,
+            "resume_pdf": {"$exists": True, "$ne": ""}
         })
-        if not existing_cand or not existing_cand.get("resume_pdf"):
+        if not existing_cand:
             existing_cand = db["candidate_submissions"].find_one({
-                "$or": [
-                    {"candidate_email": email.strip().lower()},
-                    {"email": email.strip().lower()},
-                ],
+                "$or": lookup_or,
                 "resume_pdf": {"$exists": True, "$ne": ""}
-            })
+            }, sort=[("created_at", -1)])
+        if not existing_cand:
+            existing_cand = db["candidates"].find_one({"$or": lookup_or})
+
         if existing_cand and existing_cand.get("resume_pdf"):
             pdf_base64 = existing_cand.get("resume_pdf")
             filename = existing_cand.get("filename") or "resume.pdf"

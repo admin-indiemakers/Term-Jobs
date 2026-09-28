@@ -1015,12 +1015,21 @@ export default function OpenRolesPage({ enabled = true }) {
       formData.append('linkedin_url', poolForm.linkedin_url.trim() || candidateUser?.details?.linkedin_url || '');
       formData.append('github_url', poolForm.github_url.trim() || candidateUser?.details?.github_url || '');
       formData.append('cover_note', poolForm.cover_note.trim());
+      if (candidateUser?.id || candidateUser?.candidate_id) {
+        formData.append('candidate_id', candidateUser.id || candidateUser.candidate_id);
+      }
       if (poolResume) {
         formData.append('resume', poolResume);
       }
 
+      const headers = {};
+      if (candidateAuth?.candidateToken) {
+        headers['Authorization'] = `Bearer ${candidateAuth.candidateToken}`;
+      }
+
       const res = await fetch(`${API_BASE_URL}/api/public/talent-pool/join`, {
         method: 'POST',
+        headers,
         body: formData,
       });
 
