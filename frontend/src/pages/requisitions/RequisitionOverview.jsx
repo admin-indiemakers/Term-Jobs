@@ -175,29 +175,36 @@ export default function RequisitionOverview({ section }) {
     setLoading(true);
     setError('');
     try {
-      const [reqs, profiles] = await Promise.all([
-        request('/api/requisitions', { token }).catch(() => []),
-        request('/api/company-profiles', { token }).catch(() => []),
-      ]);
-
-      const profileMap = Object.fromEntries(
-        (Array.isArray(profiles) ? profiles : []).map((p) => [p.id, p.name])
-      );
-
+      // 1. Fetch requisitions first so table renders immediately
+      const reqs = await request('/api/requisitions', { token, forceRefresh: force }).catch(() => []);
       const reqList = Array.isArray(reqs) ? reqs : reqs?.requisitions || [];
       const rows = reqList.map((r) => ({
         ...r,
-        company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
+        company_name: r.company_name || user?.tenant_name || 'Client',
       }));
 
       setRequisitions(rows);
+      setLoading(false);
       hasLoadedRef.current = true;
       prevTokenRef.current = token;
+
+      // 2. Fetch profiles non-blocking in background to enrich company names if needed
+      request('/api/company-profiles', { token }).then((profiles) => {
+        if (Array.isArray(profiles) && profiles.length > 0) {
+          const profileMap = Object.fromEntries(profiles.map((p) => [p.id, p.name]));
+          setRequisitions((prev) =>
+            prev.map((r) => ({
+              ...r,
+              company_name: r.company_name || profileMap[r.company_profile_id] || user?.tenant_name || 'Client',
+            }))
+          );
+        }
+      }).catch(() => {});
     } catch (err) {
       console.error('Failed to load requisitions:', err);
       setError(err.message || 'Unable to load requisitions.');
-    } finally {
       setLoading(false);
+    } finally {
       isFetchingRef.current = false;
     }
   }, [token, user?.tenant_name]);

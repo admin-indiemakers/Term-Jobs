@@ -198,28 +198,33 @@ export default function DashboardLayout() {
   useEffect(() => {
     if (user?.role === 'Hiring Manager' && token && !hasFetchedHmCountsRef.current) {
       hasFetchedHmCountsRef.current = true;
-      Promise.all([
-        request('/api/requisitions', { token }).catch(() => []),
-        request('/api/candidates/shortlisted', { token }).catch(() => []),
-        request('/api/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/workforce/stats', { token }).catch(() => null),
-      ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
-        const rCount = Array.isArray(reqs) ? reqs.length : 0;
-        const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
-        const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
-        const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
-        const openIssues = issueList.filter((i) => i.status === 'open').length;
-        const pendingTs = wfStats?.stats?.pending_timesheets || 0;
-        const pendingExp = wfStats?.stats?.pending_expenses || 0;
-        setHmCounts({
-          requisitions: rCount,
-          candidates: sList.length + aList.length,
-          openIssues: openIssues,
-          pendingTimesheets: pendingTs,
-          pendingExpenses: pendingExp,
-        });
-      }).catch(() => { });
+      // Defer badge polling by 2.5s so active page loads with maximum network bandwidth and zero delay
+      const timer = setTimeout(() => {
+        Promise.all([
+          request('/api/requisitions', { token }).catch(() => []),
+          request('/api/candidates/shortlisted', { token }).catch(() => []),
+          request('/api/candidates?status=Accepted', { token }).catch(() => []),
+          request('/api/onboarding/issues', { token }).catch(() => []),
+          request('/api/workforce/stats', { token }).catch(() => null),
+        ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
+          const rCount = Array.isArray(reqs) ? reqs.length : 0;
+          const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
+          const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
+          const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
+          const openIssues = issueList.filter((i) => i.status === 'open').length;
+          const pendingTs = wfStats?.stats?.pending_timesheets || 0;
+          const pendingExp = wfStats?.stats?.pending_expenses || 0;
+          setHmCounts({
+            requisitions: rCount,
+            candidates: sList.length + aList.length,
+            openIssues: openIssues,
+            pendingTimesheets: pendingTs,
+            pendingExpenses: pendingExp,
+          });
+        }).catch(() => { });
+      }, 2500);
+
+      return () => clearTimeout(timer);
     }
   }, [user?.role, token]);
 
