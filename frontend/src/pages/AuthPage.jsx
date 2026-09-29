@@ -58,8 +58,16 @@ export default function AuthPage() {
         navigate('/dashboard/superadmin');
       } else if (loggedUser?.role === 'Admin' || loggedUser?.role?.toLowerCase() === 'admin') {
         navigate('/dashboard/admin');
+      } else if (loggedUser?.role === 'Hiring Manager' || loggedUser?.role === 'HR') {
+        navigate('/dashboard/hiring-manager');
+      } else if (loggedUser?.role === 'Recruiter') {
+        navigate('/dashboard/recruiter');
+      } else if (loggedUser?.role === 'Procurement' || loggedUser?.role === 'Procurement Team') {
+        navigate('/dashboard/procurement');
+      } else if (loggedUser?.role === 'Finance' || loggedUser?.role === 'Finance Team') {
+        navigate('/dashboard/finance');
       } else {
-        navigate('/dashboard');
+        navigate('/dashboard/hiring-manager');
       }
     } catch (err) {
       setError(err?.message || 'Invalid credentials. Please try again.');

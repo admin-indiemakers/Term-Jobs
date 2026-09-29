@@ -92,22 +92,23 @@ function HomeRedirect() {
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
   if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
-  if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
+  if (user.role === 'HR' || user.role === 'Hiring Manager') return <Navigate to="/dashboard/hiring-manager" replace />;
   if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
-  return <Navigate to="/dashboard/requisitions" replace />;
+  return <Navigate to="/dashboard/hiring-manager" replace />;
 }
 
 function DashboardIndex() {
   const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
   if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
   if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
   if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
   if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
-  if (user.role === 'HR') return <Navigate to="/dashboard/hr" replace />;
+  if (user.role === 'HR' || user.role === 'Hiring Manager') return <Navigate to="/dashboard/hiring-manager" replace />;
   if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
-  return <Navigate to="/dashboard/requisitions" replace />;
+  return <Navigate to="/dashboard/hiring-manager" replace />;
 }
 
 function CandidateRouteDispatcher() {
