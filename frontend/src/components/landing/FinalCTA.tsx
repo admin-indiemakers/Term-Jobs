@@ -12,12 +12,12 @@ export function FinalCTA({ active }: { active: boolean }) {
       aria-label="Get started"
       className="relative flex h-dvh w-screen shrink-0 items-center justify-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
     >
-      <Backdrop tone="dark" />
+      <Backdrop tone="dark" active={active} />
       <motion.div
         aria-hidden="true"
         className="pointer-events-none absolute top-1/2 left-1/2 h-[42rem] w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
         style={{ background: "radial-gradient(circle, oklch(0.6 0.004 260 / 0.28), transparent 68%)" }}
-        animate={reduced ? {} : { scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] }}
+        animate={active && !reduced ? { scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] } : {}}
         transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
       />
       <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-4xl px-6 pt-20 pb-24 text-center md:px-12 min-h-dvh md:min-h-0">

@@ -17,7 +17,7 @@ export function TalentSection({ active }: { active: boolean }) {
       aria-label="Talent experience"
       className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
     >
-      <Backdrop />
+      <Backdrop active={active} />
       <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0 min-h-dvh md:min-h-0">
         <div>
           <motion.p

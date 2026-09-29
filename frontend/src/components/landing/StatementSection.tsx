@@ -10,7 +10,7 @@ export function StatementSection({ active }: { active: boolean }) {
       aria-label="Why TermJobs"
       className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
     >
-      <Backdrop tone="dark" />
+      <Backdrop tone="dark" active={active} />
 
       {/* Main content — centered on mobile, full width */}
       <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:pt-0 lg:pb-0 min-h-dvh md:min-h-0">
