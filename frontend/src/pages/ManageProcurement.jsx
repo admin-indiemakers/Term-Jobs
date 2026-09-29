@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { validateEmail } from '../utils/emailValidation';
 import {
   Link2,
   Check,
@@ -51,6 +52,7 @@ export default function ManageProcurement() {
   const [deleting, setDeleting] = useState(false);
   const [edit, setEdit] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -115,6 +117,8 @@ export default function ManageProcurement() {
       setError('Please fill in all required fields.');
       return;
     }
+    const emailErr = validateEmail(form.email);
+    if (emailErr) { setEmailError(emailErr); return; }
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -131,6 +135,7 @@ export default function ManageProcurement() {
       });
       setSuccess(`Procurement Team account created for ${form.email}.`);
       setForm(EMPTY_FORM);
+      setEmailError('');
       setShowCreateModal(false);
       load();
     } catch (err) {
@@ -456,8 +461,11 @@ export default function ManageProcurement() {
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Email Address *</label>
                 <input type="email" name="procurement_email" autoComplete="off" data-lpignore="true" data-form-type="other" required value={form.email}
-                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setError(''); }} placeholder="procurement@company.com"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailError(validateEmail(e.target.value)); setError(''); }} placeholder="procurement@company.com"
+                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-lg focus:outline-hidden focus:ring-1 transition-all ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'}`} />
+                {emailError && (
+                  <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1"><span>⚠</span> {emailError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Initial Password *</label>

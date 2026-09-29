@@ -1,6 +1,7 @@
-﻿import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { validateEmail } from '../utils/emailValidation';
 import {
   Link2,
   Check,
@@ -50,6 +51,7 @@ export default function ManageFinance() {
   const [deleting, setDeleting] = useState(false);
   const [edit, setEdit] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [emailError, setEmailError] = useState('');
 
   const load = () => {
     setLoading(true);
@@ -97,6 +99,8 @@ export default function ManageFinance() {
   const handleCreateFinance = async (e) => {
     e.preventDefault();
     if (!form.name.trim() || !form.email.trim() || !form.password.trim()) { setError('Please fill in all required fields.'); return; }
+    const emailErr = validateEmail(form.email);
+    if (emailErr) { setEmailError(emailErr); return; }
     setSubmitting(true); setError(''); setSuccess('');
     try {
       await request('/api/auth/users', {
@@ -104,7 +108,7 @@ export default function ManageFinance() {
         body: { role: 'Finance Team', name: form.name.trim(), email: form.email.trim(), password: form.password, department: form.department?.trim() || 'Finance & Accounts' },
       });
       setSuccess(`Finance Team account created for ${form.email}.`);
-      setForm(EMPTY_FORM); setShowCreateModal(false); load();
+      setForm(EMPTY_FORM); setEmailError(''); setShowCreateModal(false); load();
     } catch (err) { setError(err.message || 'Failed to create finance account'); }
     finally { setSubmitting(false); }
   };
@@ -342,8 +346,11 @@ export default function ManageFinance() {
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Email Address *</label>
                 <input type="email" name="finance_email" autoComplete="off" data-lpignore="true" data-form-type="other" required value={form.email}
-                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setError(''); }} placeholder="finance@company.com"
-                  className="w-full px-3.5 py-2 text-xs text-gray-900 bg-white border border-gray-200 rounded-lg focus:outline-hidden focus:ring-1 focus:ring-black transition-all" />
+                  onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailError(validateEmail(e.target.value)); setError(''); }} placeholder="finance@company.com"
+                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-lg focus:outline-hidden focus:ring-1 transition-all ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'}`} />
+                {emailError && (
+                  <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1"><span>⚠</span> {emailError}</p>
+                )}
               </div>
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Department</label>

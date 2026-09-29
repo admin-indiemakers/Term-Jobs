@@ -121,14 +121,27 @@ export async function request(path, {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    console.log(`🚀 [API REQUEST] ${upperMethod} ${fullUrl}`, {
-      origin: currentOrigin,
-      apiBaseUrl: API_BASE_URL,
-      path,
-      method: upperMethod,
-      headers,
-      body: isFormData ? '[FormData]' : (payloadBody !== undefined ? payloadBody : null),
-    });
+    // Only log in local development — never expose credentials or request details in production
+    const isDev = typeof window !== 'undefined' &&
+      (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+    // Safe headers: redact Authorization value even in dev logs
+    const safeHeaders = Object.fromEntries(
+      Object.entries(headers).map(([k, v]) =>
+        k.toLowerCase() === 'authorization' ? [k, 'Bearer [REDACTED]'] : [k, v]
+      )
+    );
+
+    if (isDev) {
+      console.log(`🚀 [API REQUEST] ${upperMethod} ${fullUrl}`, {
+        origin: currentOrigin,
+        apiBaseUrl: API_BASE_URL,
+        path,
+        method: upperMethod,
+        headers: safeHeaders,
+        body: isFormData ? '[FormData]' : (payloadBody !== undefined ? payloadBody : null),
+      });
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
@@ -142,14 +155,17 @@ export async function request(path, {
         signal: controller.signal,
       });
     } catch (err) {
-      console.error(`❌ [API NETWORK / CORS ERROR] ${upperMethod} ${fullUrl}`, {
-        origin: currentOrigin,
-        apiBaseUrl: API_BASE_URL,
-        path,
-        errorMessage: err?.message || err,
-        errorName: err?.name,
-        hint: 'If status shows net::ERR_FAILED / CORS blocked, check origin headers and preflight handling.',
-      });
+      // Network / CORS errors are always logged (no credentials in these logs)
+      if (isDev) {
+        console.error(`❌ [API NETWORK / CORS ERROR] ${upperMethod} ${fullUrl}`, {
+          origin: currentOrigin,
+          apiBaseUrl: API_BASE_URL,
+          path,
+          errorMessage: err?.message || err,
+          errorName: err?.name,
+          hint: 'If status shows net::ERR_FAILED / CORS blocked, check origin headers and preflight handling.',
+        });
+      }
 
       if (err && err.name === 'AbortError') {
         throw new ApiError('Request timed out. Please try again.', 0);
@@ -160,7 +176,7 @@ export async function request(path, {
     }
 
     if (response.status === 204) {
-      console.log(`✅ [API RESPONSE 204 No Content] ${upperMethod} ${fullUrl}`);
+      if (isDev) console.log(`✅ [API RESPONSE 204 No Content] ${upperMethod} ${fullUrl}`);
       return null;
     }
 
@@ -186,16 +202,20 @@ export async function request(path, {
         }
       }
 
-      console.error(`🚨 [API ERROR RESPONSE ${response.status}] ${upperMethod} ${fullUrl}`, {
-        status: response.status,
-        detail,
-        responseBody: resData,
-      });
+      if (isDev) {
+        console.error(`🚨 [API ERROR RESPONSE ${response.status}] ${upperMethod} ${fullUrl}`, {
+          status: response.status,
+          detail,
+          responseBody: resData,
+        });
+      }
 
       throw new ApiError(detail, response.status);
     }
 
-    console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${upperMethod} ${fullUrl}`, resData);
+    if (isDev) {
+      console.log(`✅ [API RESPONSE SUCCESS ${response.status}] ${upperMethod} ${fullUrl}`, resData);
+    }
 
     if (upperMethod === 'GET' && !noCache) {
       const cachePayload = { timestamp: Date.now(), data: resData };

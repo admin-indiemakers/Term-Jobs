@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
+import dns.resolver
+import re
 
 ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter", "Director", "Candidate", "Procurement", "Procurement Team", "Finance", "Finance Team")
 
@@ -9,6 +11,71 @@ PROVISION_MATRIX = {
     "HR": ("Hiring Manager", "Procurement", "Procurement Team", "Finance", "Finance Team"),
     "Recruiter": ("Candidate",),
 }
+
+
+
+# ---------------------------------------------------------------------------
+# Disposable / throwaway email domain blocklist
+# ---------------------------------------------------------------------------
+_DISPOSABLE_DOMAINS = {
+    "mailinator.com", "guerrillamail.com", "guerrillamail.net", "guerrillamail.org",
+    "guerrillamail.biz", "guerrillamail.de", "guerrillamail.info",
+    "tempmail.com", "temp-mail.org", "throwam.com", "throwam.net",
+    "yopmail.com", "yopmail.fr", "cool.fr.nf", "jetable.fr.nf", "nospam.ze.tc",
+    "nomail.xl.cx", "mega.zik.dj", "speed.1s.fr", "courriel.fr.nf",
+    "moncourrier.fr.nf", "monemail.fr.nf", "monmail.fr.nf",
+    "sharklasers.com", "guerrillamailblock.com", "grr.la", "guerrillamail.info",
+    "spam4.me", "trashmail.com", "trashmail.me", "trashmail.net", "trashmail.at",
+    "trashmail.io", "trashmail.org",
+    "dispostable.com", "mailnull.com", "fakeinbox.com", "maildrop.cc",
+    "mailnesia.com", "mailnull.com", "spamgourmet.com", "spamgourmet.net",
+    "spamgourmet.org", "spamgourmet.com", "spamgourmet.net",
+    "10minutemail.com", "10minutemail.net", "10minutemail.org",
+    "20minutemail.com", "tempr.email", "discard.email", "spambog.com",
+    "spambog.de", "spambog.ru", "getairmail.com", "filzmail.com",
+    "mailzilla.org", "mohmal.com", "mailseal.de", "incognitomail.com",
+    "armyspy.com", "cuvox.de", "dayrep.com", "einrot.com", "fleckens.hu",
+    "gustr.com", "jourrapide.com", "rhyta.com", "superrito.com", "teleworm.us",
+    "throwam.com",
+}
+
+# Basic email regex (format sanity before Pydantic EmailStr normalises it)
+_EMAIL_RE = re.compile(
+    r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$'
+)
+
+
+def _validate_real_email(email: str) -> str:
+    """Validate that the email is well-formed, non-disposable, and has MX records."""
+    email = email.strip().lower()
+
+    # 1. Regex format check
+    if not _EMAIL_RE.match(email):
+        raise ValueError("Invalid email address format.")
+
+    domain = email.split("@", 1)[1]
+
+    # 2. Disposable domain check
+    if domain in _DISPOSABLE_DOMAINS:
+        raise ValueError(
+            f"Email addresses from '{domain}' are not allowed. "
+            "Please use a valid business or personal email."
+        )
+
+    # 3. MX record check (domain must have real mail servers)
+    try:
+        dns.resolver.resolve(domain, "MX", lifetime=5)
+    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+        raise ValueError(
+            f"The domain '{domain}' does not appear to accept email. "
+            "Please use a real email address."
+        )
+    except Exception:
+        # Network timeout or other transient issue — let it through rather than
+        # block legitimate users during a DNS hiccup.
+        pass
+
+    return email
 
 
 class TenantCreate(BaseModel):
@@ -51,7 +118,7 @@ class VendorEngagementsIn(BaseModel):
 
 class UserCreate(BaseModel):
     phone: str = ''
-    email: str = Field(..., min_length=3, max_length=255)
+    email: EmailStr = Field(..., min_length=3, max_length=255)
     name: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=4, max_length=128)
     role: str
@@ -60,14 +127,26 @@ class UserCreate(BaseModel):
     candidate_limit: int | None = Field(None, ge=1, le=100)
     candidate_id: str = ""
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email_real(cls, v: str) -> str:
+        return _validate_real_email(v)
+
 class UserUpdate(BaseModel):
     phone: str | None = None
-    email: str | None = Field(None, min_length=3, max_length=255)
+    email: EmailStr | None = Field(None, min_length=3, max_length=255)
     name: str | None = Field(None, min_length=1, max_length=255)
     password: str | None = Field(None, min_length=4, max_length=128)
     department: str | None = None
     is_active: bool | None = None
     candidate_limit: int | None = Field(None, ge=1, le=100)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email_real(cls, v):
+        if v is None:
+            return v
+        return _validate_real_email(v)
 
 class UserLogin(BaseModel):
     email: str | None = None

@@ -16,12 +16,52 @@ import os
 import re
 import uuid
 import secrets
+import smtplib
+import threading
+import email.utils
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime, timezone
 import httpx
 from modules.shared.config import settings
 from modules.shared.db import db
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
+
+_GMAIL_SENDER = os.getenv("GMAIL_SENDER_EMAIL", "")
+_GMAIL_APP_PW  = os.getenv("GMAIL_APP_PASSWORD", "")
+_FRONTEND_URL  = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+
+
+def _send_email_thread(to_email: str, subject: str, html_body: str, plain_text: str) -> None:
+    """Fire-and-forget email sender — runs in a daemon thread."""
+    if not _GMAIL_SENDER or not _GMAIL_APP_PW or not to_email:
+        return
+
+    def _send():
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["Subject"]    = subject
+            msg["From"]       = f"TermJob <{_GMAIL_SENDER}>"
+            msg["To"]         = to_email
+            msg["Reply-To"]   = _GMAIL_SENDER
+            msg["Message-ID"] = email.utils.make_msgid(domain="termjob.in")
+            msg["Date"]       = email.utils.formatdate(localtime=True)
+            msg["X-Mailer"]   = "TermJob Notification Service"
+            msg["Precedence"] = "bulk"
+            msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+            msg.attach(MIMEText(html_body,  "html",  "utf-8"))
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(_GMAIL_SENDER, _GMAIL_APP_PW)
+                smtp.sendmail(_GMAIL_SENDER, [to_email], msg.as_string())
+            print(f"[TermJob EMAIL] Sent '{subject}' → {to_email}")
+        except Exception as exc:
+            print(f"[TermJob EMAIL ERROR] {to_email}: {exc}")
+
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def get_telegram_token() -> str:
@@ -144,6 +184,67 @@ async def send_candidate_requisition_alert(
                     print(f"[TELEGRAM OUTREACH RECORD WARNING] {out_err}")
             else:
                 print(f"[TELEGRAM ALERT FAILED] chat_id={chat_id}, err={data.get('description')}")
+
+            # ── Mirror to candidate email (fire-and-forget) ─────────────────────
+            cand_email = (candidate.get("candidate_email") or candidate.get("email") or "").strip()
+            if cand_email:
+                skills_bullets = "".join(
+                    f"<li style='margin:3px 0;color:#374151;'>{s}</li>"
+                    for s in (skills_list[:6] if isinstance(skills_list, list) else [])
+                )
+                rsvp_base = f"{_FRONTEND_URL}/rsvp/{outreach_token}"
+                _html = f"""
+<html><body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:30px;margin:0;">
+  <div style="max-width:540px;margin:auto;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.10);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:30px 36px;">
+      <p style="color:rgba(255,255,255,.7);font-size:11px;margin:0 0 6px;letter-spacing:1px;text-transform:uppercase;">TermJob Talent Engine</p>
+      <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">💼 New Job Match Found!</h1>
+    </div>
+    <div style="padding:28px 36px;">
+      <div style="display:inline-block;padding:4px 12px;background:#ede9fe;border-radius:20px;margin-bottom:16px;">
+        <span style="color:#5b21b6;font-size:11px;font-weight:700;">{int(match_score)}% MATCH SCORE</span>
+      </div>
+      <h2 style="color:#111827;font-size:18px;font-weight:700;margin:0 0 4px;">{req_title}</h2>
+      <p style="color:#6b7280;font-size:13px;margin:0 0 20px;">🏢 {company_name}</p>
+      <p style="color:#374151;font-size:14px;margin:0 0 8px;">Hi <strong>{cand_name}</strong>,</p>
+      <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0 0 20px;">
+        Our AI talent engine ranked your profile among the <strong>Top 20 best-fit candidates</strong> for this role.
+      </p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;padding:16px;margin-bottom:20px;">
+        <p style="color:#6b7280;font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;margin:0 0 10px;">Key Requirements</p>
+        <ul style="margin:0;padding-left:18px;">{skills_bullets}</ul>
+      </div>
+      <p style="color:#374151;font-size:14px;font-weight:600;margin:0 0 14px;">Are you available and interested?</p>
+      <table style="border-collapse:collapse;"><tr>
+        <td style="padding-right:10px;">
+          <a href="{rsvp_base}?status=interested" style="display:inline-block;padding:12px 22px;background:#16a34a;color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">✅ Yes, I'm Interested</a>
+        </td>
+        <td>
+          <a href="{rsvp_base}?status=unavailable" style="display:inline-block;padding:12px 22px;background:#dc2626;color:#fff;border-radius:8px;text-decoration:none;font-size:13px;font-weight:700;">❌ Not Available</a>
+        </td>
+      </tr></table>
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:24px 0 14px;"/>
+      <p style="color:#9ca3af;font-size:11px;margin:0;">You received this because your profile matched this role on TermJob.<br/>&copy; {datetime.now(timezone.utc).year} TermJob.</p>
+    </div>
+  </div>
+</body></html>"""
+                _plain = (
+                    f"New Job Match: {req_title} at {company_name}\n\n"
+                    f"Hi {cand_name},\n\n"
+                    f"Your profile matched {int(match_score)}% for: {req_title} at {company_name}\n"
+                    f"Key Skills: {skills_text}\n\n"
+                    f"Are you available?\n"
+                    f"  YES → {rsvp_base}?status=interested\n"
+                    f"  NO  → {rsvp_base}?status=unavailable\n\n"
+                    f"© TermJob"
+                )
+                _send_email_thread(
+                    cand_email,
+                    f"New Match: {req_title} at {company_name}",
+                    _html,
+                    _plain,
+                )
+            # ──────────────────────────────────────────────────────────
             return data
     except Exception as exc:
         print(f"[TELEGRAM SEND ERROR] {exc}")
@@ -161,8 +262,9 @@ async def send_candidate_interview_scheduled_alert(
     duration_minutes: int,
     meeting_link: str,
     passcode: str,
+    candidate_email: str = "",  # optional — mirrors alert to email
 ) -> dict:
-    """Send an instant Telegram alert to the candidate with their hosted interview room link and passcode."""
+    """Send an instant Telegram alert + email to the candidate with their interview details."""
     token = get_telegram_token()
     if not token or not chat_id:
         return {"ok": False, "error": "Missing token or chat_id."}
@@ -200,7 +302,63 @@ async def send_candidate_interview_scheduled_alert(
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             res = await client.post(url, json=payload)
-            return res.json()
+            result = res.json()
+
+        # ── Mirror to candidate email (fire-and-forget) ──────────────────────
+        if candidate_email and candidate_email.strip():
+            _subj = f"Interview Confirmed: {round_name} — {requisition_title}"
+            _html = f"""
+<html><body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:30px;margin:0;">
+  <div style="max-width:540px;margin:auto;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.10);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#0f766e,#0891b2);padding:30px 36px;">
+      <p style="color:rgba(255,255,255,.7);font-size:11px;margin:0 0 6px;letter-spacing:1px;text-transform:uppercase;">TermJob Interview</p>
+      <h1 style="color:#fff;margin:0;font-size:22px;font-weight:700;">&#128197; Interview Confirmed!</h1>
+    </div>
+    <div style="padding:28px 36px;">
+      <p style="color:#374151;font-size:15px;margin:0 0 8px;">Hi <strong>{candidate_name}</strong>,</p>
+      <p style="color:#6b7280;font-size:13px;line-height:1.6;margin:0 0 24px;">
+        Your interview has been scheduled on TermJob. Here are your details:
+      </p>
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+        <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Round</span>
+          <p style="color:#111827;font-size:14px;font-weight:700;margin:4px 0 0;">{round_name}</p>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Position</span>
+          <p style="color:#111827;font-size:14px;font-weight:700;margin:4px 0 0;">{requisition_title} &mdash; {company_name}</p>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Date &amp; Time</span>
+          <p style="color:#111827;font-size:14px;font-weight:700;margin:4px 0 0;">{scheduled_date or 'As Scheduled'} &nbsp;&#8226;&nbsp; {scheduled_time or 'TBD'} ({duration_minutes} mins)</p>
+        </div>
+        <div style="padding:12px 16px;">
+          <span style="color:#6b7280;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;">Passcode</span>
+          <p style="color:#111827;font-size:16px;font-weight:700;letter-spacing:2px;margin:4px 0 0;font-family:monospace;">{passcode}</p>
+        </div>
+      </div>
+      <a href="{meeting_link}" style="display:inline-block;padding:13px 28px;background:linear-gradient(135deg,#0f766e,#0891b2);color:#fff;border-radius:10px;text-decoration:none;font-size:14px;font-weight:700;">
+        &#127909; Join Video Interview Room
+      </a>
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:24px 0 14px;"/>
+      <p style="color:#9ca3af;font-size:11px;margin:0;">Good luck! The TermJob team is rooting for you.<br/>&copy; {datetime.now(timezone.utc).year} TermJob. All rights reserved.</p>
+    </div>
+  </div>
+</body></html>"""
+            _plain = (
+                f"Interview Confirmed: {round_name}\n\n"
+                f"Hi {candidate_name},\n\n"
+                f"Position : {requisition_title} at {company_name}\n"
+                f"Round    : {round_name}\n"
+                f"Date     : {scheduled_date or 'As Scheduled'}\n"
+                f"Time     : {scheduled_time or 'TBD'} ({duration_minutes} mins)\n"
+                f"Passcode : {passcode}\n\n"
+                f"Join here: {meeting_link}\n\n"
+                f"Good luck! © TermJob"
+            )
+            _send_email_thread(candidate_email.strip(), _subj, _html, _plain)
+        # ─────────────────────────────────────────────────────────────────────
+        return result
     except Exception as exc:
         print(f"[TELEGRAM INTERVIEW ALERT ERROR] {exc}")
         return {"ok": False, "error": str(exc)}

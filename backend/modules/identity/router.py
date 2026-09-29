@@ -47,68 +47,199 @@ def _send_credentials_email(to_email: str, name: str, role: str, plain_password:
     if not _GMAIL_SENDER or not _GMAIL_APP_PW:
         return  # silently skip if not configured
 
-    subject = "Welcome to TermJob — Your Account Credentials"
     login_url = f"{_FRONTEND_URL}/login"
+
+    # Role-specific branding
+    ROLE_META = {
+        "Hiring Manager": {
+            "gradient": "linear-gradient(135deg,#4f46e5,#7c3aed)",
+            "badge_bg": "#ede9fe", "badge_color": "#5b21b6",
+            "icon": "👔",
+            "designation": "Hiring Manager",
+            "access_desc": "You can manage job requisitions, review candidates, and coordinate interview pipelines.",
+        },
+        "Director": {
+            "gradient": "linear-gradient(135deg,#0f766e,#0891b2)",
+            "badge_bg": "#ccfbf1", "badge_color": "#134e4a",
+            "icon": "🏛️",
+            "designation": "Executive Director",
+            "access_desc": "You have executive read-only access to dashboards, work orders, and company analytics.",
+        },
+        "HR": {
+            "gradient": "linear-gradient(135deg,#b45309,#d97706)",
+            "badge_bg": "#fef3c7", "badge_color": "#78350f",
+            "icon": "🤝",
+            "designation": "HR Manager",
+            "access_desc": "You can manage hiring managers, track onboarding, and oversee workforce operations.",
+        },
+        "Procurement Team": {
+            "gradient": "linear-gradient(135deg,#1d4ed8,#0369a1)",
+            "badge_bg": "#dbeafe", "badge_color": "#1e3a8a",
+            "icon": "📋",
+            "designation": "Procurement & Commercials",
+            "access_desc": "You can view and manage rate cards, work orders, and commercial approvals.",
+        },
+        "Procurement": {
+            "gradient": "linear-gradient(135deg,#1d4ed8,#0369a1)",
+            "badge_bg": "#dbeafe", "badge_color": "#1e3a8a",
+            "icon": "📋",
+            "designation": "Procurement",
+            "access_desc": "You can view and manage rate cards, work orders, and commercial approvals.",
+        },
+        "Finance Team": {
+            "gradient": "linear-gradient(135deg,#15803d,#16a34a)",
+            "badge_bg": "#dcfce7", "badge_color": "#14532d",
+            "icon": "💼",
+            "designation": "Finance & Accounts",
+            "access_desc": "You can manage invoices, billing, expense disbursements, and financial reporting.",
+        },
+        "Finance": {
+            "gradient": "linear-gradient(135deg,#15803d,#16a34a)",
+            "badge_bg": "#dcfce7", "badge_color": "#14532d",
+            "icon": "💼",
+            "designation": "Finance & Accounts",
+            "access_desc": "You can manage invoices, billing, expense disbursements, and financial reporting.",
+        },
+        "Admin": {
+            "gradient": "linear-gradient(135deg,#7c3aed,#be185d)",
+            "badge_bg": "#fce7f3", "badge_color": "#831843",
+            "icon": "⚙️",
+            "designation": "Company Administrator",
+            "access_desc": "You have full administrative control over your company workspace on TermJob.",
+        },
+        "Recruiter": {
+            "gradient": "linear-gradient(135deg,#ea580c,#dc2626)",
+            "badge_bg": "#fee2e2", "badge_color": "#7f1d1d",
+            "icon": "🔍",
+            "designation": "Recruiter",
+            "access_desc": "You can source candidates, manage talent pipelines, and submit candidates to clients.",
+        },
+    }
+
+    meta = ROLE_META.get(role, {
+        "gradient": "linear-gradient(135deg,#4f46e5,#7c3aed)",
+        "badge_bg": "#ede9fe", "badge_color": "#5b21b6",
+        "icon": "👤",
+        "designation": role,
+        "access_desc": "You have been granted access to the TermJob platform.",
+    })
+
+    subject = f"Welcome to TermJob — Your {meta['designation']} Account"
 
     html_body = f"""\
 <html>
-<body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:30px;">
-  <div style="max-width:520px;margin:auto;background:#fff;border-radius:10px;
-              box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden;">
-    <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:32px 36px;">
-      <h1 style="color:#fff;margin:0;font-size:22px;">Welcome to TermJob 🚀</h1>
+<body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:30px;margin:0;">
+  <div style="max-width:540px;margin:auto;background:#fff;border-radius:12px;
+              box-shadow:0 4px 20px rgba(0,0,0,.10);overflow:hidden;">
+
+    <!-- Header -->
+    <div style="background:{meta['gradient']};padding:34px 36px 28px;">
+      <p style="color:rgba(255,255,255,.75);font-size:12px;margin:0 0 6px;letter-spacing:1px;text-transform:uppercase;">TermJob Platform</p>
+      <h1 style="color:#fff;margin:0;font-size:24px;font-weight:700;">
+        {meta['icon']} Welcome, {name}!
+      </h1>
     </div>
+
+    <!-- Body -->
     <div style="padding:32px 36px;">
-      <p style="color:#374151;font-size:15px;">Hi <strong>{name}</strong>,</p>
-      <p style="color:#374151;font-size:15px;">
-        Your <strong>{role}</strong> account has been created. Here are your login credentials:
+
+      <!-- Designation badge -->
+      <div style="display:inline-block;padding:5px 14px;background:{meta['badge_bg']};
+                  border-radius:20px;margin-bottom:20px;">
+        <span style="color:{meta['badge_color']};font-size:12px;font-weight:700;
+                     letter-spacing:.5px;">{meta['designation'].upper()}</span>
+      </div>
+
+      <p style="color:#374151;font-size:15px;margin:0 0 8px;">
+        Your <strong>{meta['designation']}</strong> account on TermJob has been created.
       </p>
-      <table style="width:100%;border-collapse:collapse;margin:20px 0;">
-        <tr>
-          <td style="padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;
-                     color:#6b7280;font-size:13px;width:35%;">Email</td>
-          <td style="padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;
-                     color:#111827;font-size:14px;font-weight:600;">{to_email}</td>
-        </tr>
-        <tr>
-          <td style="padding:10px 14px;border:1px solid #e5e7eb;
-                     color:#6b7280;font-size:13px;">Password</td>
-          <td style="padding:10px 14px;border:1px solid #e5e7eb;
-                     color:#111827;font-size:14px;font-weight:600;
-                     letter-spacing:1px;">{plain_password}</td>
-        </tr>
-      </table>
-      <p style="color:#374151;font-size:14px;">
-        Please log in and change your password as soon as possible.
+      <p style="color:#6b7280;font-size:13px;margin:0 0 24px;line-height:1.6;">
+        {meta['access_desc']}
       </p>
+
+      <!-- Credentials table -->
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;margin-bottom:24px;">
+        <div style="padding:12px 16px;border-bottom:1px solid #e5e7eb;">
+          <span style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Login Email</span>
+          <p style="color:#111827;font-size:14px;font-weight:700;margin:4px 0 0;">{to_email}</p>
+        </div>
+        <div style="padding:12px 16px;">
+          <span style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Temporary Password</span>
+          <p style="color:#111827;font-size:16px;font-weight:700;letter-spacing:2px;margin:4px 0 0;font-family:monospace;">{plain_password}</p>
+        </div>
+      </div>
+
+      <p style="color:#ef4444;font-size:13px;margin:0 0 24px;">
+        ⚠️ Please log in and <strong>change your password immediately</strong>.
+      </p>
+
+      <!-- CTA Button -->
       <a href="{login_url}"
-         style="display:inline-block;margin-top:8px;padding:12px 28px;
-                background:linear-gradient(135deg,#4f46e5,#7c3aed);
-                color:#fff;border-radius:8px;text-decoration:none;
-                font-size:14px;font-weight:600;">
-        Login to TermJob
+         style="display:inline-block;padding:13px 32px;
+                background:{meta['gradient']};
+                color:#fff;border-radius:10px;text-decoration:none;
+                font-size:14px;font-weight:700;letter-spacing:.3px;">
+        Login to TermJob →
       </a>
-      <p style="margin-top:32px;color:#9ca3af;font-size:12px;">
-        If you did not expect this email, please contact your administrator.
+
+      <hr style="border:none;border-top:1px solid #f3f4f6;margin:32px 0 16px;" />
+      <p style="color:#9ca3af;font-size:11px;margin:0;line-height:1.6;">
+        If you did not expect this email, please ignore it or contact your administrator.<br/>
+        &copy; {__import__('datetime').datetime.now().year} TermJob. All rights reserved.
       </p>
     </div>
   </div>
 </body>
 </html>"""
 
+    plain_text = f"""Welcome to TermJob — {meta['designation']} Account
+
+Hi {name},
+
+Your {meta['designation']} account on TermJob has been set up.
+
+{meta['access_desc']}
+
+---- Your Login Details ----
+Email    : {to_email}
+Access Key: {plain_password}
+----------------------------
+
+Please log in at: {login_url}
+
+Important: Log in and update your access key as soon as possible.
+
+If you did not expect this message, please contact your administrator.
+
+© TermJob. All rights reserved.
+"""
+
+    import email.utils, uuid, datetime as _dt
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = subject
-    msg["From"]    = f"TermJob <{_GMAIL_SENDER}>"
-    msg["To"]      = to_email
-    msg.attach(MIMEText(html_body, "html"))
+    msg["Subject"]     = subject
+    msg["From"]        = f"TermJob <{_GMAIL_SENDER}>"
+    msg["To"]          = to_email
+    msg["Reply-To"]    = _GMAIL_SENDER
+    msg["Message-ID"]  = email.utils.make_msgid(domain="termjob.in")
+    msg["Date"]        = email.utils.formatdate(localtime=True)
+    msg["X-Mailer"]    = "TermJob Notification Service"
+    msg["Precedence"]  = "bulk"
+    msg["X-Priority"]  = "3"
+    # Attach plain-text FIRST — always before HTML. Spam filters prefer multipart.
+    msg.attach(MIMEText(plain_text, "plain", "utf-8"))
+    msg.attach(MIMEText(html_body,  "html",  "utf-8"))
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as smtp:
+        # Port 587 + STARTTLS has better deliverability than SSL 465 for Gmail
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
             smtp.login(_GMAIL_SENDER, _GMAIL_APP_PW)
             smtp.sendmail(_GMAIL_SENDER, [to_email], msg.as_string())
-        print(f"[TermJob] Credential email sent to {to_email}")
+        print(f"[TermJob] Credential email sent → {to_email}")
     except Exception as exc:
-        print(f"[TermJob] Failed to send credential email to {to_email}: {exc}")
+        print(f"[TermJob] Email delivery failed → {to_email}: {exc}")
 
 
 def send_credentials_email(to_email: str, name: str, role: str, plain_password: str) -> None:
