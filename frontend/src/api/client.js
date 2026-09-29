@@ -67,7 +67,7 @@ export async function request(path, {
   body, 
   data: requestData, 
   token, 
-  timeout = 180000,
+  timeout = 15000,
   forceRefresh = false,
   noCache = false
 } = {}) {
