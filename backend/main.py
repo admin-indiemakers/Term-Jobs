@@ -1020,7 +1020,8 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
     if _cached is not None:
         return _cached
 
-    _auto_close_expired()
+    import threading
+    threading.Thread(target=_auto_close_expired, daemon=True).start()
     with get_session() as session:
         query = session.query(models.Requisition).order_by(models.Requisition.created_at.desc())
         if current_user.role == "Super Admin":
