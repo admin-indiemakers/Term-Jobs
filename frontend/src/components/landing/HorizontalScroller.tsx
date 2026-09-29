@@ -1,6 +1,6 @@
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { EASE } from "./animations";
+
 
 export function useHorizontalPanels(total: number, enabled: boolean = true) {
   const [index, setIndex] = useState(0);
@@ -110,30 +110,27 @@ export function HorizontalScroller({
   children: ReactNode;
 }) {
   const reduced = useReducedMotion();
-  const [isMobile, setIsMobile] = useState(false);
+  // Read once — no state, no re-renders on resize
+  const isMobile =
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+  const duration = reduced ? "0.25s" : isMobile ? "0.38s" : "1.1s";
+  const easing = isMobile
+    ? "cubic-bezier(0.22, 1, 0.36, 1)"
+    : "cubic-bezier(0.16, 1, 0.3, 1)";
 
   return (
     <div className="absolute inset-0 overflow-hidden">
-      <motion.div
+      <div
         className="flex h-dvh w-max"
-        animate={{ x: `-${index * 100}vw` }}
-        transition={
-          reduced
-            ? { duration: 0.25 }
-            : isMobile
-            ? { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
-            : { duration: 1.15, ease: EASE }
-        }
+        style={{
+          transform: `translateX(calc(-${index} * 100vw))`,
+          transition: `transform ${duration} ${easing}`,
+          willChange: "transform",
+        }}
       >
         {children}
-      </motion.div>
+      </div>
     </div>
   );
 }

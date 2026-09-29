@@ -18,7 +18,7 @@ function Stat({ label, value, suffix, active }: (typeof stats)[number] & { activ
       <div className="flex items-center gap-2 text-[0.6rem] font-semibold tracking-[0.18em] text-ink-soft uppercase">
         <motion.span
           className="h-1.5 w-1.5 rounded-full bg-ink/60"
-          animate={{ opacity: [1, 0.25, 1] }}
+          animate={active ? { opacity: [1, 0.25, 1] } : { opacity: 1 }}
           transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
         />
         {label}
@@ -40,7 +40,7 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
       aria-label="Hero"
       className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
     >
-      <Backdrop />
+      <Backdrop active={active} />
       <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:grid lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0">
         <div>
           <motion.p

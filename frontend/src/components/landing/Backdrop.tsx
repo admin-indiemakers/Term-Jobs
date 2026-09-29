@@ -1,14 +1,28 @@
 import { motion, useReducedMotion } from "framer-motion";
+import { useEffect, useState } from "react";
 
 /** Understated background system: soft radial light, blurred forms, grid + grain. */
 export function Backdrop({
   tone = "light",
   fixed = false,
+  active = true,
 }: {
   tone?: "light" | "dark" | "sidebar";
   fixed?: boolean;
+  /** Pass false when the section is off-screen to pause all repeating animations. */
+  active?: boolean;
 }) {
   const reduced = useReducedMotion();
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", check, { passive: true });
+    return () => window.removeEventListener("resize", check);
+  }, []);
+  // Pause repeating animations on inactive sections or any mobile browser
+  const shouldAnimate = !reduced && active && !isMobile;
   const dark = tone === "dark";
   const isSidebar = tone === "sidebar";
 
@@ -41,7 +55,7 @@ export function Backdrop({
             style={{
               background: "radial-gradient(circle, oklch(0.78 0.004 260 / 0.45), transparent 70%)",
             }}
-            animate={reduced ? {} : { x: [0, 40, 0], y: [0, 30, 0] }}
+            animate={shouldAnimate ? { x: [0, 40, 0], y: [0, 30, 0] } : {}}
             transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
@@ -49,7 +63,7 @@ export function Backdrop({
             style={{
               background: "radial-gradient(circle, oklch(0.84 0.004 260 / 0.5), transparent 70%)",
             }}
-            animate={reduced ? {} : { x: [0, -30, 0], y: [0, -20, 0] }}
+            animate={shouldAnimate ? { x: [0, -30, 0], y: [0, -20, 0] } : {}}
             transition={{ duration: 32, repeat: Infinity, ease: "easeInOut" }}
           />
         </>
@@ -62,7 +76,7 @@ export function Backdrop({
                 ? "radial-gradient(circle, oklch(0.45 0.004 260 / 0.35), transparent 70%)"
                 : "radial-gradient(circle, oklch(0.78 0.004 260 / 0.45), transparent 70%)",
             }}
-            animate={reduced ? {} : { x: [0, 60, 0], y: [0, 40, 0] }}
+            animate={shouldAnimate ? { x: [0, 60, 0], y: [0, 40, 0] } : {}}
             transition={{ duration: 26, repeat: Infinity, ease: "easeInOut" }}
           />
           <motion.div
@@ -72,7 +86,7 @@ export function Backdrop({
                 ? "radial-gradient(circle, oklch(0.38 0.004 260 / 0.4), transparent 70%)"
                 : "radial-gradient(circle, oklch(0.84 0.004 260 / 0.5), transparent 70%)",
             }}
-            animate={reduced ? {} : { x: [0, -50, 0], y: [0, -30, 0] }}
+            animate={shouldAnimate ? { x: [0, -50, 0], y: [0, -30, 0] } : {}}
             transition={{ duration: 32, repeat: Infinity, ease: "easeInOut" }}
           />
         </>
@@ -86,7 +100,7 @@ export function Backdrop({
               fill="none"
               stroke="oklch(0.2 0 0 / 0.08)"
               strokeWidth="1"
-              animate={reduced ? {} : { y: [0, 18, 0], opacity: [0.6, 1, 0.6] }}
+              animate={shouldAnimate ? { y: [0, 18, 0], opacity: [0.6, 1, 0.6] } : {}}
               transition={{ duration: 22 + i * 5, repeat: Infinity, ease: "easeInOut" }}
             />
           ))}
@@ -100,7 +114,7 @@ export function Backdrop({
               fill="none"
               stroke={dark ? "oklch(0.98 0 0 / 0.1)" : "oklch(0.2 0 0 / 0.08)"}
               strokeWidth="1"
-              animate={reduced ? {} : { y: [0, 24, 0], opacity: [0.5, 0.9, 0.5] }}
+              animate={shouldAnimate ? { y: [0, 24, 0], opacity: [0.5, 0.9, 0.5] } : {}}
               transition={{ duration: 22 + i * 5, repeat: Infinity, ease: "easeInOut" }}
             />
           ))}
