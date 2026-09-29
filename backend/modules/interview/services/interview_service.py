@@ -1505,7 +1505,10 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
         # Also query MongoDB interview_rounds
         try:
             m_round_filters = {"tenant_id": tenant_id} if tenant_id else {}
-            mongo_rounds = list(db["interview_rounds"].find(m_round_filters))
+            mongo_rounds = list(db["interview_rounds"].find(
+                m_round_filters,
+                {"transcript": 0, "recording_blob": 0, "video_blob": 0, "audio_chunks": 0, "raw_turns": 0}
+            ))
             for mr in mongo_rounds:
                 mr_id = mr.get("id") or str(mr.get("_id"))
                 if mr_id not in seen_round_ids:
@@ -1531,25 +1534,25 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
         except Exception as m_err:
             logger.warning(f"Error querying mongo interview_rounds in summary: {m_err}")
 
-        # Match candidate submission info from SQLite
+        # Match candidate submission info from SQLite with O(1) hash maps
         submissions = session.query(CandidateSubmission).all()
-        for sub in submissions:
-            sub_email_norm = (sub.candidate_email or "").strip().lower()
-            sub_name_norm = (sub.candidate_name or "").strip().lower()
-            for k, v in by_candidate.items():
-                v_email_norm = (v.get("candidate_email") or "").strip().lower()
-                v_name_norm = (v.get("candidate_name") or "").strip().lower()
-                same_req = str(v.get("requisition_id") or "") == str(sub.requisition_id or "")
+        sub_by_id = {s.id: s for s in submissions if s.id}
+        sub_by_email_req = {((s.candidate_email or "").strip().lower(), str(s.requisition_id or "")): s for s in submissions if s.candidate_email}
+        sub_by_name_req = {((s.candidate_name or "").strip().lower(), str(s.requisition_id or "")): s for s in submissions if s.candidate_name}
 
-                if (sub.id and v.get("candidate_submission_id") == sub.id) or \
-                   (sub_email_norm and v_email_norm == sub_email_norm and same_req) or \
-                   (sub_name_norm and v_name_norm == sub_name_norm and same_req):
-                    by_candidate[k]["match_score"] = sub.match_score
-                    by_candidate[k]["vendor_name"] = sub.vendor_name
-                    by_candidate[k]["submission_status"] = sub.status
-                    if not by_candidate[k].get("candidate_submission_id"):
-                        by_candidate[k]["candidate_submission_id"] = sub.id
-                    break
+        for k, v in by_candidate.items():
+            cid = v.get("candidate_submission_id")
+            v_email = (v.get("candidate_email") or "").strip().lower()
+            v_name = (v.get("candidate_name") or "").strip().lower()
+            v_req = str(v.get("requisition_id") or "")
+
+            matched_sub = sub_by_id.get(cid) or sub_by_email_req.get((v_email, v_req)) or sub_by_name_req.get((v_name, v_req))
+            if matched_sub:
+                v["match_score"] = matched_sub.match_score
+                v["vendor_name"] = matched_sub.vendor_name
+                v["submission_status"] = matched_sub.status
+                if not v.get("candidate_submission_id"):
+                    v["candidate_submission_id"] = matched_sub.id
 
         # Also enrich candidate submission info from MongoDB candidate_submissions
         try:

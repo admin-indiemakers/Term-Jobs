@@ -1022,9 +1022,16 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
     if current_user.role not in ("Hiring Manager", "Admin", "Super Admin", "HR"):
         raise HTTPException(status_code=403, detail="Hiring Manager role required")
 
+    cache_key = f"wf_stats:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     cand_ids = _get_hm_team_candidate_ids(current_user)
     if not cand_ids:
-        return {"status": "success", "stats": {"total_team": 0, "active": 0, "onboarding": 0, "pending_timesheets": 0, "pending_expenses": 0, "approved_this_week": 0}}
+        res = {"status": "success", "stats": {"total_team": 0, "active": 0, "onboarding": 0, "pending_timesheets": 0, "pending_expenses": 0, "approved_this_week": 0}}
+        cache.set(cache_key, res, ttl=30)
+        return res
 
     # Batch: all onboardings
     ob_map = {}
@@ -1061,7 +1068,7 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
         "approved_at": {"$gte": week_start},
     })
 
-    return {
+    res = {
         "status": "success",
         "stats": {
             "total_team": len(cand_ids),
@@ -1072,6 +1079,8 @@ def get_workforce_stats(current_user: User = Depends(get_current_user)):
             "approved_this_week": approved_week,
         },
     }
+    cache.set(cache_key, res, ttl=30)
+    return res
 
 
 # ---------------------------------------------------------------------------

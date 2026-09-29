@@ -71,7 +71,6 @@ export default function HiringManagerDashboard() {
   const [requisitions, setRequisitions] = useState([]);
   const [shortlistedCandidates, setShortlistedCandidates] = useState([]);
   const [acceptedCandidates, setAcceptedCandidates] = useState([]);
-  const [onboardingList, setOnboardingList] = useState([]);
   const [openIssues, setOpenIssues] = useState([]);
   const [wfStats, setWfStats] = useState(null);
   const [interviewSummary, setInterviewSummary] = useState([]);
@@ -88,11 +87,10 @@ export default function HiringManagerDashboard() {
     setLoading(true);
     setError('');
     try {
-      const [reqsData, shortlistedData, acceptedData, obData, issuesData, wfData, interviewSummaryData] = await Promise.all([
+      const [reqsData, shortlistedData, acceptedData, issuesData, wfData, interviewSummaryData] = await Promise.all([
         request('/api/requisitions', { token }).catch(() => []),
         request('/api/candidates/shortlisted', { token }).catch(() => []),
         request('/api/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
         interviewApi.getSummary(token).catch(() => []),
@@ -106,9 +104,6 @@ export default function HiringManagerDashboard() {
 
       const aList = Array.isArray(acceptedData) ? acceptedData : acceptedData?.candidates || [];
       setAcceptedCandidates(aList);
-
-      const oList = Array.isArray(obData) ? obData : obData?.candidates || [];
-      setOnboardingList(oList);
 
       const iList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
       setOpenIssues(iList.filter((i) => i.status === 'open'));
@@ -174,7 +169,7 @@ export default function HiringManagerDashboard() {
   const pendingCount = pendingApprovalRequisitions.length;
   const shortlistedCount = shortlistedCandidates.length;
   const acceptedCount = acceptedCandidates.length;
-  const onboardingCount = onboardingList.length;
+  const onboardingCount = wfStats?.stats?.onboarding || wfStats?.active_count || 0;
   const activeTeamCount = wfStats?.stats?.active_workers || wfStats?.active_count || 0;
   const pendingTimesheetsCount = wfStats?.stats?.pending_timesheets || wfStats?.pending_timesheets || 0;
 
