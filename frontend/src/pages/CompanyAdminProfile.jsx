@@ -253,7 +253,7 @@ export default function CompanyAdminProfile() {
 
       setCompanyForm((prev) => ({ ...prev, logo_url: json.logo_url }));
       setSuccess('Company logo updated successfully!');
-      if (refreshUser) refreshUser();
+      if (refreshUser) await refreshUser();
     } catch (err) {
       setError(err.message || 'Error uploading company logo');
     } finally {
@@ -277,7 +277,7 @@ export default function CompanyAdminProfile() {
         },
       });
       setSuccess('Logo removed.');
-      if (refreshUser) refreshUser();
+      if (refreshUser) await refreshUser();
     } catch (err) {
       setError(err.message || 'Failed to remove logo');
     }
@@ -323,7 +323,7 @@ export default function CompanyAdminProfile() {
       });
 
       setSuccess('Changes saved successfully!');
-      if (refreshUser) refreshUser();
+      if (refreshUser) await refreshUser();
       return true;
     } catch (err) {
       setError(err.message || 'Failed to save changes');
@@ -546,12 +546,12 @@ export default function CompanyAdminProfile() {
                     <div className="pt-3.5 flex flex-col lg:flex-row gap-5 items-start">
                       {/* Logo Section */}
                       <div className="flex items-center gap-3.5 shrink-0 pr-0 lg:pr-5 border-b lg:border-b-0 lg:border-r border-black/[0.04] pb-3.5 lg:pb-0 w-full lg:w-auto">
-                        <div className="w-16 h-16 rounded-xl bg-[#181a1d] text-white flex items-center justify-center font-bold text-lg tracking-wider shrink-0 shadow-2xs overflow-hidden">
+                        <div className="w-16 h-16 rounded-xl bg-[#181a1d] text-white flex items-center justify-center font-bold text-lg tracking-wider shrink-0 shadow-2xs overflow-hidden p-1.5">
                           {companyForm.logo_url ? (
                             <img
                               src={companyForm.logo_url}
                               alt={companyForm.name}
-                              className="w-full h-full object-cover"
+                              className="w-full h-full object-contain"
                             />
                           ) : (
                             <span>{getCompanyInitials(companyForm.name)}</span>

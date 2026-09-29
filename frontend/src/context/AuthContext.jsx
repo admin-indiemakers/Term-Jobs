@@ -103,7 +103,12 @@ export function AuthProvider({ children }) {
     if (!token) return;
     try {
       const data = await request('/api/auth/me', { token });
-      setUser(data);
+      if (data) {
+        setUser(data);
+        try {
+          localStorage.setItem(USER_KEY, JSON.stringify(data));
+        } catch {}
+      }
       return data;
     } catch {
       // ignore

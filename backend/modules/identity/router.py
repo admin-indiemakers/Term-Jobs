@@ -753,6 +753,7 @@ def update_company_profile(
     db.commit()
     _cache.invalidate_prefix("tenants:")
     _cache.invalidate_prefix("users:")
+    _cache.invalidate_prefix("me_profile:")
 
     _log_admin_action(
         current_user,
@@ -833,6 +834,8 @@ async def upload_company_logo(
 
     db.commit()
     _cache.invalidate_prefix("tenants:")
+    _cache.invalidate_prefix("users:")
+    _cache.invalidate_prefix("me_profile:")
 
     return {"logo_url": logo_data_uri, "message": "Company logo uploaded successfully"}
 
