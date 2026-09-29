@@ -1553,25 +1553,37 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
 
         # Also enrich candidate submission info from MongoDB candidate_submissions
         try:
-            mongo_subs = list(db["candidate_submissions"].find({}))
+            sub_query = {"requisition_id": {"$in": list(tenant_req_ids)}} if tenant_req_ids else {}
+            mongo_subs = list(db["candidate_submissions"].find(
+                sub_query,
+                {"candidate_email": 1, "id": 1, "_id": 1, "requisition_id": 1, "status": 1, "match_score": 1, "vendor_name": 1, "candidate_id": 1}
+            ))
+            subs_by_id = {}
+            subs_by_email_req = {}
             for ms in mongo_subs:
-                ms_email = (ms.get("candidate_email") or "").strip().lower()
                 ms_id = ms.get("id") or str(ms.get("_id"))
+                subs_by_id[ms_id] = ms
+                ms_email = (ms.get("candidate_email") or "").strip().lower()
                 ms_req = str(ms.get("requisition_id") or "")
-                for k, v in by_candidate.items():
-                    v_email = (v.get("candidate_email") or "").strip().lower()
-                    same_req = str(v.get("requisition_id") or "") == ms_req
-                    if (v.get("candidate_submission_id") == ms_id) or (ms_email and v_email == ms_email and same_req):
-                        if ms.get("status"):
-                            by_candidate[k]["submission_status"] = ms["status"]
-                        if ms.get("match_score") is not None:
-                            by_candidate[k]["match_score"] = ms["match_score"]
-                        if ms.get("vendor_name"):
-                            by_candidate[k]["vendor_name"] = ms["vendor_name"]
-                        cand_assigned_id = ms.get("candidate_id") or ms_id
-                        by_candidate[k]["candidate_id"] = cand_assigned_id
-                        if not by_candidate[k].get("candidate_submission_id"):
-                            by_candidate[k]["candidate_submission_id"] = ms_id
+                if ms_email and ms_req:
+                    subs_by_email_req[(ms_email, ms_req)] = ms
+
+            for k, v in by_candidate.items():
+                cid = v.get("candidate_submission_id")
+                v_email = (v.get("candidate_email") or "").strip().lower()
+                v_req = str(v.get("requisition_id") or "")
+                ms = subs_by_id.get(cid) or subs_by_email_req.get((v_email, v_req))
+                if ms:
+                    if ms.get("status"):
+                        v["submission_status"] = ms["status"]
+                    if ms.get("match_score") is not None:
+                        v["match_score"] = ms["match_score"]
+                    if ms.get("vendor_name"):
+                        v["vendor_name"] = ms["vendor_name"]
+                    cand_assigned_id = ms.get("candidate_id") or ms.get("id") or str(ms.get("_id"))
+                    v["candidate_id"] = cand_assigned_id
+                    if not v.get("candidate_submission_id"):
+                        v["candidate_submission_id"] = ms.get("id") or str(ms.get("_id"))
         except Exception:
             pass
             

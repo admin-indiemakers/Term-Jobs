@@ -2076,6 +2076,11 @@ def get_superadmin_candidate_management(
     if current_user.role != "Super Admin":
         raise HTTPException(status_code=403, detail="Super Admin authorization required.")
 
+    cache_key = f"sa_candidate_mgmt:{company or 'all'}:{search or 'none'}:{sort_by}"
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     from modules.shared.db import db
     from datetime import datetime, timezone
 
@@ -2099,16 +2104,19 @@ def get_superadmin_candidate_management(
 
     req_map = {}
     if all_req_ids:
-        for r in db["requisitions"].find({"id": {"$in": list(all_req_ids)}}):
+        req_list = list(db["requisitions"].find({"id": {"$in": list(all_req_ids)}}))
+        cp_ids = [r["company_profile_id"] for r in req_list if r.get("company_profile_id")]
+        t_ids = [r["tenant_id"] for r in req_list if r.get("tenant_id")]
+
+        cp_map = {c["id"]: c.get("name", "") for c in db["company_profiles"].find({"id": {"$in": cp_ids}}, {"id": 1, "name": 1})} if cp_ids else {}
+        t_map = {t["id"]: t.get("name", "") for t in db["tenants"].find({"id": {"$in": t_ids}}, {"id": 1, "name": 1})} if t_ids else {}
+
+        for r in req_list:
             comp_name = r.get("company_name") or r.get("client_name") or ""
             if not comp_name and r.get("company_profile_id"):
-                cp = db["company_profiles"].find_one({"id": r["company_profile_id"]}, {"name": 1})
-                if cp:
-                    comp_name = cp.get("name", "")
+                comp_name = cp_map.get(r["company_profile_id"], "")
             if not comp_name and r.get("tenant_id"):
-                t = db["tenants"].find_one({"id": r["tenant_id"]}, {"name": 1})
-                if t:
-                    comp_name = t.get("name", "")
+                comp_name = t_map.get(r["tenant_id"], "")
             req_map[r["id"]] = {
                 "title": r.get("title", "Open Position"),
                 "ref": f"REQ-{(r['id'])[:6].upper()}",
@@ -2227,7 +2235,7 @@ def get_superadmin_candidate_management(
         "read": False,
     })
 
-    return {
+    res = {
         "status": "success",
         "selections": filtered,
         "total_count": len(filtered),
@@ -2240,6 +2248,8 @@ def get_superadmin_candidate_management(
             "avg_match_score": round(sum(float(s.get("match_score") or 0) for s in all_selections) / max(len(all_selections), 1), 1),
         },
     }
+    _cache.set(cache_key, res, ttl=30)
+    return res
 
 
 @app.post("/api/superadmin/candidate-management/simulate-selection")
@@ -3029,8 +3039,14 @@ def get_requisition_shortlist_status_endpoint(
     current_user: User = Depends(get_current_user),
 ) -> dict:
     """Return real-time 48-hour sourcing window countdown and shortlist status."""
+    cache_key = f"shortlist_status:{requisition_id}"
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return cached
     from modules.candidate.shortlist_service import get_requisition_shortlist_status
-    return get_requisition_shortlist_status(requisition_id)
+    result = get_requisition_shortlist_status(requisition_id)
+    _cache.set(cache_key, result, ttl=20)
+    return result
 
 
 @app.post("/requisitions/{requisition_id}/shortlist/send-now")

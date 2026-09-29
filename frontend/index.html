@@ -53,6 +53,9 @@
     <script>
       (function() {
         try {
+          var isDashboard = location.pathname.indexOf('/dashboard') !== -1 || location.pathname.indexOf('/portal') !== -1;
+          var hasSession = !!localStorage.getItem('token') || !!localStorage.getItem('auth_token') || !!localStorage.getItem('auth_user');
+          if (isDashboard || hasSession) return;
           var isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
           var base = isLocal ? 'http://' + location.hostname + ':8000' : '';
           var url = base + '/api/public/requisitions';

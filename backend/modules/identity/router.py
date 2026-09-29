@@ -298,14 +298,19 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
         )
 
     user_id = payload["sub"]
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated user not found",
-        )
-    if getattr(user, 'is_deleted', False):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    cached_user = _cache.get(f"auth_user:{user_id}")
+    if cached_user is not None:
+        user = cached_user
+    else:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authenticated user not found",
+            )
+        if getattr(user, 'is_deleted', False):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        _cache.set(f"auth_user:{user_id}", user, ttl=60)
 
     # Check candidate offboarding access expiration
     if getattr(user, "role", "") == "Candidate":
@@ -554,12 +559,17 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 def get_user_profile(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    cache_key = f"me_profile:{current_user.id}"
+    cached_profile = _cache.get(cache_key)
+    if cached_profile:
+        return cached_profile
+
     comp = _get_company_profile(current_user.tenant_id, db)
     tenant = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
     effective_wo_id = getattr(current_user, 'workorder_id', '') or getattr(current_user, 'candidate_id', '') or ''
     logo_url = getattr(comp, "logo_url", "") or getattr(tenant, "logo_url", "") or ""
 
-    return UserResponse(
+    resp = UserResponse(
         id=current_user.id,
         email=current_user.email,
         name=current_user.name,
@@ -579,6 +589,8 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
         candidate_id=effective_wo_id,
         workorder_id=effective_wo_id,
     )
+    _cache.set(cache_key, resp, ttl=60)
+    return resp
 
 
 @router.post("/change-password")

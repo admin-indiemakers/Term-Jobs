@@ -290,6 +290,10 @@ export function HiringManagerInterviews() {
       setCandidateAiAnalysis(null);
       return;
     }
+    if (selectedRoundForDetails?.id === candidateAiRound.id && roundCommAnalysis) {
+      setCandidateAiAnalysis(roundCommAnalysis);
+      return;
+    }
     if (
       candidateAiRound.communication_analysis &&
       Object.keys(candidateAiRound.communication_analysis).length > 0
@@ -312,7 +316,7 @@ export function HiringManagerInterviews() {
         }
       })
       .catch(() => setCandidateAiAnalysis(null));
-  }, [candidateAiRound?.id, candidateAiRound?.communication_analysis]);
+  }, [candidateAiRound?.id, candidateAiRound?.communication_analysis, selectedRoundForDetails?.id, roundCommAnalysis]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
