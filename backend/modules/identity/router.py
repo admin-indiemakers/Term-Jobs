@@ -29,6 +29,96 @@ from modules.identity.services.auth_service import (
 from modules.requisition.domain.models import CompanyProfile
 from modules.shared.db import Session, get_session
 from modules.shared.cache import cache as _cache
+import os
+import smtplib
+import threading
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+
+# ---------------------------------------------------------------------------
+# Email helper — fires in a background thread so the API never blocks
+# ---------------------------------------------------------------------------
+_GMAIL_SENDER  = os.getenv("GMAIL_SENDER_EMAIL", "")
+_GMAIL_APP_PW  = os.getenv("GMAIL_APP_PASSWORD", "")
+_FRONTEND_URL  = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+
+def _send_credentials_email(to_email: str, name: str, role: str, plain_password: str) -> None:
+    """Send a welcome / credential email to the newly created user."""
+    if not _GMAIL_SENDER or not _GMAIL_APP_PW:
+        return  # silently skip if not configured
+
+    subject = "Welcome to TermJob — Your Account Credentials"
+    login_url = f"{_FRONTEND_URL}/login"
+
+    html_body = f"""\
+<html>
+<body style="font-family:Arial,sans-serif;background:#f4f6f8;padding:30px;">
+  <div style="max-width:520px;margin:auto;background:#fff;border-radius:10px;
+              box-shadow:0 2px 12px rgba(0,0,0,.08);overflow:hidden;">
+    <div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);padding:32px 36px;">
+      <h1 style="color:#fff;margin:0;font-size:22px;">Welcome to TermJob 🚀</h1>
+    </div>
+    <div style="padding:32px 36px;">
+      <p style="color:#374151;font-size:15px;">Hi <strong>{name}</strong>,</p>
+      <p style="color:#374151;font-size:15px;">
+        Your <strong>{role}</strong> account has been created. Here are your login credentials:
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin:20px 0;">
+        <tr>
+          <td style="padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;
+                     color:#6b7280;font-size:13px;width:35%;">Email</td>
+          <td style="padding:10px 14px;background:#f9fafb;border:1px solid #e5e7eb;
+                     color:#111827;font-size:14px;font-weight:600;">{to_email}</td>
+        </tr>
+        <tr>
+          <td style="padding:10px 14px;border:1px solid #e5e7eb;
+                     color:#6b7280;font-size:13px;">Password</td>
+          <td style="padding:10px 14px;border:1px solid #e5e7eb;
+                     color:#111827;font-size:14px;font-weight:600;
+                     letter-spacing:1px;">{plain_password}</td>
+        </tr>
+      </table>
+      <p style="color:#374151;font-size:14px;">
+        Please log in and change your password as soon as possible.
+      </p>
+      <a href="{login_url}"
+         style="display:inline-block;margin-top:8px;padding:12px 28px;
+                background:linear-gradient(135deg,#4f46e5,#7c3aed);
+                color:#fff;border-radius:8px;text-decoration:none;
+                font-size:14px;font-weight:600;">
+        Login to TermJob
+      </a>
+      <p style="margin-top:32px;color:#9ca3af;font-size:12px;">
+        If you did not expect this email, please contact your administrator.
+      </p>
+    </div>
+  </div>
+</body>
+</html>"""
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"]    = f"TermJob <{_GMAIL_SENDER}>"
+    msg["To"]      = to_email
+    msg.attach(MIMEText(html_body, "html"))
+
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=10) as smtp:
+            smtp.login(_GMAIL_SENDER, _GMAIL_APP_PW)
+            smtp.sendmail(_GMAIL_SENDER, [to_email], msg.as_string())
+        print(f"[TermJob] Credential email sent to {to_email}")
+    except Exception as exc:
+        print(f"[TermJob] Failed to send credential email to {to_email}: {exc}")
+
+
+def send_credentials_email(to_email: str, name: str, role: str, plain_password: str) -> None:
+    """Non-blocking wrapper — fires the email in a daemon thread."""
+    t = threading.Thread(
+        target=_send_credentials_email,
+        args=(to_email, name, role, plain_password),
+        daemon=True,
+    )
+    t.start()
 
 router = APIRouter(tags=["Authentication"])
 
@@ -698,6 +788,14 @@ def create_user(
     db.commit()
     db.refresh(user)
     _cache.invalidate_prefix("users:")
+
+    # Fire welcome / credential email in the background
+    send_credentials_email(
+        to_email=body.email,
+        name=body.name,
+        role=body.role,
+        plain_password=body.password,
+    )
 
 
     return UserResponse(
