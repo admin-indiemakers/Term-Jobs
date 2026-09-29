@@ -408,8 +408,12 @@ export default function DashboardLayout() {
               onClick={() => navigate('/dashboard/admin')}
               className="flex items-center gap-2.5 cursor-pointer group"
             >
-              <div className="w-9 h-9 rounded-xl bg-black text-white font-black text-sm flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
-                {companyName.charAt(0).toUpperCase()}
+              <div className="w-9 h-9 rounded-xl bg-black text-white font-black text-sm flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform overflow-hidden p-1">
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt={companyName} className="w-full h-full object-contain" />
+                ) : (
+                  companyName.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="leading-tight text-left">
                 <div className="text-[14px] font-extrabold text-gray-900 tracking-tight flex items-center gap-1">
@@ -461,8 +465,6 @@ export default function DashboardLayout() {
                 </NavLink>
               );
             })}
-
-
           </nav>
 
           {/* Right: Notifications & User Profile */}
@@ -479,7 +481,7 @@ export default function DashboardLayout() {
               </button>
             </div>
 
-            {/* User Profile Pill (Compact icon-only by default, smoothly expands on active/open) */}
+            {/* User Profile Pill (Profile Icon Button, smoothly expands on active/open) */}
             <div className="relative">
               <button
                 type="button"
@@ -491,8 +493,8 @@ export default function DashboardLayout() {
                 }`}
                 title={user?.name || 'Admin Profile'}
               >
-                <div className="w-7 h-7 rounded-full bg-black text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0">
-                  {initials(user?.name)}
+                <div className="w-7 h-7 rounded-full bg-black text-white flex items-center justify-center shadow-2xs shrink-0">
+                  <User size={13} className="text-white" />
                 </div>
                 <AnimatePresence initial={false}>
                   {showUserMenu && (
@@ -524,9 +526,14 @@ export default function DashboardLayout() {
                     className="absolute right-0 mt-2 w-52 bg-white/85 backdrop-blur-2xl rounded-2xl shadow-xl border border-white/80 py-2 z-50 text-left"
                     onClick={() => setShowUserMenu(false)}
                   >
-                    <div className="px-4 py-2 border-b border-gray-100/80">
-                      <div className="text-xs font-bold text-gray-900">{user?.name || 'Arjun M'}</div>
-                      <div className="text-[11px] text-gray-400 truncate">{user?.email || 'admin@tcs.com'}</div>
+                    <div className="px-4 py-2 border-b border-gray-100/80 flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <User size={15} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-gray-900 truncate">{user?.name || 'Arjun M'}</div>
+                        <div className="text-[11px] text-gray-400 truncate">{user?.email || 'admin@tcs.com'}</div>
+                      </div>
                     </div>
 
                     <div className="py-1">
@@ -567,8 +574,12 @@ export default function DashboardLayout() {
             <div className="relative w-64 max-w-[80vw] h-full bg-white border-r border-gray-200 p-5 flex flex-col z-60 shadow-2xl">
               <div className="flex items-center justify-between pb-4 border-b border-gray-100">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center">
-                    {companyName.charAt(0).toUpperCase()}
+                  <div className="w-8 h-8 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center overflow-hidden p-1">
+                    {user?.logo_url ? (
+                      <img src={user.logo_url} alt={companyName} className="w-full h-full object-contain" />
+                    ) : (
+                      companyName.charAt(0).toUpperCase()
+                    )}
                   </div>
                   <span className="font-bold text-sm text-gray-900">{companyName} Admin</span>
                 </div>
@@ -872,10 +883,10 @@ export default function DashboardLayout() {
                 backgroundColor: '#0A0A0A',
                 color: '#FFFFFF',
               }}
-              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden"
+              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden p-1"
             >
               {user?.logo_url ? (
-                <img src={user.logo_url} alt="Logo" className="w-full h-full object-cover" />
+                <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
               ) : (
                 initials(user?.name)
               )}
