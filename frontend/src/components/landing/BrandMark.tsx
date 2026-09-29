@@ -3,21 +3,21 @@ import logo from "@/assets/termjobs-logo.png";
 
 export function BrandMark({ dark, onHomeClick }: { dark: boolean; onHomeClick?: () => void }) {
   return (
-    <header className="absolute top-0 inset-x-0 z-40 px-6 py-5 md:px-12 md:py-6 flex items-center justify-between pointer-events-none">
+    <header className="absolute top-0 inset-x-0 z-40 px-3.5 py-3.5 sm:px-6 sm:py-5 md:px-12 md:py-6 flex items-center justify-between pointer-events-none">
       {/* Brand logo & name */}
       <button
         type="button"
         onClick={onHomeClick}
-        className="pointer-events-auto flex items-center gap-3 group transition-transform hover:scale-102 focus-visible:outline-none cursor-pointer"
+        className="pointer-events-auto flex items-center gap-2 sm:gap-3 group transition-transform hover:scale-102 focus-visible:outline-none cursor-pointer shrink-0"
       >
         <img
           src={logo}
           alt="TermJobs"
-          className="h-7 w-7 object-contain transition-[filter] duration-700 md:h-8 md:w-8"
+          className="h-6 w-6 sm:h-7 sm:w-7 object-contain transition-[filter] duration-700 md:h-8 md:w-8 shrink-0"
           style={{ filter: dark ? "invert(1)" : "none" }}
         />
         <span
-          className="text-[0.7rem] font-extrabold tracking-[0.34em] transition-colors duration-700 uppercase"
+          className="text-[0.64rem] sm:text-[0.7rem] font-extrabold tracking-[0.24em] sm:tracking-[0.34em] transition-colors duration-700 uppercase"
           style={{ color: dark ? "var(--color-paper)" : "var(--color-ink)" }}
         >
           TERMJOBS
@@ -25,22 +25,22 @@ export function BrandMark({ dark, onHomeClick }: { dark: boolean; onHomeClick?: 
       </button>
 
       {/* Top right navigation links */}
-      <div className="pointer-events-auto flex items-center gap-2.5">
+      <div className="pointer-events-auto flex items-center gap-1.5 sm:gap-2.5 shrink-0">
         <Link
           to="/open-roles"
-          className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-[0.65rem] font-bold tracking-[0.16em] uppercase transition-all duration-300 border backdrop-blur-xl active:scale-95 ${
+          className={`inline-flex items-center gap-1.5 sm:gap-2 rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 text-[0.58rem] sm:text-[0.65rem] font-bold tracking-[0.12em] sm:tracking-[0.16em] uppercase whitespace-nowrap transition-all duration-300 border backdrop-blur-xl active:scale-95 ${
             dark
               ? "bg-white/[0.08] hover:bg-white/[0.14] border-white/20 text-paper shadow-[0_4px_16px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)]"
               : "bg-white/70 hover:bg-white/90 border-ink/12 hover:border-ink/25 text-ink shadow-[0_4px_16px_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.8)]"
           }`}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-current/60 animate-pulse" />
+          <span className="w-1.5 h-1.5 rounded-full bg-current/60 animate-pulse shrink-0" />
           <span>Open Roles</span>
         </Link>
 
         <Link
           to="/login"
-          className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[0.65rem] font-bold tracking-[0.16em] uppercase transition-all duration-300 border backdrop-blur-xl active:scale-95 ${
+          className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-full px-2.5 py-1.5 sm:px-4 sm:py-2 text-[0.58rem] sm:text-[0.65rem] font-bold tracking-[0.12em] sm:tracking-[0.16em] uppercase whitespace-nowrap transition-all duration-300 border backdrop-blur-xl active:scale-95 ${
             dark
               ? "bg-paper/90 hover:bg-paper text-ink border-white/25 shadow-[0_4px_16px_rgba(0,0,0,0.3),inset_0_1px_1px_rgba(255,255,255,0.4)]"
               : "bg-ink/90 hover:bg-ink text-paper border-ink/20 shadow-[0_4px_16px_rgba(0,0,0,0.12),inset_0_1px_1px_rgba(255,255,255,0.2)]"
