@@ -55,9 +55,10 @@ export default function ManageFinance() {
 
   const load = () => {
     setLoading(true);
-    request('/api/auth/users?role=Finance+Team,Finance', { token })
+    request('/api/auth/users?role=Finance+Team,Finance', { token, forceRefresh: true })
       .then((data) => {
-        setFinanceUsers(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setFinanceUsers(list.filter((u) => u.role === 'Finance Team' || u.role === 'Finance'));
         setError('');
       })
       .catch((err) => setError(err.message))

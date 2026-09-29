@@ -78,9 +78,10 @@ export default function ManageDirectors() {
 
   const load = () => {
     setLoading(true);
-    request('/api/auth/users?role=Director', { token })
+    request('/api/auth/users?role=Director', { token, forceRefresh: true })
       .then((data) => {
-        setDirectors(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        setDirectors(list.filter((u) => u.role === 'Director'));
         setError('');
       })
       .catch((err) => setError(err.message))
