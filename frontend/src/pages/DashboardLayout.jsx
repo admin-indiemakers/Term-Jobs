@@ -381,7 +381,7 @@ export default function DashboardLayout() {
     const adminNavLinks = [
       { to: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
       { to: '/dashboard/admin/hiring-managers', label: 'Hiring', icon: Users, end: false },
-      { to: '/dashboard/admin/directors', label: 'Team', icon: UserCheck, end: false },
+      { to: '/dashboard/admin/directors', label: 'Directors', icon: UserCheck, end: false },
       { to: '/dashboard/admin/procurement', label: 'Procurement', icon: Building2, end: false },
       { to: '/dashboard/admin/finance', label: 'Finance', icon: CreditCard, end: false },
       { to: '/dashboard/admin/profile', label: 'Profile', icon: User, end: false },
@@ -537,14 +537,6 @@ export default function DashboardLayout() {
                       >
                         <User size={14} className="text-gray-400" />
                         <span>Company Profile</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/dashboard/interviews')}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-white/60 hover:text-black text-left cursor-pointer"
-                      >
-                        <BarChart3 size={14} className="text-gray-400" />
-                        <span>Interviews & Reports</span>
                       </button>
                     </div>
 

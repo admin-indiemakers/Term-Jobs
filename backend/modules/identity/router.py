@@ -991,11 +991,21 @@ def list_users(
     if current_user.role == "Super Admin":
         users = db.query(User).all()
     elif current_user.role == "Admin":
-        users = db.query(User).filter(User.tenant_id == current_user.tenant_id).all()
+        users = (
+            db.query(User)
+            .filter(
+                User.tenant_id == current_user.tenant_id,
+                User.role != "Candidate",
+            )
+            .all()
+        )
     elif current_user.role == "HR":
         users = (
             db.query(User)
-            .filter(User.created_by == current_user.id)
+            .filter(
+                User.created_by == current_user.id,
+                User.role != "Candidate",
+            )
             .all()
         )
     else:
@@ -1009,6 +1019,7 @@ def list_users(
         u for u in users 
         if not getattr(u, 'is_deleted', False) 
         and (not u.tenant_id or u.tenant_id in tenant_map or u.role == "Super Admin")
+        and (current_user.role == "Super Admin" or u.role != "Candidate")
     ]
 
     def _safe_iso(dt_val):

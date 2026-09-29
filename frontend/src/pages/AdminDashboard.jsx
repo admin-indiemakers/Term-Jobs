@@ -216,6 +216,7 @@ export default function AdminDashboard() {
   const directors = useMemo(() => users.filter((u) => u.role === 'Director'), [users]);
   const procurementUsers = useMemo(() => users.filter((u) => u.role === 'Procurement' || u.role === 'Procurement Team'), [users]);
   const financeUsers = useMemo(() => users.filter((u) => u.role === 'Finance' || u.role === 'Finance Team'), [users]);
+  const teamMembers = useMemo(() => users.filter((u) => u.role !== 'Candidate'), [users]);
   const pendingApprovals = useMemo(
     () => requisitions.filter((r) => (r.status || '').toLowerCase() === 'pending_approval'),
     [requisitions]
@@ -276,7 +277,7 @@ export default function AdminDashboard() {
     });
 
     // 3. Team Members
-    (users || []).forEach((u) => {
+    (teamMembers || []).forEach((u) => {
       list.push({
         id: `user-${u.id}`,
         type: 'team',
@@ -496,7 +497,7 @@ export default function AdminDashboard() {
               </div>
             </div>
 
-            {/* Stat Card 2: Team Members */}
+            {/* Stat Card 2: Hiring Managers */}
             <div
               onClick={() => navigate('/dashboard/admin/hiring-managers')}
               className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
@@ -506,11 +507,11 @@ export default function AdminDashboard() {
                   <Users size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {users.length}
+                  {hiringManagers.length}
                 </div>
               </div>
               <div className="text-[10.5px] font-medium text-gray-500 truncate">
-                Team Members
+                Hiring Managers
               </div>
             </div>
 
@@ -689,14 +690,14 @@ export default function AdminDashboard() {
                     </div>
                   ))}
                 </div>
-              ) : users.length === 0 ? (
+              ) : teamMembers.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center py-6 text-center text-gray-400">
                   <Users size={20} className="mb-1 text-gray-300" />
                   <span className="text-xs font-medium">No team members yet</span>
                   <span className="text-[10px] text-gray-400 mt-0.5">Use + Invite to add team members</span>
                 </div>
               ) : (
-                users.map((u) => (
+                teamMembers.map((u) => (
                   <div key={u.id} className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all">
                     <div className="min-w-0">
                       <div className="font-bold text-gray-900 text-xs sm:text-[12.5px] leading-tight truncate">

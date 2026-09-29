@@ -289,6 +289,7 @@ export default function App() {
             <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
             <Route path="admin/procurement" element={<ManageProcurement />} />
             <Route path="admin/finance" element={<ManageFinance />} />
+            <Route path="admin/profile" element={<CompanyAdminProfile />} />
             <Route path="admin/partner-vendors" element={<ManagePartnerVendors />} />
             <Route path="admin/vendors" element={<ManagePartnerVendors />} />
             <Route path="director" element={<DirectorDashboard view="overview" />} />

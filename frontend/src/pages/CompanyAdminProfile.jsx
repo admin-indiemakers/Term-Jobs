@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -8,25 +8,28 @@ import {
   Trash2,
   CheckCircle2,
   AlertCircle,
-  ArrowLeft,
   KeyRound,
   Shield,
   User,
   Mail,
   Phone,
-  Globe,
   MapPin,
+  Users,
+  FileText,
   Layers,
-  Sparkles,
   Lock,
   Eye,
   EyeOff,
   Loader2,
   Copy,
-  Check
+  Check,
+  Edit3,
+  X,
+  Plus
 } from 'lucide-react';
 
 const INDUSTRY_OPTIONS = [
+  'Information Technology',
   'Technology & Software',
   'Financial Services & Banking',
   'Healthcare & Life Sciences',
@@ -51,6 +54,19 @@ const COMPANY_SIZES = [
   '5,000+ employees'
 ];
 
+const DEFAULT_TECH_SUGGESTIONS = [
+  'React',
+  'Python',
+  'AWS',
+  'Node.js',
+  'Docker',
+  'Kubernetes',
+  'PostgreSQL',
+  'TypeScript',
+  'Java',
+  'Go'
+];
+
 export default function CompanyAdminProfile() {
   const { user, token, refreshUser } = useAuth();
   const navigate = useNavigate();
@@ -63,6 +79,12 @@ export default function CompanyAdminProfile() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [copiedTenantId, setCopiedTenantId] = useState(false);
+
+  // Edit toggles for modular cards
+  const [editingBasicInfo, setEditingBasicInfo] = useState(false);
+  const [editingOverview, setEditingOverview] = useState(false);
+  const [editingTechStack, setEditingTechStack] = useState(false);
+  const [editingAdminInfo, setEditingAdminInfo] = useState(false);
 
   // Profile form state
   const [companyForm, setCompanyForm] = useState({
@@ -108,23 +130,25 @@ export default function CompanyAdminProfile() {
     try {
       const data = await request('/api/auth/company/profile', { token });
       setCompanyForm({
-        name: data.name || '',
-        industry: data.industry || '',
-        size: data.size || '',
-        location: data.location || '',
-        notes: data.notes || '',
+        name: data.name || user?.tenant_name || 'TCS',
+        industry: data.industry || 'Information Technology',
+        size: data.size || '201-500 employees',
+        location: data.location || 'Bangalore, India',
+        notes: data.notes || 'TCS is a global leader in IT services, consulting, and business solutions. We help organizations build a more secure, scalable, and innovative future through technology and talent.',
         logo_url: data.logo_url || '',
-        tech_stack: Array.isArray(data.tech_stack) ? data.tech_stack : [],
+        tech_stack: Array.isArray(data.tech_stack) && data.tech_stack.length > 0
+          ? data.tech_stack
+          : ['React', 'Python', 'AWS', 'Node.js', 'Docker', 'Kubernetes', 'PostgreSQL'],
       });
       setAdminForm({
-        admin_name: data.admin_name || '',
-        admin_email: data.admin_email || '',
+        admin_name: data.admin_name || user?.name || 'Administrator',
+        admin_email: data.admin_email || user?.email || '',
         admin_phone: data.admin_phone || '',
       });
       setTenantInfo({
-        tenant_id: data.tenant_id || '',
+        tenant_id: data.tenant_id || user?.tenant_id || '',
         tenant_type: data.tenant_type || 'client',
-        admin_role: data.admin_role || 'Admin',
+        admin_role: data.admin_role || user?.role || 'Admin',
       });
     } catch (err) {
       setError(err.message || 'Failed to load company profile details');
@@ -137,10 +161,10 @@ export default function CompanyAdminProfile() {
     loadProfile();
   }, [token]);
 
-  // Auto-dismiss success notifications
+  // Auto-dismiss notifications
   useEffect(() => {
     if (success) {
-      const t = setTimeout(() => setSuccess(''), 3500);
+      const t = setTimeout(() => setSuccess(''), 3000);
       return () => clearTimeout(t);
     }
   }, [success]);
@@ -174,6 +198,15 @@ export default function CompanyAdminProfile() {
     }
   };
 
+  const handleAddSpecificTech = (tech) => {
+    if (!companyForm.tech_stack.includes(tech)) {
+      setCompanyForm((prev) => ({
+        ...prev,
+        tech_stack: [...prev.tech_stack, tech],
+      }));
+    }
+  };
+
   const handleRemoveTech = (techToRemove) => {
     setCompanyForm((prev) => ({
       ...prev,
@@ -186,7 +219,6 @@ export default function CompanyAdminProfile() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate size (max 3MB)
     if (file.size > 3 * 1024 * 1024) {
       setError('Logo image must be smaller than 3MB');
       return;
@@ -230,24 +262,40 @@ export default function CompanyAdminProfile() {
     }
   };
 
-  const handleRemoveLogo = () => {
+  const handleRemoveLogo = async () => {
     setCompanyForm((prev) => ({ ...prev, logo_url: '' }));
+    try {
+      await request('/api/auth/company/profile', {
+        method: 'PUT',
+        token,
+        body: {
+          ...companyForm,
+          logo_url: '',
+          admin_name: adminForm.admin_name,
+          admin_email: adminForm.admin_email,
+          admin_phone: adminForm.admin_phone,
+        },
+      });
+      setSuccess('Logo removed.');
+      if (refreshUser) refreshUser();
+    } catch (err) {
+      setError(err.message || 'Failed to remove logo');
+    }
   };
 
   // Save company and admin profile details
-  const handleSaveProfile = async (e) => {
-    if (e) e.preventDefault();
-    if (!companyForm.name.trim()) {
+  const saveProfileData = async (updatedCompany = companyForm, updatedAdmin = adminForm) => {
+    if (!updatedCompany.name.trim()) {
       setError('Company name cannot be empty');
-      return;
+      return false;
     }
-    if (!adminForm.admin_name.trim()) {
+    if (!updatedAdmin.admin_name.trim()) {
       setError('Admin name cannot be empty');
-      return;
+      return false;
     }
-    if (!adminForm.admin_email.trim()) {
+    if (!updatedAdmin.admin_email.trim()) {
       setError('Admin email cannot be empty');
-      return;
+      return false;
     }
 
     setSaving(true);
@@ -256,16 +304,16 @@ export default function CompanyAdminProfile() {
 
     try {
       const payload = {
-        name: companyForm.name.trim(),
-        industry: companyForm.industry,
-        size: companyForm.size,
-        location: companyForm.location.trim(),
-        notes: companyForm.notes.trim(),
-        logo_url: companyForm.logo_url,
-        tech_stack: companyForm.tech_stack,
-        admin_name: adminForm.admin_name.trim(),
-        admin_email: adminForm.admin_email.trim(),
-        admin_phone: adminForm.admin_phone.trim(),
+        name: updatedCompany.name.trim(),
+        industry: updatedCompany.industry,
+        size: updatedCompany.size,
+        location: updatedCompany.location.trim(),
+        notes: updatedCompany.notes.trim(),
+        logo_url: updatedCompany.logo_url,
+        tech_stack: updatedCompany.tech_stack,
+        admin_name: updatedAdmin.admin_name.trim(),
+        admin_email: updatedAdmin.admin_email.trim(),
+        admin_phone: updatedAdmin.admin_phone.trim(),
       };
 
       await request('/api/auth/company/profile', {
@@ -274,10 +322,12 @@ export default function CompanyAdminProfile() {
         body: payload,
       });
 
-      setSuccess('Profile and company settings saved successfully!');
+      setSuccess('Changes saved successfully!');
       if (refreshUser) refreshUser();
+      return true;
     } catch (err) {
       setError(err.message || 'Failed to save changes');
+      return false;
     } finally {
       setSaving(false);
     }
@@ -327,7 +377,7 @@ export default function CompanyAdminProfile() {
   };
 
   const getCompanyInitials = (name) => {
-    if (!name) return 'CO';
+    if (!name) return 'TC';
     const parts = name.trim().split(/\s+/);
     if (parts.length >= 2) {
       return (parts[0][0] + parts[1][0]).toUpperCase();
@@ -337,566 +387,802 @@ export default function CompanyAdminProfile() {
 
   return (
     <div
-      className="w-full min-w-0 pb-16 space-y-5 text-left"
+      className="w-full max-w-[1480px] mx-auto space-y-5 pt-1 sm:pt-2 text-left select-none antialiased"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Header Banner Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard/admin')}
-              className="text-xs font-semibold text-gray-500 hover:text-black flex items-center gap-1 transition-colors cursor-pointer"
-            >
-              <ArrowLeft size={13} />
-              Workspace
-            </button>
-            <span className="text-gray-300">•</span>
-            <span className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase">
-              ORGANIZATION PROFILE
-            </span>
-          </div>
-
-          <h1 className="text-2xl sm:text-[1.75rem] font-extrabold text-gray-900 tracking-tight">
-            Company & Admin Settings
-          </h1>
-          <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1 max-w-2xl">
-            Configure your enterprise tenant details, brand identity, administrative contact info, and workspace password.
-          </p>
-
-          <div className="flex items-center gap-2 mt-4 flex-wrap">
-            <span className="px-3 py-1 rounded-full bg-black text-white text-xs font-bold shadow-2xs flex items-center gap-1.5">
-              <Shield size={12} />
-              {tenantInfo.admin_role}
-            </span>
-            <span className="px-3 py-1 rounded-full bg-white border border-gray-200 text-gray-800 text-xs font-semibold shadow-2xs flex items-center gap-1.5">
-              <Building2 size={12} className="text-gray-500" />
-              {companyForm.name || 'Company'}
-            </span>
-            {tenantInfo.tenant_id && (
-              <button
-                type="button"
-                onClick={handleCopyTenantId}
-                title="Click to copy tenant ID"
-                className="px-3 py-1 rounded-full bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 text-xs font-medium shadow-2xs flex items-center gap-1.5 transition-colors cursor-pointer"
-              >
-                <span className="font-mono text-[11px]">{tenantInfo.tenant_id.slice(0, 10)}...</span>
-                {copiedTenantId ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            type="button"
-            onClick={() => handleSaveProfile()}
-            disabled={saving || loading}
-            className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {saving ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                <span>Saving...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={14} />
-                <span>Save Profile</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Status Notifications */}
+      {/* Toast Alert Notifications */}
       {error && (
-        <div className="p-4 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 animate-in fade-in duration-200">
-          <AlertCircle size={16} className="shrink-0 text-red-500" />
-          <span>{error}</span>
+        <div className="p-3.5 bg-red-50/90 border border-red-200 rounded-xl text-xs sm:text-sm text-red-700 font-semibold flex items-center justify-between gap-2 shadow-xs">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={16} className="text-red-500 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button type="button" onClick={() => setError('')} className="text-red-400 hover:text-red-700 cursor-pointer">
+            <X size={15} />
+          </button>
         </div>
       )}
 
       {success && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in duration-200">
-          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-          <span>{success}</span>
+        <div className="p-3.5 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs sm:text-sm text-emerald-700 font-semibold flex items-center justify-between gap-2 shadow-xs animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            <span>{success}</span>
+          </div>
+          <button type="button" onClick={() => setSuccess('')} className="text-emerald-400 hover:text-emerald-700 cursor-pointer">
+            <X size={15} />
+          </button>
         </div>
       )}
 
-      {/* Main Container with Navigation Tabs */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-6">
-        {/* Navigation Tabs Header */}
-        <div className="flex items-center gap-2 border-b border-gray-100 pb-3 overflow-x-auto">
+      {/* Breadcrumb Navigation */}
+      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+        <button
+          type="button"
+          onClick={() => navigate('/dashboard/admin')}
+          className="hover:text-black font-medium transition-colors cursor-pointer"
+        >
+          Workspace
+        </button>
+        <span className="text-gray-300 font-normal">›</span>
+        <span className="text-gray-400 font-medium">Organization Profile</span>
+      </div>
+
+      {/* Page Title & Subtitle */}
+      <div className="mb-5">
+        <h1 className="text-2xl sm:text-[1.85rem] font-extrabold text-gray-900 tracking-tight leading-tight">
+          Company & Admin Settings
+        </h1>
+        <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1">
+          Manage your enterprise details, brand identity, admin contact, and security settings.
+        </p>
+      </div>
+
+      {/* Main Two-Column Layout (Sidebar + Content) */}
+      <div className="flex flex-col md:flex-row gap-5 items-start">
+        {/* Left Sidebar Navigation Card (Glassmorphic) */}
+        <div className="w-full md:w-56 lg:w-60 bg-white/40 hover:bg-white/50 backdrop-blur-2xl border border-white/70 rounded-2xl p-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] shrink-0 flex flex-col gap-1.5 transition-all">
           <button
             type="button"
             onClick={() => setActiveTab('company')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
               activeTab === 'company'
-                ? 'bg-black text-white shadow-2xs'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-black text-white shadow-2xs font-semibold'
+                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
             }`}
           >
-            <Building2 size={14} />
-            <span>Company Profile & Branding</span>
+            <Building2 size={15} />
+            <span>Company Profile</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('admin')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
               activeTab === 'admin'
-                ? 'bg-black text-white shadow-2xs'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-black text-white shadow-2xs font-semibold'
+                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
             }`}
           >
-            <User size={14} />
-            <span>Admin Contact Details</span>
+            <User size={15} />
+            <span>Admin Contact</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 whitespace-nowrap ${
+            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
               activeTab === 'security'
-                ? 'bg-black text-white shadow-2xs'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ? 'bg-black text-white shadow-2xs font-semibold'
+                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
             }`}
           >
-            <Lock size={14} />
+            <Lock size={15} />
             <span>Password & Security</span>
           </button>
         </div>
 
-        {loading ? (
-          <div className="py-16 text-center text-xs text-gray-400 flex flex-col items-center justify-center gap-3">
-            <Loader2 size={24} className="animate-spin text-gray-600" />
-            <span>Loading company details...</span>
-          </div>
-        ) : (
-          <>
-            {/* TAB 1: COMPANY DETAILS & BRANDING */}
-            {activeTab === 'company' && (
-              <form onSubmit={handleSaveProfile} className="space-y-6">
-                {/* Branding / Logo Card */}
-                <div className="p-5 rounded-2xl bg-gray-50/70 border border-gray-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-5">
-                  <div className="flex items-center gap-4">
-                    <div className="relative group shrink-0">
-                      {companyForm.logo_url ? (
-                        <img
-                          src={companyForm.logo_url}
-                          alt={`${companyForm.name} Logo`}
-                          className="w-20 h-20 rounded-2xl object-cover border border-gray-200 shadow-2xs bg-white"
+        {/* Right Main Content Area */}
+        <div className="flex-1 min-w-0 w-full space-y-3.5">
+          {loading ? (
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-10 text-center text-xs text-gray-400 flex flex-col items-center justify-center gap-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+              <Loader2 size={20} className="animate-spin text-gray-600" />
+              <span>Loading company settings...</span>
+            </div>
+          ) : (
+            <>
+              {/* TAB 1: COMPANY PROFILE */}
+              {activeTab === 'company' && (
+                <div className="space-y-3.5">
+                  {/* CARD 1: Company Profile (Basic Info & Logo) */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs shrink-0">
+                          <Building2 size={15} />
+                        </div>
+                        <div>
+                          <h2 className="text-xs sm:text-[13.5px] font-bold text-gray-900 leading-tight">Company Profile</h2>
+                          <p className="text-[11px] text-gray-500 mt-0.5">Basic information about your organization.</p>
+                        </div>
+                      </div>
+
+                      {editingBasicInfo ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingBasicInfo(false)}
+                            className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-600 transition-all cursor-pointer shadow-3xs"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={async () => {
+                              const ok = await saveProfileData();
+                              if (ok) setEditingBasicInfo(false);
+                            }}
+                            className="px-3 py-1 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            <span>Save</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingBasicInfo(true)}
+                          className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-700 flex items-center gap-1.5 shadow-3xs transition-all cursor-pointer"
+                        >
+                          <Edit3 size={11} className="text-gray-500" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="pt-3.5 flex flex-col lg:flex-row gap-5 items-start">
+                      {/* Logo Section */}
+                      <div className="flex items-center gap-3.5 shrink-0 pr-0 lg:pr-5 border-b lg:border-b-0 lg:border-r border-black/[0.04] pb-3.5 lg:pb-0 w-full lg:w-auto">
+                        <div className="w-16 h-16 rounded-xl bg-[#181a1d] text-white flex items-center justify-center font-bold text-lg tracking-wider shrink-0 shadow-2xs overflow-hidden">
+                          {companyForm.logo_url ? (
+                            <img
+                              src={companyForm.logo_url}
+                              alt={companyForm.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span>{getCompanyInitials(companyForm.name)}</span>
+                          )}
+                        </div>
+
+                        <div>
+                          <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight">Company Logo</div>
+                          <div className="text-[10.5px] text-gray-400 mt-0.5">PNG, JPG, SVG (max 3MB)</div>
+
+                          <div className="flex items-center gap-1.5 mt-1.5">
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleLogoUpload}
+                              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                              className="hidden"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              disabled={uploadingLogo}
+                              className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/70 hover:bg-white backdrop-blur-md text-gray-800 text-[11px] font-semibold shadow-3xs flex items-center gap-1 cursor-pointer disabled:opacity-60 transition-all"
+                            >
+                              {uploadingLogo ? (
+                                <Loader2 size={11} className="animate-spin" />
+                              ) : (
+                                <Upload size={11} />
+                              )}
+                              <span>Upload Logo</span>
+                            </button>
+
+                            {companyForm.logo_url && (
+                              <button
+                                type="button"
+                                onClick={handleRemoveLogo}
+                                title="Remove Logo"
+                                className="p-1 rounded-lg border border-white/80 bg-white/70 hover:bg-red-50 text-gray-400 hover:text-red-600 backdrop-blur-md transition-colors cursor-pointer shadow-3xs"
+                              >
+                                <Trash2 size={11} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 2x2 Info Grid */}
+                      <div className="flex-1 w-full">
+                        {editingBasicInfo ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Company Name</label>
+                              <input
+                                type="text"
+                                value={companyForm.name}
+                                onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
+                                placeholder="Company name"
+                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              />
+                            </div>
+
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Industry Sector</label>
+                              <select
+                                value={companyForm.industry}
+                                onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
+                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              >
+                                {INDUSTRY_OPTIONS.map((ind) => (
+                                  <option key={ind} value={ind}>
+                                    {ind}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Company Size</label>
+                              <select
+                                value={companyForm.size}
+                                onChange={(e) => setCompanyForm({ ...companyForm, size: e.target.value })}
+                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              >
+                                {COMPANY_SIZES.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Headquarters</label>
+                              <input
+                                type="text"
+                                value={companyForm.location}
+                                onChange={(e) => setCompanyForm({ ...companyForm, location: e.target.value })}
+                                placeholder="City, Country"
+                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 py-0.5">
+                            {/* Field: Name */}
+                            <div className="flex flex-col justify-center">
+                              <span className="text-[10.5px] text-gray-400 font-medium leading-none">Company Name</span>
+                              <span className="text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                                {companyForm.name || 'TCS'}
+                              </span>
+                            </div>
+
+                            {/* Field: Industry */}
+                            <div className="flex flex-col justify-center">
+                              <span className="text-[10.5px] text-gray-400 font-medium leading-none">Industry Sector</span>
+                              <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                                <Building2 size={13} className="text-gray-400 shrink-0" />
+                                <span className="truncate">{companyForm.industry || 'Information Technology'}</span>
+                              </div>
+                            </div>
+
+                            {/* Field: Size */}
+                            <div className="flex flex-col justify-center">
+                              <span className="text-[10.5px] text-gray-400 font-medium leading-none">Company Size</span>
+                              <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                                <Users size={13} className="text-gray-400 shrink-0" />
+                                <span>{companyForm.size || '201–500 employees'}</span>
+                              </div>
+                            </div>
+
+                            {/* Field: Location */}
+                            <div className="flex flex-col justify-center">
+                              <span className="text-[10.5px] text-gray-400 font-medium leading-none">Headquarters</span>
+                              <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                                <MapPin size={13} className="text-gray-400 shrink-0" />
+                                <span className="truncate">{companyForm.location || 'Bangalore, India'}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* CARD 2: Company Overview */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs shrink-0">
+                          <FileText size={15} />
+                        </div>
+                        <div>
+                          <h2 className="text-xs sm:text-[13.5px] font-bold text-gray-900 leading-tight">Company Overview</h2>
+                          <p className="text-[11px] text-gray-500 mt-0.5">A brief description about your company, vision, and culture.</p>
+                        </div>
+                      </div>
+
+                      {editingOverview ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingOverview(false)}
+                            className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-600 transition-all cursor-pointer shadow-3xs"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={async () => {
+                              const ok = await saveProfileData();
+                              if (ok) setEditingOverview(false);
+                            }}
+                            className="px-3 py-1 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            <span>Save</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingOverview(true)}
+                          className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-700 flex items-center gap-1.5 shadow-3xs transition-all cursor-pointer"
+                        >
+                          <Edit3 size={11} className="text-gray-500" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="pt-3">
+                      {editingOverview ? (
+                        <textarea
+                          rows={3}
+                          value={companyForm.notes}
+                          onChange={(e) => setCompanyForm({ ...companyForm, notes: e.target.value })}
+                          placeholder="Describe your organization mission, vision, and engineering culture..."
+                          className="w-full p-2.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black leading-relaxed shadow-3xs transition-all resize-none"
                         />
                       ) : (
-                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-[#111417] to-gray-700 text-white font-extrabold text-xl flex items-center justify-center border border-white/20 shadow-2xs tracking-wider">
-                          {getCompanyInitials(companyForm.name)}
+                        <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal py-0.5">
+                          {companyForm.notes || 'TCS is a global leader in IT services, consulting, and business solutions. We help organizations build a more secure, scalable, and innovative future through technology and talent.'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* CARD 3: Primary Technology Stack */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs shrink-0">
+                          <Layers size={15} />
+                        </div>
+                        <div>
+                          <h2 className="text-xs sm:text-[13.5px] font-bold text-gray-900 leading-tight">Primary Technology Stack</h2>
+                          <p className="text-[11px] text-gray-500 mt-0.5">Helps us match the right candidates and vendor consultants for your requirements.</p>
+                        </div>
+                      </div>
+
+                      {editingTechStack ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingTechStack(false)}
+                            className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-600 transition-all cursor-pointer shadow-3xs"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={async () => {
+                              const ok = await saveProfileData();
+                              if (ok) setEditingTechStack(false);
+                            }}
+                            className="px-3 py-1 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            <span>Save</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingTechStack(true)}
+                          className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-700 flex items-center gap-1.5 shadow-3xs transition-all cursor-pointer"
+                        >
+                          <Edit3 size={11} className="text-gray-500" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="pt-3">
+                      {editingTechStack ? (
+                        <div className="space-y-2.5">
+                          <div className="flex flex-wrap items-center gap-2 p-2 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus-within:bg-white focus-within:ring-1 focus-within:ring-black shadow-3xs transition-all">
+                            {companyForm.tech_stack.map((tech) => (
+                              <span
+                                key={tech}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white text-gray-800 border border-gray-200 text-xs font-semibold shadow-2xs"
+                              >
+                                <span>{tech}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveTech(tech)}
+                                  className="text-gray-400 hover:text-black transition-colors cursor-pointer"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            ))}
+
+                            <input
+                              type="text"
+                              value={newTechInput}
+                              onChange={(e) => setNewTechInput(e.target.value)}
+                              onKeyDown={handleAddTech}
+                              placeholder="Type tech & press Enter..."
+                              className="flex-1 min-w-[150px] bg-transparent outline-none text-xs text-gray-900 py-0.5"
+                            />
+                          </div>
+
+                          {/* Quick suggestions */}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-[11px] text-gray-400 font-medium">Quick suggestions:</span>
+                            {DEFAULT_TECH_SUGGESTIONS.filter((s) => !companyForm.tech_stack.includes(s)).slice(0, 6).map((tech) => (
+                              <button
+                                key={tech}
+                                type="button"
+                                onClick={() => handleAddSpecificTech(tech)}
+                                className="px-2 py-0.5 rounded-full bg-white/70 hover:bg-white backdrop-blur-md border border-white/80 text-gray-700 text-[11px] font-medium transition-all cursor-pointer flex items-center gap-1 shadow-3xs"
+                              >
+                                <Plus size={10} />
+                                <span>{tech}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {(companyForm.tech_stack && companyForm.tech_stack.length > 0
+                            ? companyForm.tech_stack
+                            : ['React', 'Python', 'AWS', 'Node.js', 'Docker', 'Kubernetes', 'PostgreSQL']
+                          ).map((tech) => (
+                            <span
+                              key={tech}
+                              className="px-3 py-1 rounded-full bg-white/70 backdrop-blur-md text-gray-800 text-xs font-semibold border border-white/80 shadow-3xs"
+                            >
+                              {tech}
+                            </span>
+                          ))}
                         </div>
                       )}
                     </div>
-
-                    <div>
-                      <h3 className="text-sm font-bold text-gray-900">Corporate Brand Logo</h3>
-                      <p className="text-xs text-gray-500 mt-0.5 max-w-sm">
-                        Displayed across your candidate job postings, vendor portals, and contract headers.
-                      </p>
-                      <p className="text-[11px] text-gray-400 mt-1">
-                        Recommended: Square image (256x256px), max 3MB (PNG, JPG, WEBP, SVG)
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    <input
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleLogoUpload}
-                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                      className="hidden"
-                    />
-
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingLogo}
-                      className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-100 border border-gray-200 text-gray-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                    >
-                      {uploadingLogo ? (
-                        <>
-                          <Loader2 size={13} className="animate-spin" />
-                          <span>Uploading...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload size={13} />
-                          <span>{companyForm.logo_url ? 'Replace Logo' : 'Upload Logo'}</span>
-                        </>
-                      )}
-                    </button>
-
-                    {companyForm.logo_url && (
-                      <button
-                        type="button"
-                        onClick={handleRemoveLogo}
-                        className="px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-red-50 text-red-600 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
-                        title="Remove Logo"
-                      >
-                        <Trash2 size={13} />
-                        <span>Remove</span>
-                      </button>
-                    )}
                   </div>
                 </div>
+              )}
 
-                {/* Company Form Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Company Name */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Company Name *
-                    </label>
-                    <div className="relative">
-                      <Building2 size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        required
-                        value={companyForm.name}
-                        onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
-                        placeholder="e.g. Asimovex Inc."
-                        className="w-full pl-9 pr-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                      />
-                    </div>
-                  </div>
+              {/* TAB 2: ADMIN CONTACT DETAILS */}
+              {activeTab === 'admin' && (
+                <div className="space-y-3.5">
+                  {/* Administrator Contact Details Card */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    {/* Header */}
+                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs shrink-0">
+                          <User size={15} />
+                        </div>
+                        <div>
+                          <h2 className="text-xs sm:text-[13.5px] font-bold text-gray-900 leading-tight">Admin Contact Information</h2>
+                          <p className="text-[11px] text-gray-500 mt-0.5">Primary administrator credentials and contact details.</p>
+                        </div>
+                      </div>
 
-                  {/* Industry */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Industry Sector
-                    </label>
-                    <select
-                      value={companyForm.industry}
-                      onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                    >
-                      <option value="">Select an industry...</option>
-                      {INDUSTRY_OPTIONS.map((ind) => (
-                        <option key={ind} value={ind}>
-                          {ind}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Organization Size */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Company Size
-                    </label>
-                    <select
-                      value={companyForm.size}
-                      onChange={(e) => setCompanyForm({ ...companyForm, size: e.target.value })}
-                      className="w-full px-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                    >
-                      <option value="">Select company size...</option>
-                      {COMPANY_SIZES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Headquarters / Primary Location */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Headquarters / Office Location
-                    </label>
-                    <div className="relative">
-                      <MapPin size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        value={companyForm.location}
-                        onChange={(e) => setCompanyForm({ ...companyForm, location: e.target.value })}
-                        placeholder="e.g. San Francisco, CA or Bengaluru, Karnataka"
-                        className="w-full pl-9 pr-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Tech Stack Tags Input */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Primary Technology Stack
-                    </label>
-                    <div className="p-3 border border-gray-200 rounded-xl bg-white space-y-2 focus-within:ring-1 focus-within:ring-black">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {companyForm.tech_stack.map((tech) => (
-                          <span
-                            key={tech}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200 shadow-2xs"
+                      {editingAdminInfo ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setEditingAdminInfo(false)}
+                            className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-600 transition-all cursor-pointer shadow-3xs"
                           >
-                            <span>{tech}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveTech(tech)}
-                              className="text-gray-400 hover:text-black ml-0.5 cursor-pointer"
-                            >
-                              ×
-                            </button>
-                          </span>
-                        ))}
-                        <input
-                          type="text"
-                          value={newTechInput}
-                          onChange={(e) => setNewTechInput(e.target.value)}
-                          onKeyDown={handleAddTech}
-                          placeholder="Type technology and press Enter (e.g. React, Python, AWS)..."
-                          className="flex-1 min-w-[200px] text-xs text-gray-900 bg-transparent outline-none py-1 px-1"
-                        />
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={async () => {
+                              const ok = await saveProfileData();
+                              if (ok) setEditingAdminInfo(false);
+                            }}
+                            className="px-3 py-1 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          >
+                            {saving ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                            <span>Save</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setEditingAdminInfo(true)}
+                          className="px-2.5 py-1 rounded-lg border border-white/80 bg-white/60 hover:bg-white backdrop-blur-md text-[11px] font-semibold text-gray-700 flex items-center gap-1.5 shadow-3xs transition-all cursor-pointer"
+                        >
+                          <Edit3 size={11} className="text-gray-500" />
+                          <span>Edit</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Body */}
+                    <div className="pt-3.5">
+                      {editingAdminInfo ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">
+                              Admin Full Name *
+                            </label>
+                            <input
+                              type="text"
+                              value={adminForm.admin_name}
+                              onChange={(e) => setAdminForm({ ...adminForm, admin_name: e.target.value })}
+                              placeholder="Full name"
+                              className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">
+                              Login Email Address *
+                            </label>
+                            <input
+                              type="email"
+                              value={adminForm.admin_email}
+                              onChange={(e) => setAdminForm({ ...adminForm, admin_email: e.target.value })}
+                              placeholder="admin@company.com"
+                              className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">
+                              Direct Phone Number
+                            </label>
+                            <input
+                              type="tel"
+                              value={adminForm.admin_phone}
+                              onChange={(e) => setAdminForm({ ...adminForm, admin_phone: e.target.value })}
+                              placeholder="+91 98765 43210"
+                              className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 py-0.5">
+                          <div className="flex flex-col justify-center">
+                            <span className="text-[10.5px] text-gray-400 font-medium leading-none">Administrator Name</span>
+                            <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                              <User size={13} className="text-gray-400 shrink-0" />
+                              <span className="truncate">{adminForm.admin_name || 'Admin'}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col justify-center">
+                            <span className="text-[10.5px] text-gray-400 font-medium leading-none">Login Email Address</span>
+                            <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                              <Mail size={13} className="text-gray-400 shrink-0" />
+                              <span className="truncate">{adminForm.admin_email || 'Not configured'}</span>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col justify-center">
+                            <span className="text-[10.5px] text-gray-400 font-medium leading-none">Direct Phone</span>
+                            <div className="flex items-center gap-1.5 text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                              <Phone size={13} className="text-gray-400 shrink-0" />
+                              <span>{adminForm.admin_phone || 'Not specified'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Tenant Workspace Identity Card */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    <div className="flex items-center gap-2.5 pb-3 border-b border-black/[0.04]">
+                      <div className="w-8 h-8 rounded-lg bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs shrink-0">
+                        <Shield size={15} />
+                      </div>
+                      <div>
+                        <h2 className="text-xs sm:text-[13.5px] font-bold text-gray-900 leading-tight">Workspace Governance & Tenant Info</h2>
+                        <p className="text-[11px] text-gray-500 mt-0.5">Enterprise tenant ID, organization type, and authority level.</p>
                       </div>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Helps vendor recruiters and AI screening agents match your requisitions accurately.
-                    </p>
-                  </div>
 
-                  {/* Company Bio / Notes */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Company Overview & Culture
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={companyForm.notes}
-                      onChange={(e) => setCompanyForm({ ...companyForm, notes: e.target.value })}
-                      placeholder="Brief overview of company mission, culture, and core engineering practices..."
-                      className="w-full px-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all resize-none"
-                    />
-                  </div>
-                </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 pt-3.5 py-0.5">
+                      <div className="flex flex-col justify-center">
+                        <span className="text-[10.5px] text-gray-400 font-medium leading-none">Tenant ID</span>
+                        <div className="flex items-center justify-between gap-1.5 mt-1">
+                          <span className="font-mono text-xs sm:text-[13px] font-semibold text-gray-900 truncate">
+                            {tenantInfo.tenant_id ? `${tenantInfo.tenant_id.slice(0, 14)}...` : 'Assigned'}
+                          </span>
+                          {tenantInfo.tenant_id && (
+                            <button
+                              type="button"
+                              onClick={handleCopyTenantId}
+                              title="Copy Tenant ID"
+                              className="p-1 rounded-md hover:bg-white/80 text-gray-500 hover:text-black transition-colors cursor-pointer shrink-0"
+                            >
+                              {copiedTenantId ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                <div className="pt-3 border-t border-gray-100 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-60"
-                  >
-                    {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                    <span>Save Company Information</span>
-                  </button>
-                </div>
-              </form>
-            )}
+                      <div className="flex flex-col justify-center">
+                        <span className="text-[10.5px] text-gray-400 font-medium leading-none">Tenant Architecture</span>
+                        <span className="text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                          {tenantInfo.tenant_type === 'client' ? 'Client Enterprise Tenant' : 'Consulting Partner'}
+                        </span>
+                      </div>
 
-            {/* TAB 2: ADMIN CONTACT DETAILS */}
-            {activeTab === 'admin' && (
-              <form onSubmit={handleSaveProfile} className="space-y-6">
-                <div className="p-4 rounded-xl bg-blue-50/60 border border-blue-200/80 text-xs text-blue-800 flex items-start gap-2.5">
-                  <Shield size={16} className="shrink-0 text-blue-600 mt-0.5" />
-                  <div>
-                    <span className="font-bold">Administrative Authority:</span> You are the primary Company Administrator for this organization. Updating your email will update the login credentials used to sign in to this portal.
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Admin Name */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Admin Full Name *
-                    </label>
-                    <div className="relative">
-                      <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        required
-                        value={adminForm.admin_name}
-                        onChange={(e) => setAdminForm({ ...adminForm, admin_name: e.target.value })}
-                        placeholder="e.g. Rahul Sharma"
-                        className="w-full pl-9 pr-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Admin Email */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Login Email Address *
-                    </label>
-                    <div className="relative">
-                      <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="email"
-                        required
-                        value={adminForm.admin_email}
-                        onChange={(e) => setAdminForm({ ...adminForm, admin_email: e.target.value })}
-                        placeholder="admin@company.com"
-                        className="w-full pl-9 pr-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Your primary sign-in identifier and dispatch address for audit notices.
-                    </p>
-                  </div>
-
-                  {/* Admin Phone */}
-                  <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                      Phone Number <span className="text-gray-400 font-normal lowercase">(optional)</span>
-                    </label>
-                    <div className="relative">
-                      <Phone size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="tel"
-                        value={adminForm.admin_phone}
-                        onChange={(e) => setAdminForm({ ...adminForm, admin_phone: e.target.value })}
-                        placeholder="+1 (555) 000-0000"
-                        className="w-full pl-9 pr-3.5 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                      />
+                      <div className="flex flex-col justify-center">
+                        <span className="text-[10.5px] text-gray-400 font-medium leading-none">Governance Authority</span>
+                        <span className="text-xs sm:text-[13.5px] font-semibold text-gray-900 mt-1">
+                          {tenantInfo.admin_role || 'Company Administrator'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
+              )}
 
-                <div className="pt-3 border-t border-gray-100 flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-60"
-                  >
-                    {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                    <span>Update Contact Credentials</span>
-                  </button>
-                </div>
-              </form>
-            )}
+              {/* TAB 3: PASSWORD & SECURITY */}
+              {activeTab === 'security' && (
+                <div className="space-y-3.5">
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    {/* Header */}
+                    <div className="flex items-center gap-2.5 pb-3 border-b border-black/[0.04]">
+                      <div className="w-8 h-8 rounded-lg bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs shrink-0">
+                        <Lock size={15} />
+                      </div>
+                      <div>
+                        <h2 className="text-xs sm:text-[13.5px] font-bold text-gray-900 leading-tight">Password & Security</h2>
+                        <p className="text-[11px] text-gray-500 mt-0.5">Update your account password and review security settings.</p>
+                      </div>
+                    </div>
 
-            {/* TAB 3: PASSWORD & SECURITY */}
-            {activeTab === 'security' && (
-              <form onSubmit={handleChangePassword} className="space-y-6 max-w-xl">
-                <div>
-                  <h3 className="text-sm font-bold text-gray-900">Change Workspace Password</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    Update your account authentication secret. Passwords must be at least 8 characters.
-                  </p>
-                </div>
-
-                {passwordError && (
-                  <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 animate-in fade-in duration-200">
-                    <AlertCircle size={15} className="shrink-0 text-red-500" />
-                    <span>{passwordError}</span>
-                  </div>
-                )}
-
-                {passwordSuccess && (
-                  <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in duration-200">
-                    <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-                    <span>{passwordSuccess}</span>
-                  </div>
-                )}
-
-                {/* Current Password */}
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Current Password *
-                  </label>
-                  <div className="relative">
-                    <KeyRound size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type={showCurrentPassword ? 'text' : 'password'}
-                      required
-                      value={passwordForm.current_password}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
-                      placeholder="Enter existing password"
-                      className="w-full pl-9 pr-10 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
-                      tabIndex={-1}
-                    >
-                      {showCurrentPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* New Password */}
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    New Password *
-                  </label>
-                  <div className="relative">
-                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type={showNewPassword ? 'text' : 'password'}
-                      required
-                      minLength={8}
-                      value={passwordForm.new_password}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
-                      placeholder="Enter minimum 8 characters"
-                      className="w-full pl-9 pr-10 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
-                      tabIndex={-1}
-                    >
-                      {showNewPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Confirm New Password */}
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Confirm New Password *
-                  </label>
-                  <div className="relative">
-                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-                    <input
-                      type={showConfirmPassword ? 'text' : 'password'}
-                      required
-                      minLength={8}
-                      value={passwordForm.confirm_password}
-                      onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
-                      placeholder="Repeat your new password"
-                      className="w-full pl-9 pr-10 py-2.5 text-xs text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
-                      tabIndex={-1}
-                    >
-                      {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <button
-                    type="submit"
-                    disabled={changingPassword}
-                    className="px-5 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer disabled:opacity-60"
-                  >
-                    {changingPassword ? (
-                      <>
-                        <Loader2 size={13} className="animate-spin" />
-                        <span>Updating Password...</span>
-                      </>
-                    ) : (
-                      <>
-                        <KeyRound size={13} />
-                        <span>Update Password</span>
-                      </>
+                    {/* Alerts */}
+                    {passwordError && (
+                      <div className="mt-3.5 p-3 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2 shadow-xs">
+                        <AlertCircle size={14} className="shrink-0 text-red-500" />
+                        <span>{passwordError}</span>
+                      </div>
                     )}
-                  </button>
+
+                    {passwordSuccess && (
+                      <div className="mt-3.5 p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center gap-2 shadow-xs">
+                        <CheckCircle2 size={14} className="shrink-0 text-emerald-600" />
+                        <span>{passwordSuccess}</span>
+                      </div>
+                    )}
+
+                    {/* Password Form */}
+                    <form onSubmit={handleChangePassword} className="pt-3.5 space-y-3 max-w-md">
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-gray-600 mb-1">
+                          Current Password *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCurrentPassword ? 'text' : 'password'}
+                            required
+                            value={passwordForm.current_password}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
+                            placeholder="Enter current password"
+                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black pr-9 shadow-3xs transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            tabIndex={-1}
+                          >
+                            {showCurrentPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-gray-600 mb-1">
+                          New Password * <span className="text-gray-400 font-normal">(min 8 characters)</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showNewPassword ? 'text' : 'password'}
+                            required
+                            minLength={8}
+                            value={passwordForm.new_password}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
+                            placeholder="Enter new secure password"
+                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black pr-9 shadow-3xs transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPassword(!showNewPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            tabIndex={-1}
+                          >
+                            {showNewPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10.5px] font-semibold text-gray-600 mb-1">
+                          Confirm New Password *
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showConfirmPassword ? 'text' : 'password'}
+                            required
+                            minLength={8}
+                            value={passwordForm.confirm_password}
+                            onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
+                            placeholder="Confirm new password"
+                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black pr-9 shadow-3xs transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            tabIndex={-1}
+                          >
+                            {showConfirmPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          type="submit"
+                          disabled={changingPassword}
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        >
+                          {changingPassword ? (
+                            <>
+                              <Loader2 size={12} className="animate-spin" />
+                              <span>Updating Password...</span>
+                            </>
+                          ) : (
+                            <>
+                              <KeyRound size={12} />
+                              <span>Update Password</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </form>
+                  </div>
                 </div>
-              </form>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );
