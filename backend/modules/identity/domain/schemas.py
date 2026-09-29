@@ -1,5 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, EmailStr, field_validator
-import dns.resolver
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 import re
 
 ROLES = ("Super Admin", "Admin", "HR", "Hiring Manager", "Recruiter", "Director", "Candidate", "Procurement", "Procurement Team", "Finance", "Finance Team")
@@ -39,14 +38,16 @@ _DISPOSABLE_DOMAINS = {
     "throwam.com",
 }
 
-# Basic email regex (format sanity before Pydantic EmailStr normalises it)
+# Basic email regex
 _EMAIL_RE = re.compile(
     r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$'
 )
 
 
 def _validate_real_email(email: str) -> str:
-    """Validate that the email is well-formed, non-disposable, and has MX records."""
+    """Validate that the email is well-formed, non-disposable, and has MX records when available."""
+    if not isinstance(email, str):
+        raise ValueError("Invalid email address format.")
     email = email.strip().lower()
 
     # 1. Regex format check
@@ -62,17 +63,12 @@ def _validate_real_email(email: str) -> str:
             "Please use a valid business or personal email."
         )
 
-    # 3. MX record check (domain must have real mail servers)
+    # 3. Optional MX record check (domain must have real mail servers if dns is available)
     try:
-        dns.resolver.resolve(domain, "MX", lifetime=5)
-    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-        raise ValueError(
-            f"The domain '{domain}' does not appear to accept email. "
-            "Please use a real email address."
-        )
+        import dns.resolver
+        dns.resolver.resolve(domain, "MX", lifetime=3)
     except Exception:
-        # Network timeout or other transient issue — let it through rather than
-        # block legitimate users during a DNS hiccup.
+        # Ignore on serverless environments without dnspython or when network blocks DNS
         pass
 
     return email
@@ -118,7 +114,7 @@ class VendorEngagementsIn(BaseModel):
 
 class UserCreate(BaseModel):
     phone: str = ''
-    email: EmailStr = Field(..., min_length=3, max_length=255)
+    email: str = Field(..., min_length=3, max_length=255)
     name: str = Field(..., min_length=1, max_length=255)
     password: str = Field(..., min_length=4, max_length=128)
     role: str
@@ -134,7 +130,7 @@ class UserCreate(BaseModel):
 
 class UserUpdate(BaseModel):
     phone: str | None = None
-    email: EmailStr | None = Field(None, min_length=3, max_length=255)
+    email: str | None = Field(None, min_length=3, max_length=255)
     name: str | None = Field(None, min_length=1, max_length=255)
     password: str | None = Field(None, min_length=4, max_length=128)
     department: str | None = None

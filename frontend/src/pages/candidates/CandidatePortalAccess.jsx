@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
-import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key, Edit3, Lock, X } from 'lucide-react';
+import { RefreshCw, Shield, ShieldOff, UserPlus, Search, AlertCircle, CheckCircle, Key, Edit3, Lock, X, Mail } from 'lucide-react';
+import { validateEmail } from '../../utils/emailValidation';
 
 export default function CandidatePortalAccess() {
   const { token, user } = useAuth();
@@ -9,6 +10,7 @@ export default function CandidatePortalAccess() {
   const [candidates, setCandidates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [search, setSearch] = useState('');
   const [creatingId, setCreatingId] = useState(null);
   const [updatingId, setUpdatingId] = useState(null);
@@ -50,6 +52,7 @@ export default function CandidatePortalAccess() {
   const withoutAccess = candidates.filter(c => !c.has_portal_access).length;
 
   const handleCreateAccess = (cand) => {
+    setEmailError('');
     setCreateForm({
       email: cand.candidate_email || cand.portal_user_email || '',
       name: cand.candidate_name || '',
@@ -61,9 +64,11 @@ export default function CandidatePortalAccess() {
   const handleSaveAccess = async () => {
     if (!showCreateModal) return;
     setError('');
+    setEmailError('');
     const emailVal = (createForm.email || '').trim();
-    if (!emailVal || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) {
-      setError('Please enter a valid official email address (e.g. candidate@company.com).');
+    const emailErr = validateEmail(emailVal);
+    if (emailErr) {
+      setEmailError(emailErr);
       return;
     }
     const cid = showCreateModal.candidate_id || showCreateModal.workorder_id;
@@ -81,7 +86,7 @@ export default function CandidatePortalAccess() {
           password: createForm.password,
         },
       });
-      setSuccessMsg(`Portal access created for ${createForm.name}. Candidate can now login with ${emailVal}`);
+      setSuccessMsg(`Portal access created and login credentials emailed to ${emailVal}`);
       setShowCreateModal(null);
       await loadCandidates();
     } catch (err) {
@@ -93,6 +98,7 @@ export default function CandidatePortalAccess() {
   };
 
   const handleEditAccess = (cand) => {
+    setEmailError('');
     setEditForm({
       email: cand.candidate_email || cand.portal_user_email || '',
       name: cand.candidate_name || '',
@@ -105,14 +111,23 @@ export default function CandidatePortalAccess() {
   const handleUpdateAccess = async () => {
     if (!showEditModal) return;
     const cid = showEditModal.candidate_id || showEditModal.workorder_id;
+    setEmailError('');
+    setError('');
+    const emailVal = (editForm.email || '').trim();
+    if (emailVal) {
+      const emailErr = validateEmail(emailVal);
+      if (emailErr) {
+        setEmailError(emailErr);
+        return;
+      }
+    }
     setUpdatingId(cid);
     setSuccessMsg('');
-    setError('');
     try {
       if (showEditModal.portal_user_id) {
         const body = {
           name: editForm.name.trim(),
-          email: editForm.email.trim().toLowerCase(),
+          email: emailVal.toLowerCase(),
           is_active: editForm.is_active,
           candidate_id: cid,
         };
@@ -129,13 +144,13 @@ export default function CandidatePortalAccess() {
           body: {
             candidate_id: cid,
             workorder_id: cid,
-            email: editForm.email.trim().toLowerCase(),
+            email: emailVal.toLowerCase(),
             name: editForm.name.trim(),
             password: editForm.password || '1234',
           },
         });
       }
-      setSuccessMsg(`Portal credentials updated for ${editForm.name}.`);
+      setSuccessMsg(`Portal credentials updated for ${editForm.name}${editForm.password ? ' and new credentials emailed to candidate' : ''}.`);
       setShowEditModal(null);
       await loadCandidates();
     } catch (err) {
@@ -349,15 +364,34 @@ export default function CandidatePortalAccess() {
             </div>
 
             <div className="space-y-4">
+              <div className="flex items-start gap-2.5 p-3.5 bg-emerald-50/80 border border-emerald-200/70 rounded-xl text-emerald-900 text-[0.8rem]">
+                <Mail size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-emerald-800">Email Notification Enabled</p>
+                  <p className="text-[0.74rem] text-emerald-700/90 mt-0.5">
+                    The candidate will automatically receive an email with their login credentials (email &amp; password) and direct portal access link.
+                  </p>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Email</label>
                 <input
                   type="email"
                   value={createForm.email}
-                  onChange={e => setCreateForm(f => ({ ...f, email: e.target.value }))}
+                  onChange={e => {
+                    setCreateForm(f => ({ ...f, email: e.target.value }));
+                    if (emailError) setEmailError('');
+                  }}
                   style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
                   className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
                 />
+                {emailError && (
+                  <p className="text-[0.74rem] text-red-600 font-semibold mt-1.5 flex items-center gap-1">
+                    <AlertCircle size={13} className="shrink-0" />
+                    {emailError}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Name</label>
@@ -423,10 +457,19 @@ export default function CandidatePortalAccess() {
                 <input
                   type="email"
                   value={editForm.email}
-                  onChange={e => setEditForm(f => ({ ...f, email: e.target.value }))}
+                  onChange={e => {
+                    setEditForm(f => ({ ...f, email: e.target.value }));
+                    if (emailError) setEmailError('');
+                  }}
                   style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
                   className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
                 />
+                {emailError && (
+                  <p className="text-[0.74rem] text-red-600 font-semibold mt-1.5 flex items-center gap-1">
+                    <AlertCircle size={13} className="shrink-0" />
+                    {emailError}
+                  </p>
+                )}
               </div>
               <div>
                 <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Name</label>
@@ -449,6 +492,12 @@ export default function CandidatePortalAccess() {
                   className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 placeholder:text-[#a3a3a3] placeholder:font-normal shadow-2xs transition-all"
                 />
                 <p className="text-[0.74rem] text-[#737373] mt-1.5 font-medium">Leave blank to keep existing password unchanged</p>
+                {editForm.password && (
+                  <div className="flex items-center gap-2 p-2.5 bg-blue-50/80 border border-blue-200/70 rounded-xl text-blue-900 text-[0.76rem] mt-2">
+                    <Mail size={14} className="text-blue-600 shrink-0" />
+                    <span>A notification with the updated password will be sent to the candidate's email.</span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-between pt-1">
                 <span className="text-[0.84rem] font-bold text-[#0a0a0a]">Account Status</span>

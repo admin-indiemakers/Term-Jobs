@@ -184,7 +184,9 @@ export async function request(path, {
     try {
       resData = await response.json();
     } catch (parseErr) {
-      console.warn(`⚠️ [API JSON PARSE WARNING] Unable to parse response as JSON for ${fullUrl}:`, parseErr);
+      if (isDev) {
+        console.warn(`⚠️ [API JSON PARSE WARNING] Unable to parse response as JSON for ${fullUrl}:`, parseErr);
+      }
       resData = null;
     }
 
@@ -200,6 +202,8 @@ export async function request(path, {
         } else if (typeof resData.error === 'string') {
           detail = resData.error === 'Route Not Found' ? `Route Not Found (${upperMethod} ${path})` : resData.error;
         }
+      } else if (response.status >= 500) {
+        detail = 'Server temporarily unavailable. Please try again in a moment.';
       }
 
       if (isDev) {
