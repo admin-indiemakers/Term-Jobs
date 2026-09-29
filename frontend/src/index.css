@@ -36,6 +36,22 @@
   background-size: 96px 96px;
 }
 
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ============ LANDING PAGE ANIMATIONS & COMPONENT STYLES ============ */
 nav.hide {
   transform: translateY(-100%);
@@ -5788,19 +5804,23 @@ html, body, #root {
 }
 
 /* Sleek In-built Scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent !important;
+}
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 4px;
+  height: 4px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #E5E7EB;
-  border-radius: 4px;
+  background: rgba(156, 163, 175, 0.35);
+  border-radius: 9999px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #D1D5DB;
+  background: rgba(107, 114, 128, 0.6);
 }
 
 /* ============ VISIONOS GLASSMORPHIC AI CHAT ============ */
