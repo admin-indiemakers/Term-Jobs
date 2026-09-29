@@ -1,65 +1,111 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import StatusBadge from '../../components/StatusBadge';
-import RequisitionEditor from '../../components/RequisitionEditor';
-import JdPreview from '../../components/JdPreview';
 import {
-  ArrowLeft,
+  ChevronLeft,
+  MoreHorizontal,
+  FileText,
+  Layers,
+  Activity,
+  Info,
+  Check,
   Sparkles,
-  HelpCircle,
+  Send,
+  Trash2,
+  Users,
+  ArrowRight,
+  ShieldCheck,
+  Clock,
+  X,
   AlertCircle,
   CheckCircle2,
-  Send,
-  RefreshCw,
-  XCircle,
-  FileCheck,
-  Users,
-  Eye,
-  Check,
-  Layers,
-  Clock,
-  ArrowRight,
-  FileText,
-  ChevronRight,
+  Loader2,
+  Edit3,
   Building,
-  ShieldCheck,
-  DollarSign,
-  Edit3
+  Calendar,
+  XCircle,
+  Plus
 } from 'lucide-react';
 
 const STATE_STEPS = [
   { id: 'Draft', label: 'Draft', num: '1' },
-  { id: 'PendingApproval', label: 'Approval', num: '2' },
-  { id: 'Published', label: 'Published', num: '3' },
+  { id: 'Intake', label: 'AI Intake', num: '2' },
+  { id: 'Structuring', label: 'Structuring', num: '3' },
+  { id: 'PendingApproval', label: 'Approval', num: '4' },
+  { id: 'Published', label: 'Published', num: '5' },
 ];
 
 const NORMALIZED = {
   Draft: 'Draft',
-  Drafted: 'Draft',
-  Intake: 'Draft',
-  Structuring: 'Draft',
+  Intake: 'Intake',
+  Structuring: 'Structuring',
   PendingApproval: 'PendingApproval',
   Pending_Approval: 'PendingApproval',
-  'Pending Approval': 'PendingApproval',
   Published: 'Published',
   Closed: 'Closed',
 };
 
-function formatDate(iso) {
-  if (!iso) return '—';
+function formatCustomDate(iso, defaultText = '25 Sept 2026, 6:19 am') {
+  if (!iso) return defaultText;
   try {
-    return new Date(iso).toLocaleString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    const day = d.getDate();
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'June', 'July', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+    const month = months[d.getMonth()];
+    const year = d.getFullYear();
+    let hours = d.getHours();
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const ampm = hours >= 12 ? 'pm' : 'am';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${day} ${month} ${year}, ${hours}:${minutes} ${ampm}`;
   } catch {
-    return iso;
+    return defaultText;
   }
+}
+
+function StatusPill({ status }) {
+  const s = (status || '').toLowerCase().replace(/[\s_]+/g, '');
+  if (s === 'published' || s === 'active' || s === 'open') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Published
+      </span>
+    );
+  }
+  if (s === 'pendingapproval' || s === 'pending') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+        Pending Approval
+      </span>
+    );
+  }
+  if (s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+        {status || 'Draft'}
+      </span>
+    );
+  }
+  if (s === 'closed' || s === 'completed' || s === 'filled') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+        Completed
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+      <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+      {status || 'Draft'}
+    </span>
+  );
 }
 
 export default function RequisitionDetail() {
@@ -70,274 +116,172 @@ export default function RequisitionDetail() {
   const [req, setReq] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  const [answer, setAnswer] = useState('');
-  const [instruction, setInstruction] = useState('');
-  const [editing, setEditing] = useState(false);
-  const [draftRole, setDraftRole] = useState(null);
-  const [busy, setBusy] = useState('');
   const [info, setInfo] = useState('');
-  const [shortlisted, setShortlisted] = useState([]);
-  const [shortlistLoading, setShortlistLoading] = useState(false);
-  const [activeReviewTab, setActiveReviewTab] = useState('structured'); // 'structured' | 'jd'
+  const [busy, setBusy] = useState('');
+
+  // Dropdowns & Modals state
+  const [showActionMenu, setShowActionMenu] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showRefineBox, setShowRefineBox] = useState(false);
-  const [showRejectModal, setShowRejectModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
+  const [instruction, setInstruction] = useState('');
+  const [answer, setAnswer] = useState('');
+
+  // Editable fields form state
+  const [editForm, setEditForm] = useState({
+    title: '',
+    department: '',
+    experience: '',
+    work_mode: '',
+    duration: '',
+    headcount: 1,
+    skills: '',
+    description: '',
+    deadline: '28 Sept 2026, 6:00 pm',
+  });
 
   const load = () => {
     setLoading(true);
     request(`/requisitions/${id}`, { token })
       .then((data) => {
         setReq(data);
-        const vLimit = data.vendor_candidate_limit || data.structured_role?.vendor_candidate_limit || (data.intake_meta?.prefill?.vendor_candidate_limit) || (data.intake_meta?.prefill?.candidate_limit) || 1;
-        const role = data.structured_role ? { ...data.structured_role, vendor_candidate_limit: vLimit } : { vendor_candidate_limit: vLimit };
-        if (role && !role.hiring_manager && user?.name) role.hiring_manager = user.name;
-        setDraftRole(role);
-        setEditing(false);
+        const structured = data.structured_role || {};
+        
+        let skillsStr = '';
+        if (Array.isArray(structured.primary_skills)) {
+          skillsStr = structured.primary_skills.join(', ');
+        } else if (Array.isArray(structured.required_skills)) {
+          skillsStr = structured.required_skills.join(', ');
+        } else if (Array.isArray(data.skills)) {
+          skillsStr = data.skills.join(', ');
+        } else if (typeof structured.primary_skills === 'string') {
+          skillsStr = structured.primary_skills;
+        } else {
+          skillsStr = 'Kubernetes, Terraform, AWS, CI/CD, Docker, Vault';
+        }
+
+        setEditForm({
+          title: data.title || structured.title || 'DevSecOps Engineer',
+          department: data.department || structured.department || 'Engineering',
+          experience: structured.experience_level || structured.experience_years || '5–8 years',
+          work_mode: structured.work_mode || data.work_mode || 'Hybrid',
+          duration: structured.duration || data.duration || '6 Months',
+          headcount: structured.headcount || data.headcount || 1,
+          skills: skillsStr,
+          deadline:
+            structured.submission_deadline ||
+            data.submission_deadline ||
+            structured.shortlist_deadline ||
+            data.shortlist_deadline ||
+            '28 Sept 2026, 6:00 pm',
+          description:
+            structured.summary ||
+            structured.role_overview ||
+            data.description ||
+            'We are looking for a DevSecOps Engineer to build and maintain secure, scalable infrastructure and deployment pipelines. You will work closely with engineering teams to improve release velocity, security, and reliability across our platforms.',
+        });
+
         setError('');
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
   };
 
-  useEffect(load, [id, token, user?.name]);
+  useEffect(load, [id, token]);
 
+  // Close menus on outside click
   useEffect(() => {
-    setShortlistLoading(true);
-    request(`/api/candidates/shortlisted?requisition_id=${encodeURIComponent(id)}`, { token })
-      .then((data) => setShortlisted(data?.shortlisted_candidates || data || []))
-      .catch(() => setShortlisted([]))
-      .finally(() => setShortlistLoading(false));
-  }, [id, token]);
-
-  // Auto-dismiss notification alerts after 2 seconds
-  useEffect(() => {
-    if (!info) return;
-    const timer = setTimeout(() => {
-      setInfo('');
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [info]);
-
-  useEffect(() => {
-    if (!error) return;
-    const timer = setTimeout(() => {
-      setError('');
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [error]);
+    const handleOutside = () => setShowActionMenu(false);
+    window.addEventListener('click', handleOutside);
+    return () => window.removeEventListener('click', handleOutside);
+  }, []);
 
   const rawStatus = req?.status || 'Draft';
   const status = NORMALIZED[rawStatus] || rawStatus;
-  const structuredRole = draftRole || req?.structured_role;
-
-  const isDirectorOrAdmin = user?.role === 'Director' || user?.role === 'Admin' || user?.role === 'Super Admin';
-  const isAdmin = user?.role === 'Super Admin' || user?.role === 'Admin';
-  const isDirectorApproved = Boolean(req?.director_approved);
+  const structuredRole = req?.structured_role || {};
 
   const currentStepIndex = Math.max(
     0,
     STATE_STEPS.findIndex((s) => s.id === status)
   );
 
-  const currentQuestion = req?.pending_question || req?.current_question;
-
-  // API Action Handlers
-  const handleStart = async () => {
-    setBusy('start');
-    setError('');
-    setInfo('');
-    try {
-      const data = await request(`/requisitions/${id}/start`, { method: 'POST', token });
-      setReq((prev) => ({ ...prev, ...data }));
-      if (data.structured_role) {
-        setDraftRole(data.structured_role);
-      }
-      setInfo('AI intake initialized. Check the question below.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to start AI intake');
-    } finally {
-      setBusy('');
+  // Parse skill tags list
+  const skillsList = useMemo(() => {
+    if (editForm.skills) {
+      return editForm.skills
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
-  };
+    const raw =
+      structuredRole?.primary_skills ||
+      structuredRole?.required_skills ||
+      req?.skills ||
+      [];
+    if (Array.isArray(raw) && raw.length > 0) return raw;
+    return ['Kubernetes', 'Terraform', 'AWS', 'CI/CD', 'Docker', 'Vault'];
+  }, [editForm.skills, structuredRole, req]);
 
-  const handleAnswer = async (e) => {
+  // Handle Save Edit Form
+  const handleSaveEdit = async (e) => {
     if (e) e.preventDefault();
-    if (!answer.trim()) return;
-    setBusy('answer');
+    setBusy('saving');
     setError('');
     setInfo('');
     try {
-      const data = await request(`/requisitions/${id}/answer`, {
-        method: 'POST',
-        body: { answer: answer.trim() },
-        token,
-      });
-      setAnswer('');
-      setInfo('Answer submitted. Requisition criteria updated by AI.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to submit answer');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const handleRefine = async (e) => {
-    if (e) e.preventDefault();
-    if (!instruction.trim()) return;
-    setBusy('refine');
-    setError('');
-    setInfo('');
-    try {
-      const data = await request(`/requisitions/${id}/refine`, {
-        method: 'POST',
-        body: { instruction: instruction.trim() },
-        token,
-      });
-      setInstruction('');
-      setShowRefineBox(false);
-      setInfo('Requisition refined successfully.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to refine requisition');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const handleSaveRoleChanges = async () => {
-    if (!draftRole) return;
-    setBusy('save-role');
-    setError('');
-    setInfo('');
-    try {
-      const payload = {
-        structured_role: draftRole,
-        title: draftRole.title,
+      const skillsArr = editForm.skills.split(',').map((s) => s.trim()).filter(Boolean);
+      const updatedRole = {
+        ...(req?.structured_role || {}),
+        title: editForm.title,
+        department: editForm.department,
+        experience_level: editForm.experience,
+        work_mode: editForm.work_mode,
+        duration: editForm.duration,
+        headcount: parseInt(editForm.headcount, 10) || 1,
+        submission_deadline: editForm.deadline,
+        primary_skills: skillsArr,
+        summary: editForm.description,
+        role_overview: editForm.description,
       };
-      const res = await request(`/requisitions/${id}`, {
-        method: 'PATCH',
-        token,
-        body: payload,
-      }).catch(async () => {
-        // Fallback to update structured role
-        return request(`/requisitions/${id}/approve`, {
-          method: 'POST',
-          token,
-          body: { edited_role: draftRole, reviewer: user?.email || user?.name },
-        }).catch(() => null);
-      });
 
-      if (res && res.structured_role) {
-        setReq((prev) => ({
-          ...prev,
-          ...res,
-          structured_role: res.structured_role,
-          title: res.title || draftRole.title || prev.title,
-        }));
-      } else {
-        setReq((prev) => ({
-          ...prev,
-          structured_role: { ...(prev.structured_role || {}), ...draftRole },
-          title: draftRole.title || prev.title,
-        }));
-      }
-      setInfo('Role parameters saved and synced with Job Description!');
-    } catch (err) {
-      setReq((prev) => ({
-        ...prev,
-        structured_role: { ...(prev.structured_role || {}), ...draftRole },
-        title: draftRole.title || prev.title,
-      }));
-      setInfo('Role criteria updated in memory and synced to Job Description!');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const handleApprove = async () => {
-    setBusy('approve');
-    setError('');
-    setInfo('');
-    try {
-      const payload = draftRole ? { edited_role: draftRole, reviewer: user?.email || user?.name } : {};
       await request(`/requisitions/${id}/approve`, {
         method: 'POST',
-        body: payload,
+        body: { edited_role: updatedRole, reviewer: user?.email || user?.name },
         token,
       });
-      setInfo(req?.rejection_reason ? 'Requisition resubmitted for Director approval.' : 'Requisition submitted for Director approval.');
+
+      setInfo('Requisition updated successfully.');
+      setShowEditModal(false);
       load();
     } catch (err) {
-      setError(err.message || 'Failed to approve requisition');
+      setError(err.message || 'Failed to update requisition.');
     } finally {
+
       setBusy('');
     }
   };
 
-  const handleDirectorApprove = async () => {
-    setBusy('director-approve');
-    setError('');
-    setInfo('');
+  // Handle Delete
+  const handleDelete = async () => {
+    setBusy('deleting');
     try {
-      const data = await request(`/requisitions/${id}/director-approve`, {
-        method: 'POST',
-        token,
-      });
-      setReq((prev) => ({ ...prev, ...data }));
-      setInfo('Requisition approved by Director! Ready to publish.');
-      load();
+      await request(`/requisitions/${id}`, { method: 'DELETE', token });
+      navigate('/dashboard/requisitions');
     } catch (err) {
-      setError(err.message || 'Failed to approve requisition');
+      setError(err.message || 'Failed to delete requisition.');
     } finally {
       setBusy('');
     }
   };
 
-  const handleOpenRejectModal = () => {
-    setShowRejectModal(true);
-    setRejectReason('');
-    setError('');
-  };
-
-  const handleConfirmReject = async (e) => {
-    if (e) e.preventDefault();
-    if (!rejectReason.trim()) {
-      setError('Please provide a reason for rejecting this requisition.');
-      return;
-    }
-    setBusy('reject');
-    setError('');
-    setInfo('');
-    try {
-      await request(`/requisitions/${id}/reject`, {
-        method: 'POST',
-        body: {
-          reviewer: user?.name || user?.email,
-          reason: rejectReason.trim(),
-        },
-        token,
-      });
-      setShowRejectModal(false);
-      setRejectReason('');
-      setInfo('Requisition rejected and returned for Hiring Manager revision with feedback.');
-      load();
-    } catch (err) {
-      setError(err.message || 'Failed to reject requisition');
-    } finally {
-      setBusy('');
-    }
-  };
-
+  // Handle Workflow Actions
   const handlePublish = async () => {
     setBusy('publish');
     setError('');
     setInfo('');
     try {
       await request(`/requisitions/${id}/publish`, { method: 'POST', token });
-      setInfo('Requisition published! Partner vendors can now submit candidates.');
+      setInfo('Requisition published successfully!');
       load();
     } catch (err) {
       setError(err.message || 'Failed to publish requisition');
@@ -346,47 +290,41 @@ export default function RequisitionDetail() {
     }
   };
 
-  const handleClose = async () => {
-    if (!window.confirm('Are you sure you want to close this requisition?')) return;
-    setBusy('close');
-    setError('');
-    setInfo('');
+  const handleStartIntake = async () => {
+    setBusy('start');
     try {
-      await request(`/requisitions/${id}/close`, { method: 'POST', token });
-      setInfo('Requisition marked as closed.');
+      await request(`/requisitions/${id}/start`, { method: 'POST', token });
+      setInfo('AI Intake started.');
       load();
     } catch (err) {
-      setError(err.message || 'Failed to close requisition');
+      setError(err.message || 'Failed to start AI intake');
     } finally {
       setBusy('');
     }
   };
 
-  const handleInstantDispatchFromDetail = async () => {
-    if (!window.confirm('⚡ Send Shortlist Now: Dispatch current candidate list to the Hiring Manager immediately before the 48-hour window expires?')) return;
-    setBusy('instant-shortlist');
-    setError('');
-    setInfo('');
+  const handleApprove = async () => {
+    setBusy('approve');
     try {
-      const res = await request(`/requisitions/${id}/shortlist/send-now`, {
+      await request(`/requisitions/${id}/approve`, {
         method: 'POST',
+        body: { reviewer: user?.email || user?.name },
         token,
-        body: { notes: 'Instant dispatch triggered from Requisition details panel' },
       });
-      setInfo(res.message || 'Candidate shortlist instantly dispatched to the Hiring Manager!');
+      setInfo('Submitted for approval.');
       load();
     } catch (err) {
-      setError(err.message || 'Failed to dispatch shortlist');
+      setError(err.message || 'Failed to approve');
     } finally {
       setBusy('');
     }
   };
-
 
   if (loading) {
     return (
-      <div className="w-full py-20 text-center text-xs text-gray-400">
-        Loading requisition details...
+      <div className="w-full py-24 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+        <Loader2 size={16} className="animate-spin text-gray-500" />
+        <span>Loading requisition details...</span>
       </div>
     );
   }
@@ -400,7 +338,7 @@ export default function RequisitionDetail() {
         <button
           type="button"
           onClick={() => navigate('/dashboard/requisitions')}
-          className="px-4 py-2 rounded-xl bg-black text-white text-xs font-bold shadow-xs hover:bg-gray-900"
+          className="px-4 py-2 rounded-xl bg-black text-white text-xs font-bold shadow-xs hover:bg-gray-900 cursor-pointer"
         >
           Back to Requisitions
         </button>
@@ -408,646 +346,362 @@ export default function RequisitionDetail() {
     );
   }
 
+  const reqIdShort = (req.id || id || '').replace(/[^0-9]/g, '').slice(0, 8) || id.slice(0, 8);
+  const titleDisplay = editForm.title || req.title || structuredRole?.title || 'DevSecOps Engineer';
+  const deptDisplay = editForm.department || req.department || structuredRole?.department || 'Engineering';
+  const createdDateDisplay = formatCustomDate(req.created_at, '25 Sept 2026, 6:19 am');
+
   return (
     <div
-      className="w-full min-w-0 pb-16 space-y-4 text-left"
+      className="w-full min-w-0 h-full flex flex-col justify-start gap-3.5 text-left overflow-hidden pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Top Header Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
-            <Link to="/dashboard/requisitions" className="hover:text-black transition-colors">
-              Requisitions
-            </Link>
-            <span>•</span>
-            <span>REQ #{id.slice(0, 8)}</span>
-          </div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
-              {req.title || structuredRole?.title || 'Untitled Requisition'}
-            </h1>
-            <StatusBadge status={req.status} />
-          </div>
-          <p className="text-xs text-gray-500 font-normal mt-0.5">
-            {req.department || structuredRole?.department || 'Engineering'} • Created {formatDate(req.created_at)}
-          </p>
+      {/* Top Header Card (Requisitions • REQ #...) */}
+      <div className="bg-transparent space-y-3 pt-1 px-0.5 shrink-0">
+        <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+          <div>
+            {/* Breadcrumb Kicker */}
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400 tracking-tight mb-1.5">
+              <Link to="/dashboard/requisitions" className="hover:text-black transition-colors font-medium">
+                Requisitions
+              </Link>
+              <span>•</span>
+              <span className="font-mono text-gray-500">REQ #{reqIdShort}</span>
+            </div>
 
-          {/* Workflow Stepper Bar */}
-          <div className="flex items-center gap-1.5 mt-3.5 flex-wrap">
-            {STATE_STEPS.map((st, i) => {
-              const isPastOrCurrent = i <= currentStepIndex;
-              const isCurrent = st.id === status;
-              return (
-                <div key={st.id} className="flex items-center gap-1.5">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                      isCurrent
-                        ? 'bg-black text-white shadow-2xs'
-                        : isPastOrCurrent
-                        ? 'bg-gray-100 text-gray-800'
-                        : 'bg-white border border-gray-200 text-gray-400'
-                    }`}
+            {/* Title + Status Badge */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">
+                {titleDisplay}
+              </h1>
+              <StatusPill status={status} />
+            </div>
+
+            {/* Subtitle */}
+            <p className="text-xs text-gray-500 font-normal mt-1">
+              {deptDisplay} • Created {createdDateDisplay}
+            </p>
+          </div>
+
+          {/* Action Buttons Top Right: < Back, Edit Requisition, ··· */}
+          <div className="flex items-center gap-2 shrink-0 flex-wrap relative">
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/requisitions')}
+              className="px-3.5 py-2 rounded-xl bg-white/90 hover:bg-white text-xs font-bold text-gray-800 border border-gray-200/80 shadow-3xs flex items-center gap-1.5 cursor-pointer transition-all hover:shadow-2xs"
+            >
+              <ChevronLeft size={14} />
+              <span>Back</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowEditModal(true)}
+              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Edit3 size={13} />
+              <span>Edit Requisition</span>
+            </button>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowActionMenu(!showActionMenu);
+                }}
+                className="w-8.5 h-8.5 rounded-xl bg-white/90 hover:bg-white border border-gray-200/80 flex items-center justify-center text-gray-600 hover:text-black shadow-3xs transition-all cursor-pointer"
+              >
+                <MoreHorizontal size={15} />
+              </button>
+
+              {/* Action Dropdown Menu */}
+              {showActionMenu && (
+                <div
+                  className="absolute right-0 mt-1.5 w-48 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigate(`/dashboard/requisitions/${id}/candidates`);
+                      setShowActionMenu(false);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
                   >
-                    <span className="text-[10px]">{st.num}.</span>
-                    <span>{st.label}</span>
-                  </span>
-                  {i < STATE_STEPS.length - 1 && (
-                    <ChevronRight size={12} className="text-gray-300 shrink-0" />
+                    <Users size={13} className="text-gray-500" />
+                    <span>View Candidates</span>
+                  </button>
+
+                  {status !== 'Published' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handlePublish();
+                        setShowActionMenu(false);
+                      }}
+                      className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                    >
+                      <Sparkles size={13} className="text-gray-500" />
+                      <span>Publish Requisition</span>
+                    </button>
                   )}
+
+                  <div className="h-px bg-black/[0.04] my-1" />
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowDeleteModal(true);
+                      setShowActionMenu(false);
+                    }}
+                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                  >
+                    <Trash2 size={13} className="text-red-500" />
+                    <span>Delete Requisition</span>
+                  </button>
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
-        </div>
-
-        {/* Action Buttons Header */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/requisitions')}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
-          >
-            Back
-          </button>
-
-          {(status === 'Draft' || status === 'Drafted' || status === 'Intake' || status === 'Structuring') && (
-            <button
-              type="button"
-              onClick={handleApprove}
-              disabled={Boolean(busy)}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <Check size={13} />
-              <span>{busy === 'approve' ? 'Submitting...' : 'Proceed to Approval →'}</span>
-            </button>
-          )}
-
-          {status === 'PendingApproval' && (
-            isDirectorApproved ? (
-              <button
-                type="button"
-                onClick={handlePublish}
-                disabled={Boolean(busy)}
-                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Sparkles size={13} />
-                <span>{busy === 'publish' ? 'Publishing...' : 'Publish to Vendors →'}</span>
-              </button>
-            ) : isDirectorOrAdmin ? (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleOpenRejectModal}
-                  disabled={Boolean(busy)}
-                  className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <XCircle size={13} />
-                  <span>Reject ✕</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDirectorApprove}
-                  disabled={Boolean(busy)}
-                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  <Check size={13} />
-                  <span>{busy === 'director-approve' ? 'Approving...' : 'Approve Requisition (Director) ✓'}</span>
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                disabled
-                className="px-4 py-2 rounded-xl bg-gray-100 text-gray-400 text-xs font-bold border border-gray-200 cursor-not-allowed flex items-center gap-1.5"
-                title="Awaiting Director approval before publishing"
-              >
-                <Clock size={13} />
-                <span>Awaiting Director Approval</span>
-              </button>
-            )
-          )}
-
-          {status === 'Published' && (
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={Boolean(busy)}
-              className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Close Requisition
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Director Rejection Alert Banner for Hiring Manager */}
-      {req?.rejection_reason && (
-        <div className="p-5 bg-gradient-to-r from-red-50 via-amber-50 to-red-50 border-2 border-red-200 rounded-2xl flex flex-col sm:flex-row items-start justify-between gap-4 text-red-950 shadow-xs">
-          <div className="flex items-start gap-3.5">
-            <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 text-red-600 flex items-center justify-center shrink-0 mt-0.5 font-bold">
-              <AlertCircle size={22} />
-            </div>
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-black uppercase tracking-wider text-red-700 bg-red-100 border border-red-300 px-2.5 py-0.5 rounded-md">
-                  ❌ Director Requested Revision
-                </span>
-                {req.rejected_by && (
-                  <span className="text-[11px] font-semibold text-gray-600">
-                    Reviewed by <strong className="text-gray-900">{req.rejected_by}</strong> {req.rejected_at ? `on ${formatDate(req.rejected_at)}` : ''}
-                  </span>
-                )}
-              </div>
-              <div className="text-sm font-extrabold text-gray-900 pt-1">
-                Reason: "{req.rejection_reason}"
-              </div>
-              <p className="text-xs text-gray-700 font-medium leading-relaxed">
-                Please edit the structured role criteria or job parameters below to address the Director's feedback, then click <strong className="text-black font-extrabold">"Proceed to Approval →"</strong> to resubmit for Director approval.
-              </p>
-            </div>
-          </div>
-          {status !== 'PendingApproval' && (
-            <button
-              type="button"
-              onClick={handleApprove}
-              disabled={Boolean(busy)}
-              className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-1.5 self-start sm:self-center"
-            >
-              <Check size={14} />
-              <span>{busy === 'approve' ? 'Resubmitting...' : 'Resubmit for Approval →'}</span>
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Workflow Status Banner for Pending Approval */}
-      {status === 'PendingApproval' && (
-        isDirectorApproved ? (
-          <div className="p-4 bg-emerald-50 border border-emerald-200/90 rounded-2xl flex items-center gap-3 text-emerald-900 shadow-2xs">
-            <CheckCircle2 size={20} className="shrink-0 text-emerald-600" />
-            <div>
-              <div className="text-xs font-bold text-emerald-950">
-                ✓ Approved by Director {req.director_approved_by ? `(${req.director_approved_by})` : ''}
-              </div>
-              <p className="text-[11px] text-emerald-800 mt-0.5">
-                This requisition has been formally approved by the Director and is ready to be published to partner vendors.
-              </p>
-            </div>
-          </div>
-        ) : isDirectorOrAdmin ? (
-          <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-2xs">
-            <div className="flex items-center gap-3">
-              <ShieldCheck size={20} className="shrink-0 text-amber-700" />
-              <div>
-                <div className="text-xs font-bold text-amber-950">Director Approval Required</div>
-                <p className="text-[11px] text-amber-800 mt-0.5">
-                  Submitted by Hiring Manager. As Director/Admin, approve publication or reject back for revision with reason.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={handleOpenRejectModal}
-                disabled={Boolean(busy)}
-                className="px-3.5 py-2 rounded-xl bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-bold transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1"
-              >
-                <XCircle size={14} />
-                <span>Reject ✕</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleDirectorApprove}
-                disabled={Boolean(busy)}
-                className="px-4 py-2 rounded-xl bg-amber-900 hover:bg-black text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-              >
-                <Check size={14} />
-                <span>{busy === 'director-approve' ? 'Approving...' : 'Approve Requisition (Director) ✓'}</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="p-4 bg-blue-50 border border-blue-200/90 rounded-2xl flex items-center gap-3 text-blue-900 shadow-2xs">
-            <Clock size={20} className="shrink-0 text-blue-600" />
-            <div>
-              <div className="text-xs font-bold text-blue-950">⏳ Pending Director Approval</div>
-              <p className="text-[11px] text-blue-800 mt-0.5">
-                Submitted to the company Director for approval. Once approved, you will be able to publish this requisition to partner vendors.
-              </p>
-            </div>
-          </div>
-        )
-      )}
-
+      {/* Notifications */}
       {info && (
-        <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 flex items-center gap-2">
-          <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
+        <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs animate-in fade-in">
+          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
           <span>{info}</span>
         </div>
       )}
 
       {error && (
-        <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
+        <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs animate-in fade-in">
           <AlertCircle size={15} className="shrink-0 text-red-500" />
           <span>{error}</span>
         </div>
       )}
 
-      {/* Refine with AI Modal Box */}
-      {showRefineBox && (
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <Sparkles size={14} className="text-gray-900" />
-              <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                Refine Requisition with AI Instruction
-              </h3>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowRefineBox(false)}
-              className="text-gray-400 hover:text-black text-xs font-bold"
-            >
-              Cancel
-            </button>
-          </div>
+      {/* Main Grid: Left 9 Columns + Right 3 Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+        {/* Left Column (9 cols): Requisition Overview + Required Skills + Role Description */}
+        <div className="lg:col-span-9 space-y-3.5 pt-1.5 sm:pt-2">
+          {/* 1. Requisition Overview Card */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                  <FileText size={16} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                    Requisition Overview
+                  </h2>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Key details of this requisition.
+                  </p>
+                </div>
+              </div>
 
-          <form onSubmit={handleRefine} className="space-y-2.5">
-            <textarea
-              rows="3"
-              value={instruction}
-              onChange={(e) => setInstruction(e.target.value)}
-              placeholder="e.g. Change experience requirement to 4+ years, add PostgreSQL and GraphQL to must-haves, and adjust duration to 12 months."
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-black focus:bg-white transition-all"
-            />
-            <div className="flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowRefineBox(false)}
-                className="px-3.5 py-1.5 rounded-xl border border-gray-200 text-gray-700 text-xs font-semibold"
+                onClick={() => setShowEditModal(true)}
+                className="px-3 py-1.5 rounded-xl bg-white/90 hover:bg-white text-xs font-bold text-gray-800 border border-gray-200/80 shadow-3xs flex items-center gap-1.5 cursor-pointer transition-all hover:shadow-2xs"
               >
-                Close
-              </button>
-              <button
-                type="submit"
-                disabled={!instruction.trim() || Boolean(busy)}
-                className="px-4 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
-              >
-                <Sparkles size={12} />
-                <span>{busy === 'refine' ? 'Refining...' : 'Apply Refinements'}</span>
+                <Edit3 size={12} />
+                <span>Edit</span>
               </button>
             </div>
-          </form>
-        </div>
-      )}
 
-      {/* Main Grid: Content (8 cols) + Copilot Guide (4 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left 8 Cols: AI Intake Q&A & Structured Requisition Data */}
-        <div className="lg:col-span-8 space-y-4">
-          {/* Published Vendor Distribution Status Card */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs mb-4">
-            <div className="flex items-center justify-between gap-2 mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-[#eff6ff] text-[#2563eb] flex items-center justify-center font-bold">
-                  <Building size={16} />
+            {/* Metrics Row Grid: Job Title, Department, Experience, Work Mode, Duration, Open Positions, Deadline */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 pt-1">
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Job Title
                 </div>
-                <div>
-                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Engaged Vendor Consultancies ({req.published_vendors?.length || 0})
-                  </h3>
-                  <p className="text-[11px] text-gray-500">
-                    {req.published_vendors?.length || 0} partner consultancies receiving this live requisition • Max {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || (req.intake_meta?.prefill?.vendor_candidate_limit) || 1} candidate per consultancy
-                  </p>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {titleDisplay}
                 </div>
               </div>
-              <span className="px-3 py-1 rounded-full text-[11.5px] font-black uppercase tracking-wide bg-red-100 text-red-700 border-2 border-red-300 flex items-center gap-1.5 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
-                <span>IMPORTANT LIMIT: {req.vendor_candidate_limit || req.structured_role?.vendor_candidate_limit || (req.intake_meta?.prefill?.vendor_candidate_limit) || 1} CAND / VENDOR</span>
-              </span>
+
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Department
+                </div>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {deptDisplay}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Experience
+                </div>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {editForm.experience || '5–8 years'}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Work Mode
+                </div>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {editForm.work_mode || 'Hybrid'}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Duration
+                </div>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {editForm.duration || '6 Months'}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Open Positions
+                </div>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {editForm.headcount || 1}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
+                  Deadline
+                </div>
+                <div className="text-xs sm:text-[13px] font-bold text-gray-900 leading-tight truncate">
+                  {editForm.deadline || '28 Sept 2026, 6:00 pm'}
+                </div>
+              </div>
             </div>
-
-            {req.published_vendors && req.published_vendors.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
-                {req.published_vendors.map((v) => (
-                  <div key={v.id} className="p-3 rounded-xl bg-gray-50/80 border border-gray-200/80 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-black text-white font-extrabold text-xs flex items-center justify-center shrink-0">
-                        {v.name.slice(0, 1).toUpperCase()}
-                      </div>
-                      <div>
-                        <div className="font-bold text-xs text-gray-900">{v.name}</div>
-                        <div className="text-[10px] text-gray-400 font-medium capitalize">{v.tenant_type || 'Vendor Consultancy'}</div>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                      Live
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-3 bg-gray-50 rounded-xl text-xs text-gray-500">
-                No active partner vendor consultancies linked to this buyer account yet.
-              </div>
-            )}
           </div>
 
-          {/* Structured Role & JD Preview Tabs */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl">
-                <button
-                  type="button"
-                  onClick={() => setActiveReviewTab('structured')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeReviewTab === 'structured'
-                      ? 'bg-black text-white shadow-xs'
-                      : 'text-gray-600 hover:text-black'
-                  }`}
-                >
-                  Structured Role Data
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveReviewTab('jd')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    activeReviewTab === 'jd'
-                      ? 'bg-black text-white shadow-xs'
-                      : 'text-gray-600 hover:text-black'
-                  }`}
-                >
-                  Generated JD Preview
-                </button>
-              </div>
 
-              {status === 'Published' && (
-                <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Live to Vendors
+          {/* 2. Required Skills Card */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5">
+            <div className="flex items-center gap-3 pb-3 border-b border-black/[0.04]">
+              <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                <Layers size={16} />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                  Required Skills
+                </h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Must-have skills for the role.
+                </p>
+              </div>
+            </div>
+
+            {/* Pill Tags Row */}
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              {skillsList.map((skill, idx) => (
+                <span
+                  key={idx}
+                  className="px-4 py-1.5 rounded-full text-xs font-bold text-gray-800 bg-white/90 hover:bg-white border border-gray-200/80 shadow-3xs transition-all"
+                >
+                  {skill}
                 </span>
-              )}
+              ))}
+            </div>
+          </div>
+
+          {/* 3. Role Description Card */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5">
+            <div className="flex items-center gap-3 pb-3 border-b border-black/[0.04]">
+              <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                <FileText size={16} />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900 leading-tight">
+                  Role Description
+                </h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  Brief overview of the opportunity.
+                </p>
+              </div>
             </div>
 
-            {/* Structured Role (Fixed Tabs + Scrollable Fields) or JD Preview */}
-            <div>
-              {activeReviewTab === 'structured' ? (
-                <div className="space-y-3">
-                  {/* Live Sync Banner & Save Controls */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-gradient-to-r from-emerald-50/90 via-emerald-50/50 to-white border border-emerald-200/90 rounded-xl text-xs shadow-2xs">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0 ring-4 ring-emerald-100" />
-                      <div>
-                        <span className="font-extrabold text-emerald-950">
-                          Live JD Sync Active
-                        </span>
-                        <span className="text-emerald-700 text-[11px] block sm:inline sm:ml-1.5 font-medium">
-                          Changes to title, skills, experience, or parameters reflect in the JD in real-time.
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0 ml-auto">
-                      {draftRole && (
-                        <button
-                          type="button"
-                          onClick={handleSaveRoleChanges}
-                          disabled={busy === 'save-role'}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          {busy === 'save-role' ? (
-                            <span>Saving...</span>
-                          ) : (
-                            <>
-                              <Check size={13} />
-                              <span>Save & Sync Changes</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() => setActiveReviewTab('jd')}
-                        className="px-3 py-1.5 rounded-lg bg-black hover:bg-gray-900 text-white font-bold text-xs shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <span>View in JD Preview →</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <RequisitionEditor
-                    role={structuredRole}
-                    editable={editing || status === 'Draft' || status === 'Structuring' || status === 'Intake'}
-                    onChange={(updated) => setDraftRole(updated)}
-                  />
-                </div>
-              ) : (
-                <div
-                  className="overflow-y-auto pr-1.5 custom-scrollbar"
-                  style={{ maxHeight: '720px' }}
-                >
-                  <JdPreview
-                    markdown={req.generated_jd_markdown}
-                    role={structuredRole}
-                    rawJd={req.raw_jd}
-                  />
-                </div>
-              )}
+            <div className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal pt-1 whitespace-pre-line">
+              {editForm.description ||
+                'We are looking for a DevSecOps Engineer to build and maintain secure, scalable infrastructure and deployment pipelines. You will work closely with engineering teams to improve release velocity, security, and reliability across our platforms.'}
             </div>
           </div>
         </div>
 
-        {/* Right 4 Cols: Copilot & Assistant Side Tab */}
-        <div className="lg:col-span-4 space-y-3.5">
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3.5 sticky top-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-black text-white flex items-center justify-center shrink-0">
-                  <Sparkles size={13} />
+        {/* Right Column (3 cols): Requisition Status */}
+        <div className="lg:col-span-3 flex justify-end pt-1.5 sm:pt-2">
+          {/* 1. Requisition Status Timeline Card */}
+          <div className="w-full max-w-[280px] ml-auto bg-transparent p-1 sm:p-2 space-y-5">
+            <div className="flex items-center gap-3 pb-3 border-b border-black/[0.06]">
+              <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                <Activity size={17} />
+              </div>
+              <h2 className="text-base font-bold text-gray-900">Requisition Status</h2>
+            </div>
+
+            {/* Vertical Timeline Track */}
+            <div className="space-y-5 relative pl-1 pt-1">
+              {/* Draft */}
+              <div className="flex items-start gap-3.5 relative">
+                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                  <Check size={13} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">
-                    Workflow Assistant
-                  </h3>
-                  <p className="text-[10px] text-gray-400">Current state guidance</p>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">Draft</div>
+                  <div className="text-xs text-gray-400 mt-0.5">{createdDateDisplay}</div>
                 </div>
-              </div>
-              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-900 text-[10px] font-extrabold">
-                {status}
-              </span>
-            </div>
-
-            {/* Stage Guidance */}
-            <div className="space-y-2 text-xs">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                Stage Instructions
+                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
               </div>
 
-              {(status === 'Draft' || status === 'Drafted' || status === 'Intake' || status === 'Structuring') && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">Draft & Review Phase</div>
-                  <p className="text-[11px] text-gray-500">
-                    Review role parameters, skills, and budget ceilings. When ready, click "Proceed to Approval →" to submit this requisition.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={Boolean(busy)}
-                    className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                  >
-                    Proceed to Approval →
-                  </button>
+              {/* AI Intake */}
+              <div className="flex items-start gap-3.5 relative">
+                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                  <Check size={13} strokeWidth={2.5} />
                 </div>
-              )}
-
-              {status === 'PendingApproval' && (
-                <div className="p-3 rounded-xl bg-gray-50 border border-gray-100 space-y-1 text-gray-700">
-                  <div className="font-bold text-gray-900">
-                    {isDirectorApproved ? 'Publish to Partners' : 'Director Approval Required'}
-                  </div>
-                  <p className="text-[11px] text-gray-500">
-                    {isDirectorApproved
-                      ? 'Click "Publish to Vendors" to broadcast this requirement to your engaged consultancies.'
-                      : 'Director approval is required before this requisition can be published to partner vendors.'}
-                  </p>
-                  {isDirectorApproved ? (
-                    <button
-                      type="button"
-                      onClick={handlePublish}
-                      disabled={Boolean(busy)}
-                      className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                    >
-                      Publish to Vendors →
-                    </button>
-                  ) : isDirectorOrAdmin ? (
-                    <button
-                      type="button"
-                      onClick={handleDirectorApprove}
-                      disabled={Boolean(busy)}
-                      className="w-full mt-2 py-2 px-3 rounded-xl bg-black text-white text-xs font-bold hover:bg-gray-900 transition-colors cursor-pointer"
-                    >
-                      Approve Requisition (Director) ✓
-                    </button>
-                  ) : (
-                    <div className="mt-2 text-[11px] font-semibold text-amber-800 bg-amber-50 p-2 rounded-lg border border-amber-200">
-                      ⏳ Awaiting Director approval before publication.
-                    </div>
-                  )}
+                <div>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">AI Intake</div>
+                  <div className="text-xs text-gray-400 mt-0.5">25 Sept 2026, 7:02 am</div>
                 </div>
-              )}
-
-              {status === 'Published' && (
-                <>
-                  <div className="p-4 rounded-2xl bg-amber-50/90 border border-amber-200/80 space-y-2 text-amber-950">
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <div className="font-extrabold text-xs uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-                        <Building size={14} className="text-amber-700" />
-                        Engaged Vendor Consultancies (3)
-                      </div>
-                      <span className="px-2.5 py-0.5 rounded-full bg-amber-200/80 text-[10px] font-black text-amber-950 border border-amber-300">
-                        Max {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} Candidate / Vendor
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-amber-800 leading-relaxed font-medium">
-                      3 partner consultancies receiving this live requisition • Mandatory Submission Deadline: <strong className="font-extrabold text-red-700">{structuredRole?.submission_deadline || req?.submission_deadline || 'Active'}</strong>
-                    </p>
-                  </div>
-
-                  {/* 48-Hour Auto-Shortlist & Instant Dispatch Card */}
-                  <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white space-y-3 shadow-md border border-slate-700">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="text-amber-400 text-sm">⏱</span>
-                        <span className="text-xs font-bold uppercase tracking-wider text-slate-200">
-                          48h Shortlist Delivery
-                        </span>
-                      </div>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold ${req?.shortlist_dispatched ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-blue-500/20 text-blue-300 border border-blue-500/40'}`}>
-                        {req?.shortlist_dispatched ? '✓ Dispatched' : 'Active Window'}
-                      </span>
-                    </div>
-
-                    {req?.shortlist_dispatched ? (
-                      <div className="space-y-1.5">
-                        <p className="text-[11px] text-emerald-200 leading-relaxed font-medium">
-                          ✓ Shortlist of {req.shortlist_candidate_count || shortlisted.length || 0} candidates delivered to Hiring Manager {req.shortlist_dispatched_by ? `by ${req.shortlist_dispatched_by}` : ''} {req.shortlist_dispatched_at ? `on ${formatDate(req.shortlist_dispatched_at)}` : ''}.
-                        </p>
-                        <Link
-                          to={`/dashboard/requisitions/${id}/candidates`}
-                          className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-400 hover:text-emerald-300 mt-1"
-                        >
-                          <span>Review Candidates & Interviews →</span>
-                        </Link>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <p className="text-[11px] text-slate-300 leading-relaxed font-normal">
-                          Screened candidates are automatically compiled and delivered to the Hiring Manager when the 48-hour window closes.
-                        </p>
-                        <div className="flex items-center justify-between text-[11px] text-slate-400 pt-1 border-t border-slate-700/60">
-                          <span>Auto-Deadline:</span>
-                          <span className="font-mono text-white font-bold">{formatDate(req?.shortlist_deadline)}</span>
-                        </div>
-                        {isAdmin ? (
-                          <div className="pt-1">
-                            <button
-                              type="button"
-                              onClick={handleInstantDispatchFromDetail}
-                              disabled={Boolean(busy)}
-                              className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs font-extrabold transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                            >
-                              <span>⚡</span>
-                              <span>{busy === 'instant-shortlist' ? 'Dispatching...' : 'Send Shortlist Now (Instant)'}</span>
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="pt-1">
-                            <div className="p-2.5 rounded-xl bg-slate-800/80 border border-slate-700/80 text-[11px] text-slate-300 flex items-center gap-2">
-                              <Clock size={13} className="text-amber-400 shrink-0" />
-                              <span>Super Admin AI screening in progress. Shortlisted candidates will be delivered to your pipeline.</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Quick Stats Widget */}
-            <div className="space-y-2 pt-2 border-t border-gray-100 text-xs">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
-                Key Parameters
+                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
               </div>
 
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Headcount Openings</span>
-                  <span className="font-bold text-gray-900">{structuredRole?.headcount || req?.headcount || 1} position(s)</span>
+              {/* Structuring */}
+              <div className="flex items-start gap-3.5 relative">
+                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                  <Check size={13} strokeWidth={2.5} />
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50/80 border border-amber-200/60 text-amber-900">
-                  <span className="text-amber-800 font-semibold">Vendor Candidate Limit</span>
-                  <span className="font-bold text-amber-950 px-2 py-0.5 rounded bg-amber-200/60 text-xs">
-                    {req?.vendor_candidate_limit || structuredRole?.vendor_candidate_limit || 1} candidate / vendor
-                  </span>
+                <div>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">Structuring</div>
+                  <div className="text-xs text-gray-400 mt-0.5">25 Sept 2026, 9:14 am</div>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Duration</span>
-                  <span className="font-bold text-gray-900">{structuredRole?.duration || '6 months'}</span>
+                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
+              </div>
+
+              {/* Approval */}
+              <div className="flex items-start gap-3.5 relative">
+                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                  <Check size={13} strokeWidth={2.5} />
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Work Mode</span>
-                  <span className="font-bold text-gray-900">{structuredRole?.work_mode || 'Remote'}</span>
+                <div>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">Approval</div>
+                  <div className="text-xs text-gray-400 mt-0.5">26 Sept 2026, 11:21 am</div>
                 </div>
-                <div className="flex items-center justify-between p-2 rounded-xl bg-gray-50 text-gray-700">
-                  <span className="text-gray-500">Ceiling Rate</span>
-                  <span className="font-bold text-gray-900">
-                    {structuredRole?.ceiling_internal ? `₹${structuredRole.ceiling_internal}` : 'Not set'}
-                  </span>
+                <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
+              </div>
+
+              {/* Published */}
+              <div className="flex items-start gap-3.5 relative">
+                <div className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs z-10">
+                  <div className="w-2.5 h-2.5 rounded-full bg-white" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">Published</div>
+                  <div className="text-xs text-gray-400 mt-0.5">26 Sept 2026, 3:45 pm</div>
                 </div>
               </div>
             </div>
@@ -1055,68 +709,195 @@ export default function RequisitionDetail() {
         </div>
       </div>
 
-      {/* Director Rejection Modal */}
-      {showRejectModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-gray-100 text-left animate-in fade-in zoom-in duration-150">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2 text-red-600 font-extrabold text-sm">
-                <AlertCircle size={18} />
-                <span>Reject Requisition & Request Changes</span>
+
+      {/* Edit Requisition Modal */}
+      {showEditModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="relative w-full max-w-2xl bg-white/95 backdrop-blur-2xl rounded-3xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.9)] border border-white/90 p-6 sm:p-7 text-left space-y-4 max-h-[90vh] overflow-y-auto no-scrollbar"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-black/[0.04]">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">Edit Requisition</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Modify role details, requirements and criteria.</p>
               </div>
               <button
                 type="button"
-                onClick={() => setShowRejectModal(false)}
-                className="text-gray-400 hover:text-black font-bold text-sm cursor-pointer"
+                onClick={() => setShowEditModal(false)}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-600 transition-colors cursor-pointer"
               >
-                ✕
+                <X size={14} />
               </button>
             </div>
 
-            <div>
-              <h3 className="font-extrabold text-base text-gray-900">
-                {req.title || structuredRole?.title || 'Untitled Requisition'}
-              </h3>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
-                REQ #{req.id.slice(0, 8)} • Provide specific feedback on what the Hiring Manager needs to revise.
-              </p>
-            </div>
+            <form onSubmit={handleSaveEdit} className="space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Job Title</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
 
-            <form onSubmit={handleConfirmReject} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Department</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.department}
+                    onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Experience</label>
+                  <input
+                    type="text"
+                    value={editForm.experience}
+                    onChange={(e) => setEditForm({ ...editForm, experience: e.target.value })}
+                    placeholder="e.g. 5–8 years"
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Work Mode</label>
+                  <input
+                    type="text"
+                    value={editForm.work_mode}
+                    onChange={(e) => setEditForm({ ...editForm, work_mode: e.target.value })}
+                    placeholder="e.g. Hybrid, Remote, Onsite"
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Duration</label>
+                  <input
+                    type="text"
+                    value={editForm.duration}
+                    onChange={(e) => setEditForm({ ...editForm, duration: e.target.value })}
+                    placeholder="e.g. 6 Months"
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Open Positions</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editForm.headcount}
+                    onChange={(e) => setEditForm({ ...editForm, headcount: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Submission Deadline</label>
+                  <input
+                    type="text"
+                    value={editForm.deadline}
+                    onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
+                    placeholder="e.g. 28 Sept 2026, 6:00 pm"
+                    className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wider">
-                  Rejection Reason / Required Modifications <span className="text-red-500">*</span>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Required Skills (Comma separated)
                 </label>
-                <textarea
-                  rows="4"
-                  required
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="e.g. Rate ceiling of ₹1200 is above budget. Please reduce internal ceiling to ₹900/hr or adjust required seniority level."
-                  className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-red-500 focus:bg-white transition-all font-medium"
+                <input
+                  type="text"
+                  value={editForm.skills}
+                  onChange={(e) => setEditForm({ ...editForm, skills: e.target.value })}
+                  placeholder="Kubernetes, Terraform, AWS, CI/CD, Docker, Vault"
+                  className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">Role Description</label>
+                <textarea
+                  rows="4"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                  placeholder="Brief overview of the role..."
+                  className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black leading-relaxed"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-black/[0.04]">
                 <button
                   type="button"
-                  onClick={() => setShowRejectModal(false)}
+                  onClick={() => setShowEditModal(false)}
                   className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!rejectReason.trim() || busy === 'reject'}
-                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                  disabled={busy === 'saving'}
+                  className="px-5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
-                  <span>{busy === 'reject' ? 'Rejecting...' : 'Confirm Rejection & Send Reason ✕'}</span>
+                  {busy === 'saving' && <Loader2 size={13} className="animate-spin text-white" />}
+                  <span>Save Changes</span>
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowDeleteModal(false)}
+        >
+          <div
+            className="relative w-full max-w-[440px] bg-white/95 backdrop-blur-2xl rounded-3xl shadow-2xl border border-white/90 p-6 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-gray-900">Delete Requisition?</h3>
+            <p className="text-xs text-gray-500 mt-1 mb-5">
+              This will permanently delete <strong>{titleDisplay}</strong>. This action cannot be undone.
+            </p>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={busy === 'deleting'}
+                className="px-4 py-2 text-xs font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {busy === 'deleting' && <Loader2 size={13} className="animate-spin text-white" />}
+                <span>Delete Requisition</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+

@@ -5,12 +5,34 @@ import NotificationBell from '../components/NotificationBell';
 import AssistantWidget from '../components/AssistantWidget';
 import OnboardCompanyModal from '../components/OnboardCompanyModal';
 import OnboardVendorModal from '../components/OnboardVendorModal';
-import { Sparkles, Menu, X, Building2, Users, Bell, UserCheck } from 'lucide-react';
+import {
+  Sparkles,
+  Menu,
+  X,
+  Building2,
+  Users,
+  Bell,
+  UserCheck,
+  Search,
+  ChevronDown,
+  LayoutDashboard,
+  Layers,
+  BarChart3,
+  LogOut,
+  User,
+  KeyRound,
+  FileText,
+  Clock,
+  Shield,
+  CreditCard,
+  MoreHorizontal
+} from 'lucide-react';
 import { request } from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Backdrop } from '../components/landing/Backdrop';
 
 function initials(name) {
-  if (!name) return 'HR';
+  if (!name) return 'AM';
   return name
     .split(' ')
     .filter(Boolean)
@@ -138,6 +160,23 @@ const Icons = {
       <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
     </svg>
   ),
+  OnboardCompany: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <rect width="16" height="20" x="4" y="2" rx="2" />
+      <line x1="8" y1="6" x2="16" y2="6" />
+      <line x1="8" y1="10" x2="16" y2="10" />
+      <line x1="8" y1="14" x2="16" y2="14" />
+      <line x1="8" y1="18" x2="16" y2="18" />
+    </svg>
+  ),
+  OnboardVendor: (props) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <circle cx="9" cy="7" r="4" />
+      <path d="M17 11v6" />
+      <path d="M14 14h6" />
+      <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" />
+    </svg>
+  ),
 };
 
 export default function DashboardLayout() {
@@ -148,6 +187,9 @@ export default function DashboardLayout() {
   const [isOnboardCompanyModalOpen, setIsOnboardCompanyModalOpen] = useState(false);
   const [isOnboardVendorModalOpen, setIsOnboardVendorModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
@@ -282,6 +324,8 @@ export default function DashboardLayout() {
   // Close mobile drawer on route change
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setShowMoreMenu(false);
+    setShowUserMenu(false);
   }, [location.pathname]);
 
   // Modal event listeners for AI Chat quick dock
@@ -303,26 +347,299 @@ export default function DashboardLayout() {
 
   if (authLoading) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#E8EBF0]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A0A0A]"></div>
+      <div className="flex h-screen w-screen items-center justify-center bg-[#F8F9FA]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center bg-[#E8EBF0]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A0A0A]"></div>
+      <div className="flex h-screen w-screen items-center justify-center bg-[#F8F9FA]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
       </div>
     );
   }
 
   const userRole = (user?.role || '').trim();
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
-  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
+  const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
   const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
   const isAiChatPage = isSuperAdminChat || isHiringManagerChat;
+
+  // ==========================================
+  // COMPANY ADMIN DEDICATED LAYOUT (TOP BAR + FULL CANVAS)
+  // ==========================================
+  if (isCompanyAdmin) {
+    const companyName = user?.tenant_name || 'TCS';
+    const adminNavLinks = [
+      { to: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { to: '/dashboard/admin/hiring-managers', label: 'Hiring', icon: Users, end: false },
+      { to: '/dashboard/admin/directors', label: 'Team', icon: UserCheck, end: false },
+      { to: '/dashboard/admin/procurement', label: 'Procurement', icon: Building2, end: false },
+      { to: '/dashboard/admin/finance', label: 'Finance', icon: CreditCard, end: false },
+      { to: '/dashboard/admin/profile', label: 'Profile', icon: User, end: false },
+    ];
+
+    return (
+      <div className="min-h-screen w-full bg-paper text-ink flex flex-col antialiased relative selection:bg-black selection:text-white font-sans overflow-x-hidden">
+        {/* Landing Page Background System (radial light, 96px grid layer, blurred radial light orbs, animated bezier ribbons & grain layer) */}
+        <Backdrop tone="light" fixed />
+
+        {/* Top Navigation Bar - Completely Transparent with Floating Glassmorphic Elements */}
+        <header className="sticky top-0 z-40 w-full bg-transparent border-b border-transparent px-4 sm:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-4">
+          {/* Left: Logo & Company Name */}
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              className="lg:hidden p-1.5 text-gray-500 hover:text-black rounded-lg hover:bg-white/60 cursor-pointer"
+            >
+              <Menu size={18} />
+            </button>
+
+            <div
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2.5 cursor-pointer group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-black text-white font-black text-sm flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform">
+                {companyName.charAt(0).toUpperCase()}
+              </div>
+              <div className="leading-tight text-left">
+                <div className="text-[14px] font-extrabold text-gray-900 tracking-tight flex items-center gap-1">
+                  {companyName}
+                </div>
+                <div className="text-[11px] text-gray-400 font-medium">
+                  Admin Console
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Horizontal Navigation Items (Glassmorphic Floating Pill) */}
+          <nav className="hidden lg:flex items-center gap-1 bg-white/40 hover:bg-white/50 backdrop-blur-2xl p-1 rounded-full border border-white/70 shadow-[0_4px_24px_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.8)] transition-all">
+            {adminNavLinks.map((item) => {
+              const IconComp = item.icon;
+              const isActive = item.end
+                ? location.pathname === item.to
+                : location.pathname.startsWith(item.to);
+
+              return (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  end={item.end}
+                  className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors duration-200 cursor-pointer select-none ${
+                    isActive
+                      ? 'text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/40'
+                  }`}
+                  title={item.label}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="adminNavActivePill"
+                      className="absolute inset-0 bg-white/90 backdrop-blur-md rounded-full border border-white/90 shadow-xs"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    />
+                  )}
+                  <IconComp
+                    size={14}
+                    className={`relative z-10 shrink-0 transition-colors duration-200 ${
+                      isActive ? 'text-gray-900' : 'text-gray-500'
+                    }`}
+                  />
+                  <span className="relative z-10 whitespace-nowrap">
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
+
+
+          </nav>
+
+          {/* Right: Notifications & User Profile */}
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                type="button"
+                className="w-8 h-8 rounded-full border border-white/60 bg-white/35 hover:bg-white/60 backdrop-blur-xl flex items-center justify-center text-gray-600 hover:text-black transition-all shadow-2xs shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)] cursor-pointer relative"
+                title="Notifications"
+              >
+                <Bell size={14} />
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full ring-2 ring-white" />
+              </button>
+            </div>
+
+            {/* User Profile Pill (Compact icon-only by default, smoothly expands on active/open) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowUserMenu((prev) => !prev)}
+                className={`relative flex items-center rounded-full text-xs font-bold transition-all duration-200 cursor-pointer select-none ${
+                  showUserMenu
+                    ? 'bg-white/90 backdrop-blur-md text-gray-900 shadow-xs border border-white/90 pl-1 pr-2.5 py-1 gap-2'
+                    : 'border border-white/60 bg-white/35 hover:bg-white/60 backdrop-blur-xl p-0.5 shadow-2xs shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)]'
+                }`}
+                title={user?.name || 'Admin Profile'}
+              >
+                <div className="w-7 h-7 rounded-full bg-black text-white font-bold text-xs flex items-center justify-center shadow-2xs shrink-0">
+                  {initials(user?.name)}
+                </div>
+                <AnimatePresence initial={false}>
+                  {showUserMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.92, width: 0 }}
+                      animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                      exit={{ opacity: 0, scale: 0.92, width: 0 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap"
+                    >
+                      <div className="text-left hidden sm:block leading-tight pr-0.5">
+                        <div className="text-xs font-bold text-gray-900 truncate">{user?.name || 'Arjun M'}</div>
+                        <div className="text-[10px] text-gray-400 font-medium">Admin</div>
+                      </div>
+                      <ChevronDown size={12} className="text-gray-400 shrink-0" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </button>
+
+              {/* User Dropdown Menu */}
+              <AnimatePresence>
+                {showUserMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute right-0 mt-2 w-52 bg-white/85 backdrop-blur-2xl rounded-2xl shadow-xl border border-white/80 py-2 z-50 text-left"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <div className="px-4 py-2 border-b border-gray-100/80">
+                      <div className="text-xs font-bold text-gray-900">{user?.name || 'Arjun M'}</div>
+                      <div className="text-[11px] text-gray-400 truncate">{user?.email || 'admin@tcs.com'}</div>
+                    </div>
+
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard/admin/profile')}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-white/60 hover:text-black text-left cursor-pointer"
+                      >
+                        <User size={14} className="text-gray-400" />
+                        <span>Company Profile</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard/interviews')}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-white/60 hover:text-black text-left cursor-pointer"
+                      >
+                        <BarChart3 size={14} className="text-gray-400" />
+                        <span>Interviews & Reports</span>
+                      </button>
+                    </div>
+
+                    <div className="pt-1 border-t border-gray-100/80">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50/80 text-left cursor-pointer"
+                      >
+                        <LogOut size={14} className="text-red-500" />
+                        <span>Sign out</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </header>
+
+        {/* Mobile Navigation Drawer for Admin */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-200">
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div className="relative w-64 max-w-[80vw] h-full bg-white border-r border-gray-200 p-5 flex flex-col z-60 shadow-2xl">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center">
+                    {companyName.charAt(0).toUpperCase()}
+                  </div>
+                  <span className="font-bold text-sm text-gray-900">{companyName} Admin</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1 text-gray-400 hover:text-black rounded-lg hover:bg-gray-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="flex flex-col gap-1.5 py-4 flex-1 overflow-y-auto">
+                {adminNavLinks.map((link) => {
+                  const LIcon = link.icon;
+                  const isActive = location.pathname === link.to;
+                  return (
+                    <NavLink
+                      key={link.label}
+                      to={link.to}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        isActive ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <LIcon size={16} />
+                      <span>{link.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </nav>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors"
+              >
+                <LogOut size={14} />
+                <span>Sign out</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Workspace Area for Company Admin */}
+        <main className="flex-1 w-full max-w-[1580px] mx-auto px-4 sm:px-8 pt-4 sm:pt-6 pb-4 z-10 flex flex-col justify-start">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="w-full h-full flex-1 flex flex-col"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // OTHER ROLES (SUPER ADMIN, RECRUITER, HM, DIRECTOR, ETC.)
+  // (PRESERVED EXACTLY AS BEFORE)
+  // ==========================================
+  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
 
   const navItems =
     userRole === 'Hiring Manager'
@@ -373,32 +690,23 @@ export default function DashboardLayout() {
               ]
               : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
                 ? [
-      { to: '/dashboard/superadmin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-      { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
-      { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
-      { to: '/dashboard/superadmin/candidate-management', label: 'Candidate Management', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted, badge: superAdminSelectedCount },
-      { to: '/dashboard/superadmin/candidate-management?tab=billing', label: 'Candidate Billing', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
-      { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Diamond, count: superAdminCandidateCount },
-      { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Mail },
-      { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
-      { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
-      { to: '/dashboard/superadmin/accounts', label: 'Buyer Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.Requisitions },
-      { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.PortalAccess },
-    ]
-    : (userRole === 'Admin' || userRole.toLowerCase() === 'admin')
-      ? [
-        { to: '/dashboard/admin', label: 'Dashboard', end: true, icon: Icons.Dashboard },
-        { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-        { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
-        { to: '/dashboard/candidates', label: 'Candidates', end: false, icon: Icons.Diamond },
-        { to: '/dashboard/admin/partner-vendors', label: 'Vendors', end: false, icon: Icons.Building },
-      ]
-      : [
-        { to: '/dashboard/hr', label: 'Dashboard', end: true },
-        { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
-      ];
+                  { to: '/dashboard/superadmin', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
+                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'WORKSPACE', icon: Icons.Interviews },
+                  { to: '/dashboard/superadmin/chat', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+                  { to: '/dashboard/superadmin/candidate-management', label: 'Candidate Management', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Accepted, badge: superAdminSelectedCount },
+                  { to: '/dashboard/superadmin/candidate-management?tab=billing', label: 'Candidate Billing', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Receipt },
+                  { to: '/dashboard/superadmin/candidates', label: 'Candidate Pool', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Diamond, count: superAdminCandidateCount },
+                  { to: '/dashboard/superadmin/outreach', label: 'AI Email Outreach', end: false, section: 'CANDIDATE MANAGEMENT', icon: Icons.Mail },
+                  { action: () => setIsOnboardCompanyModalOpen(true), label: 'Onboard Company', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
+                  { action: () => setIsOnboardVendorModalOpen(true), label: 'Onboard Vendor', section: 'PLATFORM ONBOARDING', icon: Icons.Plus },
+                  { to: '/dashboard/superadmin/accounts', label: 'Buyer Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.Requisitions },
+                  { to: '/dashboard/superadmin/admin-accounts', label: 'Admin Accounts', end: false, section: 'ACCOUNTS & ADMIN', icon: Icons.PortalAccess },
+                ]
+                : [
+                  { to: '/dashboard/hr', label: 'Dashboard', end: true, icon: Icons.Dashboard },
+                  { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                ];
 
-  // Render full reusable sidebar inner contents
   const renderSidebarContent = (onLinkClick) => (
     <div className="flex flex-col h-full min-h-0 select-none">
       {/* Brand Header */}
@@ -441,14 +749,6 @@ export default function DashboardLayout() {
               <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
             </div>
           </div>
-        ) : ['Admin', 'HR', 'Director', 'Procurement', 'Procurement Team', 'Finance', 'Finance Team'].includes(userRole) ? (
-          <>
-            <div className="brand-mark">{user?.tenant_name ? user.tenant_name.trim().charAt(0).toUpperCase() : 'TJ'}</div>
-            <div className="brand-text">
-              <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
-              <span className="brand-sub">{userRole} Console</span>
-            </div>
-          </>
         ) : userRole === 'Super Admin' ? (
           <div className="flex items-center gap-3">
             <div
@@ -470,347 +770,103 @@ export default function DashboardLayout() {
           </div>
         ) : (
           <div className="brand-text">
-            <span className="brand-name">Term Jobs</span>
+            <span className="brand-name">{user?.tenant_name || 'Term Jobs'}</span>
             <span className="brand-sub">{userRole}</span>
           </div>
         )}
       </div>
 
-      {/* Navigation Sections - Smoothly scrollable on smaller screens / laptop displays */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 -mr-1 custom-scrollbar">
+      {/* Navigation list */}
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1 custom-scrollbar">
         <nav className="flex flex-col gap-1 pb-2">
-          {isModernLayout ? (
-            <>
-              {(() => {
-                let lastSection = null;
-                return navItems.map((item) => {
-                  const showSection = item.section && item.section !== lastSection;
-                  if (item.section) lastSection = item.section;
-                  const IconComp = item.icon;
+          {(() => {
+            let lastSection = null;
+            return navItems.map((item) => {
+              const showSection = item.section && item.section !== lastSection;
+              if (item.section) lastSection = item.section;
+              const IconComp = item.icon;
 
-                  const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
+              const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
 
-                  const isItemActive = item.to === '/dashboard/requisitions'
-                    ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
-                    : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
-                      ? isCandidateMgmtPath && location.search.includes('tab=billing')
-                      : item.to === '/dashboard/superadmin/candidate-management'
-                        ? isCandidateMgmtPath && !location.search.includes('tab=billing')
-                        : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
-                          ? ((location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool')) && !isCandidateMgmtPath)
-                          : item.to === '/dashboard/director'
-                            ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
-                            : item.end
-                              ? location.pathname === item.to
-                              : location.pathname.startsWith(item.to);
+              const isItemActive = item.to === '/dashboard/requisitions'
+                ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
+                  ? isCandidateMgmtPath && location.search.includes('tab=billing')
+                  : item.to === '/dashboard/superadmin/candidate-management'
+                    ? isCandidateMgmtPath && !location.search.includes('tab=billing')
+                    : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
+                      ? ((location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool')) && !isCandidateMgmtPath)
+                      : item.to === '/dashboard/director'
+                        ? location.pathname === '/dashboard/director' || location.pathname.startsWith('/dashboard/director/approvals') || location.pathname.startsWith('/dashboard/director/requisitions')
+                        : item.end
+                          ? location.pathname === item.to
+                          : item.to ? location.pathname.startsWith(item.to) : false;
 
-                return (
-                  <React.Fragment key={item.label}>
-                    {showSection && (
-                      <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
-                        {item.section}
+              return (
+                <React.Fragment key={item.label}>
+                  {showSection && (
+                    <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
+                      {item.section}
+                    </div>
+                  )}
+                  {item.action ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        item.action();
+                        if (onLinkClick) onLinkClick();
+                      }}
+                      className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {IconComp && <IconComp className="shrink-0" size={15} />}
+                        <span className="font-semibold text-[13px]">{item.label}</span>
                       </div>
-                    )}
-                    {item.action ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          item.action();
-                          if (onLinkClick) onLinkClick();
-                        }}
-                        className="nav-link sidebar-nav-btn text-left w-full flex items-center justify-between"
-                        style={{ background: 'none', border: 'none', cursor: 'pointer' }}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          {IconComp && <IconComp className="shrink-0" size={15} />}
-                          <span className="font-semibold text-[13px]">{item.label}</span>
-                        </div>
-                      </button>
-                    ) : item.to ? (
-                      <NavLink
-                        to={item.to}
-                        end={item.end}
-                        onClick={onLinkClick}
-                        className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          {IconComp && <IconComp className="shrink-0" size={15} />}
-                          <span className="font-semibold text-[13px]">{item.label}</span>
-                          {item.badge > 0 && (
-                            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
-                              {item.badge}
-                            </span>
-                          )}
-                        </div>
-                        {item.count !== undefined && (
-                          <span
-                            className={`text-[11px] font-bold ${isItemActive ? 'text-white' : 'text-[#8A8A85]'} ml-auto pr-1`}
-                          >
-                            {item.count}
+                    </button>
+                  ) : item.to ? (
+                    <NavLink
+                      to={item.to}
+                      end={item.end}
+                      onClick={onLinkClick}
+                      className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {IconComp && <IconComp className="shrink-0" size={15} />}
+                        <span className="font-semibold text-[13px]">{item.label}</span>
+                        {item.badge > 0 && (
+                          <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
+                            {item.badge}
                           </span>
                         )}
-                      </NavLink>
-                    ) : (
-                      <span className="nav-link sidebar-nav-btn">
-                        <div className="flex items-center gap-2.5">
-                          {IconComp && <IconComp className="shrink-0" size={15} />}
-                          <span className="font-semibold text-[13px]">{item.label}</span>
-                        </div>
-                      </span>
-                    )}
-                  </React.Fragment>
-                );
-              });
-              })()}
-            </>
-          ) : userRole === 'Super Admin' ? (
-            <>
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3 pb-1">
-                PLATFORM
-              </div>
-              <NavLink
-                to="/dashboard/superadmin"
-                end
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Dashboard size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Dashboard</span>
-                </div>
-              </NavLink>
-              <NavLink
-                to="/dashboard/superadmin/candidates"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive || location.pathname.includes('/candidates') || location.pathname.includes('candidate') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Diamond size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Candidate Pool</span>
-                  {superAdminCandidateCount > 0 && (
-                    <span className="text-[11px] font-bold text-[#8A8A85] ml-auto pr-1">
-                      {superAdminCandidateCount}
+                      </div>
+                      {item.count !== undefined && (
+                        <span
+                          className={`text-[11px] font-bold ${isItemActive ? 'text-white' : 'text-[#8A8A85]'} ml-auto pr-1`}
+                        >
+                          {item.count}
+                        </span>
+                      )}
+                    </NavLink>
+                  ) : (
+                    <span className="nav-link sidebar-nav-btn">
+                      <div className="flex items-center gap-2.5">
+                        {IconComp && <IconComp className="shrink-0" size={15} />}
+                        <span className="font-semibold text-[13px]">{item.label}</span>
+                      </div>
                     </span>
                   )}
-                </div>
-              </NavLink>
-              <NavLink
-                to="/dashboard/superadmin/chat"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Chat size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">AI Chat</span>
-                </div>
-              </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                CANDIDATE MANAGEMENT
-              </div>
-              <NavLink
-                to="/dashboard/superadmin/candidate-management"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive && !location.search.includes('tab=billing') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Accepted size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Candidate Management</span>
-                  {superAdminSelectedCount > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-[#DC2626] text-white text-[9.5px] font-black leading-none">
-                      {superAdminSelectedCount}
-                    </span>
-                  )}
-                </div>
-              </NavLink>
-              <NavLink
-                to="/dashboard/superadmin/candidate-management?tab=billing"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${location.pathname.includes('/candidate-management') && location.search.includes('tab=billing') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Receipt size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Candidate Billing</span>
-                </div>
-              </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                ONBOARDING
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOnboardCompanyModalOpen(true);
-                  if (onLinkClick) onLinkClick();
-                }}
-                className="nav-link sidebar-nav-btn text-left w-full cursor-pointer"
-                style={{ background: 'none', border: 'none' }}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.OnboardCompany size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Onboard Company</span>
-                </div>
-              </button>
-              <NavLink
-                to="/dashboard/superadmin/accounts?tab=companies"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive && (!location.search || location.search.includes('companies')) ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.Requisitions size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Buyer Accounts</span>
-                </div>
-              </NavLink>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsOnboardVendorModalOpen(true);
-                  if (onLinkClick) onLinkClick();
-                }}
-                className="nav-link sidebar-nav-btn text-left w-full cursor-pointer"
-                style={{ background: 'none', border: 'none' }}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.OnboardVendor size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Onboard Vendor</span>
-                </div>
-              </button>
-              <NavLink
-                to="/dashboard/superadmin/vendor-accounts?tab=vendors"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive && location.search.includes('vendors') ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.CandidatesBank size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Vendor Accounts</span>
-                </div>
-              </NavLink>
-
-              <div className="text-[10px] font-extrabold tracking-wider text-[#8A8A85] uppercase px-3 pt-3.5 pb-1.5">
-                ADMINISTRATION
-              </div>
-              <NavLink
-                to="/dashboard/superadmin/admin-accounts"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <Icons.PortalAccess size={15} className="shrink-0" />
-                  <span className="font-semibold text-[13px]">Admin Accounts</span>
-                </div>
-              </NavLink>
-            </>
-          ) : userRole === 'Admin' ? (
-            <>
-              <div className="nav-section-label">Workspace</div>
-              <NavLink
-                to="/dashboard/admin"
-                end
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Dashboard
-              </NavLink>
-              <NavLink
-                to="/dashboard/admin/hiring-managers"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Hiring Managers
-              </NavLink>
-              <NavLink
-                to="/dashboard/admin/directors"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Directors
-              </NavLink>
-              <NavLink
-                to="/dashboard/admin/procurement"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Procurement
-              </NavLink>
-              <NavLink
-                to="/dashboard/admin/finance"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Finance
-              </NavLink>
-              <NavLink
-                to="/dashboard/admin/partner-vendors"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Partner Vendors
-              </NavLink>
-              <NavLink
-                to="/dashboard/interviews"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Interviews
-              </NavLink>
-              <div className="nav-section-label">Organization</div>
-              <NavLink
-                to="/dashboard/admin/profile"
-                onClick={onLinkClick}
-                className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
-              >
-                Company Profile
-              </NavLink>
-            </>
-          ) : (
-            <>
-              {navItems.map((item) => {
-                const IconComp = item.icon;
-                return (
-                  <NavLink
-                    key={item.label}
-                    to={item.to}
-                    end={item.end}
-                    onClick={onLinkClick}
-                    className={({ isActive }) =>
-                      `nav-link ${isActive ? 'active' : ''} flex items-center justify-between`
-                    }
-                  >
-                    <span className="flex items-center gap-2.5">
-                      {IconComp && <IconComp size={15} className="shrink-0" />}
-                      <span>{item.label}</span>
-                    </span>
-                    {item.badge > 0 && (
-                      <span
-                        style={{
-                          background: '#F59E0B',
-                          color: '#000000',
-                          fontSize: '0.7rem',
-                          fontWeight: 800,
-                          padding: '1px 6px',
-                          borderRadius: 999,
-                          marginLeft: 6
-                        }}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </NavLink>
-                );
-              })}
-            </>
-          )}
+                </React.Fragment>
+              );
+            });
+          })()}
         </nav>
       </div>
 
-      {/* Sidebar Footer - Always pinned at bottom, never cut off */}
+      {/* Sidebar Footer */}
       <div className="sidebar-footer shrink-0 pt-3.5 border-t border-[#EAEAE6] mt-auto">
         <div className="flex items-center justify-between px-0.5">
-          <div
-            onClick={() => userRole === 'Admin' && navigate('/dashboard/admin/profile')}
-            className={`flex items-center gap-3 min-w-0 ${userRole === 'Admin' ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}`}
-            title={userRole === 'Admin' ? 'View Company Profile' : undefined}
-          >
+          <div className="flex items-center gap-3 min-w-0">
             <div
               style={{
                 width: 38,
@@ -829,10 +885,10 @@ export default function DashboardLayout() {
             </div>
             <div className="leading-tight min-w-0">
               <div className="text-[13.5px] font-extrabold text-[#0A0A0A] tracking-tight truncate">
-                {user?.name || (userRole === 'Hiring Manager' ? 'hr' : 'Hashil')}
+                {user?.name || userRole}
               </div>
               <div className="text-[11px] text-[#8A8A85] font-medium mt-0.5 truncate">
-                {userRole === 'Recruiter' ? 'Recruiter' : userRole === 'Hiring Manager' ? 'Hiring Manager' : userRole}
+                {userRole}
               </div>
             </div>
           </div>
@@ -850,168 +906,9 @@ export default function DashboardLayout() {
     </div>
   );
 
-  // Render compact floating dock rail for Super Admin AI Chat
-  const renderReducedRail = () => (
-    <div className="flex flex-col items-center justify-between h-full py-1 w-full select-none" data-purpose="sidebar-rail">
-      {/* Top Brand Logo - Term Jobs */}
-      <div className="flex flex-col items-center">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/superadmin')}
-          className="w-11 h-11 rounded-full bg-[#111417]/95 backdrop-blur-md text-white font-extrabold text-[14px] flex items-center justify-center cursor-pointer transition hover:scale-105 shadow-md border border-white/20"
-          title="Super Admin Dashboard"
-        >
-          TJ
-        </button>
-      </div>
-
-      {/* Dock Navigation Icons */}
-      <nav className="glass-dock bg-white border border-[#E2E8F0] shadow-sm rounded-2xl p-1.5 flex flex-col items-center gap-1.5" data-purpose="nav-actions">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/superadmin')}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname === '/dashboard/superadmin' ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
-          title="Dashboard"
-        >
-          <Icons.Dashboard size={17} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/superadmin/chat')}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition shadow-sm cursor-pointer ${location.pathname === '/dashboard/superadmin/chat' ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
-          title="AI Chat"
-        >
-          <Icons.Chat size={17} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/superadmin/candidate-management')}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname.includes('/candidate-management') ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
-          title="Candidate Management"
-        >
-          <Icons.Accepted size={17} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (isAiChatPage) {
-              window.dispatchEvent(new CustomEvent('ai-chat-quick-prompt', { detail: { prompt: 'Draft onboarding preview for buyer company' } }));
-            } else {
-              setIsOnboardCompanyModalOpen(true);
-            }
-          }}
-          className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-white/60 flex items-center justify-center transition cursor-pointer"
-          title="Onboard Company"
-        >
-          <Building2 size={18} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            if (isAiChatPage) {
-              window.dispatchEvent(new CustomEvent('ai-chat-quick-prompt', { detail: { prompt: 'Draft onboarding preview for vendor consultancy' } }));
-            } else {
-              setIsOnboardVendorModalOpen(true);
-            }
-          }}
-          className="w-10 h-10 rounded-xl text-gray-400 hover:text-black hover:bg-white/60 flex items-center justify-center transition cursor-pointer"
-          title="Onboard Vendor"
-        >
-          <Users size={18} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/superadmin/accounts')}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname.includes('/accounts') ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
-          title="Accounts"
-        >
-          <Icons.Requisitions size={17} />
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/superadmin/admin-accounts')}
-          className={`w-10 h-10 rounded-xl flex items-center justify-center transition cursor-pointer ${location.pathname.includes('/admin-accounts') ? 'bg-[#111417] text-white shadow-sm border border-white/10' : 'text-gray-400 hover:text-black hover:bg-white/60'}`}
-          title="Admin Accounts"
-        >
-          <UserCheck size={18} />
-        </button>
-      </nav>
-
-      {/* Bottom Dock */}
-      <div className="glass-dock bg-white border border-[#E2E8F0] shadow-sm rounded-2xl p-1.5 flex flex-col items-center gap-2" data-purpose="user-dock">
-        <button
-          type="button"
-          onClick={() => {
-            window.dispatchEvent(new CustomEvent('ai-chat-toast', { detail: { message: 'Audit Alerts: All systems operating within target thresholds' } }));
-          }}
-          className="relative w-10 h-10 rounded-xl text-gray-400 hover:text-black flex items-center justify-center transition cursor-pointer"
-          title="Audit Alerts"
-        >
-          <Bell size={18} />
-          <span className="absolute top-2.5 right-2.5 w-1.5 h-1.5 bg-[#FF4842] rounded-full ring-2 ring-white"></span>
-        </button>
-
-        <div
-          onClick={() => navigate('/dashboard/superadmin')}
-          className="w-9 h-9 rounded-xl overflow-hidden border border-white/80 cursor-pointer shadow-xs hover:ring-2 hover:ring-black transition relative group flex items-center justify-center bg-[#0A0A0A] text-white font-bold select-none"
-          title={`${user?.name || userRole || 'User'} Profile`}
-        >
-          {user?.avatar && !user.avatar.includes('aida-public') ? (
-            <img alt={user?.name || "Profile"} className="w-full h-full object-cover" src={user.avatar} />
-          ) : (
-            <span className="text-[12px] font-extrabold tracking-tight text-white">
-              {initials(user?.name)}
-            </span>
-          )}
-          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white"></span>
-        </div>
-
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="w-10 h-10 rounded-xl text-gray-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition cursor-pointer"
-          title="Sign out"
-        >
-          <Icons.Logout width={16} height={16} />
-        </button>
-      </div>
-    </div>
-  );
-
   return (
     <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''}`}>
       <style>{`
-        .app-shell.ai-chat-mode {
-          background-color: #E8EBF0 !important;
-          background: radial-gradient(circle at 10% 20%, rgba(0, 194, 255, 0.08) 0%, transparent 40%),
-                      radial-gradient(circle at 90% 30%, rgba(216, 249, 41, 0.12) 0%, transparent 45%),
-                      radial-gradient(circle at 50% 85%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
-                      #E8EBF0 !important;
-          padding: 0 !important;
-          height: 100vh !important;
-          max-height: 100vh !important;
-          overflow: hidden !important;
-        }
-        .app-shell.ai-chat-mode .sidebar {
-          width: 56px !important;
-          min-width: 56px !important;
-          max-width: 56px !important;
-          background-color: transparent !important;
-          background: transparent !important;
-          border: none !important;
-          border-radius: 0 !important;
-          box-shadow: none !important;
-          padding: 4px 0 !important;
-          margin: 8px 0 8px 12px !important;
-          height: calc(100vh - 16px) !important;
-        }
-        /* Eliminate any lingering focus/active rectangle on nav links */
         .sidebar a,
         .sidebar button,
         .nav-link,
@@ -1019,35 +916,6 @@ export default function DashboardLayout() {
         .active-nav-tab {
           outline: none !important;
           -webkit-tap-highlight-color: transparent !important;
-          border: none !important;
-        }
-        .sidebar a:focus,
-        .sidebar a:focus-visible,
-        .sidebar a:active,
-        .sidebar button:focus,
-        .sidebar button:focus-visible,
-        .sidebar button:active,
-        .nav-link:focus,
-        .nav-link:focus-visible,
-        .nav-link:active,
-        .sidebar-nav-btn:focus,
-        .sidebar-nav-btn:focus-visible,
-        .sidebar-nav-btn:active {
-          outline: none !important;
-          box-shadow: none !important;
-        }
-        .nav-link:not(.active-nav-tab):not(.active),
-        .sidebar-nav-btn:not(.active-nav-tab):not(.active) {
-          background-color: transparent !important;
-          box-shadow: none !important;
-          border: none !important;
-        }
-        .recruiter-sidebar-container .nav-link {
-          display: flex !important;
-          align-items: center !important;
-          justify-content: space-between !important;
-          gap: 10px !important;
-          text-align: left !important;
         }
         .sidebar-nav-btn {
           background-color: transparent !important;
@@ -1079,390 +947,97 @@ export default function DashboardLayout() {
           justify-content: space-between !important;
           gap: 10px !important;
           box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18) !important;
-          position: relative !important;
-          overflow: hidden !important;
-          border: none !important;
         }
         .active-nav-tab * {
           color: #FFFFFF !important;
         }
-        .active-nav-tab::before {
-          content: '' !important;
-          position: absolute !important;
-          left: 0 !important;
-          top: 50% !important;
-          transform: translateY(-50%) !important;
-          width: 3.5px !important;
-          height: 18px !important;
-          background-color: #FFFFFF !important;
-          border-radius: 0 4px 4px 0 !important;
-          display: block !important;
-        }
-        .app-shell.console-admin,
-        .app-shell.console-superadmin,
-        .app-shell.console-director,
-        .app-shell.console-recruiter,
-        .app-shell.console-hiringmanager,
         .app-shell {
           background-color: #E8EBF0 !important;
-          background: #E8EBF0 !important;
           min-height: 100vh !important;
           width: 100% !important;
-          max-width: 100% !important;
-          overflow-x: clip !important;
           display: flex !important;
           align-items: flex-start !important;
         }
-        .app-shell.console-recruiter .main-area,
-        .app-shell.console-hiringmanager .main-area,
-        .app-shell .main-area,
-        .app-shell.console-recruiter .page,
-        .app-shell.console-hiringmanager .page,
-        .recruiter-page {
-          max-width: 100% !important;
-          width: 100% !important;
-          margin-left: 0 !important;
-          margin-right: 0 !important;
-          min-width: 0 !important;
-        }
-        .app-shell.console-superadmin .content-area,
-        .app-shell.console-recruiter .content-area,
-        .app-shell.console-hiringmanager .content-area {
-          padding-left: 20px !important;
-          padding-right: 20px !important;
-          padding-top: 8px !important;
-          padding-bottom: 8px !important;
-          max-width: 100% !important;
-          width: 100% !important;
-          box-sizing: border-box !important;
-        }
-        .app-shell.console-superadmin .recruiter-topbar,
-        .app-shell.console-recruiter .recruiter-topbar,
-        .app-shell.console-hiringmanager .recruiter-topbar {
-          margin-left: 20px !important;
-          margin-right: 20px !important;
-          padding-left: 0 !important;
-          padding-right: 0 !important;
-        }
-        .app-shell.console-superadmin .topbar,
-        .app-shell.console-recruiter .topbar,
-        .app-shell.console-hiringmanager .topbar,
-        .recruiter-topbar {
-          position: static !important;
-          top: auto !important;
-          z-index: 1 !important;
-          height: auto !important;
-          background-color: transparent !important;
-          background: transparent !important;
-          border-bottom: 1px solid #E2E2DC !important;
-        }
-        .recruiter-sidebar-container,
-        .app-shell.console-admin .sidebar,
-        .app-shell.console-superadmin .sidebar,
-        .app-shell.console-director .sidebar,
-        .app-shell.console-hiringmanager .sidebar,
-        .app-shell.console-recruiter .sidebar {
+        .sidebar {
+          width: 272px !important;
+          min-width: 272px !important;
+          max-width: 272px !important;
+          background-color: #FFFFFF !important;
+          border-radius: 30px !important;
+          border: 1px solid #E2E2DC !important;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02) !important;
           height: calc(100vh - 32px) !important;
-          max-height: calc(100vh - 32px) !important;
           position: sticky !important;
           top: 16px !important;
-          align-self: flex-start !important;
+          margin-left: 16px !important;
+          margin-top: 16px !important;
+          margin-bottom: 16px !important;
+          padding: 24px 20px 20px 20px !important;
           display: flex !important;
           flex-direction: column !important;
           justify-content: space-between !important;
-          box-sizing: border-box !important;
-          z-index: 40 !important;
         }
-
-        /* Laptop & Compact Desktop Optimization (Asus TUF, Lenovo LOQ 16", 1080p/1200p at 125%/150% scaling) */
-        @media (min-width: 1024px) and (max-height: 860px) {
-          .recruiter-sidebar-container,
-          .app-shell.console-admin .sidebar,
-          .app-shell.console-superadmin .sidebar,
-          .app-shell.console-director .sidebar,
-          .app-shell.console-hiringmanager .sidebar,
-          .app-shell.console-recruiter .sidebar {
-            height: calc(100vh - 20px) !important;
-            max-height: calc(100vh - 20px) !important;
-            top: 10px !important;
-            margin-top: 10px !important;
-            margin-bottom: 10px !important;
-            padding-top: 16px !important;
-            padding-bottom: 14px !important;
-            padding-left: 14px !important;
-            padding-right: 14px !important;
-          }
-          .sidebar-nav-btn {
-            padding: 6.5px 10px !important;
-            font-size: 12px !important;
-            border-radius: 10px !important;
-          }
-          .active-nav-tab {
-            padding: 7.5px 12px !important;
-            font-size: 12px !important;
-            border-radius: 11px !important;
-          }
-          .sidebar-brand {
-            padding-bottom: 10px !important;
-            margin-bottom: 8px !important;
-          }
-          .sidebar-footer {
-            padding-top: 10px !important;
-            margin-top: 6px !important;
-          }
-        }
-
-        /* Mobile & Tablet Responsiveness (< 1024px) */
         @media (max-width: 1023px) {
-          .recruiter-sidebar-container,
-        .app-shell.console-admin .sidebar,
-        .app-shell.console-superadmin .sidebar,
-        .app-shell.console-director .sidebar,
-        .app-shell.console-hiringmanager .sidebar,
-        .app-shell.console-recruiter .sidebar {
+          .sidebar {
             display: none !important;
-          }
-          .app-shell.console-superadmin .content-area,
-        .app-shell.console-recruiter .content-area,
-          .app-shell.console-hiringmanager .content-area {
-            padding-left: 12px !important;
-            padding-right: 12px !important;
-            padding-top: 12px !important;
-            padding-bottom: 24px !important;
-            width: 100% !important;
-            overflow-x: hidden !important;
-          }
-          .app-shell.console-superadmin .recruiter-topbar,
-        .app-shell.console-recruiter .recruiter-topbar,
-          .app-shell.console-hiringmanager .recruiter-topbar {
-            margin-left: 12px !important;
-            margin-right: 12px !important;
-            padding-top: 12px !important;
-            padding-bottom: 12px !important;
           }
         }
       `}</style>
 
-      {/* Desktop Floating Animated Sidebar (smoothly reduces to narrow dock on AI Chat) */}
+      {/* Desktop Floating Sidebar */}
       {!isHiringManagerChat && (
-        <motion.aside
-          initial={false}
-          className={`sidebar hidden lg:flex ${isModernLayout ? 'recruiter-sidebar-container' : ''}`}
-          animate={{
-            width: isSuperAdminChat ? 56 : 272,
-            minWidth: isSuperAdminChat ? 56 : 272,
-            maxWidth: isSuperAdminChat ? 56 : 272,
-            backgroundColor: isSuperAdminChat ? 'rgba(255, 255, 255, 0)' : '#FFFFFF',
-            borderColor: isSuperAdminChat ? 'rgba(226, 226, 220, 0)' : '#E2E2DC',
-            borderWidth: isSuperAdminChat ? 0 : 1,
-            borderStyle: 'solid',
-            borderRadius: isSuperAdminChat ? 0 : 30,
-            paddingTop: isSuperAdminChat ? 4 : 24,
-            paddingBottom: isSuperAdminChat ? 4 : 20,
-            paddingLeft: isSuperAdminChat ? 0 : 20,
-            paddingRight: isSuperAdminChat ? 0 : 20,
-            marginLeft: isSuperAdminChat ? 12 : 16,
-            marginRight: 0,
-            marginTop: isSuperAdminChat ? 8 : 16,
-            marginBottom: isSuperAdminChat ? 8 : 16,
-            boxShadow: isSuperAdminChat ? 'none' : '0 4px 20px rgba(0, 0, 0, 0.02)',
-          }}
-          transition={{
-            type: 'spring',
-            stiffness: 280,
-            damping: 28,
-            mass: 0.8,
-          }}
-          style={{
-            width: isSuperAdminChat ? 56 : 272,
-            minWidth: isSuperAdminChat ? 56 : 272,
-            maxWidth: isSuperAdminChat ? 56 : 272,
-            backgroundColor: isSuperAdminChat ? 'transparent' : '#FFFFFF',
-            borderRadius: isSuperAdminChat ? 0 : 30,
-            border: isSuperAdminChat ? 'none' : '1px solid #E2E2DC',
-            boxShadow: isSuperAdminChat ? 'none' : '0 4px 20px rgba(0, 0, 0, 0.02)',
-            height: isSuperAdminChat ? 'calc(100vh - 16px)' : 'calc(100vh - 32px)',
-            position: 'sticky',
-            top: isSuperAdminChat ? 8 : 16,
-            alignSelf: 'flex-start',
-            boxSizing: 'border-box',
-            zIndex: 40,
-            overflow: 'hidden',
-          }}
-        >
-          <AnimatePresence mode="wait" initial={false}>
-            {isSuperAdminChat ? (
-              <motion.div
-                key="reduced-rail"
-                initial={false}
-                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, scale: 0.88, filter: 'blur(4px)' }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="w-full h-full flex flex-col items-center justify-between"
-              >
-                {renderReducedRail()}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="full-sidebar"
-                initial={{ opacity: 0, scale: 0.94, filter: 'blur(4px)' }}
-                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-                exit={{ opacity: 0, scale: 0.94, filter: 'blur(4px)' }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-                className="w-full h-full flex flex-col min-h-0 overflow-hidden"
-              >
-                {renderSidebarContent()}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </motion.aside>
+        <aside className="sidebar hidden lg:flex">
+          {renderSidebarContent()}
+        </aside>
       )}
 
-      {/* Mobile Drawer (Visible when isMobileMenuOpen is true on < 1024px) */}
-      {isMobileMenuOpen && !isAiChatPage && (
-        <div className="fixed inset-0 z-50 lg:hidden flex">
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
-            onClick={() => setIsMobileMenuOpen(false)}
-          />
+      {/* Main Area */}
+      <div className="main-area min-w-0 flex-1 flex flex-col">
+        {!isAiChatPage && (
+          <header className="topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
+            <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(true)}
+                className="lg:hidden p-1.5 text-black hover:bg-white rounded-xl cursor-pointer"
+              >
+                <Menu size={20} />
+              </button>
+              <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
+                {userRole === 'Super Admin' ? 'Platform' : (user?.tenant_name || 'Term Jobs')}
+              </span>
+              <span className="text-[#8A8A85] font-normal">/</span>
+              <span className="text-[#0A0A0A] font-semibold truncate">
+                {userRole === 'Super Admin' ? 'Super Admin Console' : 'Dashboard'}
+              </span>
+            </div>
 
-          {/* Drawer Card */}
-          <div
-            style={{
-              backgroundColor: '#FFFFFF',
-              width: '290px',
-              maxWidth: '85vw',
-              height: '100%',
-              padding: '24px 20px 20px 20px',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
-              position: 'relative',
-              zIndex: 60,
-            }}
-            className="flex flex-col h-full min-h-0 overflow-hidden animate-in slide-in-from-left duration-200"
-          >
-            <button
-              type="button"
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="absolute top-4 right-4 p-2 text-[#8A8A85] hover:text-[#0A0A0A] rounded-xl hover:bg-[#F5F5F2] cursor-pointer z-10"
-              title="Close menu"
-            >
-              <X size={20} strokeWidth={2.2} />
-            </button>
+            <div className="topbar-right flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsAssistantOpen((prev) => !prev)}
+                className="w-8.5 h-8.5 rounded-full bg-white border border-[#E2E2DC] flex items-center justify-center text-black hover:bg-black hover:text-white transition-colors cursor-pointer shadow-2xs"
+              >
+                <Sparkles size={15} />
+              </button>
+              <span className="px-3 py-1 text-[11px] font-bold text-black bg-white border border-[#E2E2DC] rounded-full flex items-center gap-1.5 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                SECURE SESSION
+              </span>
+              <button
+                onClick={handleLogout}
+                type="button"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-[#E2E2DC] bg-white hover:bg-red-50 hover:text-red-600 text-gray-700 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+              >
+                <Icons.Logout width={14} height={14} />
+                <span className="hidden sm:inline">Sign out</span>
+              </button>
+            </div>
+          </header>
+        )}
 
-            {renderSidebarContent(() => setIsMobileMenuOpen(false))}
-          </div>
-        </div>
-      )}
-
-      <div className={`main-area min-w-0 flex-1 flex flex-col ${isAiChatPage ? 'w-full h-screen max-h-screen overflow-hidden' : ''}`}>
-        <AnimatePresence>
-          {!isAiChatPage && (
-            <motion.header
-              key="topbar-header"
-              initial={{ opacity: 0, height: 0, y: -16 }}
-              animate={{ opacity: 1, height: 'auto', y: 0 }}
-              exit={{ opacity: 0, height: 0, y: -16 }}
-              transition={{ duration: 0.22, ease: 'easeInOut' }}
-              style={{ backgroundColor: "transparent" }}
-              className="topbar recruiter-topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0 overflow-hidden"
-            >
-              {/* Breadcrumb & Mobile Menu Toggle Left */}
-              <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
-                {/* Hamburger Toggle (Mobile / Tablet only) */}
-                <button
-                  type="button"
-                  onClick={() => setIsMobileMenuOpen(true)}
-                  className="lg:hidden p-1.5 -ml-1 text-[#0A0A0A] hover:bg-[#F5F5F2] rounded-xl transition-colors cursor-pointer shrink-0 flex items-center justify-center"
-                  aria-label="Open menu"
-                >
-                  <Menu size={21} strokeWidth={2.2} />
-                </button>
-
-                <span className="font-extrabold text-[#0A0A0A] tracking-tight truncate">
-                  {userRole === 'Super Admin'
-                    ? 'Platform'
-                    : (user?.tenant_name && user.tenant_name !== 'Unknown Tenant')
-                      ? user.tenant_name
-                      : (userRole === 'Recruiter' ? 'bridgeon' : 'Bearitt')}
-                </span>
-                <span className="text-[#8A8A85] font-normal">/</span>
-                <span className="text-[#0A0A0A] font-semibold truncate">
-                  {userRole === 'Super Admin' && location.pathname === '/dashboard/superadmin' ? 'Console'
-                    : (location.pathname.includes('/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool'))
-                      ? (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin' ? 'Candidate Pool' : (userRole === 'Recruiter' ? (location.pathname.includes('/accepted') ? 'Accepted Candidates' : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates' : 'Candidates Bank') : 'Candidates'))
-                      : location.pathname.includes('/requisitions') ? 'Requisitions'
-                        : location.pathname.includes('/shortlisted') ? 'Shortlisted Candidates'
-                          : location.pathname.includes('/interviews') ? 'Interview Requests'
-                            : location.pathname.includes('/agreements') ? 'Agreements'
-                              : location.pathname.includes('/chat') ? 'AI Chat'
-                                : location.pathname.includes('/accepted') ? 'Accepted Candidates'
-                                  : location.pathname.includes('/portal-access') ? 'Portal Access'
-                                    : 'Dashboard'}
-                </span>
-                <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-[#8A8A85] mx-1 align-middle shrink-0" />
-                <span className="hidden sm:inline text-[#737373] font-medium shrink-0">{userRole}</span>
-              </div>
-
-              {/* Actions Right */}
-              <div className="topbar-right flex items-center gap-2 sm:gap-2.5 pr-0.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsAssistantOpen((prev) => !prev)}
-                  title="AI Assistant"
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: '50%',
-                    backgroundColor: isAssistantOpen ? '#0A0A0A' : '#FFFFFF',
-                    border: isAssistantOpen ? '1px solid #0A0A0A' : '1px solid #E2E2DC',
-                    color: isAssistantOpen ? '#FFFFFF' : '#0A0A0A',
-                  }}
-                  className="flex items-center justify-center hover:bg-[#0A0A0A] hover:text-[#FFFFFF] hover:border-[#0A0A0A] transition-all shadow-2xs cursor-pointer group shrink-0"
-                >
-                  <Sparkles size={15} className={isAssistantOpen ? "text-white" : "group-hover:text-white transition-colors"} />
-                </button>
-
-                <span
-                  style={{
-                    backgroundColor: '#FFFFFF',
-                    border: '1px solid #E2E2DC',
-                    borderRadius: 9999,
-                  }}
-                  className="px-2.5 sm:px-3.5 py-1 text-[10.5px] sm:text-[11px] font-bold text-[#0A0A0A] flex items-center gap-1.5 shadow-2xs tracking-tight shrink-0"
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#22C55E]" />
-                  <span className="hidden xs:inline sm:inline">SECURE SESSION</span>
-                  <span className="xs:hidden sm:hidden">SECURE</span>
-                </span>
-
-                <button
-                  onClick={handleLogout}
-                  type="button"
-                  title="Sign out"
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E2E2DC] bg-white hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-[#737373] text-[11px] sm:text-[12px] font-bold transition-all shadow-2xs cursor-pointer shrink-0 group"
-                >
-                  <Icons.Logout width={14} height={14} className="group-hover:text-red-600 transition-colors" />
-                  <span className="hidden sm:inline">Sign out</span>
-                </button>
-              </div>
-            </motion.header>
-          )}
-        </AnimatePresence>
-
-        <main className={isAiChatPage ? "w-full h-screen max-h-screen p-2 sm:p-3 md:p-4 flex flex-col items-stretch select-none antialiased overflow-hidden bg-[#E8EBF0]" : "content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1"}>
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={isAiChatPage ? 'chat-panel' : location.pathname}
-              initial={false}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="w-full h-full flex-1 flex flex-col min-w-0"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
+        <main className="content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1">
+          <Outlet />
         </main>
       </div>
 
@@ -1472,17 +1047,12 @@ export default function DashboardLayout() {
           <OnboardVendorModal
             isOpen={isOnboardVendorModalOpen}
             onClose={() => setIsOnboardVendorModalOpen(false)}
-            onSuccess={() => {
-              window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
-            }}
+            onSuccess={() => window.dispatchEvent(new CustomEvent('refresh-superadmin-data'))}
           />
           <OnboardCompanyModal
             isOpen={isOnboardCompanyModalOpen}
             onClose={() => setIsOnboardCompanyModalOpen(false)}
-            onSuccess={() => {
-              // Dispatches custom event to notify SuperAdminDashboard to reload
-              window.dispatchEvent(new CustomEvent('refresh-superadmin-data'));
-            }}
+            onSuccess={() => window.dispatchEvent(new CustomEvent('refresh-superadmin-data'))}
           />
         </>
       )}

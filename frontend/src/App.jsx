@@ -114,6 +114,14 @@ function CandidateRouteDispatcher() {
   return <ShortlistedCandidates />;
 }
 
+function RequisitionRouteGuard({ children }) {
+  const { user } = useAuth();
+  if (user?.role === 'Admin' || user?.role?.toLowerCase() === 'admin') {
+    return <Navigate to="/dashboard/admin" replace />;
+  }
+  return children;
+}
+
 function HorizontalTransitionLayout() {
   const location = useLocation();
   const isLanding = location.pathname === '/';
@@ -234,17 +242,17 @@ export default function App() {
             <Route path="interviews" element={<HiringManagerInterviews />} />
             <Route path="hiring-manager" element={<HiringManagerDashboard />} />
             <Route path="hiring-manager/chat" element={<HiringManagerChat />} />
-            <Route path="requisitions" element={<RequisitionOverview />} />
-            <Route path="requisitions/published" element={<RequisitionOverview section="published" />} />
-            <Route path="requisitions/pending-approval" element={<RequisitionOverview section="pending_approval" />} />
-            <Route path="requisitions/pending" element={<RequisitionOverview section="pending_approval" />} />
-            <Route path="requisitions/drafted" element={<RequisitionOverview section="drafted" />} />
-            <Route path="requisitions/completed" element={<RequisitionOverview section="completed" />} />
-            <Route path="requisitions/history" element={<RequisitionOverview section="history" />} />
-            <Route path="requisitions/new" element={<NewRequisition />} />
-            <Route path="requisitions/:id" element={<RequisitionDetail />} />
-            <Route path="requisitions/:id/candidates" element={<RequisitionCandidates />} />
-            <Route path="requisitions/:reqId/candidates/:candidateId" element={<CandidateSchedule />} />
+            <Route path="requisitions" element={<RequisitionRouteGuard><RequisitionOverview /></RequisitionRouteGuard>} />
+            <Route path="requisitions/published" element={<RequisitionRouteGuard><RequisitionOverview section="published" /></RequisitionRouteGuard>} />
+            <Route path="requisitions/pending-approval" element={<RequisitionRouteGuard><RequisitionOverview section="pending_approval" /></RequisitionRouteGuard>} />
+            <Route path="requisitions/pending" element={<RequisitionRouteGuard><RequisitionOverview section="pending_approval" /></RequisitionRouteGuard>} />
+            <Route path="requisitions/drafted" element={<RequisitionRouteGuard><RequisitionOverview section="drafted" /></RequisitionRouteGuard>} />
+            <Route path="requisitions/completed" element={<RequisitionRouteGuard><RequisitionOverview section="completed" /></RequisitionRouteGuard>} />
+            <Route path="requisitions/history" element={<RequisitionRouteGuard><RequisitionOverview section="history" /></RequisitionRouteGuard>} />
+            <Route path="requisitions/new" element={<RequisitionRouteGuard><NewRequisition /></RequisitionRouteGuard>} />
+            <Route path="requisitions/:id" element={<RequisitionRouteGuard><RequisitionDetail /></RequisitionRouteGuard>} />
+            <Route path="requisitions/:id/candidates" element={<RequisitionRouteGuard><RequisitionCandidates /></RequisitionRouteGuard>} />
+            <Route path="requisitions/:reqId/candidates/:candidateId" element={<RequisitionRouteGuard><CandidateSchedule /></RequisitionRouteGuard>} />
             <Route path="candidates/accepted" element={<AcceptedCandidates />} />
             <Route path="candidates/onboarding" element={<OnboardingManagement />} />
             <Route path="candidates/portal-access" element={<CandidatePortalAccess />} />

@@ -34,6 +34,7 @@ export default function AuthPage() {
     if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
     if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
     if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
+    if (user.role === 'Admin' || user.role?.toLowerCase() === 'admin') return <Navigate to="/dashboard/admin" replace />;
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -55,6 +56,8 @@ export default function AuthPage() {
         navigate('/dashboard/director');
       } else if (loggedUser?.role === 'Super Admin') {
         navigate('/dashboard/superadmin');
+      } else if (loggedUser?.role === 'Admin' || loggedUser?.role?.toLowerCase() === 'admin') {
+        navigate('/dashboard/admin');
       } else {
         navigate('/dashboard');
       }

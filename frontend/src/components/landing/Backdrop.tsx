@@ -1,13 +1,22 @@
 import { motion, useReducedMotion } from "framer-motion";
 
 /** Understated background system: soft radial light, blurred forms, grid + grain. */
-export function Backdrop({ tone = "light" }: { tone?: "light" | "dark" | "sidebar" }) {
+export function Backdrop({
+  tone = "light",
+  fixed = false,
+}: {
+  tone?: "light" | "dark" | "sidebar";
+  fixed?: boolean;
+}) {
   const reduced = useReducedMotion();
   const dark = tone === "dark";
   const isSidebar = tone === "sidebar";
 
   return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+    <div
+      className={`pointer-events-none ${fixed ? "fixed" : "absolute"} inset-0 overflow-hidden`}
+      aria-hidden="true"
+    >
       <div
         className="absolute inset-0"
         style={{
@@ -15,7 +24,7 @@ export function Backdrop({ tone = "light" }: { tone?: "light" | "dark" | "sideba
             ? "radial-gradient(120% 90% at 20% 10%, oklch(0.26 0.004 260) 0%, oklch(0.13 0.004 260) 55%, oklch(0.1 0.004 260) 100%)"
             : isSidebar
               ? "radial-gradient(130% 90% at 0% 0%, oklch(1 0 0) 0%, oklch(0.975 0.002 100) 50%, oklch(0.94 0.002 100) 100%)"
-              : "radial-gradient(110% 85% at 80% 0%, oklch(1 0 0) 0%, oklch(0.975 0.002 100) 55%, oklch(0.94 0.002 100) 100%)",
+              : "radial-gradient(120% 90% at 80% 0%, oklch(0.99 0.002 100) 0%, oklch(0.965 0.002 100) 55%, oklch(0.935 0.002 100) 100%)",
         }}
       />
       <div
