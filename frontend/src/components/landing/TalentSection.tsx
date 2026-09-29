@@ -15,16 +15,16 @@ export function TalentSection({ active }: { active: boolean }) {
   return (
     <section
       aria-label="Talent experience"
-      className="relative flex h-dvh w-screen shrink-0 items-start md:items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
+      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
     >
       <Backdrop />
-      <div className="relative z-10 mx-auto grid w-full max-w-7xl gap-10 px-6 pt-28 pb-32 md:px-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0">
+      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:grid lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0 min-h-dvh md:min-h-0">
         <div>
           <motion.p
             variants={fadeUp}
             initial="hidden"
             animate={state}
-            className="mb-8 text-[0.65rem] font-semibold tracking-[0.3em] text-ink-soft uppercase"
+            className="mb-6 sm:mb-8 text-[0.62rem] sm:text-[0.65rem] font-semibold tracking-[0.3em] text-ink-soft uppercase"
           >
             04 — For talent
           </motion.p>
@@ -47,7 +47,7 @@ export function TalentSection({ active }: { active: boolean }) {
             custom={2}
             initial="hidden"
             animate={state}
-            className="mt-8 max-w-md text-sm leading-relaxed text-ink-soft md:text-base"
+            className="mt-6 sm:mt-8 max-w-md text-sm leading-relaxed text-ink-soft md:text-base"
           >
             Create your profile, get matched with relevant contract roles, and manage your engagement from one place.
           </motion.p>
@@ -57,11 +57,11 @@ export function TalentSection({ active }: { active: boolean }) {
             custom={3}
             initial="hidden"
             animate={state}
-            className="mt-8"
+            className="mt-6 sm:mt-8"
           >
             <Link
               to="/open-roles"
-              className="group inline-flex items-center gap-3 rounded-full bg-ink/90 hover:bg-ink text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-3 rounded-full bg-ink/90 hover:bg-ink text-paper px-6 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
             >
               Browse Open Positions
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
@@ -69,7 +69,7 @@ export function TalentSection({ active }: { active: boolean }) {
           </motion.div>
         </div>
 
-        <div className="flex justify-center lg:justify-end">
+        <div className="hidden lg:flex justify-end">
           <motion.div
             initial={{ opacity: 0, y: 40, rotate: reduced ? 0 : 2 }}
             animate={active ? { opacity: 1, y: 0, rotate: reduced ? 0 : -1.2 } : { opacity: 0, y: 40 }}

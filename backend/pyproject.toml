@@ -22,6 +22,7 @@ dependencies = [
     "groq>=1.6.0",
     "loguru>=0.7.3",
     "certifi>=2024.2.2",
+    "email-validator>=2.3.0",
 ]
 
 [dependency-groups]

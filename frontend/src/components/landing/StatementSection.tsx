@@ -8,18 +8,18 @@ export function StatementSection({ active }: { active: boolean }) {
   return (
     <section
       aria-label="Why TermJobs"
-      className="relative flex h-dvh w-screen shrink-0 items-start md:items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
+      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
     >
       <Backdrop tone="dark" />
 
-      {/* Main content — full width, same as Page 1 container but single column */}
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-6 pt-28 pb-32 md:px-12 lg:pt-0 lg:pb-0">
+      {/* Main content — centered on mobile, full width */}
+      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:pt-0 lg:pb-0 min-h-dvh md:min-h-0">
 
         <motion.p
           variants={fadeUp}
           initial="hidden"
           animate={state}
-          className="mb-8 text-[0.65rem] font-semibold tracking-[0.3em] text-paper/45 uppercase"
+          className="mb-6 sm:mb-8 text-[0.62rem] sm:text-[0.65rem] font-semibold tracking-[0.3em] text-paper/45 uppercase"
         >
           02 — Why TermJobs
         </motion.p>
@@ -65,10 +65,28 @@ export function StatementSection({ active }: { active: boolean }) {
           custom={1}
           initial="hidden"
           animate={state}
-          className="mt-8 max-w-xl text-sm leading-relaxed text-paper/60 md:text-base"
+          className="mt-6 sm:mt-8 max-w-xl text-sm leading-relaxed text-paper/60 md:text-base"
         >
           From candidate sourcing to screening and shortlisting, TermJobs takes the repetitive work off your team so you can focus on choosing the right person.
         </motion.p>
+
+        {/* 3 badges as seen in Image 3 */}
+        <motion.div
+          variants={fadeUp}
+          custom={2}
+          initial="hidden"
+          animate={state}
+          className="mt-6 sm:mt-8 flex flex-wrap items-center gap-2 sm:gap-2.5"
+        >
+          {["REQUIREMENT", "TALENT NETWORK", "YOUR SELECTION"].map((badge) => (
+            <span
+              key={badge}
+              className="rounded-full border border-paper/15 bg-paper/[0.05] px-3.5 sm:px-4 py-1.5 sm:py-2 text-[0.6rem] sm:text-[0.65rem] font-semibold tracking-[0.16em] sm:tracking-[0.18em] text-paper/75 uppercase backdrop-blur-md"
+            >
+              {badge}
+            </span>
+          ))}
+        </motion.div>
       </div>
 
       {/* Tagline — anchored top-right, treated as ambient caption */}

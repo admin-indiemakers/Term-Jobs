@@ -17,15 +17,15 @@ export function WorkflowSection({ active }: { active: boolean }) {
   return (
     <section
       aria-label="How it works"
-      className="relative flex h-dvh w-screen shrink-0 items-start md:items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper-dim text-ink"
+      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper-dim text-ink"
     >
       <Backdrop />
-      <div className="relative z-10 mx-auto w-full max-w-7xl px-6 pt-28 pb-32 md:px-12">
+      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 min-h-dvh md:min-h-0">
         <motion.p
           variants={fadeUp}
           initial="hidden"
           animate={state}
-          className="mb-8 text-[0.65rem] font-semibold tracking-[0.3em] text-ink-soft uppercase"
+          className="mb-6 sm:mb-8 text-[0.62rem] sm:text-[0.65rem] font-semibold tracking-[0.3em] text-ink-soft uppercase"
         >
           03 — How it works
         </motion.p>
@@ -44,7 +44,7 @@ export function WorkflowSection({ active }: { active: boolean }) {
           </span>
         </h2>
 
-        <ol className="mt-14 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
+        <ol className="mt-6 sm:mt-14 grid grid-cols-2 gap-x-4 gap-y-4 sm:gap-y-6 sm:grid-cols-3 lg:grid-cols-6">
           {steps.map((step, i) => (
             <motion.li
               key={step}
@@ -66,7 +66,7 @@ export function WorkflowSection({ active }: { active: boolean }) {
                   />
                 )}
               </div>
-              <p className="mt-3 text-[0.66rem] font-semibold tracking-[0.14em] uppercase">{step}</p>
+              <p className="mt-2.5 sm:mt-3 text-[0.64rem] sm:text-[0.66rem] font-semibold tracking-[0.14em] uppercase">{step}</p>
             </motion.li>
           ))}
         </ol>
@@ -76,7 +76,7 @@ export function WorkflowSection({ active }: { active: boolean }) {
           custom={4}
           initial="hidden"
           animate={state}
-          className="mt-14 max-w-xl text-sm leading-relaxed text-ink-soft"
+          className="mt-6 sm:mt-14 max-w-xl text-sm leading-relaxed text-ink-soft"
         >
           From requirement to invoice — with an intelligent layer running quietly across every stage,
           and people still making the decisions that matter.
