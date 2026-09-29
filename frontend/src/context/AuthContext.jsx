@@ -4,20 +4,38 @@ import { request } from '../api/client';
 const AuthContext = createContext(null);
 
 const TOKEN_KEY = 'auth_token';
+const USER_KEY = 'auth_user';
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
-  const [initializing, setInitializing] = useState(Boolean(localStorage.getItem(TOKEN_KEY)));
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem(USER_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [initializing, setInitializing] = useState(() => {
+    const hasToken = Boolean(localStorage.getItem(TOKEN_KEY));
+    const hasUser = Boolean(localStorage.getItem(USER_KEY));
+    return hasToken && !hasUser;
+  });
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
   }, []);
 
   const applySession = useCallback((accessToken, userData) => {
     localStorage.setItem(TOKEN_KEY, accessToken);
+    if (userData) {
+      try {
+        localStorage.setItem(USER_KEY, JSON.stringify(userData));
+      } catch {}
+    }
     setToken(accessToken);
     setUser(userData);
   }, []);
@@ -60,7 +78,12 @@ export function AuthProvider({ children }) {
 
     request('/api/auth/me', { token, timeout: 5000 })
       .then((data) => {
-        if (!cancelled) setUser(data);
+        if (!cancelled && data) {
+          setUser(data);
+          try {
+            localStorage.setItem(USER_KEY, JSON.stringify(data));
+          } catch {}
+        }
       })
       .catch(() => {
         if (!cancelled) logout();

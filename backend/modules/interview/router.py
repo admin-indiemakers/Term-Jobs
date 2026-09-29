@@ -300,7 +300,14 @@ def get_interview_summary_endpoint(
 ):
     """Get aggregated interview progression per candidate for Hiring Manager, or all for Super Admin."""
     effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
-    return get_hiring_manager_summary(tenant_id=effective_tenant)
+    from modules.shared.cache import cache as _cache
+    cache_key = f"interview_summary:{effective_tenant or 'all'}"
+    cached_val = _cache.get(cache_key)
+    if cached_val is not None:
+        return cached_val
+    res = get_hiring_manager_summary(tenant_id=effective_tenant)
+    _cache.set(cache_key, res, ttl=30)
+    return res
 
 
 @router.post("/candidates/{candidate_id}/decision")

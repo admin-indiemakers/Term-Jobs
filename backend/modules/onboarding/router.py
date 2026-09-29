@@ -109,10 +109,17 @@ def _get_current_user(authorization: str | None) -> dict | None:
     payload = decode_access_token(token)
     if not payload or "sub" not in payload:
         return None
+    user_id = payload["sub"]
+    from modules.shared.cache import cache as _cache
+    cached = _cache.get(f"auth_user_dict:{user_id}")
+    if cached is not None:
+        return cached
     with get_session() as session:
-        user = session.get(User, payload["sub"])
+        user = session.get(User, user_id)
         if user:
-            return {"id": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id}
+            u_dict = {"id": user.id, "email": user.email, "role": user.role, "tenant_id": user.tenant_id}
+            _cache.set(f"auth_user_dict:{user_id}", u_dict, ttl=60)
+            return u_dict
     return None
 
 
@@ -197,6 +204,13 @@ def raise_onboarding_issue(data: dict, authorization: str | None = Header(None))
 def list_onboarding_issues(authorization: str | None = Header(None)):
     """List raised onboarding issues. Scoped by tenant and hiring manager."""
     user = _get_current_user(authorization)
+    from modules.shared.cache import cache as _cache
+    user_id = user.get("id") if user else "anon"
+    cache_key = f"ob_issues:{user_id}"
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     if user and user["role"] not in ("Super Admin", "Admin", "HR", "Director"):
         # Hiring Manager: only see issues for candidates in their requisitions
         from modules.requisition.domain.models import Requisition
@@ -219,6 +233,7 @@ def list_onboarding_issues(authorization: str | None = Header(None)):
         docs = list(_issues_coll().find())
     for d in docs:
         d.pop("_id", None)
+    _cache.set(cache_key, docs, ttl=30)
     return docs
 
 
@@ -317,9 +332,14 @@ def mark_notification_read(notification_id: str):
 @router.get("/")
 def list_onboardings():
     """List all onboarding checklists."""
-    docs = list(_coll().find())
+    from modules.shared.cache import cache as _cache
+    cached = _cache.get("onboardings_list")
+    if cached is not None:
+        return cached
+    docs = list(_coll().find({}, {"activation_gates": 0, "completed_items": 0}))
     for d in docs:
         d.pop("_id", None)
+    _cache.set("onboardings_list", docs, ttl=30)
     return docs
 
 def _get_or_create_onboarding_doc(candidate_id: str) -> dict:

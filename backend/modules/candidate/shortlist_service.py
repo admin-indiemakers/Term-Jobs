@@ -125,7 +125,7 @@ def get_requisition_shortlist_status(requisition_id: str) -> Dict[str, Any]:
     screened_count = 0
     shortlisted_count = 0
     try:
-        subs = list(db["candidate_submissions"].find({"requisition_id": requisition_id}))
+        subs = list(db["candidate_submissions"].find({"requisition_id": requisition_id}, {"status": 1}))
         total_candidates = len(subs)
         for s in subs:
             st = s.get("status")

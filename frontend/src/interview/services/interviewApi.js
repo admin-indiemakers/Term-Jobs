@@ -1,5 +1,7 @@
 import { request } from '../../api/client';
 
+const commAnalysisCache = new Map();
+
 export const interviewApi = {
   // Hiring Manager / HR Actions
   async createRound(payload, token) {
@@ -122,9 +124,18 @@ export const interviewApi = {
   },
 
   async getCommunicationAnalysis(roundId) {
-    return request(`/api/interviews/rounds/${roundId}/communication-analysis`, {
+    if (!roundId) return null;
+    if (commAnalysisCache.has(roundId)) {
+      return commAnalysisCache.get(roundId);
+    }
+    const p = request(`/api/interviews/rounds/${roundId}/communication-analysis`, {
       method: 'GET',
+    }).catch((err) => {
+      commAnalysisCache.delete(roundId);
+      throw err;
     });
+    commAnalysisCache.set(roundId, p);
+    return p;
   },
 
   // Candidate Interview Video Recording

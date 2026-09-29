@@ -402,6 +402,12 @@ def list_candidates(
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """List candidate submissions, optionally filtered by status and/or requisition."""
+    from modules.shared.cache import cache as _cache
+    cache_key = f"cands_list:{current_user.id}:{current_user.role}:{status or 'all'}:{requisition_id or 'all'}:{include_details}"
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query_filter = {}
     if status:
         if status == "Accepted":
@@ -412,12 +418,20 @@ def list_candidates(
             query_filter["status"] = status
     if requisition_id:
         query_filter["requisition_id"] = requisition_id
-    return _fetch_candidate_submissions_mongo(query_filter, current_user, include_details=include_details)
+    res = _fetch_candidate_submissions_mongo(query_filter, current_user, include_details=include_details)
+    _cache.set(cache_key, res, ttl=20)
+    return res
 
 
 @router.get("/shortlisted")
 def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dict]:
     """Shortcut for the shortlisted candidates queue (strictly verified: must have completed AI screening interview)."""
+    from modules.shared.cache import cache as _cache
+    cache_key = f"shortlisted_list:{current_user.id}:{current_user.role}"
+    cached = _cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     from modules.shared.db import db, get_session
     from modules.interview.domain.models import InterviewRound
 
@@ -494,6 +508,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
         except Exception as demote_err:
             logger.warning(f"Error auto-demoting un-interviewed candidates: {demote_err}")
 
+    _cache.set(cache_key, verified, ttl=20)
     return verified
 
 
@@ -816,6 +831,12 @@ def update_submission_status(
             )
     except Exception as notify_exc:  # noqa: BLE001
         print(f"Notification error on status change: {notify_exc}")
+
+    try:
+        from modules.shared.cache import cache as _cache
+        _cache.clear()
+    except Exception:
+        pass
 
     return {
         "status": "success",
