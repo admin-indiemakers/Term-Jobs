@@ -19,6 +19,7 @@ from modules.identity.domain.schemas import (
     UserUpdate,
     VendorEngagementsIn,
     VendorResponse,
+    _validate_real_email,
 )
 from modules.identity.services.auth_service import (
     create_access_token,
@@ -114,6 +115,13 @@ def _send_credentials_email(to_email: str, name: str, role: str, plain_password:
             "designation": "Recruiter",
             "access_desc": "You can source candidates, manage talent pipelines, and submit candidates to clients.",
         },
+        "Candidate": {
+            "gradient": "linear-gradient(135deg,#0d9488,#0284c7)",
+            "badge_bg": "#ccfbf1", "badge_color": "#0f766e",
+            "icon": "🎓",
+            "designation": "Candidate",
+            "access_desc": "You have been granted access to your TermJob Candidate Portal to track your applications, interviews, onboarding, timesheets, and assignments.",
+        },
     }
 
     meta = ROLE_META.get(role, {
@@ -124,7 +132,17 @@ def _send_credentials_email(to_email: str, name: str, role: str, plain_password:
         "access_desc": "You have been granted access to the TermJob platform.",
     })
 
-    subject = f"Welcome to TermJob — Your {meta['designation']} Account"
+    if role == "Candidate":
+        subject = "Welcome to TermJob — Your Candidate Portal Access"
+    else:
+        subject = f"Welcome to TermJob — Your {meta['designation']} Account"
+
+    cid_html = f"""<div style="padding:12px 16px;">
+          <span style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Work Order / Candidate ID</span>
+          <p style="color:#111827;font-size:14px;font-weight:700;margin:4px 0 0;font-family:monospace;">{candidate_id}</p>
+        </div>""" if candidate_id else ""
+
+    cta_label = "Access Candidate Portal →" if role == "Candidate" else "Login to TermJob →"
 
     html_body = f"""\
 <html>
@@ -163,10 +181,11 @@ def _send_credentials_email(to_email: str, name: str, role: str, plain_password:
           <span style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Login Email</span>
           <p style="color:#111827;font-size:14px;font-weight:700;margin:4px 0 0;">{to_email}</p>
         </div>
-        <div style="padding:12px 16px;">
+        <div style="padding:12px 16px;{'border-bottom:1px solid #e5e7eb;' if candidate_id else ''}">
           <span style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.5px;font-weight:600;">Temporary Password</span>
           <p style="color:#111827;font-size:16px;font-weight:700;letter-spacing:2px;margin:4px 0 0;font-family:monospace;">{plain_password}</p>
         </div>
+        {cid_html}
       </div>
 
       <p style="color:#ef4444;font-size:13px;margin:0 0 24px;">
@@ -179,7 +198,7 @@ def _send_credentials_email(to_email: str, name: str, role: str, plain_password:
                 background:{meta['gradient']};
                 color:#fff;border-radius:10px;text-decoration:none;
                 font-size:14px;font-weight:700;letter-spacing:.3px;">
-        Login to TermJob →
+        {cta_label}
       </a>
 
       <hr style="border:none;border-top:1px solid #f3f4f6;margin:32px 0 16px;" />
@@ -192,6 +211,7 @@ def _send_credentials_email(to_email: str, name: str, role: str, plain_password:
 </body>
 </html>"""
 
+    id_line = f"\nCandidate ID: {candidate_id}" if candidate_id else ""
     plain_text = f"""Welcome to TermJob — {meta['designation']} Account
 
 Hi {name},
@@ -201,8 +221,8 @@ Your {meta['designation']} account on TermJob has been set up.
 {meta['access_desc']}
 
 ---- Your Login Details ----
-Email    : {to_email}
-Access Key: {plain_password}
+Email       : {to_email}
+Access Key  : {plain_password}{id_line}
 ----------------------------
 
 Please log in at: {login_url}
@@ -242,11 +262,11 @@ If you did not expect this message, please contact your administrator.
         print(f"[TermJob] Email delivery failed → {to_email}: {exc}")
 
 
-def send_credentials_email(to_email: str, name: str, role: str, plain_password: str) -> None:
+def send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:
     """Non-blocking wrapper — fires the email in a daemon thread."""
     t = threading.Thread(
         target=_send_credentials_email,
-        args=(to_email, name, role, plain_password),
+        args=(to_email, name, role, plain_password, candidate_id),
         daemon=True,
     )
     t.start()
@@ -1750,6 +1770,10 @@ def create_or_update_portal_user(
 
     if not email or "@" not in email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="A valid email is required")
+    try:
+        email = _validate_real_email(email)
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     if not name:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Candidate name is required")
     if not candidate_id:
@@ -1890,6 +1914,16 @@ def create_or_update_portal_user(
         # Synchronize to Mongo collections
         _sync_candidate_credentials_to_mongo(candidate_id, email, name)
 
+        # Send credentials email to candidate if password was provided/reset
+        if password:
+            send_credentials_email(
+                to_email=existing_user.email,
+                name=existing_user.name,
+                role="Candidate",
+                plain_password=password,
+                candidate_id=candidate_id or getattr(existing_user, 'candidate_id', '') or getattr(existing_user, 'workorder_id', '')
+            )
+
         return {
             "ok": True,
             "id": existing_user.id,
@@ -1927,6 +1961,15 @@ def create_or_update_portal_user(
     # Sync candidate email & name to candidate_submissions and onboarding_checklists in MongoDB
     _sync_candidate_credentials_to_mongo(candidate_id, email, name)
 
+    # Fire welcome credential email to candidate
+    send_credentials_email(
+        to_email=new_user.email,
+        name=new_user.name,
+        role="Candidate",
+        plain_password=password,
+        candidate_id=candidate_id
+    )
+
     return {
         "ok": True,
         "id": new_user.id,
@@ -1935,7 +1978,7 @@ def create_or_update_portal_user(
         "candidate_id": new_user.candidate_id,
         "workorder_id": new_user.workorder_id,
         "is_active": new_user.is_active,
-        "message": "Portal access created successfully",
+        "message": "Portal access created successfully and credentials emailed to candidate",
     }
 
 
@@ -1947,6 +1990,17 @@ def update_portal_user(
     db: Session = Depends(get_db),
 ):
     """Update a Candidate user's name, email, password, or active status."""
+    email = (body.get("email") or "").strip().lower()
+    name = (body.get("name") or "").strip()
+    password = body.get("password") or ""
+    candidate_id = (body.get("candidate_id") or body.get("workorder_id") or "").strip()
+
+    if email:
+        try:
+            email = _validate_real_email(email)
+        except ValueError as ve:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+
     target = db.query(User).filter(
         User.id == user_id,
     ).first()
@@ -1963,24 +2017,30 @@ def update_portal_user(
             if "is_active" in body: m_set["is_active"] = body["is_active"]
             if password: m_set["password_hash"] = hash_password(password)
             mongo_db["users"].update_one({"_id": m_user["_id"]}, {"$set": m_set})
-            cid = m_user.get("candidate_id") or m_user.get("workorder_id") or body.get("candidate_id") or ""
+            cid = m_user.get("candidate_id") or m_user.get("workorder_id") or candidate_id or ""
+            target_email = email or m_user.get("email")
+            target_name = name or m_user.get("name")
             if cid:
-                _sync_candidate_credentials_to_mongo(cid, email or m_user.get("email"), name or m_user.get("name"))
+                _sync_candidate_credentials_to_mongo(cid, target_email, target_name)
+            if password and target_email:
+                send_credentials_email(
+                    to_email=target_email,
+                    name=target_name,
+                    role="Candidate",
+                    plain_password=password,
+                    candidate_id=cid,
+                )
             return {
                 "ok": True,
-                "message": "Portal credentials updated successfully",
+                "message": "Portal credentials updated successfully" + (" and new password emailed to candidate" if password else ""),
                 "user": {
                     "id": user_id,
-                    "email": email or m_user.get("email"),
-                    "name": name or m_user.get("name"),
+                    "email": target_email,
+                    "name": target_name,
                     "candidate_id": cid,
                 }
             }
         raise HTTPException(status_code=404, detail="User not found")
-
-    email = (body.get("email") or "").strip().lower()
-    name = (body.get("name") or "").strip()
-    password = body.get("password") or ""
 
     if email and email != target.email:
         # Check if email is used by another user account
@@ -2012,21 +2072,31 @@ def update_portal_user(
         target.password_hash = hash_password(password)
     if "is_active" in body:
         target.is_active = body["is_active"]
-    if "candidate_id" in body and body["candidate_id"]:
-        target.candidate_id = body["candidate_id"]
+    if candidate_id:
+        target.candidate_id = candidate_id
 
     db.commit()
     db.refresh(target)
     _cache.invalidate_prefix("users:")
 
     # Sync to MongoDB collections as well
-    cid = target.candidate_id or body.get("candidate_id")
+    cid = target.candidate_id or candidate_id
     if cid:
         _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
 
+    # If password was reset or changed, send credentials email
+    if password and target.email:
+        send_credentials_email(
+            to_email=target.email,
+            name=target.name,
+            role="Candidate",
+            plain_password=password,
+            candidate_id=cid or getattr(target, 'candidate_id', '') or getattr(target, 'workorder_id', '')
+        )
+
     return {
         "ok": True,
-        "message": "Portal credentials updated successfully",
+        "message": "Portal credentials updated successfully" + (" and new password emailed to candidate" if password else ""),
         "user": {
             "id": target.id,
             "email": target.email,

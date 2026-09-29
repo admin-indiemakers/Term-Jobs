@@ -6442,7 +6442,7 @@ function PortalAccessView({ authToken }) {
           candidate_id: createCandidateId.trim(),
         },
       });
-      setToast('✓ Portal access created successfully');
+      setToast('✓ Portal access created & credentials emailed to candidate');
       setShowCreate(false);
       setCreateName('');
       setCreateEmail('');
@@ -6469,7 +6469,7 @@ function PortalAccessView({ authToken }) {
         token: authToken,
         body,
       });
-      setToast('✓ Portal credentials updated successfully');
+      setToast(editUser._password ? '✓ Portal credentials updated & new password emailed to candidate' : '✓ Portal credentials updated successfully');
       setEditUser(null);
       loadData();
       setTimeout(() => setToast(''), 3500);
