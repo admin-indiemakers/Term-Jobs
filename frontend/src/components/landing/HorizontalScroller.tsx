@@ -19,9 +19,10 @@ export function useHorizontalPanels(total: number, enabled: boolean = true) {
       if (locked.current) return;
       locked.current = true;
       setIndex((current) => Math.max(0, Math.min(total - 1, current + delta)));
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
       window.setTimeout(() => {
         locked.current = false;
-      }, 750);
+      }, isMobile ? 380 : 650);
     },
     [total],
   );
@@ -61,16 +62,35 @@ export function useHorizontalPanels(total: number, enabled: boolean = true) {
     if (!enabled) return;
     let startX = 0;
     let startY = 0;
+    let startTime = 0;
+
     const onStart = (e: TouchEvent) => {
       startX = e.touches[0]!.clientX;
       startY = e.touches[0]!.clientY;
+      startTime = Date.now();
     };
+
     const onEnd = (e: TouchEvent) => {
       const dx = e.changedTouches[0]!.clientX - startX;
       const dy = e.changedTouches[0]!.clientY - startY;
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1);
-      else if (Math.abs(dy) > 60 && Math.abs(dy) > Math.abs(dx)) step(dy < 0 ? 1 : -1);
+      const dt = Math.max(1, Date.now() - startTime);
+
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      // Fast flick or standard swipe detection
+      const isQuickFlick = dt < 320 && (absX > 25 || absY > 30);
+      const isNormalSwipe = absX > 35 || absY > 45;
+
+      if (isQuickFlick || isNormalSwipe) {
+        if (absX >= absY) {
+          step(dx < 0 ? 1 : -1);
+        } else {
+          step(dy < 0 ? 1 : -1);
+        }
+      }
     };
+
     window.addEventListener("touchstart", onStart, { passive: true });
     window.addEventListener("touchend", onEnd, { passive: true });
     return () => {
@@ -90,13 +110,27 @@ export function HorizontalScroller({
   children: ReactNode;
 }) {
   const reduced = useReducedMotion();
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   return (
     <div className="absolute inset-0 overflow-hidden">
       <motion.div
         className="flex h-dvh w-max"
         animate={{ x: `-${index * 100}vw` }}
-        transition={reduced ? { duration: 0.25 } : { duration: 1.15, ease: EASE }}
+        transition={
+          reduced
+            ? { duration: 0.25 }
+            : isMobile
+            ? { duration: 0.45, ease: [0.22, 1, 0.36, 1] }
+            : { duration: 1.15, ease: EASE }
+        }
       >
         {children}
       </motion.div>
