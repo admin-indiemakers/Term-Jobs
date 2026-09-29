@@ -22,7 +22,7 @@ const FEATURES = [
 ];
 
 export default function AuthPage() {
-  const { user, login } = useAuth();
+  const { user, token, initializing, login } = useAuth();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -30,11 +30,19 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  if (user) {
+  if (initializing) {
+    return null;
+  }
+
+  if (token && user) {
     if (user.role === 'Candidate') return <Navigate to="/dashboard/candidate" replace />;
     if (user.role === 'Director') return <Navigate to="/dashboard/director" replace />;
     if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
     if (user.role === 'Admin' || user.role?.toLowerCase() === 'admin') return <Navigate to="/dashboard/admin" replace />;
+    if (user.role === 'Hiring Manager' || user.role === 'HR') return <Navigate to="/dashboard/hiring-manager" replace />;
+    if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
+    if (user.role === 'Procurement' || user.role === 'Procurement Team') return <Navigate to="/dashboard/procurement" replace />;
+    if (user.role === 'Finance' || user.role === 'Finance Team') return <Navigate to="/dashboard/finance" replace />;
     return <Navigate to="/dashboard" replace />;
   }
 

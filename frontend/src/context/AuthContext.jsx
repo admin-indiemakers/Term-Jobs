@@ -9,6 +9,13 @@ const USER_KEY = 'auth_user';
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState(() => {
+    const hasToken = Boolean(localStorage.getItem(TOKEN_KEY));
+    if (!hasToken) {
+      try {
+        localStorage.removeItem(USER_KEY);
+      } catch {}
+      return null;
+    }
     try {
       const saved = localStorage.getItem(USER_KEY);
       return saved ? JSON.parse(saved) : null;
@@ -114,6 +121,7 @@ export function AuthProvider({ children }) {
     () => ({
       user,
       token,
+      loading: initializing,
       initializing,
       login,
       loginWithCandidateId,

@@ -35,7 +35,7 @@ export default function HRDashboard() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    Promise.all([request('/api/auth/users', { token }), request('/requisitions', { token })])
+    Promise.all([request('/api/auth/users?role=Hiring+Manager', { token }), request('/requisitions', { token })])
       .then(([usersRes, reqsRes]) => {
         setUsers(usersRes || []);
         setRequisitions(reqsRes || []);

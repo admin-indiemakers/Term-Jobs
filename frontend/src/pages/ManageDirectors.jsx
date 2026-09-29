@@ -75,12 +75,12 @@ export default function ManageDirectors() {
 
   const searchInputRef = useRef(null);
 
+
   const load = () => {
     setLoading(true);
-    request('/api/auth/users', { token })
+    request('/api/auth/users?role=Director', { token })
       .then((data) => {
-        const all = Array.isArray(data) ? data : [];
-        setDirectors(all.filter((u) => u.role === 'Director'));
+        setDirectors(Array.isArray(data) ? data : []);
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -695,9 +695,8 @@ export default function ManageDirectors() {
                     setError('');
                   }}
                   placeholder="director@company.com"
-                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-xl focus:outline-hidden focus:ring-1 transition-all ${
-                    emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'
-                  }`}
+                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-xl focus:outline-hidden focus:ring-1 transition-all ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'
+                    }`}
                 />
                 {emailError && (
                   <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">

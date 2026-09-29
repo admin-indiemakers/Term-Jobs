@@ -77,10 +77,9 @@ export default function ManageHiringManagers() {
 
   const load = () => {
     setLoading(true);
-    request('/api/auth/users', { token })
+    request('/api/auth/users?role=Hiring+Manager', { token })
       .then((data) => {
-        const all = Array.isArray(data) ? data : [];
-        setManagers(all.filter((u) => u.role === 'Hiring Manager'));
+        setManagers(Array.isArray(data) ? data : []);
         setError('');
       })
       .catch((err) => setError(err.message))

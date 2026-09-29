@@ -56,10 +56,9 @@ export default function ManageProcurement() {
 
   const load = () => {
     setLoading(true);
-    request('/api/auth/users', { token })
+    request('/api/auth/users?role=Procurement+Team,Procurement', { token })
       .then((data) => {
-        const all = Array.isArray(data) ? data : [];
-        setProcurementUsers(all.filter((u) => u.role === 'Procurement Team' || u.role === 'Procurement'));
+        setProcurementUsers(Array.isArray(data) ? data : []);
         setError('');
       })
       .catch((err) => setError(err.message))
