@@ -1408,6 +1408,8 @@ def create_tenant(
 
 def _engaged_vendor_map(db: Session, client_tenant_id: str) -> dict[str, VendorEngagement]:
     """VendorEngagements currently engaged by a client company."""
+    if not client_tenant_id:
+        return {}
     rows = (
         db.query(VendorEngagement)
         .filter(VendorEngagement.tenant_id == client_tenant_id)
@@ -1434,10 +1436,13 @@ def list_vendors(
 
     engaged_map = _engaged_vendor_map(db, current_user.tenant_id) if current_user.role == "Admin" else {}
     vendors = db.query(Tenant).filter(Tenant.tenant_type == "consultancy").all()
-    profiles = {
-        p.tenant_id: p
-        for p in db.query(CompanyProfile).filter(CompanyProfile.tenant_id.in_([v.id for v in vendors])).all()
-    }
+    vendor_ids = [v.id for v in vendors]
+    profiles = {}
+    if vendor_ids:
+        profiles = {
+            p.tenant_id: p
+            for p in db.query(CompanyProfile).filter(CompanyProfile.tenant_id.in_(vendor_ids)).all()
+        }
     return [
         VendorResponse(
             id=v.id,

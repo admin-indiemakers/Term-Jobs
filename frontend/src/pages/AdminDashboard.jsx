@@ -100,7 +100,6 @@ export default function AdminDashboard() {
 
   const [users, setUsers] = useState([]);
   const [requisitions, setRequisitions] = useState([]);
-  const [vendors, setVendors] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [calConfig, setCalConfig] = useState({ provider: null, status: 'disconnected', connected_email: null });
   const [loading, setLoading] = useState(true);
@@ -138,34 +137,59 @@ export default function AdminDashboard() {
 
   const load = () => {
     setLoading(true);
-    Promise.all([
-      request('/api/auth/users', { token }),
-      request('/requisitions', { token }),
-      request('/api/auth/vendors', { token }),
-      request('/api/calendar/config', { token }).catch(() => null),
-      request('/api/notifications', { token }).catch(() => []),
-    ])
-      .then(([usersRes, reqsRes, vendorsRes, calConfigRes, notifsRes]) => {
-        setUsers(usersRes || []);
-        setRequisitions(reqsRes || []);
-        setVendors(vendorsRes || []);
-        setNotifications(Array.isArray(notifsRes) ? notifsRes : (notifsRes?.notifications || []));
-        if (calConfigRes) {
-          setCalConfig(calConfigRes);
-          setCalForm({
-            cal_link: calConfigRes.cal_link || '',
-            cal_username: calConfigRes.cal_username || '',
-            event_slug: calConfigRes.event_slug || '30min',
-            default_duration: calConfigRes.default_duration || 60,
-            default_timezone: calConfigRes.default_timezone || 'Asia/Kolkata',
-            instructions: calConfigRes.instructions || '',
-          });
+    setError('');
+
+    const fetchUsers = request('/api/auth/users', { token })
+      .then((usersRes) => {
+        if (Array.isArray(usersRes)) {
+          setUsers(usersRes);
         }
-        setError('');
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
+      .catch((err) => {
+        console.warn('Failed to load users:', err);
+      });
+
+    const fetchReqs = request('/requisitions', { token })
+      .then((reqsRes) => {
+        if (Array.isArray(reqsRes)) {
+          setRequisitions(reqsRes);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load requisitions:', err);
+      });
+
+    const fetchNotifs = request('/api/notifications', { token })
+      .then((notifsRes) => {
+        setNotifications(Array.isArray(notifsRes) ? notifsRes : (notifsRes?.notifications || []));
+      })
+      .catch(() => {});
+
+    Promise.allSettled([fetchUsers, fetchReqs, fetchNotifs]).finally(() => {
+      setLoading(false);
+    });
   };
+
+  // Fetch Cal.com config on-demand when calendar modal opens
+  useEffect(() => {
+    if (showCalModal && token && !calConfig.provider) {
+      request('/api/calendar/config', { token })
+        .then((calConfigRes) => {
+          if (calConfigRes) {
+            setCalConfig(calConfigRes);
+            setCalForm({
+              cal_link: calConfigRes.cal_link || '',
+              cal_username: calConfigRes.cal_username || '',
+              event_slug: calConfigRes.event_slug || '30min',
+              default_duration: calConfigRes.default_duration || 60,
+              default_timezone: calConfigRes.default_timezone || 'Asia/Kolkata',
+              instructions: calConfigRes.instructions || '',
+            });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [showCalModal, token, calConfig.provider]);
 
   useEffect(() => {
     load();
@@ -302,7 +326,7 @@ export default function AdminDashboard() {
       const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
       return timeB - timeA;
     });
-  }, [notifications, requisitions, users, vendors]);
+  }, [notifications, requisitions, users]);
 
   const filteredActivities = useMemo(() => {
     if (activityFilter === 'all') return activities;
@@ -557,24 +581,31 @@ export default function AdminDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-black/[0.03]">
-                  {requisitions.length === 0 ? (
-                    <tr className="bg-transparent hover:bg-white/35 transition-colors">
-                      <td className="py-2.5 px-3">
-                        <div className="min-w-0">
-                          <div className="font-bold text-gray-900 text-xs sm:text-[13px]">DevSecOps Engineer</div>
-                          <div className="text-[10px] text-gray-400">General</div>
+                  {loading ? (
+                    [1, 2, 3].map((i) => (
+                      <tr key={i} className="animate-pulse">
+                        <td className="py-2.5 px-3">
+                          <div className="h-3.5 w-32 bg-gray-200/70 rounded mb-1"></div>
+                          <div className="h-2.5 w-16 bg-gray-200/50 rounded"></div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="h-5 w-16 bg-gray-200/60 rounded-full"></div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="h-3 w-20 bg-gray-200/60 rounded"></div>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="h-3 w-12 bg-gray-200/50 rounded ml-auto"></div>
+                        </td>
+                      </tr>
+                    ))
+                  ) : requisitions.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-8 text-center text-gray-400">
+                        <div className="flex flex-col items-center justify-center gap-1">
+                          <FileText size={18} className="text-gray-300" />
+                          <span className="text-xs font-medium">No requisitions created yet</span>
                         </div>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <StatusBadge status="Published" />
-                      </td>
-                      <td className="py-2.5 px-3 text-gray-600 font-medium text-xs sm:text-[12.5px]">
-                        Sep 25, 2026
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        <span className="text-[11px] font-semibold text-gray-400">
-                          REQ #001
-                        </span>
                       </td>
                     </tr>
                   ) : (
@@ -645,40 +676,25 @@ export default function AdminDashboard() {
 
             {/* Members Rows with Hidden Scroller */}
             <div className="space-y-1 overflow-y-auto flex-1 min-h-0 mt-2 no-scrollbar">
-              {users.length === 0 ? (
-                <>
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all">
-                    <div className="min-w-0">
-                      <div className="font-bold text-gray-900 text-xs sm:text-[12.5px] leading-tight">r</div>
-                      <div className="text-[10px] text-gray-400">Engineering</div>
+              {loading ? (
+                <div className="space-y-2 py-1">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-white/20 animate-pulse">
+                      <div className="space-y-1">
+                        <div className="h-3.5 w-24 bg-gray-200/70 rounded"></div>
+                        <div className="h-2.5 w-14 bg-gray-200/50 rounded"></div>
+                      </div>
+                      <div className="h-3 w-32 bg-gray-200/60 rounded hidden sm:block"></div>
+                      <div className="h-5 w-14 bg-gray-200/60 rounded-full"></div>
                     </div>
-                    <div className="text-xs text-gray-500 font-normal px-2 truncate">
-                      hm@gmail.com
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100/90 text-gray-700 border border-gray-200/70">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-                        Active
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all">
-                    <div className="min-w-0">
-                      <div className="font-bold text-gray-900 text-xs sm:text-[12.5px] leading-tight">Arjun M</div>
-                      <div className="text-[10px] text-gray-400">Admin</div>
-                    </div>
-                    <div className="text-xs text-gray-500 font-normal px-2 truncate">
-                      arjun@tcs.com
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100/90 text-gray-700 border border-gray-200/70">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-                        Active
-                      </span>
-                    </div>
-                  </div>
-                </>
+                  ))}
+                </div>
+              ) : users.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center py-6 text-center text-gray-400">
+                  <Users size={20} className="mb-1 text-gray-300" />
+                  <span className="text-xs font-medium">No team members yet</span>
+                  <span className="text-[10px] text-gray-400 mt-0.5">Use + Invite to add team members</span>
+                </div>
               ) : (
                 users.map((u) => (
                   <div key={u.id} className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all">
