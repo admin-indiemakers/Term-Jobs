@@ -228,7 +228,7 @@ export default function AdminDashboard() {
         title: n.title || 'System Notification',
         description: n.body || 'New notification received',
         timestamp: n.created_at,
-        link: n.data?.requisition_id ? `/dashboard/requisitions` : null,
+        link: null,
         icon: Bell,
         color: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
         badge: 'Notification',
@@ -244,7 +244,7 @@ export default function AdminDashboard() {
         title: `${r.title || 'Requisition'} - ${r.status || 'Active'}`,
         description: `${r.department || 'General'} department • Created for ${r.experience_range || 'experienced talent'}`,
         timestamp: r.created_at || r.updated_at,
-        link: `/dashboard/requisitions`,
+        link: null,
         icon: Briefcase,
         color: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
         badge: 'Requisition',
@@ -277,7 +277,7 @@ export default function AdminDashboard() {
           title: 'DevSecOps Engineer requisition published',
           description: 'General department • Active for partner matching and candidate dispatch',
           timestamp: new Date().toISOString(),
-          link: '/dashboard/requisitions',
+          link: null,
           icon: Briefcase,
           color: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
           badge: 'Requisition',
@@ -457,8 +457,7 @@ export default function AdminDashboard() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 shrink-0">
             {/* Stat Card 1: Active Requisitions */}
             <div
-              onClick={() => navigate('/dashboard/requisitions')}
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
@@ -493,8 +492,7 @@ export default function AdminDashboard() {
 
             {/* Stat Card 3: Draft Requisitions */}
             <div
-              onClick={() => navigate('/dashboard/requisitions')}
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
@@ -511,8 +509,7 @@ export default function AdminDashboard() {
 
             {/* Stat Card 4: Pending Approvals */}
             <div
-              onClick={() => navigate('/dashboard/requisitions')}
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
@@ -542,19 +539,9 @@ export default function AdminDashboard() {
               </div>
 
               <div className="flex items-center gap-2">
-                <Link
-                  to="/dashboard/requisitions/new"
-                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-bold bg-black text-white hover:bg-gray-800 shadow-xs transition-all cursor-pointer"
-                >
-                  <span>+ Create</span>
-                </Link>
-                <Link
-                  to="/dashboard/requisitions"
-                  className="text-[11.5px] font-bold text-gray-600 hover:text-black flex items-center gap-1 transition-colors group cursor-pointer pl-1"
-                >
-                  <span>View all</span>
-                  <ArrowRight size={12} className="group-hover:translate-x-0.5 transition-transform" />
-                </Link>
+                <span className="text-[11px] font-semibold text-gray-500">
+                  {requisitions.length} total
+                </span>
               </div>
             </div>
 
@@ -585,12 +572,9 @@ export default function AdminDashboard() {
                         Sep 25, 2026
                       </td>
                       <td className="py-2.5 px-3 text-right">
-                        <Link
-                          to="/dashboard/requisitions"
-                          className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-lg inline-flex items-center justify-center transition-colors"
-                        >
-                          <MoreHorizontal size={14} />
-                        </Link>
+                        <span className="text-[11px] font-semibold text-gray-400">
+                          REQ #001
+                        </span>
                       </td>
                     </tr>
                   ) : (
@@ -613,12 +597,9 @@ export default function AdminDashboard() {
                           {formatDate(r.created_at)}
                         </td>
                         <td className="py-2.5 px-3 text-right">
-                          <Link
-                            to={`/dashboard/requisitions`}
-                            className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-white/60 rounded-lg inline-flex items-center justify-center transition-colors"
-                          >
-                            <MoreHorizontal size={14} />
-                          </Link>
+                        <span className="text-[11px] font-semibold text-gray-400">
+                          REQ #{r.id?.slice(0, 6)}
+                        </span>
                         </td>
                       </tr>
                     ))

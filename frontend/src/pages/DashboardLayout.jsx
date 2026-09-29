@@ -16,7 +16,6 @@ import {
   Search,
   ChevronDown,
   LayoutDashboard,
-  Briefcase,
   Layers,
   BarChart3,
   LogOut,
@@ -377,7 +376,6 @@ export default function DashboardLayout() {
     const adminNavLinks = [
       { to: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
       { to: '/dashboard/admin/hiring-managers', label: 'Hiring', icon: Users, end: false },
-      { to: '/dashboard/requisitions', label: 'Requisitions', icon: Briefcase, end: false },
       { to: '/dashboard/admin/directors', label: 'Team', icon: UserCheck, end: false },
       { to: '/dashboard/admin/procurement', label: 'Procurement', icon: Building2, end: false },
       { to: '/dashboard/admin/finance', label: 'Finance', icon: CreditCard, end: false },
@@ -587,7 +585,7 @@ export default function DashboardLayout() {
               </div>
 
               <nav className="flex flex-col gap-1.5 py-4 flex-1 overflow-y-auto">
-                {adminNavLinks.concat(moreLinks).map((link) => {
+                {adminNavLinks.map((link) => {
                   const LIcon = link.icon;
                   const isActive = location.pathname === link.to;
                   return (

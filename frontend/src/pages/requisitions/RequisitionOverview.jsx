@@ -41,6 +41,7 @@ const SECTION_CONFIG = {
   },
   drafted: {
     title: 'Drafted',
+    icon: FileText,
     caption: 'Requisitions in progress — draft parameters and role specifications.',
     statuses: ['Draft', 'Drafted', 'Intake', 'Structuring'],
     to: '/dashboard/requisitions/drafted',
@@ -156,6 +157,8 @@ export default function RequisitionOverview({ section }) {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [busyId, setBusyId] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const isFetchingRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const prevTokenRef = useRef(token);
@@ -210,23 +213,27 @@ export default function RequisitionOverview({ section }) {
     }
   }, [token, loadData]);
 
-  const handleDelete = async (reqItem, e) => {
-    e?.stopPropagation();
-    if (!window.confirm(`Delete "${reqItem.title || 'this requisition'}" permanently? This cannot be undone.`)) {
-      return;
-    }
-    setBusyId(reqItem.id);
+  const handleDeleteRequisition = async () => {
+    if (!confirmDelete) return;
+    setDeleting(true);
     setError('');
     setInfo('');
     try {
-      await request(`/api/requisitions/${reqItem.id}`, { method: 'DELETE', token });
-      setInfo(`Requisition "${reqItem.title}" deleted.`);
+      await request(`/requisitions/${confirmDelete.id}`, { method: 'DELETE', token });
+      setInfo(`Requisition "${confirmDelete.title || 'Untitled'}" deleted successfully.`);
+      setConfirmDelete(null);
       loadData(true);
     } catch (err) {
       setError(err.message || 'Failed to delete requisition.');
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleDelete = (reqItem, e) => {
+    e?.stopPropagation();
+    setConfirmDelete(reqItem);
+    setActiveMenuId(null);
   };
 
   // Live Section Counts
@@ -349,7 +356,7 @@ export default function RequisitionOverview({ section }) {
                 }`}
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Icon size={15} className={isActive ? 'text-white' : 'text-gray-600'} />
+                {Icon && <Icon size={15} className={isActive ? 'text-white' : 'text-gray-600'} />}
                 <span className="text-xs font-bold truncate">{config.title}</span>
               </div>
 
