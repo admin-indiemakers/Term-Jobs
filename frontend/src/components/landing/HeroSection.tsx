@@ -38,10 +38,10 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
   return (
     <section
       aria-label="Hero"
-      className="relative flex h-dvh w-screen shrink-0 items-start md:items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
+      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
     >
       <Backdrop />
-      <div className="relative z-10 mx-auto grid w-full max-w-7xl gap-12 px-6 pt-28 pb-32 md:px-12 lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0">
+      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:grid lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0">
         <div>
           <motion.p
             variants={fadeUp}
@@ -88,26 +88,31 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
             animate={state}
             className="mt-10 flex flex-wrap items-center gap-3"
           >
+            {/* Dark glassmorphic button */}
             <Link
               to="/open-roles"
-              className="group inline-flex items-center gap-2.5 rounded-full bg-ink/90 hover:bg-ink text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.18),inset_0_1px_1px_rgba(255,255,255,0.3)] active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-2.5 rounded-full bg-ink/80 hover:bg-ink/90 text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/20 shadow-[0_12px_36px_rgba(0,0,0,0.22),inset_0_1px_1.5px_rgba(255,255,255,0.35)] active:scale-95 cursor-pointer"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-paper/90 animate-pulse" />
               <span>Explore Open Roles</span>
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </Link>
+
+            {/* Frosted white glassmorphic button */}
             <button
               type="button"
               onClick={onNext}
-              className="group inline-flex items-center gap-3 rounded-full bg-white/70 hover:bg-white/90 text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-ink/15 hover:border-ink/30 shadow-[0_8px_25px_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-3 rounded-full bg-white/55 hover:bg-white/75 text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/80 shadow-[0_12px_36px_rgba(0,0,0,0.06),inset_0_1px_2px_rgba(255,255,255,0.95)] active:scale-95 cursor-pointer"
             >
               Get started
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
             </button>
+
+            {/* Translucent glassmorphic button */}
             <button
               type="button"
               onClick={onNext}
-              className="group inline-flex items-center gap-3 rounded-full bg-white/35 hover:bg-white/60 text-ink/80 hover:text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-md border border-ink/10 hover:border-ink/25 shadow-[0_4px_16px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.6)] active:scale-95 cursor-pointer"
+              className="group inline-flex items-center gap-3 rounded-full bg-white/35 hover:bg-white/60 text-ink/85 hover:text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-2xl border border-white/60 shadow-[0_8px_28px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.85)] active:scale-95 cursor-pointer"
             >
               How it works
               <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
@@ -115,12 +120,12 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
           </motion.div>
         </div>
 
-        {/* Product visualization */}
+        {/* Product visualization — desktop only */}
         <motion.div
           initial={{ opacity: 0, y: 48, rotate: reduced ? 0 : -1.6 }}
           animate={active ? { opacity: 1, y: 0, rotate: 0 } : { opacity: 0, y: 48 }}
           transition={{ duration: 1.2, ease: EASE, delay: 0.3 }}
-          className="relative"
+          className="relative hidden lg:block"
         >
           <div className="rounded-2xl border border-ink/10 bg-paper/80 p-5 shadow-[0_40px_90px_-50px_oklch(0.2_0_0/0.45)] backdrop-blur-md md:p-6">
             <div className="flex items-center justify-between border-b border-ink/10 pb-4">

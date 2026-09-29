@@ -10,7 +10,7 @@ export function FinalCTA({ active }: { active: boolean }) {
   return (
     <section
       aria-label="Get started"
-      className="relative flex h-dvh w-screen shrink-0 items-start justify-center md:items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
+      className="relative flex h-dvh w-screen shrink-0 items-center justify-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
     >
       <Backdrop tone="dark" />
       <motion.div
@@ -20,7 +20,7 @@ export function FinalCTA({ active }: { active: boolean }) {
         animate={reduced ? {} : { scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] }}
         transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
       />
-      <div className="relative z-10 mx-auto w-full max-w-4xl px-6 pt-28 pb-32 text-center md:px-12">
+      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-4xl px-6 pt-20 pb-24 text-center md:px-12 min-h-dvh md:min-h-0">
         <h2 className="font-display text-[clamp(2.2rem,6.4vw,5rem)] leading-[0.98] font-extrabold tracking-[-0.03em]">
           {["BUILD YOUR TEAM.", "MOVE FASTER."].map((line, i) => (
             <span key={line} className="block overflow-hidden">
@@ -41,7 +41,7 @@ export function FinalCTA({ active }: { active: boolean }) {
           custom={1}
           initial="hidden"
           animate={state}
-          className="mx-auto mt-8 max-w-xl text-sm leading-relaxed text-paper/60 md:text-base"
+          className="mx-auto mt-6 sm:mt-8 max-w-xl text-sm leading-relaxed text-paper/60 md:text-base"
         >
           Whether you're hiring your next specialist or managing a flexible workforce, TermJobs keeps
           the entire engagement connected.
@@ -51,18 +51,18 @@ export function FinalCTA({ active }: { active: boolean }) {
           custom={2}
           initial="hidden"
           animate={state}
-          className="mt-11 flex flex-wrap items-center justify-center gap-3.5"
+          className="mt-8 sm:mt-11 flex flex-wrap items-center justify-center gap-2.5 sm:gap-3.5"
         >
           <Link
             to="/login"
-            className="group inline-flex items-center gap-3 rounded-full bg-paper/90 hover:bg-paper text-ink px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/25 shadow-[0_8px_30px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.4)] active:scale-95 cursor-pointer"
+            className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full bg-paper/90 hover:bg-paper text-ink px-5 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/25 shadow-[0_8px_30px_rgba(0,0,0,0.25),inset_0_1px_1px_rgba(255,255,255,0.4)] active:scale-95 cursor-pointer"
           >
             For Companies & Teams
             <span className="transition-transform duration-300 group-hover:translate-x-1">→</span>
           </Link>
           <Link
             to="/open-roles"
-            className="group inline-flex items-center gap-3 rounded-full bg-white/10 hover:bg-white/18 text-paper px-7 py-3.5 text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)] active:scale-95 cursor-pointer"
+            className="group inline-flex items-center gap-2.5 sm:gap-3 rounded-full bg-white/10 hover:bg-white/18 text-paper px-5 sm:px-7 py-3 sm:py-3.5 text-[0.66rem] sm:text-[0.7rem] font-semibold tracking-[0.18em] uppercase transition-all duration-300 hover:-translate-y-0.5 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgba(0,0,0,0.2),inset_0_1px_1px_rgba(255,255,255,0.15)] active:scale-95 cursor-pointer"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-paper/85 animate-pulse" />
             <span>Explore Open Roles</span>

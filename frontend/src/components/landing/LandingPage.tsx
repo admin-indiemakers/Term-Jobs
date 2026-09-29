@@ -5,6 +5,7 @@ import { FeaturesSection } from "./FeaturesSection";
 import { FinalCTA } from "./FinalCTA";
 import { HeroSection } from "./HeroSection";
 import { HorizontalScroller, useHorizontalPanels } from "./HorizontalScroller";
+import { MobileBottomNav } from "./MobileBottomNav";
 import { PageProgress } from "./PageProgress";
 import { SectionNavigation } from "./SectionNavigation";
 import { StatementSection } from "./StatementSection";
@@ -53,9 +54,24 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
           />
 
           <BrandMark dark={dark} onHomeClick={() => goTo(0)} />
-          <PageProgress index={index} total={TOTAL} dark={dark} />
-          <SectionNavigation index={index} dark={dark} onSelect={goTo} />
-          <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
+
+          {/* Desktop Navigation (completely untouched for md and up) */}
+          <div className="hidden md:block">
+            <PageProgress index={index} total={TOTAL} dark={dark} />
+            <SectionNavigation index={index} dark={dark} onSelect={goTo} />
+            <ArrowControl isLast={isLast} dark={dark} onClick={() => (isLast ? goTo(0) : step(1))} />
+          </div>
+
+          {/* Mobile Bottom Navigation Capsule */}
+          <MobileBottomNav
+            index={index}
+            total={TOTAL}
+            dark={dark}
+            onSelect={goTo}
+            onPrev={() => step(-1)}
+            onNext={() => (isLast ? goTo(0) : step(1))}
+            isLast={isLast}
+          />
         </>
       )}
     </main>

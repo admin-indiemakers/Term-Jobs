@@ -1072,8 +1072,9 @@ export default function OpenRolesPage({ enabled = true }) {
       )}
 
       {/* ============================================================ */}
-      {/* LEFT PANEL: LIGHT EDITORIAL COLUMN                          */}
-      <aside className="w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
+      {/* LEFT PANEL: LIGHT EDITORIAL COLUMN (HIDDEN ON MOBILE)        */}
+      {/* ============================================================ */}
+      <aside className="hidden lg:flex w-full lg:w-[360px] xl:w-[400px] 2xl:w-[430px] shrink-0 bg-paper text-ink border-b lg:border-b-0 lg:border-r border-ink/10 flex-col justify-between relative overflow-hidden lg:h-screen lg:max-h-screen lg:sticky lg:top-0">
         {/* Light Atmospheric Background Layer - mathematically synced with Landing Page */}
         <Backdrop tone="sidebar" />
 
@@ -1189,55 +1190,59 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {/* RIGHT PANEL: DARK DASHBOARD & OPEN ROLES                    */}
       {/* ============================================================ */}
-      <div className="flex-1 min-w-0 bg-ink text-paper p-4 sm:p-5 xl:p-7 flex flex-col relative overflow-hidden">
+      <div className="flex-1 min-w-0 bg-ink text-paper p-3.5 sm:p-5 xl:p-7 flex flex-col relative overflow-hidden">
         {/* Atmospheric Background Layer */}
         <Backdrop tone="dark" />
 
         <div className="relative z-10 flex flex-col flex-1">
-          {/* Top Header Navigation */}
-          <header className="flex items-center justify-between gap-4 mb-4 sm:mb-5">
+          {/* Top Header Navigation — Optimized for Mobile */}
+          <header className="flex items-center justify-between gap-2.5 sm:gap-4 mb-3 sm:mb-5 pt-1 lg:pt-0">
+            {/* Left: Brand logo + back link on mobile, Platform Overview on desktop */}
             <Link
               to="/"
-              className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs text-paper/60 hover:text-white transition font-medium cursor-pointer"
+              className="inline-flex items-center gap-2 group cursor-pointer transition-transform active:scale-95 shrink-0"
+              title="Return to Home"
             >
-              <ArrowLeft size={13} />
-              <span>Platform Overview</span>
+              <ArrowLeft size={14} className="text-paper/70 group-hover:text-white transition-transform group-hover:-translate-x-0.5" />
+              <img src={logo} alt="TermJobs" className="h-5 w-5 object-contain invert lg:hidden" />
+              <span className="text-[12px] font-extrabold tracking-[0.2em] text-white lg:hidden">TERMJOBS</span>
+              <span className="hidden lg:inline text-xs text-paper/60 hover:text-white font-medium">Platform Overview</span>
             </Link>
 
             {/* Right Action Buttons */}
-            <div className="flex items-center gap-2 sm:gap-2.5 ml-auto">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 ml-auto shrink-0">
               {candidateUser ? (
-                <div className="flex items-center gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
+                <div className="flex items-center gap-1.5 sm:gap-2 p-0.5 pl-2 pr-1.5 rounded-full bg-paper/[0.06] border border-paper/15 backdrop-blur-md">
                   <div className="w-5.5 h-5.5 rounded-full bg-white/10 text-white font-bold text-[9.5px] flex items-center justify-center border border-white/20">
                     {(candidateUser.candidate_name || 'C').slice(0, 1).toUpperCase()}
                   </div>
-                  <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[120px] truncate">
+                  <span className="text-[11px] sm:text-xs font-semibold text-white max-w-[90px] sm:max-w-[120px] truncate">
                     {candidateUser.candidate_name || candidateUser.candidate_email}
                   </span>
                   <div className="h-3 w-px bg-paper/20 mx-0.5" />
                   <button
                     type="button"
                     onClick={() => setShowSetupModal(true)}
-                    className="px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                    className="hidden sm:inline-block px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
                   >
                     Edit Profile
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowMyAppsModal(true)}
-                    className="px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
+                    className="px-2 py-0.5 text-[10px] sm:text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer"
                   >
-                    Applications ({applications.length})
+                    Apps ({applications.length})
                   </button>
                   <a
                     href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${candidateUser.id || candidateUser.candidate_email || ''}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer inline-flex items-center gap-1.5 text-decoration-none"
+                    className="hidden sm:inline-flex px-2 py-0.5 text-[10.5px] font-medium text-paper/80 hover:text-white transition rounded-lg hover:bg-paper/10 cursor-pointer items-center gap-1.5 text-decoration-none"
                     title="Connect Telegram for instant interview alerts & notifications"
                   >
                     <Send size={11} />
-                    <span className="hidden sm:inline">Bot</span>
+                    <span>Bot</span>
                   </a>
                   <button
                     type="button"
@@ -1249,9 +1254,9 @@ export default function OpenRolesPage({ enabled = true }) {
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 sm:gap-2.5">
+                <div className="flex items-center gap-1.5 sm:gap-2.5">
                   {/* Candidate Auth Pill (Google Icon + Divider + Candidate Sign In) */}
-                  <div className="inline-flex items-center px-2.5 py-0.5 rounded-full border border-white/15 bg-white/[0.03] hover:border-white/30 backdrop-blur-md transition-all">
+                  <div className="inline-flex items-center px-2 sm:px-2.5 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:border-white/30 backdrop-blur-md transition-all">
                     {/* Google Sign In Trigger */}
                     <button
                       type="button"
@@ -1270,30 +1275,30 @@ export default function OpenRolesPage({ enabled = true }) {
                     <button
                       type="button"
                       onClick={() => { setAuthModalTab('login'); setShowAuthModal(true); }}
-                      className="inline-flex items-center gap-1.5 text-[10.5px] sm:text-[11px] font-medium text-white/90 hover:text-white transition cursor-pointer"
+                      className="inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-medium text-white/90 hover:text-white transition cursor-pointer"
                     >
-                      <User size={12} className="text-white/70" />
-                      <span>Candidate Sign In</span>
+                      <User size={11} className="text-white/70" />
+                      <span>Sign In</span>
                     </button>
                   </div>
 
-                  {/* Staff Portal Link (Border-only Transparent Pill) */}
+                  {/* Staff Portal Link */}
                   <Link
                     to="/login"
-                    className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 rounded-full border border-white/15 bg-white/[0.03] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10.5px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95"
+                    className="inline-flex items-center gap-1 px-2.5 sm:px-3 py-1 rounded-full border border-white/15 bg-white/[0.04] hover:bg-white/[0.08] hover:border-white/30 text-white/90 hover:text-white text-[10px] sm:text-[11px] font-medium transition backdrop-blur-md active:scale-95"
                   >
-                    <Users size={12} className="text-white/70" />
-                    <span>Staff Portal</span>
-                    <ArrowRight size={11} className="text-white/60" />
+                    <Users size={11} className="text-white/70" />
+                    <span>Staff</span>
+                    <ArrowRight size={10} className="text-white/60" />
                   </Link>
                 </div>
               )}
             </div>
           </header>
 
-          {/* Glass Search & Filter Control Console */}
-          <div className="mt-2 mb-4 sm:mb-5 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="w-full max-w-4xl p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.05] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2 transition-all">
+          {/* Glass Search & Filter Control Console — Optimized for Mobile */}
+          <div className="mt-1 mb-3.5 sm:mb-5 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
+            <div className="w-[90%] sm:w-full max-w-lg sm:max-w-4xl mx-auto sm:mx-0 p-2 sm:p-1.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.06] border border-white/[0.12] focus-within:border-white/35 backdrop-blur-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.37),inset_0_1px_1px_0_rgba(255,255,255,0.14)] flex flex-col sm:flex-row items-center gap-2 transition-all">
               {/* Keyword Search Input */}
               <div className="relative flex-1 w-full min-w-[150px]">
                 <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
@@ -1322,14 +1327,14 @@ export default function OpenRolesPage({ enabled = true }) {
                   <select
                     value={selectedWorkMode}
                     onChange={(e) => setSelectedWorkMode(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg pl-5.5 pr-5.5 py-1 text-[10.5px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                    className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Modes</option>
                     <option value="Remote" className="bg-zinc-950 text-white">Remote</option>
                     <option value="Hybrid" className="bg-zinc-950 text-white">Hybrid</option>
                     <option value="Onsite" className="bg-zinc-950 text-white">Onsite</option>
                   </select>
-                  <Briefcase size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <Briefcase size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                   <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
@@ -1338,7 +1343,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   <select
                     value={selectedFamily}
                     onChange={(e) => setSelectedFamily(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg pl-5.5 pr-5.5 py-1 text-[10.5px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[125px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                    className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[130px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Depts</option>
                     {availableFamilies.map((fam) => (
@@ -1347,16 +1352,16 @@ export default function OpenRolesPage({ enabled = true }) {
                       </option>
                     ))}
                   </select>
-                  <Building2 size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <Building2 size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                   <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
-                {/* Location Filter */}
+                {/* Location Filter (Tablet / Desktop) */}
                 <div className="relative flex-1 sm:flex-initial hidden md:block">
                   <select
                     value={selectedLocation}
                     onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="w-full sm:w-auto appearance-none bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] rounded-lg pl-5.5 pr-5.5 py-1 text-[10.5px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[115px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
+                    className="w-full sm:w-auto appearance-none bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.1] rounded-xl pl-6 pr-5 py-1.5 text-[11px] text-white/90 font-medium cursor-pointer focus:outline-none focus:border-white/30 transition max-w-[115px] truncate shadow-[inset_0_1px_0_0_rgba(255,255,255,0.08)]"
                   >
                     <option value="ALL" className="bg-zinc-950 text-white">All Locations</option>
                     {availableLocations.map((loc) => (
@@ -1365,17 +1370,17 @@ export default function OpenRolesPage({ enabled = true }) {
                       </option>
                     ))}
                   </select>
-                  <MapPin size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
+                  <MapPin size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                   <ChevronDown size={10} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-white/50 pointer-events-none" />
                 </div>
 
-                {/* Glass Search Action Button (No Green) */}
+                {/* Glass Search Action Button */}
                 <button
                   type="button"
                   onClick={() => {
                     document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
                   }}
-                  className="w-7 h-7 rounded-lg bg-white/[0.08] hover:bg-white/[0.16] border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
+                  className="w-8 h-8 rounded-xl bg-white/[0.08] hover:bg-white/[0.16] border border-white/15 text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 cursor-pointer shrink-0 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
                   title="Search Roles"
                 >
                   <ArrowRight size={13} />
@@ -1389,19 +1394,29 @@ export default function OpenRolesPage({ enabled = true }) {
             <h2 className="font-display text-base sm:text-lg font-extrabold tracking-[-0.03em] text-white">
               Latest Opportunities
             </h2>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('');
-                setSelectedWorkMode('ALL');
-                setSelectedFamily('ALL');
-                setSelectedLocation('ALL');
-              }}
-              className="text-[11px] sm:text-xs font-semibold text-paper/60 hover:text-paper transition inline-flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>View All Roles</span>
-              <ArrowRight size={12} />
-            </button>
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <button
+                type="button"
+                onClick={() => setShowGeneralPoolModal(true)}
+                className="lg:hidden text-[10.5px] font-semibold text-white/80 hover:text-white transition inline-flex items-center gap-1 cursor-pointer bg-white/10 px-2.5 py-1 rounded-full border border-white/15"
+              >
+                <Sparkles size={11} className="text-white" />
+                <span>Join Talent Pool</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  setSelectedWorkMode('ALL');
+                  setSelectedFamily('ALL');
+                  setSelectedLocation('ALL');
+                }}
+                className="text-[11px] sm:text-xs font-semibold text-paper/60 hover:text-paper transition inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>View All Roles</span>
+                <ArrowRight size={12} />
+              </button>
+            </div>
           </div>
 
           {/* Opportunities Grid Section */}
@@ -1618,63 +1633,158 @@ export default function OpenRolesPage({ enabled = true }) {
               </div>
             )}
 
-            {/* Candidate Navigation (matching landing page SectionNavigation style, visible when signed in) */}
-            {enabled && candidateUser && typeof document !== 'undefined' && createPortal(
-              <nav
-                aria-label="Candidate Navigation"
-                className="fixed right-5 bottom-5 z-40 md:right-10 md:bottom-8 pointer-events-auto"
-              >
-                <ul className="flex flex-col items-end gap-2 md:gap-2.5">
-                  {[
-                    {
-                      id: 'home',
-                      label: 'HOME',
-                      onClick: () => {
-                        setActiveNavTab('home');
-                        setShowAgreementModal(false);
-                        setShowSetupModal(false);
-                        setShowMyAppsModal(false);
-                        document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
+            {/* Candidate Navigation (Mobile: Glassmorphic Floating Capsule Dock | Desktop: Minimal Vertical List) */}
+            {enabled && typeof document !== 'undefined' && createPortal(
+              <>
+                {/* Mobile View: Floating Glassmorphic Capsule Dock */}
+                <div className="md:hidden fixed bottom-4 inset-x-0 z-40 flex justify-center pointer-events-none px-3.5 pb-[env(safe-area-inset-bottom,0px)]">
+                  <nav
+                    aria-label="Mobile Candidate Navigation"
+                    className="pointer-events-auto flex items-center gap-1 p-1 rounded-full bg-[#0a0b10]/85 hover:bg-[#0a0b10]/95 backdrop-blur-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.65),inset_0_1px_1px_rgba(255,255,255,0.22)] select-none"
+                  >
+                    {[
+                      {
+                        id: 'home',
+                        label: 'HOME',
+                        icon: Home,
+                        onClick: () => {
+                          setActiveNavTab('home');
+                          setShowAgreementModal(false);
+                          setShowSetupModal(false);
+                          setShowMyAppsModal(false);
+                          setShowAuthModal(false);
+                          document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
+                        },
                       },
-                    },
-                    {
-                      id: 'agreement',
-                      label: 'AGREEMENT',
-                      onClick: () => {
-                        setActiveNavTab('agreement');
-                        setShowAgreementModal(true);
+                      {
+                        id: 'agreement',
+                        label: 'AGREEMENT',
+                        icon: FileText,
+                        badge: candidateAgreements?.length > 0 ? candidateAgreements.length : null,
+                        onClick: () => {
+                          setActiveNavTab('agreement');
+                          setShowSetupModal(false);
+                          setShowMyAppsModal(false);
+                          setShowAuthModal(false);
+                          setShowAgreementModal(true);
+                        },
                       },
-                    },
-                    {
-                      id: 'profile',
-                      label: 'PROFILE',
-                      onClick: () => {
-                        setActiveNavTab('profile');
-                        if (candidateUser) {
-                          setShowSetupModal(true);
-                        } else {
-                          setShowAuthModal(true);
-                        }
+                      {
+                        id: 'profile',
+                        label: 'PROFILE',
+                        icon: User,
+                        hasUser: Boolean(candidateUser),
+                        onClick: () => {
+                          setActiveNavTab('profile');
+                          setShowAgreementModal(false);
+                          setShowMyAppsModal(false);
+                          if (candidateUser) {
+                            setShowSetupModal(true);
+                          } else {
+                            setAuthModalTab('login');
+                            setShowAuthModal(true);
+                          }
+                        },
                       },
-                    },
-                  ].map((item) => {
-                    const isActive = activeNavTab === item.id;
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={item.onClick}
-                          aria-current={isActive ? 'true' : undefined}
-                          className="text-[0.58rem] md:text-[0.62rem] font-semibold tracking-[0.2em] uppercase transition-opacity duration-300 hover:opacity-100 focus-visible:ring-1 focus-visible:ring-current focus-visible:outline-none text-white cursor-pointer"
-                          style={{ opacity: isActive ? 1 : 0.4 }}
-                        >
-                          {item.label}
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </nav>,
+                    ].map((item, idx) => {
+                      const isActive = activeNavTab === item.id;
+                      const IconComponent = item.icon;
+                      return (
+                        <div key={item.id} className="flex items-center">
+                          {idx > 0 && <div className="h-3 w-px bg-white/12 mx-0.5" />}
+                          <button
+                            type="button"
+                            onClick={item.onClick}
+                            aria-current={isActive ? 'true' : undefined}
+                            className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full transition-all duration-200 cursor-pointer active:scale-95 ${
+                              isActive
+                                ? 'bg-white/18 text-white border border-white/25 shadow-[inset_0_1px_1px_rgba(255,255,255,0.3),0_2px_8px_rgba(0,0,0,0.35)]'
+                                : 'text-white/55 hover:text-white/90 hover:bg-white/[0.06] border border-transparent'
+                            }`}
+                          >
+                            <span className="relative flex items-center justify-center">
+                              <IconComponent
+                                size={12}
+                                className={isActive ? 'text-white' : 'text-white/60'}
+                              />
+                              {item.badge && (
+                                <span className="absolute -top-1 -right-1.5 flex h-2.5 min-w-[10px] items-center justify-center rounded-full bg-emerald-400 px-0.5 text-[8px] font-bold text-black ring-1 ring-black">
+                                  {item.badge}
+                                </span>
+                              )}
+                              {!item.badge && item.hasUser && (
+                                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-emerald-400 ring-1 ring-black" />
+                              )}
+                            </span>
+                            <span className="text-[0.58rem] font-medium tracking-[0.16em] uppercase">
+                              {item.label}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </nav>
+                </div>
+
+                {/* Desktop View: Preserved Exact Minimal Vertical List */}
+                {candidateUser && (
+                  <nav
+                    aria-label="Candidate Navigation"
+                    className="hidden md:block fixed right-10 bottom-8 z-40 pointer-events-auto"
+                  >
+                    <ul className="flex flex-col items-end gap-2.5">
+                      {[
+                        {
+                          id: 'home',
+                          label: 'HOME',
+                          onClick: () => {
+                            setActiveNavTab('home');
+                            setShowAgreementModal(false);
+                            setShowSetupModal(false);
+                            setShowMyAppsModal(false);
+                            document.getElementById('roles-grid-section')?.scrollIntoView({ behavior: 'smooth' });
+                          },
+                        },
+                        {
+                          id: 'agreement',
+                          label: 'AGREEMENT',
+                          onClick: () => {
+                            setActiveNavTab('agreement');
+                            setShowAgreementModal(true);
+                          },
+                        },
+                        {
+                          id: 'profile',
+                          label: 'PROFILE',
+                          onClick: () => {
+                            setActiveNavTab('profile');
+                            if (candidateUser) {
+                              setShowSetupModal(true);
+                            } else {
+                              setShowAuthModal(true);
+                            }
+                          },
+                        },
+                      ].map((item) => {
+                        const isActive = activeNavTab === item.id;
+                        return (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              onClick={item.onClick}
+                              aria-current={isActive ? 'true' : undefined}
+                              className="text-[0.62rem] font-semibold tracking-[0.2em] uppercase transition-opacity duration-300 hover:opacity-100 focus-visible:ring-1 focus-visible:ring-current focus-visible:outline-none text-white cursor-pointer"
+                              style={{ opacity: isActive ? 1 : 0.4 }}
+                            >
+                              {item.label}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </nav>
+                )}
+              </>,
               document.body
             )}
           </main>
