@@ -1081,12 +1081,13 @@ export default function OpenRolesPage({ enabled = true }) {
         {/* Zone 1: Main Scrollable Editorial Content (takes remaining height, never pushes bottom) */}
         <div className="relative z-10 flex-1 min-h-0 lg:overflow-y-auto custom-scrollbar-none p-6 sm:p-7 xl:p-8 pb-2 flex flex-col justify-between">
           <div>
-            {/* Brand Mark with overlapping rectangles */}
+            {/* Official TermJobs Logo & Brand Mark */}
             <Link to="/" className="inline-flex items-center gap-2.5 group cursor-pointer">
-              <svg className="w-7 h-7 text-neutral-900 shrink-0" viewBox="0 0 32 32" fill="none">
-                <rect x="3" y="6" width="16" height="20" rx="4.5" stroke="currentColor" strokeWidth="2.4" />
-                <rect x="13" y="6" width="16" height="20" rx="4.5" stroke="currentColor" strokeWidth="2.4" />
-              </svg>
+              <img
+                src={logo}
+                alt="TermJobs"
+                className="w-7 h-7 object-contain shrink-0 group-hover:scale-105 transition-transform"
+              />
               <div>
                 <span className="text-[13px] font-extrabold tracking-[0.2em] text-neutral-900 block leading-none">
                   TERMJOBS

@@ -216,7 +216,7 @@ export default function ManageHiringManagers() {
       const payload = {};
       if (edit.email !== '') payload.email = edit.email.trim();
       if (edit.name !== '') payload.name = edit.name.trim();
-      if (edit.department !== '') payload.department = edit.department.trim();
+      if (edit.department !== undefined) payload.department = edit.department.trim();
       if (edit.password) payload.password = edit.password;
 
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
@@ -231,27 +231,42 @@ export default function ManageHiringManagers() {
   };
 
   const departmentsList = useMemo(() => {
-    const set = new Set(managers.map((m) => m.department).filter(Boolean));
-    return ['All Departments', ...Array.from(set)];
+    const set = new Set();
+    let hasUnassigned = false;
+    for (const m of managers) {
+      if (m.department && m.department.trim()) {
+        set.add(m.department.trim());
+      } else {
+        hasUnassigned = true;
+      }
+    }
+    const list = ['All Departments', ...Array.from(set).sort()];
+    if (hasUnassigned) list.push('Unassigned');
+    return list;
   }, [managers]);
 
   const filteredManagers = useMemo(() => {
     return managers.filter((m) => {
+      const isUnassigned = !m.department || !m.department.trim();
       const matchesSearch =
         !searchQuery.trim() ||
         (m.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         (m.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (m.department || '').toLowerCase().includes(searchQuery.toLowerCase());
+        (m.department || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (isUnassigned && 'unassigned'.includes(searchQuery.toLowerCase().trim()));
 
       const matchesDept =
-        selectedDept === 'All Departments' || (m.department || '').toLowerCase() === selectedDept.toLowerCase();
+        selectedDept === 'All Departments' ||
+        (selectedDept === 'Unassigned'
+          ? isUnassigned
+          : (m.department || '').toLowerCase() === selectedDept.toLowerCase());
 
       return matchesSearch && matchesDept;
     });
   }, [managers, searchQuery, selectedDept]);
 
   const activeCount = useMemo(() => managers.filter((m) => m.is_active !== false).length, [managers]);
-  const deptCount = useMemo(() => new Set(managers.map((m) => m.department).filter(Boolean)).size, [managers]);
+  const deptCount = useMemo(() => new Set(managers.map((m) => m.department?.trim()).filter(Boolean)).size, [managers]);
 
   return (
     <div
@@ -435,13 +450,13 @@ export default function ManageHiringManagers() {
 
                         {/* Department Column */}
                         <td className="py-3 px-3">
-                          {u.department ? (
+                          {u.department && u.department.trim() ? (
                             <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100/90 text-gray-700 border border-gray-200/70">
                               {u.department}
                             </span>
                           ) : (
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-gray-100/90 text-gray-500 border border-gray-200/70">
-                              eng
+                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-gray-50 text-gray-400 border border-gray-200/60 italic">
+                              Unassigned
                             </span>
                           )}
                         </td>
@@ -610,7 +625,7 @@ export default function ManageHiringManagers() {
             </div>
             <div>
               <div className="text-xl sm:text-[22px] font-black text-gray-900 tracking-tight leading-none">
-                {deptCount || 1}
+                {deptCount}
               </div>
               <div className="text-[10px] font-semibold text-gray-500 mt-0.5">
                 Departments
@@ -658,7 +673,7 @@ export default function ManageHiringManagers() {
               </div>
               <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100">
                 <span className="text-gray-500 font-medium">Department</span>
-                <span className="font-bold text-gray-900">{viewProfile.department || 'General'}</span>
+                <span className="font-bold text-gray-900">{viewProfile.department?.trim() || 'Unassigned'}</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50/80 border border-gray-100">
                 <span className="text-gray-500 font-medium">Account Status</span>

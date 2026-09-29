@@ -650,7 +650,7 @@ export default function AdminDashboard() {
                   <div className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all">
                     <div className="min-w-0">
                       <div className="font-bold text-gray-900 text-xs sm:text-[12.5px] leading-tight">r</div>
-                      <div className="text-[10px] text-gray-400">eng</div>
+                      <div className="text-[10px] text-gray-400">Engineering</div>
                     </div>
                     <div className="text-xs text-gray-500 font-normal px-2 truncate">
                       hm@gmail.com
