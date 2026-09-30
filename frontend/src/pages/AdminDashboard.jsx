@@ -149,7 +149,9 @@ export default function AdminDashboard() {
         console.warn('Failed to load users:', err);
       });
 
-    const fetchReqs = request('/requisitions', { token })
+    // The console only renders a small requisition summary. Request the compact
+    // representation instead of full JD/intake documents for every role.
+    const fetchReqs = request('/requisitions?dashboard=true', { token })
       .then((reqsRes) => {
         if (Array.isArray(reqsRes)) {
           setRequisitions(reqsRes);
@@ -159,13 +161,15 @@ export default function AdminDashboard() {
         console.warn('Failed to load requisitions:', err);
       });
 
-    const fetchNotifs = request('/api/notifications', { token })
+    // Activity is supplemental; keep it small and do not make the primary
+    // requisitions/team view wait for it.
+    const fetchNotifs = request('/api/notifications?compact=true&limit=12', { token })
       .then((notifsRes) => {
         setNotifications(Array.isArray(notifsRes) ? notifsRes : (notifsRes?.notifications || []));
       })
       .catch(() => {});
 
-    Promise.allSettled([fetchUsers, fetchReqs, fetchNotifs]).finally(() => {
+    Promise.allSettled([fetchUsers, fetchReqs]).finally(() => {
       setLoading(false);
     });
   };

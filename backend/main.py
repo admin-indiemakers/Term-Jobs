@@ -1011,11 +1011,14 @@ def create_requisition(
 
 @app.get("/requisitions")
 @app.get("/api/requisitions")
-def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
+def list_requisitions(
+    dashboard: bool = False,
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
     # Cache requisitions per user for 30s to avoid repeated DB scans
-    _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{'dashboard' if dashboard else 'full'}"
     _cached = _cache.get(_cache_key)
     if _cached is not None:
         return _cached
@@ -1048,6 +1051,24 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         else:
             # Admin, HR, Director, etc. see all requisitions in their tenant
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
+
+        # The Admin Console needs only these list-card fields. Avoid loading the
+        # large generated JD, intake, coverage and refinement documents.
+        if dashboard:
+            rows = query.only("id", "status", "title", "created_at", "updated_at").all()
+            result = [
+                {
+                    "id": r.id,
+                    "status": r.status,
+                    "title": r.title,
+                    "created_at": _format_datetime(r.created_at),
+                    "updated_at": _format_datetime(r.updated_at),
+                }
+                for r in rows
+            ]
+            _cache.set(_cache_key, result, ttl=30)
+            return result
+
         rows = query.all()
         # Only fetch company profiles referenced by the returned requisitions (not ALL profiles)
         needed_cp_ids = {r.company_profile_id for r in rows if r.company_profile_id}
