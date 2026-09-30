@@ -75,9 +75,9 @@ export default function ManageHiringManagers() {
 
   const searchInputRef = useRef(null);
 
-  const load = () => {
+  const load = (forceRefresh = false) => {
     setLoading(true);
-    request('/api/auth/users?role=Hiring+Manager', { token, forceRefresh: true })
+    request('/api/auth/users?role=Hiring+Manager&compact=true', { token, forceRefresh })
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setManagers(list.filter((u) => u.role === 'Hiring Manager'));
@@ -163,7 +163,7 @@ export default function ManageHiringManagers() {
       setForm(EMPTY_FORM);
       setEmailError('');
       setShowCreateModal(false);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to create manager account');
     } finally {
@@ -180,7 +180,7 @@ export default function ManageHiringManagers() {
       await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
       setSuccess(`Hiring Manager account "${confirmDelete.name || confirmDelete.email}" removed.`);
       setConfirmDelete(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to remove account');
     } finally {
@@ -198,7 +198,7 @@ export default function ManageHiringManagers() {
         token,
       });
       setSuccess(`Hiring Manager "${manager.name || manager.email}" approved successfully.`);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to approve hiring manager account');
     } finally {
@@ -222,7 +222,7 @@ export default function ManageHiringManagers() {
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess(`Hiring Manager "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to update manager account');
     } finally {
@@ -973,5 +973,4 @@ export default function ManageHiringManagers() {
     </div>
   );
 }
-
 

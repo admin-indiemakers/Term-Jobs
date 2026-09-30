@@ -979,16 +979,17 @@ def create_user(
     )
 
 
-@router.get("/users", response_model=list[UserListResponse])
+@router.get("/users")
 def list_users(
     role: str | None = None,
+    compact: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Super Admin sees all accounts; Admin sees their tenant's users; HR sees the Hiring Managers they created.
     Pass ?role=Director (or any role name) to fetch only users of that role — filtered at the DB level.
     """
-    _cache_key = f"users:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{role or 'all'}"
+    _cache_key = f"users:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{role or 'all'}:{'compact' if compact else 'full'}"
     _cached = _cache.get(_cache_key)
     if _cached is not None:
         return _cached
@@ -997,6 +998,13 @@ def list_users(
         "id", "email", "name", "role", "tenant_id", "department",
         "is_active", "created_by", "created_at", "candidate_limit", "phone", "is_deleted"
     )
+    if compact:
+        # List pages need identity, display and status fields only. This also
+        # avoids the tenant lookup performed for the full account response.
+        user_fields = (
+            "id", "email", "name", "role", "department", "is_active",
+            "created_at", "is_deleted",
+        )
     role_list = [r.strip() for r in role.split(",") if r.strip()] if role else []
 
     if current_user.role == "Super Admin":
@@ -1040,6 +1048,31 @@ def list_users(
             detail="You are not allowed to list users",
         )
 
+    def _safe_iso(dt_val):
+        """Safely convert a datetime to ISO string, handling string values."""
+        if not dt_val:
+            return ""
+        if hasattr(dt_val, 'isoformat'):
+            return dt_val.isoformat()
+        return str(dt_val)
+
+    if compact:
+        result = [
+            {
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "role": u.role,
+                "department": u.department or "",
+                "is_active": bool(u.is_active),
+                "created_at": _safe_iso(u.created_at),
+            }
+            for u in users
+            if not getattr(u, "is_deleted", False)
+        ]
+        _cache.set(_cache_key, result, ttl=30)
+        return result
+
     # Only fetch tenants that actually belong to the filtered users instead of scanning the full collection
     tenant_ids = list({u.tenant_id for u in users if getattr(u, 'tenant_id', None)})
     if tenant_ids:
@@ -1064,14 +1097,6 @@ def list_users(
         and (not u.tenant_id or u.tenant_id in tenant_map or u.role == "Super Admin")
         and (current_user.role == "Super Admin" or u.role != "Candidate")
     ]
-
-    def _safe_iso(dt_val):
-        """Safely convert a datetime to ISO string, handling string values."""
-        if not dt_val:
-            return ""
-        if hasattr(dt_val, 'isoformat'):
-            return dt_val.isoformat()
-        return str(dt_val)
 
     result = [
         UserListResponse(
