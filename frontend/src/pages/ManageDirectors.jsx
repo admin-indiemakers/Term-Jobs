@@ -76,9 +76,9 @@ export default function ManageDirectors() {
   const searchInputRef = useRef(null);
 
 
-  const load = () => {
+  const load = (forceRefresh = false) => {
     setLoading(true);
-    request('/api/auth/users?role=Director', { token, forceRefresh: true })
+    request('/api/auth/users?role=Director&compact=true', { token, forceRefresh })
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setDirectors(list.filter((u) => u.role === 'Director'));
@@ -163,7 +163,7 @@ export default function ManageDirectors() {
       setForm(EMPTY_FORM);
       setEmailError('');
       setShowCreateModal(false);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to create director account');
     } finally {
@@ -181,7 +181,7 @@ export default function ManageDirectors() {
         token,
       });
       setSuccess(`Director "${director.name || director.email}" approved and activated.`);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to approve director account');
     } finally {
@@ -198,7 +198,7 @@ export default function ManageDirectors() {
       await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
       setSuccess(`Director account "${confirmDelete.name || confirmDelete.email}" removed.`);
       setConfirmDelete(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to remove account');
     } finally {
@@ -222,7 +222,7 @@ export default function ManageDirectors() {
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess(`Director "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to update director account');
     } finally {

@@ -54,9 +54,9 @@ export default function ManageProcurement() {
   const [editing, setEditing] = useState(false);
   const [emailError, setEmailError] = useState('');
 
-  const load = () => {
+  const load = (forceRefresh = false) => {
     setLoading(true);
-    request('/api/auth/users?role=Procurement+Team,Procurement', { token, forceRefresh: true })
+    request('/api/auth/users?role=Procurement+Team,Procurement&compact=true', { token, forceRefresh })
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
         setProcurementUsers(list.filter((u) => u.role === 'Procurement Team' || u.role === 'Procurement'));
@@ -98,7 +98,7 @@ export default function ManageProcurement() {
         token,
       });
       setSuccess(`Procurement Team member "${procUser.name || procUser.email}" approved and activated successfully.`);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to approve procurement account');
     } finally {
@@ -137,7 +137,7 @@ export default function ManageProcurement() {
       setForm(EMPTY_FORM);
       setEmailError('');
       setShowCreateModal(false);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to create procurement account');
     } finally {
@@ -154,7 +154,7 @@ export default function ManageProcurement() {
       await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
       setSuccess(`Procurement account "${confirmDelete.name || confirmDelete.email}" removed.`);
       setConfirmDelete(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to remove account');
     } finally {
@@ -177,7 +177,7 @@ export default function ManageProcurement() {
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess(`Procurement member "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to update procurement account');
     } finally {
@@ -581,4 +581,4 @@ export default function ManageProcurement() {
       )}
     </div>
   );
-}
+}
