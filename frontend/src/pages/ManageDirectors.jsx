@@ -1,3 +1,4 @@
+
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
@@ -60,7 +61,7 @@ export default function ManageDirectors() {
         const parsed = JSON.parse(cached);
         return Array.isArray(parsed) ? parsed : [];
       }
-    } catch (e) {}
+    } catch (e) { }
     return [];
   });
   const [loading, setLoading] = useState(() => directors.length === 0);
@@ -96,7 +97,7 @@ export default function ManageDirectors() {
         setDirectors(filtered);
         try {
           sessionStorage.setItem('tj_cached_directors', JSON.stringify(filtered));
-        } catch (e) {}
+        } catch (e) { }
         setError('');
       })
       .catch((err) => setError(err.message))
