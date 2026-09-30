@@ -285,6 +285,7 @@ export default function App() {
             <Route path="recruiter/portal-access" element={<RecruiterDashboard view="portal-access" />} />
             <Route path="recruiter/billing" element={<Navigate to="/dashboard/superadmin/candidate-management?tab=billing" replace />} />
             <Route path="admin" element={<AdminDashboard />} />
+            <Route path="admin/chat" element={<AiChat />} />
             <Route path="admin/directors" element={<ManageDirectors />} />
             <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
             <Route path="admin/procurement" element={<ManageProcurement />} />
