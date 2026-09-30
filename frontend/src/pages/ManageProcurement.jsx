@@ -36,8 +36,17 @@ export default function ManageProcurement() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [procurementUsers, setProcurementUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [procurementUsers, setProcurementUsers] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_procurement');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => procurementUsers.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -55,11 +64,17 @@ export default function ManageProcurement() {
   const [emailError, setEmailError] = useState('');
 
   const load = (forceRefresh = false) => {
-    setLoading(true);
+    if (procurementUsers.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     request('/api/auth/users?role=Procurement+Team,Procurement&compact=true', { token, forceRefresh })
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
-        setProcurementUsers(list.filter((u) => u.role === 'Procurement Team' || u.role === 'Procurement'));
+        const filtered = list.filter((u) => u.role === 'Procurement Team' || u.role === 'Procurement');
+        setProcurementUsers(filtered);
+        try {
+          sessionStorage.setItem('tj_cached_procurement', JSON.stringify(filtered));
+        } catch (e) {}
         setError('');
       })
       .catch((err) => setError(err.message))

@@ -45,10 +45,12 @@ def _get_client() -> "MongoClient":
             "retryWrites": True,
             "retryReads": True,
         }
-        # In serverless environment like Vercel, use minPoolSize=0
+        # In serverless environments like Vercel, maintain 1 connection warm with idle timeout
+        # to avoid repeating expensive TLS handshakes on every invocation
         if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
             kwargs["maxPoolSize"] = 10
-            kwargs["minPoolSize"] = 0
+            kwargs["minPoolSize"] = 1
+            kwargs["maxIdleTimeMS"] = 60000
         else:
             kwargs["maxPoolSize"] = 50
             kwargs["minPoolSize"] = 10

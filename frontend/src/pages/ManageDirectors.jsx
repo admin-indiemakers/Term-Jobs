@@ -53,8 +53,17 @@ export default function ManageDirectors() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [directors, setDirectors] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [directors, setDirectors] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_directors');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => directors.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -77,11 +86,17 @@ export default function ManageDirectors() {
 
 
   const load = (forceRefresh = false) => {
-    setLoading(true);
+    if (directors.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     request('/api/auth/users?role=Director&compact=true', { token, forceRefresh })
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
-        setDirectors(list.filter((u) => u.role === 'Director'));
+        const filtered = list.filter((u) => u.role === 'Director');
+        setDirectors(filtered);
+        try {
+          sessionStorage.setItem('tj_cached_directors', JSON.stringify(filtered));
+        } catch (e) {}
         setError('');
       })
       .catch((err) => setError(err.message))

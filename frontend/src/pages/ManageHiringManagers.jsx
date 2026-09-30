@@ -51,8 +51,17 @@ export default function ManageHiringManagers() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [managers, setManagers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [managers, setManagers] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_hiring_managers');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => managers.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -76,11 +85,17 @@ export default function ManageHiringManagers() {
   const searchInputRef = useRef(null);
 
   const load = (forceRefresh = false) => {
-    setLoading(true);
+    if (managers.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
     request('/api/auth/users?role=Hiring+Manager&compact=true', { token, forceRefresh })
       .then((data) => {
         const list = Array.isArray(data) ? data : [];
-        setManagers(list.filter((u) => u.role === 'Hiring Manager'));
+        const filtered = list.filter((u) => u.role === 'Hiring Manager');
+        setManagers(filtered);
+        try {
+          sessionStorage.setItem('tj_cached_hiring_managers', JSON.stringify(filtered));
+        } catch (e) {}
         setError('');
       })
       .catch((err) => setError(err.message))
