@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { request, API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
@@ -56,7 +56,8 @@ import {
   SlidersHorizontal,
   ChevronDown,
   AudioLines,
-  Shield
+  Shield,
+  Table
 } from 'lucide-react';
 
 /* ── REQUISITIONS MOCK DATA FOR RIGHT SIDEBAR OVERVIEW ─────────────────────── */
@@ -66,7 +67,7 @@ const REQUISITIONS_DATA = [
     title: 'Senior Cloud Architect',
     dept: 'Cloud Ops',
     stage: 'Stage: Offer',
-    stageStyle: 'bg-[#FCFEED] text-gray-900 border border-[#D8F929]',
+    stageStyle: 'bg-black text-white border border-black',
     hrLead: 'Marcus V.',
     candidatesCount: '12 Candidates In-Process'
   },
@@ -84,7 +85,7 @@ const REQUISITIONS_DATA = [
     title: 'Staff Security Engineer',
     dept: 'Infra & Sec',
     stage: 'Stage: Screening',
-    stageStyle: 'bg-emerald-50 text-emerald-800 border border-emerald-200',
+    stageStyle: 'bg-gray-100 text-gray-800 border border-gray-200',
     hrLead: 'David K.',
     candidatesCount: '19 Candidates In-Process'
   }
@@ -99,11 +100,264 @@ const SARVAM_SPEAKERS = [
   { id: 'aditya', label: 'Aditya (Male)' }
 ];
 
-/* Clean text helper: strip raw ASCII tables, transform debug logs into friendly copilot responses */
+/* Configure marked for GitHub Flavored Markdown and line breaks */
+marked.setOptions({
+  gfm: true,
+  breaks: true
+});
+
+/* Helper to convert space-aligned pseudo-tables into standard GitHub Markdown tables */
+const formatMarkdownContent = (text) => {
+  if (!text) return '';
+  const lines = String(text).split('\n');
+  const result = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Check if line looks like a multi-column header (at least 3 columns separated by 2+ spaces or tabs, not starting with markdown chars)
+    if (
+      trimmed &&
+      !trimmed.startsWith('|') &&
+      !trimmed.startsWith('#') &&
+      !trimmed.startsWith('-') &&
+      !trimmed.startsWith('•') &&
+      !trimmed.startsWith('*') &&
+      !trimmed.startsWith('>')
+    ) {
+      const parts = trimmed.split(/\s{2,}|\t+/).filter(Boolean);
+      if (parts.length >= 3) {
+        // Collect subsequent rows that have 2+ columns
+        const tableRows = [parts];
+        let j = i + 1;
+        while (j < lines.length) {
+          const nextTrim = lines[j].trim();
+          if (
+            !nextTrim ||
+            nextTrim.startsWith('#') ||
+            nextTrim.startsWith('-') ||
+            nextTrim.startsWith('•') ||
+            nextTrim.startsWith('*') ||
+            nextTrim.startsWith('|')
+          ) {
+            break;
+          }
+          const nextParts = nextTrim.split(/\s{2,}|\t+/).filter(Boolean);
+          if (nextParts.length >= 2) {
+            tableRows.push(nextParts);
+            j++;
+          } else {
+            break;
+          }
+        }
+
+        if (tableRows.length >= 2) {
+          const maxCols = Math.max(...tableRows.map((r) => r.length));
+          const headerRow = [...tableRows[0]];
+          while (headerRow.length < maxCols) headerRow.push('');
+          result.push('');
+          result.push('| ' + headerRow.join(' | ') + ' |');
+          result.push('| ' + Array(maxCols).fill(':---').join(' | ') + ' |');
+          for (let r = 1; r < tableRows.length; r++) {
+            const row = [...tableRows[r]];
+            while (row.length < maxCols) row.push('');
+            result.push('| ' + row.join(' | ') + ' |');
+          }
+          result.push('');
+          i = j;
+          continue;
+        }
+      }
+    }
+
+    result.push(line);
+    i++;
+  }
+
+  return result.join('\n');
+};
+
+/* Multi-View Comparative Prompt Detector: detects if the user wants to keep current data and view additional data side-by-side */
+const isComparativeMultiViewPrompt = (promptText) => {
+  if (!promptText || typeof promptText !== 'string') return false;
+  // Normalize punctuation and extra spaces
+  const clean = promptText.toLowerCase().replace(/[,.!?;:]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // High-confidence regex patterns for split, other tab, right tab, side-by-side, comparative requests
+  const patterns = [
+    // Matches "in other tab", "in another tab", "on other tab", "to other tab", "into other tab", "open in other tab", "open in right tab", etc.
+    /\b(?:in|on|at|into|as|to|open(?:\s+in)?)\s+(?:an?|the)?\s*(?:other|another|second|2nd|new|separate|next|right|additional|side|dual|split)\s*tab\b/i,
+    // Direct mention of "other tab", "another tab", "second tab", "2nd tab", "right tab", "side tab", "separate tab", "dual tab", "split tab"
+    /\b(?:other|another|second|2nd|right|side|separate|dual|split)\s*tab\b/i,
+    // "in a tab", "open in tab", "into a tab"
+    /\b(?:open|show|list|display|put|view|add|see|fetch)\s+(?:in|into|as)\s+(?:a|another|the|an)?\s*tab\b/i,
+    // "open on right", "show to the right", "display on the right", "open right panel"
+    /\b(?:open|show|list|display|put|view|add|see|fetch)\s+(?:on|to|in)\s+(?:the\s+)?right\b/i,
+    /\b(?:right|second|2nd)\s+(?:panel|window|column|side|view)\b/i,
+    // Split and side-by-side phrasing
+    /\bside\s*[-–—]?\s*by\s*[-–—]?\s*side\b/i,
+    /\bsplit\s*(?:view|screen|panel|tab|window)?\b/i,
+    /\bdual\s*(?:view|screen|panel|tab|window)\b/i,
+    // Comparative phrasing with current/existing item
+    /\b(?:along\s+with|with\s+(?:this|that|current|existing)|keep\s+(?:this|current)|next\s+to\s+(?:this|that))\b/i,
+    // "also show", "also list", "also view", "also get", "show also", "list also"
+    /\b(?:also\s+(?:show|list|view|get|display|see|fetch|compare)|show\s+also|list\s+also|view\s+also|and\s+also)\b/i,
+    // Comparison verbs
+    /\bcompare\s+(?:with|to|this|that|both)\b/i,
+    /\bboth\s+(?:data|records|views|tabs|tables)\b/i
+  ];
+
+  if (patterns.some((re) => re.test(clean))) {
+    return true;
+  }
+
+  // Exact substring fallback keywords
+  const keywords = [
+    'other tab',
+    'in other tab',
+    'another tab',
+    'in another tab',
+    'new tab',
+    'in a new tab',
+    'right tab',
+    'in right tab',
+    'second tab',
+    '2nd tab',
+    'side tab',
+    'separate tab',
+    'with this data',
+    'with this',
+    'along with this',
+    'along with that',
+    'compare with',
+    'compare to',
+    'compare this',
+    'compare both',
+    'side by side',
+    'side-by-side',
+    'keep this',
+    'and also',
+    'additionally',
+    'at the same time',
+    'show both',
+    'next to this',
+    'as well as',
+    'both data',
+    'split view',
+    'split screen'
+  ];
+
+  return keywords.some((k) => clean.includes(k));
+};
+
+/* Helper to extract markdown tables from AI messages for the popup modal tab */
+const extractTableFromText = (text) => {
+  if (!text) return { cleanText: '', tableInfo: null };
+
+  const formatted = formatMarkdownContent(text);
+  const lines = formatted.split('\n');
+
+  let tableStart = -1;
+  let tableEnd = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      if (tableStart === -1) tableStart = i;
+      tableEnd = i;
+    } else if (tableStart !== -1 && tableEnd !== -1) {
+      if (!trimmed) {
+        break;
+      }
+    }
+  }
+
+  if (tableStart === -1 || tableEnd === -1 || tableEnd <= tableStart) {
+    return { cleanText: text, tableInfo: null };
+  }
+
+  const tableLines = lines
+    .slice(tableStart, tableEnd + 1)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('|') && l.endsWith('|'));
+
+  if (tableLines.length < 2) {
+    return { cleanText: text, tableInfo: null };
+  }
+
+  // Parse headers
+  const headers = tableLines[0]
+    .slice(1, -1)
+    .split('|')
+    .map((c) => c.trim());
+
+  let startIdx = 1;
+  if (tableLines[1].replace(/[\s\:\-\|]/g, '') === '') {
+    startIdx = 2;
+  }
+
+  const rows = [];
+  for (let i = startIdx; i < tableLines.length; i++) {
+    const cells = tableLines[i]
+      .slice(1, -1)
+      .split('|')
+      .map((c) => c.trim());
+    if (cells.some((c) => c.length > 0)) {
+      rows.push(cells);
+    }
+  }
+
+  // Find title preceding the table
+  let title = '';
+  for (let i = tableStart - 1; i >= 0; i--) {
+    const l = lines[i].trim();
+    if (l) {
+      title = l.replace(/^#+\s*/, '').replace(/\*+/g, '').trim();
+      break;
+    }
+  }
+
+  // If table is a candidate roster or applicant list, ensure title distinguishes candidates
+  const isCandidateTable = headers.some((h) => /candidate|applicant/i.test(h));
+  if (isCandidateTable && title && !/candidate|applicant/i.test(title)) {
+    title = title.includes('—')
+      ? title.replace('—', 'Candidates —')
+      : `${title} — Candidates`;
+  }
+
+  // Filter out the table lines and immediately preceding markdown heading if it was the table title
+  const nonTableLines = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (i >= tableStart && i <= tableEnd) continue;
+    if (i === tableStart - 1 && lines[i].trim().startsWith('#')) continue;
+    nonTableLines.push(lines[i]);
+  }
+
+  let cleanText = nonTableLines.join('\n').trim();
+  if (!cleanText) {
+    cleanText = title ? `I have compiled the **${title}** below.` : 'I have retrieved the requested records.';
+  }
+
+  return {
+    cleanText,
+    tableInfo: {
+      title: title || 'Data Table Records',
+      headers,
+      rows,
+      rawMarkdown: tableLines.join('\n')
+    }
+  };
+};
+
+/* Clean text helper: transform debug logs into friendly copilot responses without stripping legitimate markdown tables */
 const cleanReplyText = (text) => {
   if (!text) return '';
   let str = String(text);
-  if (str.includes('|---|') || str.includes('| --- |') || str.includes('| Tenant ID |')) {
+
+  // Only strip legacy debug database queries that start with "Super Admin King DB Query:"
+  if (str.startsWith('Super Admin King DB Query:') && str.includes('| Tenant ID |')) {
     const lines = str.split('\n');
     const nonTableLines = lines.filter((line) => !line.trim().startsWith('|'));
     const summaryText = nonTableLines.join(' ').trim();
@@ -263,10 +517,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-black/[0.05]">
         <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border shadow-2xs shrink-0 ${isConsultancyOnly
-              ? 'bg-amber-500/10 text-amber-600 border-amber-300/40'
-              : 'bg-cyan-500/10 text-cyan-600 border-cyan-300/40'
-            }`}>
+          <div className="w-10 h-10 rounded-2xl flex items-center justify-center border border-gray-200 bg-black/5 text-gray-900 shadow-2xs shrink-0">
             {isConsultancyOnly ? <Layers size={19} /> : <Building2 size={19} />}
           </div>
           <div>
@@ -274,7 +525,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
               <h3 className="text-sm sm:text-base font-extrabold text-gray-950 tracking-tight leading-tight">
                 {widgetTitle}
               </h3>
-              <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-black tracking-wider uppercase bg-emerald-50 text-emerald-700 border border-emerald-200/80">
+              <span className="px-2.5 py-0.5 rounded-full text-[9.5px] font-black tracking-wider uppercase bg-gray-100 text-gray-800 border border-gray-200">
                 {tenants.length} {tenants.length === 1 ? 'Total' : 'Total'}
               </span>
             </div>
@@ -288,7 +539,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => setFilterTab('all')}
-              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'all' ? 'bg-gray-950 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-gray-950'
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'all' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               All ({tenants.length})
@@ -296,7 +547,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => setFilterTab('client')}
-              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'client' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'client' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               Buyers ({clientCount})
@@ -304,7 +555,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => setFilterTab('consultancy')}
-              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'consultancy' ? 'bg-amber-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-amber-800'
+              className={`px-3 py-1 rounded-xl transition-all cursor-pointer text-[11px] ${filterTab === 'consultancy' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               Vendors ({consultancyCount})
@@ -359,10 +610,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
                   {/* Top Bar inside Card */}
                   <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-black/[0.04]">
                     <span
-                      className={`px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1.5 ${isClient
-                          ? 'bg-indigo-50 text-indigo-700 border border-indigo-200/80'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200/80'
-                        }`}
+                      className="px-2.5 py-0.5 rounded-full text-[9.5px] font-black uppercase tracking-wider flex items-center gap-1.5 bg-gray-100 text-gray-900 border border-gray-200"
                     >
                       {isClient ? <Building2 size={10} /> : <Layers size={10} />}
                       {isClient ? 'Buyer Company' : 'Vendor Consultancy'}
@@ -382,10 +630,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
                   {/* Company Info */}
                   <div className="pt-3 flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className={`w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shadow-xs shrink-0 ${isClient
-                          ? 'bg-gradient-to-br from-indigo-500/15 to-blue-500/10 text-indigo-700 border border-indigo-200/60'
-                          : 'bg-gradient-to-br from-amber-500/15 to-orange-500/10 text-amber-700 border border-amber-200/60'
-                        }`}>
+                      <div className="w-11 h-11 rounded-2xl flex items-center justify-center font-black text-sm shadow-xs shrink-0 bg-gray-100 text-gray-950 border border-gray-200">
                         {t.name ? t.name.charAt(0).toUpperCase() : 'O'}
                       </div>
                       <div>
@@ -425,7 +670,7 @@ function TenantConsoleWidget({ tenants = [], onSendMessage, onCopy }) {
                     <button
                       type="button"
                       onClick={() => onSendMessage(`Delete tenant ${t.name}`)}
-                      className="p-1.5 rounded-xl bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-600 border border-rose-200/80 transition-colors shadow-2xs cursor-pointer"
+                      className="p-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-700 border border-gray-200 transition-colors shadow-2xs cursor-pointer"
                       title="Delete Tenant"
                     >
                       <Trash2 size={13} />
@@ -507,13 +752,13 @@ function PlatformMetricsWidget({ stats = {}, onSendMessage }) {
           <div className="text-[10px] font-black text-gray-400 uppercase">Total Tenants</div>
           <div className="text-2xl font-black text-gray-950 mt-1">{total}</div>
         </div>
-        <div className="p-3.5 rounded-2xl bg-white border border-emerald-200 text-center shadow-2xs">
-          <div className="text-[10px] font-black text-emerald-700 uppercase">Buyers</div>
-          <div className="text-2xl font-black text-emerald-800 mt-1">{clients}</div>
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200 text-center shadow-2xs">
+          <div className="text-[10px] font-black text-gray-400 uppercase">Buyers</div>
+          <div className="text-2xl font-black text-gray-950 mt-1">{clients}</div>
         </div>
-        <div className="p-3.5 rounded-2xl bg-white border border-indigo-200 text-center shadow-2xs">
-          <div className="text-[10px] font-black text-indigo-700 uppercase">Vendors</div>
-          <div className="text-2xl font-black text-indigo-800 mt-1">{vendors}</div>
+        <div className="p-3.5 rounded-2xl bg-white border border-gray-200 text-center shadow-2xs">
+          <div className="text-[10px] font-black text-gray-400 uppercase">Vendors</div>
+          <div className="text-2xl font-black text-gray-950 mt-1">{vendors}</div>
         </div>
         <div className="p-3.5 rounded-2xl bg-white border border-gray-200 text-center shadow-2xs">
           <div className="text-[10px] font-black text-gray-400 uppercase">User Accounts</div>
@@ -624,13 +869,13 @@ function OnboardingDraftPreviewWidget({ draft = {}, onSendMessage }) {
             type="button"
             onClick={handleAiAutoFill}
             disabled={isGenerating}
-            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-[11px] font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            className="px-3 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-[11px] font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             title="Click to AI auto-fill company description & profile blurb"
           >
             <Sparkles size={13} className={isGenerating ? 'animate-spin' : ''} />
-            <span>{isGenerating ? 'AI Generating...' : '✨ AI Auto-Fill Profile'}</span>
+            <span>{isGenerating ? 'AI Generating...' : 'AI Auto-Fill Profile'}</span>
           </button>
-          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-900 border border-amber-200">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200">
             Draft Form Preview
           </span>
         </div>
@@ -667,12 +912,12 @@ function OnboardingDraftPreviewWidget({ draft = {}, onSendMessage }) {
             />
           </div>
           <div>
-            <label className="block text-[10.5px] font-bold text-purple-900 mb-1">Initial Password *</label>
+            <label className="block text-[10.5px] font-bold text-gray-700 mb-1">Initial Password *</label>
             <input
               type="text"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3.5 py-2 bg-purple-50/60 border border-purple-200 rounded-xl text-xs font-mono font-bold text-purple-950 focus:outline-none focus:bg-white focus:border-purple-600"
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold text-gray-950 focus:outline-none focus:bg-white focus:border-black"
             />
           </div>
         </div>
@@ -722,7 +967,7 @@ function OnboardingDraftPreviewWidget({ draft = {}, onSendMessage }) {
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="block text-[10.5px] font-bold text-gray-600">Company Overview / About Description *</label>
-            <span className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200 flex items-center gap-1">
+            <span className="text-[10px] font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200 flex items-center gap-1">
               <Sparkles size={10} />
               <span>AI Auto-Filled Blurb</span>
             </span>
@@ -763,25 +1008,25 @@ function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
   return (
     <div className="w-full text-left font-sans space-y-4 animate-in fade-in zoom-in-95 duration-200">
       {/* Top Banner Header */}
-      <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-900 via-teal-900 to-black text-white shadow-md flex items-center justify-between gap-3">
+      <div className="p-4 rounded-3xl bg-black text-white shadow-md flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-black text-lg">
+          <div className="w-10 h-10 rounded-2xl bg-white/10 text-white border border-white/20 flex items-center justify-center font-black text-lg">
             <CheckCircle2 size={24} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-extrabold text-white tracking-tight">Organization Onboarding Confirmed</h3>
-              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-400 text-black uppercase">
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white text-black uppercase">
                 LIVE DB ACTIVE
               </span>
             </div>
-            <p className="text-[11px] text-emerald-200 font-medium">Tenant database record & admin user account provisioned</p>
+            <p className="text-[11px] text-gray-400 font-medium">Tenant database record & admin user account provisioned</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => onSendMessage && onSendMessage('List all platform tenants')}
-          className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-emerald-300 border border-emerald-400/30 text-xs font-extrabold transition cursor-pointer shrink-0"
+          className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/30 text-xs font-extrabold transition cursor-pointer shrink-0"
         >
           View All Tenants →
         </button>
@@ -794,8 +1039,7 @@ function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">ONBOARDED ORGANIZATION</span>
             <div className="text-xl font-black text-gray-950 tracking-tight mt-0.5">{companyName}</div>
           </div>
-          <span className={`px-3 py-1 rounded-full text-[10.5px] font-extrabold ${isClient ? 'bg-blue-50 text-blue-800 border border-blue-200' : 'bg-purple-50 text-purple-800 border border-purple-200'
-            }`}>
+          <span className="px-3 py-1 rounded-full text-[10.5px] font-extrabold bg-gray-100 text-gray-900 border border-gray-200">
             {isClient ? '🏢 Buyer Client Company' : '🤝 Vendor Consultancy Partner'}
           </span>
         </div>
@@ -807,7 +1051,7 @@ function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
             <button
               type="button"
               onClick={() => onCopy && onCopy(`Organization: ${companyName}\nTenant ID: ${tenantId}\nAdmin Email: ${adminEmail}\nPassword: ${password}`)}
-              className="text-[10.5px] font-extrabold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+              className="text-[10.5px] font-extrabold text-gray-900 hover:text-black flex items-center gap-1 cursor-pointer"
             >
               <Copy size={12} />
               <span>Copy Credentials</span>
@@ -822,7 +1066,7 @@ function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
 
             <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
               <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Admin Login Email</span>
-              <span className="font-extrabold text-indigo-600 text-xs mt-0.5 block truncate">{adminEmail}</span>
+              <span className="font-extrabold text-gray-900 text-xs mt-0.5 block truncate">{adminEmail}</span>
             </div>
 
             <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
@@ -832,23 +1076,23 @@ function OnboardingSuccessWidget({ data = {}, onSendMessage, onCopy }) {
 
             <div className="p-2.5 rounded-xl bg-white border border-gray-200/70">
               <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Password</span>
-              <span className="font-mono font-black text-purple-700 text-xs mt-0.5 block">{password}</span>
+              <span className="font-mono font-black text-gray-900 text-xs mt-0.5 block">{password}</span>
             </div>
           </div>
         </div>
 
         {/* Integration Checklist */}
         <div className="space-y-1.5 text-xs font-semibold text-gray-700 pt-1">
-          <div className="flex items-center gap-2 text-emerald-700">
-            <CheckCircle2 size={14} className="text-emerald-600" />
+          <div className="flex items-center gap-2 text-gray-800">
+            <CheckCircle2 size={14} className="text-gray-950" />
             <span>SQL & MongoDB Tenant Record Created (`{tenantId}`)</span>
           </div>
-          <div className="flex items-center gap-2 text-emerald-700">
-            <CheckCircle2 size={14} className="text-emerald-600" />
+          <div className="flex items-center gap-2 text-gray-800">
+            <CheckCircle2 size={14} className="text-gray-950" />
             <span>Admin User Account & Auth Password Hash Configured</span>
           </div>
-          <div className="flex items-center gap-2 text-emerald-700">
-            <CheckCircle2 size={14} className="text-emerald-600" />
+          <div className="flex items-center gap-2 text-gray-800">
+            <CheckCircle2 size={14} className="text-gray-950" />
             <span>System Requisition Routing & Vendor Match Engine Ready</span>
           </div>
         </div>
@@ -997,23 +1241,23 @@ function PasswordChangeConfirmWidget({ data = {}, onSendMessage }) {
 
   return (
     <div className="w-full text-left font-sans space-y-4">
-      <div className="flex items-center justify-between border-b border-purple-100 pb-2">
+      <div className="flex items-center justify-between border-b border-gray-200 pb-2">
         <div className="flex items-center gap-2">
-          <ShieldAlert size={18} className="text-purple-600 animate-pulse" />
+          <ShieldAlert size={18} className="text-gray-900 animate-pulse" />
           <h3 className="text-sm font-extrabold text-gray-950">Credential & Password Change Confirmation</h3>
         </div>
-        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-900 border border-purple-200 uppercase">
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200 uppercase">
           Confirmation Required
         </span>
       </div>
 
-      <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/50 to-white border border-purple-200/80 shadow-2xs space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-purple-100">
+      <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-2xs space-y-3">
+        <div className="flex items-center justify-between pb-2 border-b border-gray-100">
           <div>
-            <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">Target User Account</span>
+            <span className="text-[10px] font-black uppercase text-gray-500 tracking-wider">Target User Account</span>
             <h4 className="text-base font-black text-gray-950 mt-0.5">{formData.user_name}</h4>
           </div>
-          <span className="font-mono text-xs font-bold text-purple-900 bg-purple-100/70 px-2.5 py-1 rounded-xl border border-purple-200">
+          <span className="font-mono text-xs font-bold text-gray-900 bg-gray-100 px-2.5 py-1 rounded-xl border border-gray-200">
             {formData.role}
           </span>
         </div>
@@ -1025,7 +1269,7 @@ function PasswordChangeConfirmWidget({ data = {}, onSendMessage }) {
               type="text"
               value={formData.user_name}
               onChange={(e) => setFormData({ ...formData, user_name: e.target.value })}
-              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 font-bold focus:outline-none focus:border-purple-600"
+              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 font-bold focus:outline-none focus:border-black"
             />
           </div>
           <div>
@@ -1034,19 +1278,19 @@ function PasswordChangeConfirmWidget({ data = {}, onSendMessage }) {
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 font-bold focus:outline-none focus:border-purple-600"
+              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 font-bold focus:outline-none focus:border-black"
             />
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-white border border-purple-100 space-y-2 text-xs">
+        <div className="p-3 rounded-xl bg-white border border-gray-200 space-y-2 text-xs">
           <label className="block text-[10.5px] font-bold text-gray-700">New Target Password *</label>
           <div className="flex items-center gap-2">
             <input
               type="text"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              className="w-full px-3.5 py-2 bg-purple-50/50 border border-purple-200 rounded-xl text-xs font-mono font-black text-purple-950 focus:outline-none focus:border-purple-600"
+              className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono font-bold text-gray-950 focus:outline-none focus:border-black"
             />
           </div>
           <p className="text-[10.5px] text-gray-500 font-medium">
@@ -1062,7 +1306,7 @@ function PasswordChangeConfirmWidget({ data = {}, onSendMessage }) {
           onClick={handleConfirm}
           className="px-5 py-2.5 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-extrabold shadow-md cursor-pointer flex items-center gap-2 transition-all hover:scale-102"
         >
-          <ShieldCheck size={15} className="text-[#D8F929]" />
+          <ShieldCheck size={15} className="text-white" />
           <span>Confirm & Change Password</span>
         </button>
       </div>
@@ -1079,7 +1323,7 @@ function PasswordUpdatedSuccessWidget({ data = {}, onSendMessage }) {
       <div className="p-5 rounded-3xl bg-gray-950 text-white border border-gray-800 shadow-xl space-y-4">
         <div className="flex items-center justify-between border-b border-gray-800 pb-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/40">
+            <div className="w-10 h-10 rounded-2xl bg-white/10 text-white flex items-center justify-center border border-white/20">
               <ShieldCheck size={20} />
             </div>
             <div>
@@ -1087,7 +1331,7 @@ function PasswordUpdatedSuccessWidget({ data = {}, onSendMessage }) {
               <p className="text-[11px] text-gray-400">Account credentials synchronized across platform authentication nodes</p>
             </div>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-white/10 text-white border border-white/20 uppercase">
             Active & Synced
           </span>
         </div>
@@ -1099,11 +1343,11 @@ function PasswordUpdatedSuccessWidget({ data = {}, onSendMessage }) {
           </div>
           <div className="flex items-center justify-between text-gray-300">
             <span className="font-medium">New Active Password:</span>
-            <span className="font-mono font-bold text-[#D8F929]">{new_password || '1234'}</span>
+            <span className="font-mono font-bold text-white">{new_password || '1234'}</span>
           </div>
           <div className="flex items-center justify-between text-gray-300">
             <span className="font-medium">Status:</span>
-            <span className="text-emerald-400 font-bold">Password Hash Updated & Committed</span>
+            <span className="text-white font-bold">Password Hash Updated & Committed</span>
           </div>
         </div>
 
@@ -1161,7 +1405,7 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2 gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center shadow-md shrink-0">
             <Briefcase size={18} />
           </div>
           <div>
@@ -1169,7 +1413,7 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
               <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">
                 {vendorName ? `Requisitions for ${vendorName}` : 'Job Requisitions Directory'}
               </h3>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-indigo-500/10 text-indigo-800 border border-indigo-300/80 uppercase">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200 uppercase">
                 {reqList.length} REQUISITIONS
               </span>
             </div>
@@ -1190,7 +1434,7 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
             <button
               type="button"
               onClick={() => setFilterStatus('open')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'open' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'open' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               Open ({openCount})
@@ -1198,7 +1442,7 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
             <button
               type="button"
               onClick={() => setFilterStatus('draft')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'draft' ? 'bg-amber-500 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-amber-800'
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'draft' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               Drafts ({draftCount})
@@ -1225,20 +1469,20 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
       </div>
 
       {/* Requisitions Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {filteredReqs.map((r, i) => {
           const isOpen = ['open', 'published', 'active'].includes((r.status || '').toLowerCase());
           return (
             <div
               key={r.requisition_id || r.id || i}
-              className="p-3.5 rounded-2xl bg-white border border-gray-200 hover:border-black transition-all shadow-2xs flex flex-col justify-between"
+              className="p-3.5 sm:p-4 rounded-xl bg-white border border-gray-200 hover:border-black/50 transition-all shadow-xs flex flex-col justify-between text-xs"
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1.5">
                   <span
-                    className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase tracking-wider ${isOpen
-                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                      : 'bg-amber-50 text-amber-800 border border-amber-200'
+                    className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${isOpen
+                      ? 'bg-black text-white border border-black'
+                      : 'bg-gray-100 text-gray-800 border border-gray-200'
                       }`}
                   >
                     {r.status || 'Published'}
@@ -1253,23 +1497,18 @@ function RequisitionsConsoleWidget({ requisitions = [], vendorName = '', onSendM
                   {r.department || 'Engineering'} • {r.location || 'Remote'}
                 </div>
                 {r.client_name && (
-                  <div className="text-[10.5px] font-bold text-gray-700 mt-1">
+                  <div className="text-[11px] font-bold text-gray-700 mt-1">
                     Company: <span className="text-gray-950">{r.client_name}</span>
-                  </div>
-                )}
-                {r.vendor_name && (
-                  <div className="text-[10.5px] text-indigo-700 font-semibold">
-                    Vendor Partner: {r.vendor_name}
                   </div>
                 )}
               </div>
 
-              <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
-                <span className="text-[10px] font-mono text-gray-400 font-bold">{r.salary_range || '$120k-$150k'}</span>
+              <div className="mt-3 pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-gray-500 font-bold">{r.salary_range || '$120k-$150k'}</span>
                 <button
                   type="button"
                   onClick={() => onSendMessage(`Show candidates under vendor ${r.vendor_name || 'all'}`)}
-                  className="px-2.5 py-1 rounded-xl bg-gray-950 hover:bg-black text-white text-[10.5px] font-bold cursor-pointer transition shadow-2xs"
+                  className="px-2.5 py-1 rounded-lg bg-gray-950 hover:bg-black text-white text-[10px] font-bold cursor-pointer transition shadow-xs hover:scale-102 active:scale-95"
                 >
                   Candidates
                 </button>
@@ -1317,7 +1556,7 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2 gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center shadow-md shrink-0">
             <Users size={18} />
           </div>
           <div>
@@ -1325,7 +1564,7 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
               <h3 className="text-sm font-extrabold text-gray-950 tracking-tight">
                 {vendorName ? `Candidates Submitted by ${vendorName}` : 'Candidate Submissions Directory'}
               </h3>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-800 border border-emerald-300/80 uppercase">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200 uppercase">
                 {candList.length} SUBMISSIONS
               </span>
             </div>
@@ -1346,7 +1585,7 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
             <button
               type="button"
               onClick={() => setFilterStatus('shortlisted')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'shortlisted' ? 'bg-emerald-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-emerald-800'
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'shortlisted' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               Shortlisted
@@ -1354,7 +1593,7 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
             <button
               type="button"
               onClick={() => setFilterStatus('interviewing')}
-              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'interviewing' ? 'bg-indigo-600 text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-indigo-800'
+              className={`px-2.5 py-1 rounded-lg cursor-pointer text-[11px] transition ${filterStatus === 'interviewing' ? 'bg-black text-white shadow-xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
             >
               Interviewing
@@ -1381,55 +1620,52 @@ function CandidatesConsoleWidget({ candidates = [], vendorName = '', onSendMessa
       </div>
 
       {/* Candidates Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[440px] overflow-y-auto pr-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {filteredCands.map((c, i) => (
-          <div key={c.candidate_id || c.id || i} className="p-3.5 rounded-2xl bg-white border border-gray-200 hover:border-black transition-all shadow-2xs flex flex-col justify-between">
+          <div key={c.candidate_id || c.id || i} className="p-2.5 rounded-xl bg-white border border-gray-200 hover:border-black transition-all shadow-2xs flex flex-col justify-between text-xs">
             <div>
-              <div className="flex items-center justify-between gap-2 mb-1.5">
-                <span className="px-2 py-0.5 rounded-lg text-[9px] font-black uppercase bg-emerald-50 text-emerald-800 border border-emerald-200">
+              <div className="flex items-center justify-between gap-1.5 mb-1">
+                <span className="px-2 py-0.5 rounded-md text-[8.5px] font-black uppercase bg-gray-100 text-gray-900 border border-gray-200">
                   {c.status || 'Shortlisted'}
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#FCFEED] text-gray-900 border border-[#D8F929]">
+                <span className="px-2 py-0.5 rounded-full text-[9.5px] font-black bg-black text-white border border-black">
                   {c.match_score || '94% Match'}
                 </span>
               </div>
 
-              <h4 className="text-xs sm:text-sm font-extrabold text-gray-950 leading-snug">{c.name}</h4>
-              <div className="text-[11px] text-gray-500 font-medium truncate mt-0.5">{c.email}</div>
-              <div className="text-[10.5px] font-bold text-gray-800 mt-1 truncate">
+              <h4 className="text-xs font-extrabold text-gray-950 leading-tight truncate">{c.name}</h4>
+              <div className="text-[10px] text-gray-500 font-medium truncate mt-0.5">{c.email}</div>
+              <div className="text-[9.5px] font-bold text-gray-800 mt-0.5 truncate">
                 Req: {c.requisition_title || 'Senior Full Stack Engineer'}
-              </div>
-              <div className="text-[10px] text-indigo-700 font-semibold mt-0.5">
-                Vendor: {c.vendor_name || 'Vendorqueue'}
               </div>
             </div>
 
-            <div className="mt-3 pt-2 border-t border-gray-100 flex items-center justify-between gap-2">
+            <div className="mt-1.5 pt-1.5 border-t border-gray-100 flex items-center justify-between gap-1.5">
               <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={() => onCopy(c.email, c.email)}
-                  className="p-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-600 transition cursor-pointer"
+                  className="p-1 rounded-lg bg-gray-100 hover:bg-black hover:text-white text-gray-600 transition cursor-pointer"
                   title="Copy Candidate Email"
                 >
-                  <Copy size={12} />
+                  <Copy size={11} />
                 </button>
                 <button
                   type="button"
                   onClick={() => onSendMessage(`I WOULD LIKE TO SEE THE RESUME OF ${c.name}`)}
-                  className="px-2.5 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-[10.5px] font-bold transition cursor-pointer flex items-center gap-1"
+                  className="px-2 py-0.5 rounded-lg bg-gray-100 hover:bg-black hover:text-white text-gray-900 border border-gray-200 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
                   title="View full candidate resume and evaluation profile"
                 >
-                  <FileText size={12} />
-                  <span>View Resume</span>
+                  <FileText size={11} />
+                  <span>Resume</span>
                 </button>
               </div>
               <button
                 type="button"
                 onClick={() => onSendMessage(`Schedule interview for ${c.name}`)}
-                className="px-2.5 py-1 rounded-xl bg-black hover:bg-gray-800 text-white text-[10.5px] font-bold transition shadow-2xs cursor-pointer"
+                className="px-2 py-0.5 rounded-lg bg-black hover:bg-gray-800 text-white text-[10px] font-bold transition shadow-2xs cursor-pointer"
               >
-                Schedule Interview
+                Schedule
               </button>
             </div>
           </div>
@@ -1445,12 +1681,12 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
 
   if (data.status === 'not_found' || !data.candidate_name) {
     return (
-      <div className="w-full text-left font-sans p-6 rounded-3xl bg-rose-50/60 border border-rose-200 text-center space-y-3">
-        <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center mx-auto">
+      <div className="w-full text-left font-sans p-6 rounded-3xl bg-gray-50 border border-gray-200 text-center space-y-3">
+        <div className="w-12 h-12 rounded-2xl bg-gray-100 text-gray-700 flex items-center justify-center mx-auto">
           <FileText size={24} />
         </div>
-        <h4 className="text-sm font-extrabold text-rose-950">Candidate Resume Not Found</h4>
-        <p className="text-xs text-rose-700 font-medium max-w-md mx-auto">
+        <h4 className="text-sm font-extrabold text-gray-950">Candidate Resume Not Found</h4>
+        <p className="text-xs text-gray-600 font-medium max-w-md mx-auto">
           {data.message || `No candidate resume or submission record found for '${data.candidate_identifier || 'specified candidate'}'.`}
         </p>
         <button
@@ -1519,30 +1755,30 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-900 to-black text-white flex items-center justify-center shadow-md shrink-0">
+          <div className="w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center shadow-md shrink-0">
             <FileText size={20} />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-base font-black text-gray-950 tracking-tight">{candidate_name}</h3>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-[#FCFEED] text-gray-950 border border-[#D8F929]">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-black text-white border border-black">
                 {match_score} Match
               </span>
             </div>
             <p className="text-[11px] text-gray-500 font-medium">
-              {title} • <span className="text-indigo-700 font-bold">Vendor: {vendor_name}</span>
+              {title} • <span className="text-gray-900 font-bold">Vendor: {vendor_name}</span>
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-900 border border-emerald-200 uppercase">
+          <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200 uppercase">
             {candidate_status}
           </span>
           <button
             type="button"
             onClick={handleDownloadPDF}
-            className="px-3.5 py-1.5 rounded-xl bg-purple-950 hover:bg-black text-white text-[11px] font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white text-[11px] font-extrabold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
             title="Download candidate resume document"
           >
             <Download size={13} />
@@ -1558,7 +1794,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
             type="button"
             onClick={() => setActiveTab('pdf')}
             className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${activeTab === 'pdf'
-              ? 'bg-black text-[#D8F929] shadow-xs'
+              ? 'bg-black text-white shadow-xs'
               : 'text-gray-600 hover:text-black'
               }`}
           >
@@ -1570,7 +1806,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
             type="button"
             onClick={() => setActiveTab('summary')}
             className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${activeTab === 'summary'
-              ? 'bg-black text-[#D8F929] shadow-xs'
+              ? 'bg-black text-white shadow-xs'
               : 'text-gray-600 hover:text-black'
               }`}
           >
@@ -1582,7 +1818,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
             type="button"
             onClick={() => setActiveTab('text')}
             className={`px-3 py-1.5 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center gap-1.5 ${activeTab === 'text'
-              ? 'bg-black text-[#D8F929] shadow-xs'
+              ? 'bg-black text-white shadow-xs'
               : 'text-gray-600 hover:text-black'
               }`}
           >
@@ -1596,7 +1832,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
             href={pdfDataUrl}
             target="_blank"
             rel="noreferrer"
-            className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-extrabold transition flex items-center gap-1 cursor-pointer"
+            className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-900 border border-gray-200 text-xs font-extrabold transition flex items-center gap-1 cursor-pointer"
           >
             <ExternalLink size={13} />
             <span className="hidden sm:inline">Open PDF in New Window</span>
@@ -1611,11 +1847,11 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
             <div className="w-full rounded-3xl overflow-hidden border border-gray-300 shadow-xl bg-gray-950 text-white space-y-0">
               <div className="flex items-center justify-between px-4 py-2.5 bg-gray-900 border-b border-gray-800">
                 <div className="flex items-center gap-2">
-                  <FileText size={16} className="text-[#D8F929]" />
+                  <FileText size={16} className="text-white" />
                   <span className="text-xs font-black text-white tracking-wide">
                     Live PDF Document ({filename || `${candidate_name.replace(/\s+/g, '_')}_Resume.pdf`})
                   </span>
-                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase">
+                  <span className="px-2 py-0.5 rounded-full text-[9.5px] font-extrabold bg-white/10 text-white border border-white/20 uppercase">
                     Interactive Viewer Active
                   </span>
                 </div>
@@ -1624,7 +1860,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
                     href={pdfDataUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-[#D8F929] text-[11px] font-bold transition flex items-center gap-1.5"
+                    className="px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-[11px] font-bold transition flex items-center gap-1.5"
                   >
                     <ExternalLink size={13} />
                     <span>Open Full Tab</span>
@@ -1632,7 +1868,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
                   <button
                     type="button"
                     onClick={handleDownloadPDF}
-                    className="px-3.5 py-1.5 rounded-xl bg-[#D8F929] hover:bg-[#c6e822] text-gray-950 text-[11px] font-black transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+                    className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-200 text-black text-[11px] font-black transition flex items-center gap-1.5 cursor-pointer shadow-sm"
                   >
                     <Download size={13} />
                     <span>Download PDF</span>
@@ -1649,13 +1885,13 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
               </div>
             </div>
           ) : (
-            <div className="p-6 rounded-3xl bg-amber-50 border border-amber-200 text-center space-y-2">
-              <AlertTriangle size={24} className="text-amber-600 mx-auto" />
-              <h4 className="text-sm font-extrabold text-amber-950">PDF Document Stream Unavailable</h4>
-              <p className="text-xs text-amber-800">
+            <div className="p-6 rounded-3xl bg-gray-50 border border-gray-200 text-center space-y-2">
+              <AlertTriangle size={24} className="text-gray-900 mx-auto" />
+              <h4 className="text-sm font-extrabold text-gray-950">PDF Document Stream Unavailable</h4>
+              <p className="text-xs text-gray-600">
                 Raw PDF binary file is not attached for this record. Showing parsed text document instead:
               </p>
-              <div className="max-h-64 overflow-y-auto font-mono text-[11px] text-gray-800 text-left leading-relaxed whitespace-pre-wrap p-3 bg-white rounded-2xl border border-amber-200 mt-2">
+              <div className="max-h-64 overflow-y-auto font-mono text-[11px] text-gray-800 text-left leading-relaxed whitespace-pre-wrap p-3 bg-white rounded-2xl border border-gray-200 mt-2">
                 {resume_text}
               </div>
             </div>
@@ -1692,18 +1928,18 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
 
             <div>
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Evaluation Score</span>
-              <span className="font-extrabold text-purple-700 block mt-0.5">{recommendation}</span>
+              <span className="font-extrabold text-gray-900 block mt-0.5">{recommendation}</span>
             </div>
           </div>
 
           {/* AI Executive Summary Card */}
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/70 to-indigo-50/30 border border-purple-200/80 shadow-2xs space-y-2">
+          <div className="p-4 rounded-2xl bg-gray-50 border border-gray-200 shadow-2xs space-y-2">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-purple-900 font-extrabold text-xs">
-                <Sparkles size={14} className="text-purple-600 animate-pulse" />
+              <div className="flex items-center gap-1.5 text-gray-950 font-extrabold text-xs">
+                <Sparkles size={14} className="text-gray-900" />
                 <span>AI Executive Evaluation Summary</span>
               </div>
-              <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full border border-purple-200">
+              <span className="text-[10px] font-bold text-gray-800 bg-gray-100 px-2 py-0.5 rounded-full border border-gray-200">
                 Automated Profile Fit
               </span>
             </div>
@@ -1720,7 +1956,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
               {matched_skills.map((skill, idx) => (
                 <span
                   key={idx}
-                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-emerald-50 text-emerald-900 border border-emerald-200 shadow-2xs"
+                  className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-gray-100 text-gray-900 border border-gray-200 shadow-2xs"
                 >
                   ✓ {skill}
                 </span>
@@ -1743,7 +1979,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
         <div className="p-4 rounded-2xl bg-gray-950 text-gray-100 border border-gray-800 space-y-2 shadow-md">
           <div className="flex items-center justify-between border-b border-gray-800 pb-2">
             <div className="flex items-center gap-2">
-              <FileText size={15} className="text-[#D8F929]" />
+              <FileText size={15} className="text-white" />
               <span className="text-xs font-extrabold text-white">Parsed Plain Text Document</span>
               <span className="text-[10px] text-gray-400 font-mono">({filename || 'Resume.pdf'})</span>
             </div>
@@ -1762,7 +1998,7 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
           onClick={() => onSendMessage(`Schedule candidate interview for ${candidate_name}`)}
           className="px-5 py-2.5 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs font-extrabold shadow-sm transition cursor-pointer flex items-center gap-2 hover:scale-102"
         >
-          <Calendar size={14} className="text-[#D8F929]" />
+          <Calendar size={14} className="text-white" />
           <span>Schedule Interview</span>
         </button>
       </div>
@@ -1770,9 +2006,406 @@ function CandidateResumeWidget({ data = {}, onSendMessage, onCopy }) {
   );
 }
 
-/* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
-/* ── 10.8 Super Admin Statistical Analytics Dashboard Widget ──────────────── */
-function StatisticalDashboardWidget({ onSendMessage, onClose }) {
+/* ── 10.7 Company Admin Widgets (Hiring Managers, Invites, Interviews) ─────── */
+function HiringManagersConsoleWidget({ managers = [], companyName = 'Company', onSendMessage, onCopy }) {
+  const [searchTerm, setSearchTerm] = useState('');
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return managers;
+    const q = searchTerm.toLowerCase();
+    return managers.filter(m => (m.name || '').toLowerCase().includes(q) || (m.email || '').toLowerCase().includes(q) || (m.department || '').toLowerCase().includes(q));
+  }, [managers, searchTerm]);
+
+  return (
+    <div className="w-full text-left font-sans space-y-3">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+        <div className="flex items-center gap-2">
+          <Users size={18} className="text-gray-950" />
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-950">{companyName} Hiring Managers & Leads</h3>
+            <p className="text-[11px] text-gray-500">Departmental managers authorized to review candidates</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200">
+            {managers.length} Active Leads
+          </span>
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('Invite a new hiring manager to our company')}
+            className="px-2.5 py-1 rounded-xl bg-black text-white hover:bg-gray-900 font-bold text-[10px] shadow-2xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
+          >
+            <Plus size={10} />
+            Invite Lead
+          </button>
+        </div>
+      </div>
+
+      {/* Quick Search */}
+      <div className="relative">
+        <Search size={12} className="absolute left-3 top-2.5 text-gray-400" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Filter by name, department, or email..."
+          className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-white/80 border border-gray-200 text-xs text-gray-900 placeholder:text-gray-400 focus:outline-none focus:border-black"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {filtered.map((m, i) => (
+          <div key={m.id || i} className="p-3 rounded-2xl bg-white border border-gray-200 flex flex-col justify-between text-xs shadow-2xs hover:border-black transition-all group">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-extrabold text-gray-950 truncate group-hover:text-black">{m.name}</div>
+                <div className="text-[11px] text-gray-500 truncate">{m.email}</div>
+                <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[9.5px] font-semibold">
+                    {m.department || 'Engineering'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-800 border border-gray-200 text-[9px] font-bold">
+                    {m.status || 'Active'}
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => onCopy && onCopy(m.email, m.email)}
+                className="p-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-600 transition-colors cursor-pointer shrink-0"
+                title="Copy Email"
+              >
+                <Copy size={12} />
+              </button>
+            </div>
+            <div className="mt-2.5 pt-2 border-t border-gray-100 flex items-center justify-between">
+              <span className="text-[10px] text-gray-400 font-mono">Role: {m.role || 'Hiring Manager'}</span>
+              <button
+                type="button"
+                onClick={() => onSendMessage && onSendMessage(`Show active requisitions and candidate pipeline for ${m.name}`)}
+                className="text-[10.5px] font-bold text-gray-900 hover:text-black transition flex items-center gap-0.5 cursor-pointer"
+              >
+                Pipeline <ChevronRight size={11} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CompanyProfileWidget({ profile = {}, companyName = 'Company', onSendMessage }) {
+  const stack = Array.isArray(profile.tech_stack)
+    ? profile.tech_stack
+    : (typeof profile.tech_stack === 'string' ? profile.tech_stack.split(',').map((s) => s.trim()) : ['React', 'Python', 'AWS', 'Kubernetes']);
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+        <div className="flex items-center gap-2">
+          <Building2 size={18} className="text-gray-950" />
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-950">{profile.name || companyName} Organization Profile</h3>
+            <p className="text-[11px] text-gray-500">Verified enterprise details & technical infrastructure</p>
+          </div>
+        </div>
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-800 border border-gray-200 uppercase">
+          Verified Enterprise
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+        <div className="p-3 rounded-2xl bg-white/70 border border-white/90 shadow-2xs">
+          <div className="text-[10px] font-bold text-gray-400 uppercase">Industry</div>
+          <div className="text-xs font-black text-gray-900 mt-1 truncate">{profile.industry || 'Technology Services'}</div>
+        </div>
+        <div className="p-3 rounded-2xl bg-white/70 border border-white/90 shadow-2xs">
+          <div className="text-[10px] font-bold text-gray-400 uppercase">Location</div>
+          <div className="text-xs font-black text-gray-900 mt-1 truncate">{profile.location || 'Bengaluru / Global'}</div>
+        </div>
+        <div className="p-3 rounded-2xl bg-white/70 border border-white/90 shadow-2xs">
+          <div className="text-[10px] font-bold text-gray-400 uppercase">Enterprise Size</div>
+          <div className="text-xs font-black text-gray-900 mt-1 truncate">{profile.company_size || '1,000+ employees'}</div>
+        </div>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-white/80 border border-white/95 shadow-sm space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-extrabold text-gray-950">About Organization</h4>
+          {profile.website && (
+            <a
+              href={profile.website}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] font-bold text-gray-900 hover:text-black flex items-center gap-1"
+            >
+              <span>{profile.website.replace(/^https?:\/\//, '')}</span>
+              <ExternalLink size={11} />
+            </a>
+          )}
+        </div>
+        <p className="text-xs text-gray-700 leading-relaxed font-medium">
+          {profile.about || `${companyName} is an enterprise organization managing digital transformations and specialized engineering pipelines.`}
+        </p>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-white/80 border border-white/95 shadow-sm space-y-2.5">
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-extrabold text-gray-950">Technology Stack & Platforms</h4>
+          <span className="text-[10px] text-gray-400 font-semibold">{stack.length} Core Technologies</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {stack.map((tech, idx) => (
+            <span
+              key={idx}
+              className="px-2.5 py-1 rounded-xl text-[11px] font-bold bg-white border border-gray-200 text-gray-800 shadow-3xs"
+            >
+              ⚡ {tech}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-2.5 rounded-xl bg-white/60 border border-white/80 shadow-3xs flex items-center justify-between gap-2">
+        <span className="text-[11px] text-gray-600 font-medium">Want to explore our active roles or team?</span>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('Show our active job requisitions')}
+            className="px-2.5 py-1 rounded-lg bg-black text-white hover:bg-gray-800 font-bold text-[10px] transition cursor-pointer"
+          >
+            Requisitions
+          </button>
+          <button
+            type="button"
+            onClick={() => onSendMessage && onSendMessage('List all hiring managers in our company')}
+            className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-gray-800 hover:text-black font-bold text-[10px] transition cursor-pointer"
+          >
+            Hiring Managers
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DraftInviteHiringManagerWidget({ draft = {}, onSendMessage }) {
+  const [formData, setFormData] = useState({
+    name: draft.name || 'Marcus Vance',
+    email: draft.email || 'm.vance@company.com',
+    department: draft.department || 'Cloud & Infra Engineering',
+  });
+
+  useEffect(() => {
+    if (draft) {
+      setFormData({
+        name: draft.name || '',
+        email: draft.email || '',
+        department: draft.department || 'Engineering'
+      });
+    }
+  }, [draft]);
+
+  const handleExecute = () => {
+    if (!formData.name.trim() || !formData.email.trim()) return;
+    onSendMessage(`CONFIRM_EXECUTE_INVITE: name="${formData.name.trim()}", email="${formData.email.trim()}", department="${formData.department.trim()}"`);
+  };
+
+  return (
+    <div className="w-full text-left font-sans space-y-4">
+      <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+        <div className="flex items-center gap-2">
+          <Users size={18} className="text-gray-950" />
+          <div>
+            <h3 className="text-sm font-extrabold text-gray-950">Invite Hiring Manager</h3>
+            <p className="text-[11px] text-gray-500">Provision portal access and departmental requisition privileges</p>
+          </div>
+        </div>
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200">
+          Invitation Draft
+        </span>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-3 text-xs">
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 mb-1">Full Name</label>
+          <input
+            type="text"
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="e.g. Marcus Vance"
+            className="w-full px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold focus:outline-none focus:border-black"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 mb-1">Corporate Email Address</label>
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            placeholder="e.g. m.vance@company.com"
+            className="w-full px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold focus:outline-none focus:border-black"
+          />
+        </div>
+
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 mb-1">Department</label>
+          <input
+            type="text"
+            value={formData.department}
+            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+            placeholder="e.g. Cloud & Infra Engineering"
+            className="w-full px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-semibold focus:outline-none focus:border-black"
+          />
+        </div>
+
+        <div className="pt-2 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleExecute}
+            className="flex-1 py-2 rounded-xl bg-black text-white hover:bg-gray-800 font-extrabold text-xs shadow-md cursor-pointer transition hover:scale-101 flex items-center justify-center gap-1.5"
+          >
+            <CheckCircle2 size={13} />
+            Confirm & Send Invitation
+          </button>
+          <button
+            type="button"
+            onClick={() => onSendMessage('Cancel hiring manager invitation')}
+            className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs cursor-pointer transition"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InviteHiringManagerSuccessWidget({ data = {}, onSendMessage, onCopy }) {
+  return (
+    <div className="w-full text-left font-sans space-y-4 animate-in fade-in duration-300">
+      <div className="p-4 rounded-3xl bg-gray-50 border border-gray-200 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center shrink-0 shadow-sm">
+          <CheckCircle2 size={20} />
+        </div>
+        <div>
+          <h3 className="text-sm font-extrabold text-gray-950">Hiring Manager Provisioned</h3>
+          <p className="text-[11px] text-gray-600 font-medium">Access credentials generated and invitation ready</p>
+        </div>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-2.5 text-xs">
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Name:</span>
+          <span className="font-extrabold text-gray-900">{data.name}</span>
+        </div>
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Email:</span>
+          <div className="flex items-center gap-1.5">
+            <span className="font-bold text-gray-900">{data.email}</span>
+            <button
+              type="button"
+              onClick={() => onCopy && onCopy(data.email, data.email)}
+              className="p-1 rounded-lg bg-gray-100 hover:bg-black hover:text-white transition text-gray-600"
+            >
+              <Copy size={11} />
+            </button>
+          </div>
+        </div>
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Department:</span>
+          <span className="font-semibold text-gray-700">{data.department || 'Engineering'}</span>
+        </div>
+        <div className="flex justify-between items-center py-1">
+          <span className="text-gray-400 font-medium">Role:</span>
+          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-800 font-bold text-[10px]">Hiring Manager</span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onSendMessage && onSendMessage('List all hiring managers')}
+        className="w-full py-2 rounded-xl bg-gray-900 hover:bg-black text-white font-bold text-xs transition cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+      >
+        <Users size={12} />
+        View All Hiring Managers
+      </button>
+    </div>
+  );
+}
+
+function InterviewScheduledWidget({ data = {}, onSendMessage, onCopy }) {
+  return (
+    <div className="w-full text-left font-sans space-y-4 animate-in fade-in duration-300">
+      <div className="p-4 rounded-3xl bg-gray-50 border border-gray-200 flex items-center gap-3">
+        <div className="w-10 h-10 rounded-2xl bg-black text-white flex items-center justify-center shrink-0 shadow-sm">
+          <Calendar size={20} />
+        </div>
+        <div>
+          <h3 className="text-sm font-extrabold text-gray-950">Interview Scheduled</h3>
+          <p className="text-[11px] text-gray-600 font-medium">Candidate calendar invite and virtual room ready</p>
+        </div>
+      </div>
+
+      <div className="p-4 rounded-2xl bg-white border border-gray-200 shadow-sm space-y-2.5 text-xs">
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Candidate:</span>
+          <span className="font-extrabold text-gray-900">{data.candidate_name}</span>
+        </div>
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Interview Round:</span>
+          <span className="font-bold text-gray-900">{data.round || 'Technical Round'}</span>
+        </div>
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Scheduled Time:</span>
+          <span className="font-bold text-gray-900">{data.scheduled_time}</span>
+        </div>
+        <div className="flex justify-between items-center py-1 border-b border-gray-100">
+          <span className="text-gray-400 font-medium">Interviewer:</span>
+          <span className="font-semibold text-gray-700">{data.interviewer || 'Hiring Manager'}</span>
+        </div>
+        {data.meeting_link && (
+          <div className="flex justify-between items-center py-1">
+            <span className="text-gray-400 font-medium">Meeting Room:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[10px] text-gray-500 truncate max-w-[160px]">{data.meeting_link}</span>
+              <button
+                type="button"
+                onClick={() => onCopy && onCopy(data.meeting_link, data.meeting_link)}
+                className="p-1 rounded-lg bg-gray-100 hover:bg-black hover:text-white transition text-gray-600"
+                title="Copy Link"
+              >
+                <Copy size={11} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onSendMessage && onSendMessage(`Show profile dossier for ${data.candidate_name}`)}
+          className="flex-1 py-2 rounded-xl bg-gray-900 hover:bg-black text-white font-bold text-xs transition cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+        >
+          <UserCheck size={12} />
+          Candidate Profile
+        </button>
+        <button
+          type="button"
+          onClick={() => onSendMessage && onSendMessage('Show shortlisted candidates')}
+          className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs cursor-pointer transition"
+        >
+          Candidate Pool
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ── 10.8 Statistical Analytics Dashboard Widget (SuperAdmin & CompanyAdmin) ── */
+function StatisticalDashboardWidget({ isCompanyAdmin = false, companyName = 'Company', onSendMessage, onClose }) {
   const [stats, setStats] = useState({
     total_companies: 0,
     buyer_companies: 0,
@@ -1783,15 +2416,24 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
     super_admins: 0,
     clients: [],
     consultancies: [],
-    platform_activities: []
+    platform_activities: [],
+    total_hiring_managers: 0,
+    total_directors: 0,
+    total_requisitions: 0,
+    live_requisitions: 0,
+    draft_requisitions: 0,
+    shortlisted_candidates: 0,
+    hiring_managers: [],
+    requisitions: []
   });
   const [isLoading, setIsLoading] = useState(false);
 
   const fetchLiveStats = async () => {
     try {
       setIsLoading(true);
-      const res = await request('/api/superadmin/agent/stats');
-      if (res && res.status === 'success') {
+      const endpoint = isCompanyAdmin ? '/api/company-admin/agent/stats' : '/api/superadmin/agent/stats';
+      const res = await request(endpoint);
+      if (res && (res.status === 'success' || res.total_hiring_managers !== undefined || res.total_companies !== undefined)) {
         setStats(res);
       }
     } catch (err) {
@@ -1803,14 +2445,189 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
 
   useEffect(() => {
     fetchLiveStats();
-  }, []);
+  }, [isCompanyAdmin]);
+
+  if (isCompanyAdmin) {
+    const managersList = stats.hiring_managers || [];
+    return (
+      <div className="w-full text-left font-sans space-y-2.5 animate-in fade-in duration-200">
+        {/* Live DB Status Bar */}
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-gray-900 animate-pulse"></span>
+            <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+              {companyName} Admin Management Console
+            </span>
+            <span className="text-[9.5px] text-gray-400 font-mono">
+              ({stats.total_hiring_managers || managersList.length} Leads · {stats.live_requisitions || 0} Live Requisitions)
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchLiveStats}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold text-gray-600 hover:text-gray-950 bg-white/70 hover:bg-white border border-white/90 shadow-2xs transition cursor-pointer active:scale-95"
+            title="Refresh Live Data"
+          >
+            <RefreshCw size={9} className={isLoading ? 'animate-spin text-black' : ''} />
+            <span>{isLoading ? 'Syncing...' : 'Sync'}</span>
+          </button>
+        </div>
+
+        {/* Company Admin Key Metrics */}
+        <div className="grid grid-cols-3 gap-2">
+          <div className="p-3 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-black/5 text-gray-950 flex items-center justify-center shrink-0">
+                <Users size={14} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xl font-black text-gray-950 leading-none">{stats.total_hiring_managers || managersList.length || 0}</div>
+                <div className="text-[10px] font-bold text-gray-500 mt-0.5 truncate">Hiring Leads</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-black/5 text-gray-950 flex items-center justify-center shrink-0">
+                <Briefcase size={14} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xl font-black text-gray-950 leading-none">{stats.live_requisitions || stats.total_requisitions || 0}</div>
+                <div className="text-[10px] font-bold text-gray-500 mt-0.5 truncate">Active Roles</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-black/5 text-gray-950 flex items-center justify-center shrink-0">
+                <UserCheck size={14} />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xl font-black text-gray-950 leading-none">{stats.shortlisted_candidates || 0}</div>
+                <div className="text-[10px] font-bold text-gray-500 mt-0.5 truncate">Shortlisted</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Directory & Quick Lists */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Hiring Managers Card */}
+          <div className="p-3 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-black/[0.04]">
+              <div className="flex items-center gap-1.5">
+                <Users size={12} className="text-gray-950" />
+                <h4 className="text-[11.5px] font-extrabold text-gray-950">Hiring Managers</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSendMessage && onSendMessage('Invite a new hiring manager to our company')}
+                className="text-[9.5px] font-bold text-gray-900 hover:text-black transition"
+              >
+                + Invite
+              </button>
+            </div>
+
+            <div className="space-y-1.5">
+              {managersList.length > 0 ? (
+                managersList.slice(0, 4).map((m, i) => (
+                  <div
+                    key={m.id || i}
+                    onClick={() => onSendMessage && onSendMessage(`Show requisitions and pipeline for ${m.name}`)}
+                    className="p-2 rounded-lg bg-white/60 hover:bg-white/90 border border-white/80 shadow-3xs transition cursor-pointer group"
+                  >
+                    <div className="font-bold text-gray-900 text-xs group-hover:text-black truncate">{m.name}</div>
+                    <div className="text-[9.5px] text-gray-400 mt-0.5 truncate">{m.department || 'Engineering'}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-2 text-xs text-gray-400 font-medium">No managers listed</div>
+              )}
+            </div>
+          </div>
+
+          {/* Hiring Operations Card */}
+          <div className="p-3 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 shadow-2xs space-y-2">
+            <div className="flex items-center justify-between pb-1 border-b border-black/[0.04]">
+              <div className="flex items-center gap-1.5">
+                <Briefcase size={12} className="text-gray-950" />
+                <h4 className="text-[11.5px] font-extrabold text-gray-950">Quick Navigation</h4>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <div
+                onClick={() => onSendMessage && onSendMessage('Show our active job requisitions')}
+                className="p-2 rounded-lg bg-white/60 hover:bg-white/90 border border-white/80 shadow-3xs transition cursor-pointer group flex items-center justify-between"
+              >
+                <div className="font-bold text-gray-900 text-xs group-hover:text-black">Job Requisitions</div>
+                <ChevronRight size={12} className="text-gray-400 group-hover:text-black" />
+              </div>
+
+              <div
+                onClick={() => onSendMessage && onSendMessage('List shortlisted candidates across open positions')}
+                className="p-2 rounded-lg bg-white/60 hover:bg-white/90 border border-white/80 shadow-3xs transition cursor-pointer group flex items-center justify-between"
+              >
+                <div className="font-bold text-gray-900 text-xs group-hover:text-black">Candidate Pool</div>
+                <ChevronRight size={12} className="text-gray-400 group-hover:text-black" />
+              </div>
+
+              <div
+                onClick={() => onSendMessage && onSendMessage('Show company profile and verified details')}
+                className="p-2 rounded-lg bg-white/60 hover:bg-white/90 border border-white/80 shadow-3xs transition cursor-pointer group flex items-center justify-between"
+              >
+                <div className="font-bold text-gray-900 text-xs group-hover:text-black">Company Profile</div>
+                <ChevronRight size={12} className="text-gray-400 group-hover:text-black" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Company Admin Quick Actions & Controls */}
+        <div className="p-2.5 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 shadow-2xs flex flex-wrap items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1.5">
+            <Sparkles size={13} className="text-gray-950" />
+            <span className="text-[11px] font-bold text-gray-900">Admin Actions</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => onSendMessage && onSendMessage('Invite a new hiring manager to our company')}
+              className="px-2.5 py-1 rounded-full bg-white/70 hover:bg-white border border-white/90 text-gray-800 font-bold text-[10px] shadow-3xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
+            >
+              <Plus size={10} />
+              Invite Manager
+            </button>
+            <button
+              type="button"
+              onClick={() => onSendMessage && onSendMessage('Draft a new job requisition')}
+              className="px-2.5 py-1 rounded-full bg-white/70 hover:bg-white border border-white/90 text-gray-800 font-bold text-[10px] shadow-3xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
+            >
+              <Plus size={10} />
+              New Requisition
+            </button>
+            <button
+              type="button"
+              onClick={() => onSendMessage && onSendMessage('List all hiring managers in our company')}
+              className="px-2.5 py-1 rounded-full bg-black text-white hover:bg-gray-800 font-bold text-[10px] shadow-3xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
+            >
+              👥 Managers
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full text-left font-sans space-y-2.5 animate-in fade-in duration-200">
       {/* Live DB Status Bar */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="w-1.5 h-1.5 rounded-full bg-gray-900 animate-pulse"></span>
           <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
             Super Admin Platform Console
           </span>
@@ -1825,14 +2642,14 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
           className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-bold text-gray-600 hover:text-gray-950 bg-white/70 hover:bg-white border border-white/90 shadow-2xs transition cursor-pointer active:scale-95"
           title="Refresh Live Data"
         >
-          <RefreshCw size={9} className={isLoading ? 'animate-spin text-emerald-600' : ''} />
+          <RefreshCw size={9} className={isLoading ? 'animate-spin text-black' : ''} />
           <span>{isLoading ? 'Syncing...' : 'Sync'}</span>
         </button>
       </div>
 
       {/* Super Admin Metric - Total Companies Only */}
       <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-2xs hover:shadow-xs transition flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-600 flex items-center justify-center border border-cyan-300/40 shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-black/5 text-gray-950 flex items-center justify-center border border-gray-200 shrink-0">
           <Building2 size={18} />
         </div>
         <div className="min-w-0 flex-1">
@@ -1849,7 +2666,7 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
         {/* Buyer Companies (Clients) */}
         <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm space-y-2">
           <div className="flex items-center gap-1.5">
-            <Building2 size={12} className="text-indigo-600" />
+            <Building2 size={12} className="text-gray-950" />
             <h4 className="text-[11.5px] font-extrabold text-gray-950">Buyer Companies</h4>
           </div>
 
@@ -1876,7 +2693,7 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
         {/* Vendor Consultancies (Vendors) */}
         <div className="p-3 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm space-y-2">
           <div className="flex items-center gap-1.5">
-            <Layers size={12} className="text-amber-600" />
+            <Layers size={12} className="text-gray-950" />
             <h4 className="text-[11.5px] font-extrabold text-gray-950">Vendor Consultancies</h4>
           </div>
 
@@ -1921,13 +2738,13 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-6 h-6 rounded-lg bg-gray-100 text-gray-700 flex items-center justify-center shrink-0">
                     {act.type === 'buyer' ? (
-                      <Building2 size={11} className="text-indigo-600" />
+                      <Building2 size={11} className="text-gray-950" />
                     ) : act.type === 'vendor' ? (
-                      <Layers size={11} className="text-amber-600" />
+                      <Layers size={11} className="text-gray-950" />
                     ) : act.type === 'admin' ? (
-                      <ShieldCheck size={11} className="text-emerald-600" />
+                      <ShieldCheck size={11} className="text-gray-950" />
                     ) : (
-                      <Users size={11} className="text-purple-600" />
+                      <Users size={11} className="text-gray-950" />
                     )}
                   </div>
                   <div className="min-w-0">
@@ -1936,14 +2753,7 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
                   </div>
                 </div>
 
-                <span
-                  className={`px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 ${act.tone === 'green'
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : act.tone === 'blue'
-                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                        : 'bg-purple-50 text-purple-700 border-purple-200'
-                    }`}
-                >
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold border shrink-0 bg-gray-100 text-gray-900 border-gray-200">
                   {act.badge}
                 </span>
               </div>
@@ -1957,7 +2767,7 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
       {/* Super Admin Quick Actions & Controls */}
       <div className="p-2.5 rounded-2xl bg-white/80 backdrop-blur-xl border border-white/95 shadow-sm flex flex-wrap items-center justify-between gap-1.5">
         <div className="flex items-center gap-1.5">
-          <Sparkles size={13} className="text-cyan-600" />
+          <Sparkles size={13} className="text-gray-950" />
           <span className="text-[11px] font-bold text-gray-900">Admin Actions</span>
         </div>
         <div className="flex items-center gap-1 flex-wrap">
@@ -1980,7 +2790,7 @@ function StatisticalDashboardWidget({ onSendMessage, onClose }) {
           <button
             type="button"
             onClick={() => onSendMessage && onSendMessage('List and audit all administrator accounts across tenants')}
-            className="px-2.5 py-1 rounded-xl bg-[#111417] text-[#D8F929] hover:bg-black font-bold text-[10px] shadow-2xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
+            className="px-2.5 py-1 rounded-xl bg-black text-white hover:bg-gray-800 font-bold text-[10px] shadow-2xs cursor-pointer transition hover:scale-102 flex items-center gap-1"
           >
             👥 Admin Accounts
           </button>
@@ -1999,13 +2809,13 @@ function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
     <div className="w-full text-left font-sans space-y-4">
       <div className="flex items-center justify-between border-b border-gray-100 pb-2">
         <div className="flex items-center gap-2">
-          <ShieldCheck size={18} className="text-emerald-600" />
+          <ShieldCheck size={18} className="text-gray-950" />
           <div>
             <h3 className="text-sm font-extrabold text-gray-950">Super Admin King DB Overview</h3>
             <p className="text-[11px] text-gray-500">Unrestricted full database controller inspection</p>
           </div>
         </div>
-        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-500/10 text-emerald-800 border border-emerald-300 uppercase">
+        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gray-100 text-gray-900 border border-gray-200 uppercase">
           FULL ACCESS
         </span>
       </div>
@@ -2016,22 +2826,22 @@ function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
           <div className="text-xl font-black text-gray-950 mt-0.5">{summary.total_tenants || tenants.length || 0}</div>
         </div>
         <div className="p-3 rounded-2xl glass-card text-center">
-          <div className="text-[9.5px] font-black text-emerald-700 uppercase">Users</div>
-          <div className="text-xl font-black text-emerald-800 mt-0.5">{summary.total_user_accounts || 34}</div>
+          <div className="text-[9.5px] font-black text-gray-400 uppercase">Users</div>
+          <div className="text-xl font-black text-gray-950 mt-0.5">{summary.total_user_accounts || 34}</div>
         </div>
         <div className="p-3 rounded-2xl glass-card text-center">
-          <div className="text-[9.5px] font-black text-indigo-700 uppercase">Requisitions</div>
-          <div className="text-xl font-black text-indigo-800 mt-0.5">{summary.sql_requisitions || summary.mongo_requisitions || 26}</div>
+          <div className="text-[9.5px] font-black text-gray-400 uppercase">Requisitions</div>
+          <div className="text-xl font-black text-gray-950 mt-0.5">{summary.sql_requisitions || summary.mongo_requisitions || 26}</div>
         </div>
         <div className="p-3 rounded-2xl glass-card text-center">
-          <div className="text-[9.5px] font-black text-amber-700 uppercase">Candidates</div>
-          <div className="text-xl font-black text-amber-800 mt-0.5">{summary.candidate_submissions || 24}</div>
+          <div className="text-[9.5px] font-black text-gray-400 uppercase">Candidates</div>
+          <div className="text-xl font-black text-gray-950 mt-0.5">{summary.candidate_submissions || 24}</div>
         </div>
       </div>
 
       <div className="space-y-2">
         <h4 className="text-xs font-extrabold text-gray-950">Active Platform Tenants ({tenants.length})</h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[260px] overflow-y-auto pr-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {tenants.map((t, i) => (
             <div key={i} className="p-2.5 rounded-xl bg-white/50 hover:bg-white/85 backdrop-blur-sm border border-white/80 text-xs flex items-center justify-between shadow-2xs transition">
               <span className="font-bold text-gray-900 truncate">{t.name}</span>
@@ -2041,6 +2851,279 @@ function DatabaseControllerWidget({ dbData = {}, onSendMessage, onCopy }) {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── 11.5 POPUP MODAL TAB COMPONENT & INTERACTIVE WIDGET CONTAINER ────────────── */
+
+function InteractiveWidgetContainer({ activeWidget, companyName, isCompanyAdmin, onSendMessage, copyToClipboard, onClose }) {
+  if (!activeWidget) return null;
+
+  return (
+    <div className="space-y-4">
+      {activeWidget.type === 'hiring_managers_console' && (
+        <HiringManagersConsoleWidget
+          managers={Array.isArray(activeWidget.data) ? activeWidget.data : (activeWidget.data?.hiring_managers || activeWidget.data?.managers || [])}
+          companyName={companyName}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'company_admin_stats' && (
+        <StatisticalDashboardWidget
+          isCompanyAdmin={isCompanyAdmin}
+          companyName={companyName}
+          onSendMessage={onSendMessage}
+          onClose={onClose}
+        />
+      )}
+
+      {activeWidget.type === 'company_profile' && (
+        <CompanyProfileWidget
+          profile={activeWidget.data}
+          companyName={companyName}
+          onSendMessage={onSendMessage}
+        />
+      )}
+
+      {activeWidget.type === 'draft_invite_hm' && (
+        <DraftInviteHiringManagerWidget
+          draft={activeWidget.data}
+          onSendMessage={onSendMessage}
+        />
+      )}
+
+      {activeWidget.type === 'invite_hm_success' && (
+        <InviteHiringManagerSuccessWidget
+          data={activeWidget.data}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'interview_scheduled' && (
+        <InterviewScheduledWidget
+          data={activeWidget.data}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'password_change_confirm' && (
+        <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={onSendMessage} />
+      )}
+
+      {activeWidget.type === 'password_updated_success' && (
+        <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={onSendMessage} />
+      )}
+
+      {activeWidget.type === 'tenant_delete_confirm' && (
+        <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={onSendMessage} />
+      )}
+
+      {activeWidget.type === 'tenant_deleted_success' && (
+        <TenantDeletedSuccessWidget data={activeWidget.data} onSendMessage={onSendMessage} />
+      )}
+
+      {activeWidget.type === 'tenant_console' && (
+        <TenantConsoleWidget
+          tenants={activeWidget.data}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'admin_accounts' && (
+        <AdminAccountsWidget users={activeWidget.data} onCopy={copyToClipboard} />
+      )}
+
+      {activeWidget.type === 'platform_metrics' && (
+        <PlatformMetricsWidget stats={activeWidget.data} onSendMessage={onSendMessage} />
+      )}
+
+      {activeWidget.type === 'onboard_draft' && (
+        <OnboardingDraftPreviewWidget draft={activeWidget.data} onSendMessage={onSendMessage} />
+      )}
+
+      {activeWidget.type === 'onboard_success' && (
+        <OnboardingSuccessWidget
+          data={activeWidget.data}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'requisitions_console' && (
+        <RequisitionsConsoleWidget
+          requisitions={activeWidget.data}
+          vendorName={activeWidget.vendorName}
+          onSendMessage={onSendMessage}
+        />
+      )}
+
+      {activeWidget.type === 'candidates_console' && (
+        <CandidatesConsoleWidget
+          candidates={activeWidget.data}
+          vendorName={activeWidget.vendorName}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'candidate_resume' && (
+        <CandidateResumeWidget
+          data={activeWidget.data}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {activeWidget.type === 'database_controller' && (
+        <DatabaseControllerWidget
+          dbData={activeWidget.data}
+          onSendMessage={onSendMessage}
+          onCopy={copyToClipboard}
+        />
+      )}
+
+      {(![
+        'hiring_managers_console', 'draft_invite_hm', 'invite_hm_success',
+        'interview_scheduled', 'password_change_confirm', 'password_updated_success',
+        'tenant_delete_confirm', 'tenant_deleted_success', 'tenant_console',
+        'admin_accounts', 'platform_metrics', 'onboard_draft', 'onboard_success',
+        'requisitions_console', 'candidates_console', 'candidate_resume', 'database_controller',
+        'company_admin_stats', 'company_profile'
+      ].includes(activeWidget.type)) && (
+        <StatisticalDashboardWidget
+          isCompanyAdmin={isCompanyAdmin}
+          companyName={companyName}
+          onSendMessage={onSendMessage}
+          onClose={onClose}
+        />
+      )}
+    </div>
+  );
+}
+
+function TableModalTab({ modalData, onClose, onSendMessage, copyToClipboard, isCompanyAdmin, companyName, splitIndex = 0, totalTabs = 1 }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  if (!modalData) return null;
+
+  const { title, headers = [], rows = [], rawMarkdown, widget } = modalData;
+  const hasTableData = rows && rows.length > 0;
+  const hasWidgetData = Boolean(widget);
+
+  const filteredRows = hasTableData ? rows : [];
+
+  return (
+    <div className="w-full flex flex-col overflow-hidden rounded-2xl border border-white/80 shadow-[0_8px_32px_0_rgba(0,0,0,0.06),inset_0_1px_1px_rgba(255,255,255,0.9)] bg-white/50 backdrop-blur-2xl text-gray-900 font-sans max-h-full">
+      {/* Top Header Bar - Seamlessly joined into the top of the card */}
+      <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-b border-black/[0.04] bg-white/30 backdrop-blur-md shrink-0 gap-3">
+        <h3 className="font-extrabold text-xs sm:text-[13.5px] text-gray-950 tracking-tight flex-1 truncate">
+          {title || 'Enterprise Data View'}
+        </h3>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-7 h-7 rounded-full bg-white/60 hover:bg-white/90 border border-white/80 backdrop-blur-md flex items-center justify-center text-gray-600 hover:text-black transition cursor-pointer shadow-3xs active:scale-95 shrink-0"
+          title={totalTabs > 1 ? `Close Tab ${splitIndex + 1}` : 'Close Popup Tab (ESC)'}
+        >
+          <X size={14} />
+        </button>
+      </div>
+
+      {/* Content Body - Contained directly inside the single unified card */}
+      <div className="flex-1 overflow-auto scrollbar-thin min-h-0">
+        {!hasTableData && hasWidgetData ? (
+          <div className="p-4 sm:p-5 animate-in fade-in duration-150">
+            <InteractiveWidgetContainer
+              activeWidget={widget}
+              companyName={companyName}
+              isCompanyAdmin={isCompanyAdmin}
+              onSendMessage={(txt) => onSendMessage(txt)}
+              copyToClipboard={copyToClipboard}
+              onClose={onClose}
+            />
+          </div>
+        ) : (
+          <div className="overflow-x-auto w-full">
+            <table className="w-full text-left border-collapse text-xs sm:text-[13px]">
+              <thead>
+                <tr className="bg-white/60 backdrop-blur-md border-b border-black/[0.04] sticky top-0 z-10">
+                  {headers.map((h, i) => (
+                    <th
+                      key={i}
+                      className="py-3 px-4 font-extrabold text-gray-700 uppercase tracking-wider text-[11px] whitespace-nowrap"
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-black/[0.03]">
+                {filteredRows.length > 0 ? (
+                  filteredRows.map((row, rIdx) => (
+                    <tr key={rIdx} className="hover:bg-white/50 transition-colors">
+                      {row.map((cell, cIdx) => {
+                        const val = String(cell || '').trim();
+                        const valLower = val.toLowerCase();
+                        const isStatus = ['active', 'shortlisted', 'accepted', 'screened', 'rejected', 'pending', 'published'].includes(valLower);
+                        const isEmail = val.includes('@') && !val.includes(' ');
+
+                        return (
+                          <td key={cIdx} className="py-3.5 px-4 font-medium text-gray-800 align-middle">
+                            {isStatus ? (
+                              <span
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                                  valLower === 'active' || valLower === 'accepted' || valLower === 'published'
+                                    ? 'bg-black text-white border border-black shadow-xs'
+                                    : 'bg-white/60 backdrop-blur-md text-gray-800 border border-white/80 shadow-3xs'
+                                }`}
+                              >
+                                <span className={`w-1.5 h-1.5 rounded-full ${
+                                  valLower === 'active' || valLower === 'accepted' || valLower === 'published'
+                                    ? 'bg-white'
+                                    : 'bg-gray-400'
+                                }`} />
+                                {val}
+                              </span>
+                            ) : isEmail ? (
+                              <a
+                                href={`mailto:${val}`}
+                                className="text-gray-900 hover:text-black hover:underline font-mono text-xs"
+                              >
+                                {val}
+                              </a>
+                            ) : (
+                              <span>{val || '—'}</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={headers.length || 1} className="py-8 text-center text-gray-400 font-medium text-xs">
+                      No matching records found{searchQuery ? ` for "${searchQuery}"` : ''}.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2078,12 +3161,12 @@ const Q3_REVIEW_CONVERSATION = [
   }
 ];
 
-export const getInitialWelcomeMessage = (userName) => {
+export const getInitialWelcomeMessage = (userName, isCompanyAdmin = false, companyName = 'Company') => {
   const name = (() => {
-    if (!userName || typeof userName !== 'string') return 'Alex';
+    if (!userName || typeof userName !== 'string') return isCompanyAdmin ? 'Admin' : 'Alex';
     const trimmed = userName.trim();
     if (trimmed.toLowerCase().includes('super') || trimmed.toLowerCase() === 'admin') {
-      return 'Alex';
+      return isCompanyAdmin ? 'Admin' : 'Alex';
     }
     return trimmed.split(' ')[0];
   })();
@@ -2093,6 +3176,8 @@ export const getInitialWelcomeMessage = (userName) => {
     role: 'assistant',
     isWelcome: true,
     userName: name,
+    isCompanyAdmin,
+    companyName,
     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
   };
 };
@@ -2100,15 +3185,39 @@ export const getInitialWelcomeMessage = (userName) => {
 export default function AiChat() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Initial focused state: Full-width Chat, analytics hidden until first AI interaction
+  const isCompanyAdmin = user?.role === 'Admin' || location.pathname.includes('/admin/chat');
+  const companyName = user?.tenant_name || user?.company_name || 'TCS';
+
+  // Initial focused state: Full-width Chat, popup tab modal supporting dual/split multi-view comparison
+  const [modalTabs, setModalTabs] = useState([]);
+  const modalTabsRef = useRef(modalTabs);
+  useEffect(() => {
+    modalTabsRef.current = modalTabs;
+  }, [modalTabs]);
+  const tableModal = modalTabs.length > 0 ? modalTabs[0] : null;
+
+  const setTableModal = (val) => {
+    if (!val) {
+      setModalTabs([]);
+    } else if (Array.isArray(val)) {
+      setModalTabs(val);
+    } else {
+      setModalTabs([val]);
+    }
+  };
+
+  const handleCloseTab = (indexToClose) => {
+    setModalTabs((prev) => prev.filter((_, idx) => idx !== indexToClose));
+  };
   const [isAnalyticsVisible, setIsAnalyticsVisible] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const settingsMenuRef = useRef(null);
   const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
   const sessionDropdownRef = useRef(null);
 
-  const [messages, setMessages] = useState(() => [getInitialWelcomeMessage(user?.name)]);
+  const [messages, setMessages] = useState(() => [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)]);
   const [activeTab, setActiveTab] = useState('new'); // 'new' | 'review'
 
   const [input, setInput] = useState('');
@@ -2116,9 +3225,10 @@ export default function AiChat() {
 
   const handleNewChat = () => {
     setActiveTab('new');
-    setMessages([getInitialWelcomeMessage(user?.name)]);
+    setMessages([getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)]);
     setIsAnalyticsVisible(false);
     setActiveWidget(null);
+    setTableModal(null);
     setInput('');
   };
 
@@ -2130,15 +3240,15 @@ export default function AiChat() {
 
   // Sync initial welcome message if user profile loads asynchronously
   useEffect(() => {
-    if (user?.name) {
+    if (user?.name || user?.role) {
       setMessages((prev) => {
         if (prev.length === 1 && prev[0]?.id === 'welcome-init') {
-          return [getInitialWelcomeMessage(user.name)];
+          return [getInitialWelcomeMessage(user.name, isCompanyAdmin, companyName)];
         }
         return prev;
       });
     }
-  }, [user?.name]);
+  }, [user?.name, user?.role, isCompanyAdmin, companyName]);
 
   // Click-outside listener for Voice & AI Settings popover
   useEffect(() => {
@@ -2202,8 +3312,18 @@ export default function AiChat() {
   const audioPlayerRef = useRef(null);
   const chatContainerRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const projectedEndRef = useRef(null);
+  const fileInputRef = useRef(null);
   const ttsPlaybackIdRef = useRef(0);
   const vadStartupTimeRef = useRef(0);
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      showToast(`Attached: ${file.name}`);
+      setInput((prev) => (prev ? `${prev} [Attached: ${file.name}]` : `Analyze file: ${file.name}`));
+    }
+  };
 
   // Pipecat WebRTC Streaming Refs
   const webrtcPeerRef = useRef(null);
@@ -2821,15 +3941,43 @@ export default function AiChat() {
     const deleteAction = executedActions.find((a) => a.tool === 'delete_tenant');
     const passwordDraftAction = executedActions.find((a) => a.tool === 'draft_password_change');
     const passwordUpdatedAction = executedActions.find((a) => a.tool === 'update_user_password');
-    const reqAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions' || a.tool === 'list_requisitions_by_vendor');
+    const reqAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions' || a.tool === 'list_requisitions_by_vendor' || a.tool === 'list_company_requisitions' || a.tool === 'create_hiring_requisition');
     const candidateAction = executedActions.find((a) => a.tool === 'list_shortlisted_candidates' || a.tool === 'list_candidates_by_vendor');
-    const candidateResumeAction = executedActions.find((a) => a.tool === 'get_candidate_resume');
+    const candidateResumeAction = executedActions.find((a) => a.tool === 'get_candidate_resume' || a.tool === 'get_candidate_profile_details');
     const dbQueryAction = executedActions.find((a) => a.tool === 'query_database_all_entities');
+    const hmAction = executedActions.find((a) => a.tool === 'list_company_hiring_managers');
+    const hmDirectorsAction = executedActions.find((a) => a.tool === 'list_company_directors');
+    const draftInviteHmAction = executedActions.find((a) => a.tool === 'draft_invite_hiring_manager');
+    const createHmAction = executedActions.find((a) => a.tool === 'create_company_hiring_manager');
+    const scheduleInterviewAction = executedActions.find((a) => a.tool === 'schedule_candidate_interview');
+    const companyStatsAction = executedActions.find((a) => a.tool === 'get_company_admin_stats');
+    const companyProfileAction = executedActions.find((a) => a.tool === 'get_company_profile');
 
     let widgetObj = null;
     let textNotice = cleanReplyText(replyContent) || 'Action executed successfully.';
 
-    if (passwordDraftAction) {
+    if (draftInviteHmAction) {
+      widgetObj = { type: 'draft_invite_hm', title: 'Hiring Manager Invitation Preview', data: draftInviteHmAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `I have prepared the hiring manager invitation card on your right Output Display panel.`;
+    } else if (createHmAction) {
+      widgetObj = { type: 'invite_hm_success', title: 'Hiring Manager Provisioned', data: createHmAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `Hiring Manager has been provisioned successfully.`;
+    } else if (scheduleInterviewAction) {
+      widgetObj = { type: 'interview_scheduled', title: 'Candidate Interview Scheduled', data: scheduleInterviewAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `Candidate interview has been scheduled.`;
+    } else if (hmAction) {
+      widgetObj = { type: 'hiring_managers_console', title: `${companyName} Hiring Managers Directory`, data: hmAction.result || [] };
+      textNotice = cleanReplyText(replyContent) || `All registered hiring managers are now displayed on the right Output Display panel.`;
+    } else if (hmDirectorsAction) {
+      widgetObj = { type: 'hiring_managers_console', title: `${companyName} Leadership & Directors`, data: hmDirectorsAction.result || [] };
+      textNotice = cleanReplyText(replyContent) || `Company directors are now displayed on the right Output Display panel.`;
+    } else if (companyProfileAction) {
+      widgetObj = { type: 'company_profile', title: `${companyName} Organization Profile`, data: companyProfileAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `Organization profile and details are now displayed on the right Output Display panel.`;
+    } else if (companyStatsAction) {
+      widgetObj = { type: 'company_admin_stats', title: `${companyName} Real-Time Hiring Metrics`, data: companyStatsAction.result || {} };
+      textNotice = cleanReplyText(replyContent) || `Real-time hiring metrics are now displayed on the right panel.`;
+    } else if (passwordDraftAction) {
       widgetObj = { type: 'password_change_confirm', title: 'Password Change Confirmation', data: passwordDraftAction.result || {} };
       textNotice = cleanReplyText(replyContent) || `I have prepared the password change confirmation card on your right Output Display panel.`;
     } else if (passwordUpdatedAction) {
@@ -3069,15 +4217,20 @@ export default function AiChat() {
     setLoading(true);
 
     try {
-      // Connect to real backend SuperAdmin Agent API
-      const res = await request('/api/superadmin/agent/chat', {
+      // Connect to real backend Agent API (SuperAdmin or Company Admin)
+      const chatEndpoint = isCompanyAdmin ? '/api/company-admin/agent/chat' : '/api/superadmin/agent/chat';
+      const userRole = isCompanyAdmin ? 'Admin' : (user?.role || 'Super Admin');
+      const userName = user?.name || (isCompanyAdmin ? `${companyName} Admin` : 'Super Admin');
+
+      const res = await request(chatEndpoint, {
         method: 'POST',
         token,
         body: {
           prompt: textToSend,
           history: newMessages.map((m) => ({ role: m.role, content: m.content || m.heading || '' })),
-          user_role: user?.role || 'Super Admin',
-          user_name: user?.name || 'Super Admin'
+          user_role: userRole,
+          user_name: userName,
+          tenant_id: user?.tenant_id || ''
         }
       });
 
@@ -3087,34 +4240,84 @@ export default function AiChat() {
       // Update right-hand Output Display widgets using shared dispatcher
       const { widgetObj, textNotice } = dispatchExecutedActionWidgets(executedActions, replyContent);
 
+      // Check if user input is a greeting or general pleasantry
+      const isGreeting = /^(hi|hello|hey|good\s*(morning|afternoon|evening|day)|greetings|howdy|yo|hi\s*there|hello\s*there|sup|thanks|thank\s*you|ok|okay)[\s!.,?]*$/i.test(textToSend.trim());
+
+      // Separate structured table data from natural language text for the popup modal tab
+      const { cleanText, tableInfo } = extractTableFromText(textNotice);
+      let modalPayload = null;
+
+      if (!isGreeting) {
+        modalPayload = tableInfo
+          ? { ...tableInfo, widget: widgetObj }
+          : widgetObj
+          ? { title: widgetObj.title || 'Interactive Management Console', widget: widgetObj }
+          : null;
+      }
+
+      const isComparative = isComparativeMultiViewPrompt(textToSend);
+
+      // If comparative prompt was requested and we don't have a structured table yet, extract key data points from the reply
+      if (!isGreeting && !modalPayload && isComparative && cleanReplyText(textNotice).trim().length > 10) {
+        modalPayload = {
+          title: cleanReplyText(textNotice).split('\n')[0].replace(/^#+\s*/, '').replace(/\*+/g, '').slice(0, 110) || 'Requested Comparison Data',
+          headers: ['DATA POINT', 'DETAILS'],
+          rows: [
+            ['**Information**', cleanReplyText(textNotice)]
+          ],
+          rawMarkdown: textNotice
+        };
+      }
+
+      // Automatically open or compare tabs side-by-side (NEVER for greetings or casual remarks)
+      if (modalPayload && !isGreeting) {
+        setModalTabs((currentTabs) => {
+          const prevTabs = (currentTabs && currentTabs.length > 0)
+            ? currentTabs
+            : (modalTabsRef.current && modalTabsRef.current.length > 0 ? modalTabsRef.current : []);
+
+          if (isComparative && prevTabs.length > 0) {
+            // Minimize current tab to left, open new tab on right!
+            return [prevTabs[0], modalPayload];
+          } else {
+            // Standard single tab view
+            return [modalPayload];
+          }
+        });
+
+        const hadExisting = modalTabs.length > 0 || (modalTabsRef.current && modalTabsRef.current.length > 0);
+        if (isComparative && hadExisting) {
+          showToast('⚡ Dual Split View: Current tab minimized to left, new data opened at right');
+        }
+      }
+
       setMessages((prev) => [
         ...prev,
         {
           id: `ai-${Date.now()}`,
           role: 'assistant',
-          title: 'Enterprise Business AI',
+          title: isCompanyAdmin ? `${companyName} Admin AI` : 'Enterprise Business AI',
           badge: 'Synced',
           heading: widgetObj && widgetObj.type.includes('draft') ? 'Action Preview Required:' : '',
           points: [
             {
               label: '',
-              text: textNotice
+              text: cleanText || textNotice
             }
           ],
-          executedActions: executedActions,
+          tableInfo: isGreeting ? null : modalPayload,
+          executedActions: isGreeting ? [] : executedActions,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         }
       ]);
 
-      // Reveal analytics smoothly with macOS-style window animation!
-      setIsAnalyticsVisible(true);
-
       // Automatically synthesize Sarvam AI voice output ONLY when using speech or hands-free options!
+      const speechToPlay = cleanText || textNotice;
       if (voiceEnabled && (isContinuousVAD || isVoiceInput)) {
         if (continuousModeRef.current) {
           setVadStatus('ai_speaking');
         }
-        playSarvamAudio(textNotice, () => {
+        playSarvamAudio(speechToPlay, () => {
           if (continuousModeRef.current) {
             resumeVADListening(1200);
           } else {
@@ -3209,336 +4412,372 @@ export default function AiChat() {
     };
   }, []);
 
+  // Auto-scroll chat conversation when messages change or popup modal opens
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (tableModal) {
+      projectedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, tableModal]);
+
+  // Render message stream shared between the fixed background chat and foreground projected chatting card
+  const renderMessagesContent = (scrollRef, isProjected = false) => {
+    const visibleMsgs = messages.filter((msg) => !msg.isWelcome && msg.id !== 'welcome-init');
+
+    if (visibleMsgs.length === 0 && isProjected) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-3 text-gray-500 my-auto">
+          <div className="w-8 h-8 rounded-full bg-black/5 text-gray-950 flex items-center justify-center mb-1.5 shadow-2xs">
+            <Sparkles size={16} />
+          </div>
+          <p className="text-xs font-bold text-gray-800">Ask questions about the data above</p>
+          <p className="text-[11px] text-gray-400 mt-0.5">Type below or speak to filter, inspect, or analyze records continuously</p>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        {visibleMsgs.map((msg) => {
+          if (msg.role === 'user') {
+            return (
+              <div key={msg.id} className="flex justify-end items-start py-1 px-1 my-1 mt-1.5 animate-in fade-in duration-200">
+                <div className="bg-[#111417] text-white text-[12.5px] sm:text-[13px] font-medium leading-relaxed max-w-[80%] px-3.5 py-2 rounded-2xl rounded-tr-xs shadow-2xs">
+                  {msg.content}
+                </div>
+              </div>
+            );
+          }
+
+          const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
+          const { cleanText, tableInfo: dynamicTableInfo } = extractTableFromText(rawText);
+          const effectiveTable = msg.tableInfo || dynamicTableInfo;
+          const displayText = cleanText || rawText;
+
+          return (
+            <div key={msg.id} className="flex items-start gap-2.5 py-1 px-1 my-1 animate-in fade-in duration-200">
+              {/* Assistant Avatar */}
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs mt-0.5">
+                <Sparkles size={14} />
+              </div>
+
+              {/* Message Bubble */}
+              <div className="flex-1 min-w-0 bg-white/80 hover:bg-white/95 backdrop-blur-md border border-black/[0.06] rounded-2xl rounded-tl-xs p-3 sm:p-3.5 shadow-2xs space-y-2">
+                {msg.heading && (
+                  <div className="font-extrabold text-gray-950 text-xs sm:text-[13px] tracking-tight">
+                    {msg.heading}
+                  </div>
+                )}
+
+                {displayText && (
+                  <div
+                    className="chat-markdown-body prose prose-sm max-w-none text-gray-800 font-sans text-xs sm:text-[12.5px] leading-relaxed"
+                    dangerouslySetInnerHTML={{
+                      __html: marked.parse(formatMarkdownContent(displayText))
+                    }}
+                  />
+                )}
+
+                {/* Embedded Preview Summary Card */}
+                {effectiveTable && (
+                  <div className="p-2.5 sm:p-3 rounded-xl bg-white border border-black/[0.08] shadow-3xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition hover:border-black/20">
+                    <div className="min-w-0 space-y-0.5">
+                      <div className="flex items-center gap-1.5 font-extrabold text-xs text-gray-900">
+                        <Table size={13} className="text-gray-900 shrink-0" />
+                        <span className="truncate">{effectiveTable.title || 'Data Records'}</span>
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-black text-white border border-black shrink-0">
+                          {tableModal ? 'Active in Top Tab' : 'Popup Tab'}
+                        </span>
+                      </div>
+                      <div className="text-[10.5px] text-gray-500 font-medium">
+                        {effectiveTable.rows ? `${effectiveTable.rows.length} records available · Click to inspect` : 'Interactive live management console ready'}
+                      </div>
+                    </div>
+
+                    {!isProjected && (
+                      <button
+                        type="button"
+                        onClick={() => setTableModal(effectiveTable)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
+                          tableModal?.title === effectiveTable?.title
+                            ? 'bg-black text-white shadow-xs'
+                            : 'bg-black/5 hover:bg-black text-gray-800 hover:text-white'
+                        }`}
+                      >
+                        <Table size={12} />
+                        <span>{tableModal?.title === effectiveTable?.title ? 'View in Top Tab ↗' : 'View Table ↗'}</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                <div className="text-[10px] text-gray-400 font-mono text-right pt-0.5">
+                  {msg.timestamp || 'Just now'}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {loading && (
+          <div className="flex items-center gap-2.5 py-1.5 px-2 text-xs font-semibold text-gray-700 animate-pulse">
+            <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping"></span>
+            <span>Reviewing enterprise platform data...</span>
+          </div>
+        )}
+        <div ref={scrollRef} />
+      </>
+    );
+  };
+
+  // Render bottom floating capsule dock shared between background and projected chatting card
+  const renderInputDockPill = (isProjected = false) => {
+    return (
+      <div className={`flex-shrink-0 w-full max-w-3xl lg:max-w-4xl xl:max-w-[960px] mx-auto px-2 sm:px-4 ${isProjected ? 'pb-1 pt-1.5' : 'pb-2 pt-2'} relative z-20 mt-auto`}>
+        {/* Sleek Floating Status Pill when Voice Mode or STT is active */}
+        {continuousMode ? (
+          <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold bg-gray-950/90 text-white border border-gray-800/80 shadow-lg backdrop-blur-md">
+              {vadStatus === 'listening' && (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                  </span>
+                  <span className="text-white font-bold text-[11px]">Listening naturally...</span>
+                  <span className="text-gray-400 text-[10px] hidden sm:inline">(Speak anytime or click mic to stop)</span>
+                </>
+              )}
+              {vadStatus === 'user_speaking' && (
+                <>
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+                  </span>
+                  <span className="text-white font-bold text-[11px]">Hearing your voice...</span>
+                  <span className="text-gray-400 text-[10px] hidden sm:inline">(Silero VAD active)</span>
+                </>
+              )}
+              {vadStatus === 'transcribing' && (
+                <>
+                  <RefreshCw size={11} className="animate-spin text-white" />
+                  <span className="text-white font-bold text-[11px]">Processing speech...</span>
+                </>
+              )}
+              {vadStatus === 'ai_speaking' && (
+                <>
+                  <Volume2 size={12} className="animate-bounce text-white" />
+                  <span className="text-white font-bold text-[11px]">Assistant speaking...</span>
+                  <span className="text-gray-400 text-[10px] hidden sm:inline">(Speak to interrupt)</span>
+                </>
+              )}
+              {vadStatus === 'idle' && (
+                <span className="text-gray-400 text-[11px]">Voice standby</span>
+              )}
+
+              {lastSttText && vadStatus !== 'transcribing' && (
+                <span className="text-gray-400 text-[10px] italic truncate max-w-[140px] sm:max-w-[200px] border-l border-gray-700 pl-2">
+                  "{lastSttText}"
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={handleToggleVoiceMode}
+                className="ml-1 p-0.5 rounded-full hover:bg-white/20 text-gray-400 hover:text-white transition cursor-pointer"
+                title="Stop Voice Mode"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+        ) : (lastSttText || isRecording || isTranscribing) && (
+          <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in duration-150">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold bg-black text-white shadow-md">
+              {isRecording && (
+                <>
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping"></span>
+                  <span>Recording audio... speak now</span>
+                </>
+              )}
+              {isTranscribing && (
+                <>
+                  <RefreshCw size={11} className="animate-spin text-white" />
+                  <span>Transcribing spoken audio...</span>
+                </>
+              )}
+              {!isRecording && !isTranscribing && lastSttText && (
+                <>
+                  <span className="text-white">🎙️</span>
+                  <span className="truncate max-w-[260px]">"{lastSttText}"</span>
+                </>
+              )}
+            </span>
+          </div>
+        )}
+
+        {/* Hidden File Input */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileUpload}
+          className="hidden"
+          accept=".pdf,.doc,.docx,.csv,.xlsx,.txt"
+        />
+
+        {/* Floating Pill Capsule Dock */}
+        <div className={`rounded-full pl-2 sm:pl-2.5 pr-1.5 py-1.5 flex items-center gap-2.5 transition-all duration-200 ${
+          isProjected
+            ? 'bg-white shadow-[0_16px_45px_rgba(0,0,0,0.20),0_2px_8px_rgba(0,0,0,0.06)] border border-gray-200/90 ring-1 ring-black/5'
+            : 'bg-white/60 hover:bg-white/80 focus-within:bg-white/95 backdrop-blur-xl border border-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)]'
+        }`}>
+          {/* Attachment Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:text-gray-900 hover:bg-black/5 transition cursor-pointer shrink-0"
+            title="Attach file / document"
+          >
+            <Paperclip size={17} />
+          </button>
+
+          {/* Input Text Box */}
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            placeholder={
+              continuousMode
+                ? vadStatus === 'listening'
+                  ? "🎙️ Conversational voice active (Speak naturally or click mic to stop)..."
+                  : vadStatus === 'user_speaking'
+                    ? "🗣️ Hearing you speak..."
+                    : vadStatus === 'ai_speaking'
+                      ? "🔊 Assistant speaking (Speak to interrupt)..."
+                      : vadStatus === 'transcribing'
+                        ? "⚡ Transcribing spoken audio..."
+                        : "Voice agent active..."
+                : isRecording
+                  ? "🔴 Recording active... Speak now!"
+                  : isTranscribing
+                    ? "⚡ Transcribing spoken audio..."
+                    : isProjected
+                      ? modalTabs.length > 1
+                        ? "Ask a question about data above or compare continuously..."
+                        : "Ask a question about data above or chat continuously..."
+                      : isCompanyAdmin
+                        ? `Ask ${companyName} Admin AI...`
+                        : "Ask SuperAdmin AI..."
+            }
+            className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 placeholder:font-normal font-normal focus:outline-none py-1"
+          />
+
+          {/* Right Controls: Mic + Send */}
+          <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
+            {/* Mic Button: Conversational Full-Duplex Voice Mode Toggle */}
+            {continuousMode ? (
+              <button
+                type="button"
+                onClick={handleToggleVoiceMode}
+                className="relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition shadow-md cursor-pointer hover:scale-105 active:scale-95 group bg-black hover:bg-gray-800 text-white"
+                title="Voice Active — Click to stop conversation"
+              >
+                {vadStatus === 'ai_speaking' ? (
+                  <>
+                    <Volume2 size={16} className="animate-bounce relative z-10 block group-hover:hidden" />
+                    <MicOff size={15} className="relative z-10 hidden group-hover:block" />
+                  </>
+                ) : (
+                  <>
+                    <Radio size={15} className="relative z-10 block group-hover:hidden animate-pulse" />
+                    <MicOff size={15} className="relative z-10 hidden group-hover:block" />
+                  </>
+                )}
+              </button>
+            ) : isRecording ? (
+              <button
+                type="button"
+                onClick={stopRecording}
+                className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-black hover:bg-gray-800 text-white transition shadow-sm animate-pulse flex items-center justify-center cursor-pointer"
+                title="Click to stop recording"
+              >
+                <MicOff size={15} />
+              </button>
+            ) : isTranscribing ? (
+              <button
+                type="button"
+                disabled
+                className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-black text-white flex items-center justify-center shadow-sm"
+                title="Transcribing speech..."
+              >
+                <RefreshCw size={14} className="animate-spin" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleToggleVoiceMode}
+                className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full text-gray-600 hover:text-black hover:bg-black/5 transition flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
+                title="Start Conversational Voice Agent (Click to speak naturally)"
+              >
+                <Mic size={18} />
+              </button>
+            )}
+
+            {/* Send Button: Solid Black Circle with White Send Icon */}
+            <button
+              type="button"
+              disabled={!input.trim() || loading}
+              onClick={() => handleSend()}
+              className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-black hover:bg-gray-800 text-white transition shadow-md disabled:opacity-35 cursor-pointer flex items-center justify-center shrink-0 hover:scale-105 active:scale-95"
+              title="Send message"
+            >
+              {loading ? (
+                <RefreshCw size={13} className="animate-spin text-white" />
+              ) : (
+                <Send size={14} className="ml-0.5" />
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="w-full h-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-none overflow-hidden">
+    <div className="w-full h-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-none overflow-hidden" style={{ minHeight: 'calc(100vh - 84px)' }}>
       {/* Toast Notification */}
       {notification && (
-        <div className="fixed top-5 right-5 z-50 bg-[#111417] text-[#D8F929] border border-gray-800 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-3">
-          <CheckCircle2 size={16} className="text-[#D8F929]" />
+        <div className="fixed top-5 right-5 z-50 bg-black text-white border border-gray-800 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-3">
+          <CheckCircle2 size={16} className="text-white" />
           <span>{notification}</span>
         </div>
       )}
 
-      {/* Main Container with Dual Panels (Rail is smoothly animated in DashboardLayout) */}
-      <div className="w-full h-full flex-1 flex gap-3 md:gap-4 lg:gap-5 items-stretch overflow-hidden relative" data-purpose="main-dashboard-wrapper">
-        {/* Ambient Frosted-Glass Monochromatic Soft Glow Highlights */}
-        <div className="absolute -top-28 -left-20 w-[520px] h-[520px] rounded-full bg-gradient-to-br from-white/40 via-slate-100/20 to-transparent blur-[120px] pointer-events-none -z-0" />
-        <div className="absolute top-[20%] -right-24 w-[560px] h-[560px] rounded-full bg-gradient-to-bl from-white/35 via-gray-100/15 to-transparent blur-[130px] pointer-events-none -z-0" />
-        <div className="absolute -bottom-28 left-[28%] w-[540px] h-[480px] rounded-full bg-gradient-to-tr from-white/30 via-slate-100/15 to-transparent blur-[120px] pointer-events-none -z-0" />
+      {/* Main Container */}
+      <div className="w-full h-full flex-1 flex justify-center items-stretch overflow-hidden relative" data-purpose="main-dashboard-wrapper" style={{ minHeight: 'calc(100vh - 84px)' }}>
 
         {/* ================================================================= */}
-        {/* BEGIN: Main Dual-Panel Content Layout */}
+        {/* BEGIN: Main Focused Chat Layout (Right Panel moved to Popup Tab Modal) */}
         {/* ================================================================= */}
-        <main className="flex-1 flex gap-4 md:gap-5 h-full min-h-0 overflow-hidden w-full relative z-10" data-purpose="main-content-layout">
+        <main className={`flex-1 flex flex-col justify-start items-stretch h-full min-h-0 overflow-hidden w-full relative max-w-[96%] xl:max-w-[94%] 2xl:max-w-[1620px] mx-auto transition-all duration-200 ${
+          modalTabs.length > 0 ? 'z-50' : 'z-10'
+        }`} data-purpose="main-content-layout" style={{ minHeight: 'calc(100vh - 84px)' }}>
 
-          {/* ================================================================= */}
-          {/* LEFT PANEL: PURELY CHAT CONVERSATION WORKSPACE */}
-          {/* ================================================================= */}
+          {/* Background Chat Workspace (Hidden when Table Modal is Open) */}
           <motion.section
-            layout
-            initial={false}
-            animate={{
-              width: isAnalyticsVisible ? '62%' : '100%',
-            }}
-            transition={{
-              duration: 0.6,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-            className="aichat-visionos-panel rounded-[32px] p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden h-full min-h-0 shrink-0 z-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.95)]"
+            layout={false}
+            className={`w-full h-full min-h-0 border rounded-2xl flex flex-col justify-between relative overflow-hidden transition-all duration-300 p-4 sm:p-5 bg-white/40 backdrop-blur-2xl border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] ${
+              modalTabs.length > 0 ? 'hidden' : 'flex'
+            }`}
+            style={{ height: '100%', minHeight: 'calc(100vh - 84px)' }}
             data-purpose="pure-chat-workspace"
           >
-            {/* Continuous Frosted-Glass S-Wave Lines embedded inside the glass */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
-              <svg
-                className="w-full h-full object-cover absolute inset-0"
-                viewBox="0 0 1600 900"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                preserveAspectRatio="none"
-              >
-                <defs>
-                  {/* Gaussian Blur Filters with ample margins to prevent clipping */}
-                  <filter id="frost-blur-ambient" x="-40%" y="-40%" width="180%" height="180%">
-                    <feGaussianBlur stdDeviation="26" />
-                  </filter>
-                  <filter id="frost-blur-broad" x="-30%" y="-30%" width="160%" height="160%">
-                    <feGaussianBlur stdDeviation="15" />
-                  </filter>
-                  <filter id="frost-blur-mid" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="5.5" />
-                  </filter>
-                  <filter id="frost-blur-core" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="1.8" />
-                  </filter>
-
-                  {/* Left Wave Luminous Frost Gradient */}
-                  <linearGradient id="frost-white-left" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-                    <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
-                    <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
-                    <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
-                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                  </linearGradient>
-
-                  {/* Right Wave Luminous Frost Gradient (Mirrored) */}
-                  <linearGradient id="frost-white-right" x1="100%" y1="0%" x2="0%" y2="0%">
-                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-                    <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
-                    <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
-                    <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
-                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                  </linearGradient>
-
-                  {/* Left Ambient Fold Shadow (Soft internal glass refraction depth) */}
-                  <linearGradient id="frost-shadow-left" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
-                    <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
-                    <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
-                    <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
-                    <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                    <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                  </linearGradient>
-
-                  {/* Right Ambient Fold Shadow (Mirrored) */}
-                  <linearGradient id="frost-shadow-right" x1="100%" y1="0%" x2="0%" y2="0%">
-                    <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
-                    <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
-                    <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
-                    <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
-                    <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                    <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                  </linearGradient>
-
-                  {/* Translucent Feathered Veil Body Gradients */}
-                  <linearGradient id="frost-veil-left" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
-                    <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
-                    <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
-                    <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
-                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                  </linearGradient>
-
-                  <linearGradient id="frost-veil-right" x1="100%" y1="0%" x2="0%" y2="0%">
-                    <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
-                    <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
-                    <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
-                    <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
-                    <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                    <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-
-                {/* ============================================================== */}
-                {/* 1. TRANSLUCENT FEATHERED VEILS (Tactile Frosted Glass Volume)  */}
-                {/* ============================================================== */}
-                <path
-                  d="M -30,-30 L 160,-30 C 320,120 400,260 400,440 C 400,620 300,780 140,930 L -30,930 Z"
-                  fill="url(#frost-veil-left)"
-                  filter="url(#frost-blur-ambient)"
-                />
-                <path
-                  d="M 1630,-30 L 1440,-30 C 1280,120 1200,260 1200,440 C 1200,620 1300,780 1460,930 L 1630,930 Z"
-                  fill="url(#frost-veil-right)"
-                  filter="url(#frost-blur-ambient)"
-                />
-
-                {/* ============================================================== */}
-                {/* 2. LEFT FLANK: FLOWING CONTINUOUS S-WAVE LINES                 */}
-                {/* ============================================================== */}
-
-                {/* --- Wave 1: Primary Sweeping S-Curve --- */}
-                {/* Ambient under-ridge shadow */}
-                <path
-                  d="M -30,120 C 140,195 280,265 365,365 C 435,455 385,595 275,715 C 185,815 85,885 -30,935"
-                  stroke="url(#frost-shadow-left)"
-                  strokeWidth="48"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-ambient)"
-                />
-                {/* Broad glowing frosted dispersion */}
-                <path
-                  d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="42"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-broad)"
-                />
-                {/* Mid frosted ribbon */}
-                <path
-                  d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-mid)"
-                />
-                {/* Soft feathered specular core spine */}
-                <path
-                  d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-core)"
-                />
-
-                {/* --- Wave 2: Upper Secondary Flowing Wave --- */}
-                <path
-                  d="M -30,-5 C 120,75 230,155 295,255 C 345,345 315,445 215,535 C 125,615 35,655 -30,685"
-                  stroke="url(#frost-shadow-left)"
-                  strokeWidth="36"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-ambient)"
-                />
-                <path
-                  d="M -30,-10 C 120,70 230,150 290,250 C 340,340 310,440 210,530 C 120,610 30,650 -30,680"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="32"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-broad)"
-                />
-                <path
-                  d="M -30,-10 C 120,70 230,150 290,250 C 340,340 310,440 210,530 C 120,610 30,650 -30,680"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="11"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-mid)"
-                />
-                <path
-                  d="M -30,-10 C 120,70 230,150 290,250 C 340,340 310,440 210,530 C 120,610 30,650 -30,680"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-core)"
-                />
-
-                {/* --- Wave 3: Lower Counter-Wave --- */}
-                <path
-                  d="M -30,465 C 130,515 250,575 315,665 C 365,745 325,835 185,895 C 105,925 25,935 -30,935"
-                  stroke="url(#frost-shadow-left)"
-                  strokeWidth="34"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-ambient)"
-                />
-                <path
-                  d="M -30,460 C 130,510 250,570 310,660 C 360,740 320,830 180,890 C 100,920 20,930 -30,930"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="30"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-broad)"
-                />
-                <path
-                  d="M -30,460 C 130,510 250,570 310,660 C 360,740 320,830 180,890 C 100,920 20,930 -30,930"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-mid)"
-                />
-                <path
-                  d="M -30,460 C 130,510 250,570 310,660 C 360,740 320,830 180,890 C 100,920 20,930 -30,930"
-                  stroke="url(#frost-white-left)"
-                  strokeWidth="2.8"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-core)"
-                />
-
-                {/* ============================================================== */}
-                {/* 3. RIGHT FLANK: MIRRORED CONTINUOUS S-WAVE LINES               */}
-                {/* ============================================================== */}
-
-                {/* --- Wave 1: Primary Sweeping S-Curve (Mirrored) --- */}
-                <path
-                  d="M 1630,120 C 1460,195 1320,265 1235,365 C 1165,455 1215,595 1325,715 C 1415,815 1515,885 1630,935"
-                  stroke="url(#frost-shadow-right)"
-                  strokeWidth="48"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-ambient)"
-                />
-                <path
-                  d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="42"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-broad)"
-                />
-                <path
-                  d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="14"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-mid)"
-                />
-                <path
-                  d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-core)"
-                />
-
-                {/* --- Wave 2: Upper Secondary Flowing Wave (Mirrored) --- */}
-                <path
-                  d="M 1630,-5 C 1480,75 1370,155 1305,255 C 1255,345 1285,445 1385,535 C 1475,615 1565,655 1630,685"
-                  stroke="url(#frost-shadow-right)"
-                  strokeWidth="36"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-ambient)"
-                />
-                <path
-                  d="M 1630,-10 C 1480,70 1370,150 1310,250 C 1260,340 1290,440 1390,530 C 1480,610 1570,650 1630,680"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="32"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-broad)"
-                />
-                <path
-                  d="M 1630,-10 C 1480,70 1370,150 1310,250 C 1260,340 1290,440 1390,530 C 1480,610 1570,650 1630,680"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="11"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-mid)"
-                />
-                <path
-                  d="M 1630,-10 C 1480,70 1370,150 1310,250 C 1260,340 1290,440 1390,530 C 1480,610 1570,650 1630,680"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="3"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-core)"
-                />
-
-                {/* --- Wave 3: Lower Counter-Wave (Mirrored) --- */}
-                <path
-                  d="M 1630,465 C 1470,515 1350,575 1285,665 C 1235,745 1275,835 1415,895 C 1495,925 1575,935 1630,935"
-                  stroke="url(#frost-shadow-right)"
-                  strokeWidth="34"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-ambient)"
-                />
-                <path
-                  d="M 1630,460 C 1470,510 1350,570 1290,660 C 1240,740 1280,830 1420,890 C 1500,920 1580,930 1630,930"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="30"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-broad)"
-                />
-                <path
-                  d="M 1630,460 C 1470,510 1350,570 1290,660 C 1240,740 1280,830 1420,890 C 1500,920 1580,930 1630,930"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-mid)"
-                />
-                <path
-                  d="M 1630,460 C 1470,510 1350,570 1290,660 C 1240,740 1280,830 1420,890 C 1500,920 1580,930 1630,930"
-                  stroke="url(#frost-white-right)"
-                  strokeWidth="2.8"
-                  strokeLinecap="round"
-                  filter="url(#frost-blur-core)"
-                />
-              </svg>
-            </div>
-
             <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
               {/* Top Header Bar matching Image 2 */}
               <div className="flex-shrink-0 flex items-center justify-between gap-3 mb-2 px-1">
@@ -3547,7 +4786,7 @@ export default function AiChat() {
                   <button
                     type="button"
                     onClick={() => setIsSessionDropdownOpen((prev) => !prev)}
-                    className="visionos-header-pill flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold text-gray-800 transition cursor-pointer hover:bg-white active:scale-95 shadow-sm"
+                    className="flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold text-gray-800 bg-white/60 hover:bg-white/90 backdrop-blur-md border border-white/80 shadow-2xs transition cursor-pointer active:scale-95"
                   >
                     <span className="text-gray-950 font-black text-xs leading-none">✦</span>
                     <span className="text-gray-900 font-semibold text-xs tracking-tight">
@@ -3568,14 +4807,14 @@ export default function AiChat() {
                           handleLoadQ3Review();
                           setIsSessionDropdownOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${activeTab === 'review' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${activeTab === 'review' ? 'bg-black text-white' : 'hover:bg-black/5 text-gray-800'
                           }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className={activeTab === 'review' ? 'text-[#D8F929]' : 'text-gray-500'}>✦</span>
+                          <span className={activeTab === 'review' ? 'text-white' : 'text-gray-500'}>✦</span>
                           <span>Q3 Talent & Operations Review</span>
                         </div>
-                        {activeTab === 'review' && <Check size={14} className="text-[#D8F929]" />}
+                        {activeTab === 'review' && <Check size={14} className="text-white" />}
                       </button>
 
                       <button
@@ -3584,14 +4823,14 @@ export default function AiChat() {
                           handleNewChat();
                           setIsSessionDropdownOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${activeTab === 'new' ? 'bg-[#0E1013] text-white' : 'hover:bg-black/5 text-gray-800'
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${activeTab === 'new' ? 'bg-black text-white' : 'hover:bg-black/5 text-gray-800'
                           }`}
                       >
                         <div className="flex items-center gap-2">
                           <Plus size={14} />
                           <span>New Conversation</span>
                         </div>
-                        {activeTab === 'new' && <Check size={14} className="text-[#D8F929]" />}
+                        {activeTab === 'new' && <Check size={14} className="text-white" />}
                       </button>
                     </div>
                   )}
@@ -3604,7 +4843,7 @@ export default function AiChat() {
                     <button
                       type="button"
                       onClick={() => setIsSettingsOpen((prev) => !prev)}
-                      className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${isSettingsOpen ? 'bg-white shadow-sm text-gray-950 ring-2 ring-black/5' : 'text-gray-700'
+                      className={`w-8.5 h-8.5 bg-white/60 hover:bg-white/90 backdrop-blur-md border border-white/80 shadow-2xs rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${isSettingsOpen ? 'bg-white shadow-sm text-gray-950 ring-2 ring-black/5' : 'text-gray-700'
                         }`}
                       title="Voice & AI Settings"
                     >
@@ -3616,7 +4855,7 @@ export default function AiChat() {
                       <div className="absolute right-0 top-full mt-2 w-80 p-4 rounded-2xl glass-card border border-white/90 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95">
                         <div className="flex items-center justify-between pb-3 mb-3 border-b border-black/[0.08]">
                           <div className="flex items-center gap-2">
-                            <SlidersHorizontal size={14} className="text-[#899c08]" />
+                            <SlidersHorizontal size={14} className="text-gray-950" />
                             <span className="text-xs font-black text-gray-950 uppercase tracking-wider">Settings & Output</span>
                           </div>
                           <button
@@ -3644,7 +4883,7 @@ export default function AiChat() {
                                 setIsAnalyticsVisible((prev) => !prev);
                               }}
                               className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${isAnalyticsVisible
-                                ? 'bg-[#111417] text-[#D8F929]'
+                                ? 'bg-black text-white'
                                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                 }`}
                             >
@@ -3656,7 +4895,7 @@ export default function AiChat() {
                           <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 border border-white/80">
                             <div className="space-y-0.5 pr-2">
                               <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
-                                <Radio size={12} className={continuousMode ? 'text-[#899c08] animate-pulse' : 'text-gray-400'} />
+                                <Radio size={12} className={continuousMode ? 'text-gray-950 animate-pulse' : 'text-gray-400'} />
                                 <span>Hands-Free VAD</span>
                               </div>
                               <p className="text-[10px] text-gray-500">Autonomous voice detection</p>
@@ -3678,7 +4917,7 @@ export default function AiChat() {
                                 }
                               }}
                               className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${continuousMode
-                                ? 'bg-[#111417] text-[#D8F929] border border-[#D8F929]'
+                                ? 'bg-black text-white'
                                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                 }`}
                             >
@@ -3690,7 +4929,7 @@ export default function AiChat() {
                           <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/60 border border-white/80">
                             <div className="space-y-0.5 pr-2">
                               <div className="font-extrabold text-gray-900 flex items-center gap-1.5">
-                                {voiceEnabled ? <Volume2 size={13} className="text-emerald-600" /> : <VolumeX size={13} className="text-gray-400" />}
+                                {voiceEnabled ? <Volume2 size={13} className="text-gray-950" /> : <VolumeX size={13} className="text-gray-400" />}
                                 <span>Spoken Voice Output</span>
                               </div>
                               <p className="text-[10px] text-gray-500">Read AI responses aloud</p>
@@ -3703,7 +4942,7 @@ export default function AiChat() {
                                 showToast(nextState ? 'Sarvam Voice TTS Active' : 'Sarvam Voice TTS Muted');
                               }}
                               className={`px-3 py-1 rounded-lg text-[11px] font-black transition cursor-pointer ${voiceEnabled
-                                ? 'bg-emerald-600 text-white shadow-xs'
+                                ? 'bg-black text-white shadow-xs'
                                 : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'
                                 }`}
                             >
@@ -3717,7 +4956,7 @@ export default function AiChat() {
                             <select
                               value={selectedSpeaker}
                               onChange={(e) => setSelectedSpeaker(e.target.value)}
-                              className="w-full bg-white/90 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-900 focus:outline-none focus:ring-1 focus:ring-[#899c08] cursor-pointer"
+                              className="w-full bg-white/90 border border-gray-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-gray-900 focus:outline-none focus:ring-1 focus:ring-black cursor-pointer"
                             >
                               {SARVAM_SPEAKERS.map((s) => (
                                 <option key={s.id} value={s.id}>
@@ -3741,7 +4980,7 @@ export default function AiChat() {
                                   type="button"
                                   onClick={() => setSpeechPace(item.pace)}
                                   className={`py-1 rounded-lg text-[11px] font-bold transition cursor-pointer text-center ${speechPace === item.pace
-                                    ? 'bg-[#111417] text-[#D8F929] border border-[#D8F929]'
+                                    ? 'bg-black text-white'
                                     : 'bg-white/90 text-gray-600 border border-gray-200 hover:bg-gray-50'
                                     }`}
                                 >
@@ -3760,7 +4999,7 @@ export default function AiChat() {
                               disabled={isSyncing}
                               className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-white/80 hover:bg-white text-gray-700 text-[11px] font-bold border border-white/90 shadow-2xs transition cursor-pointer"
                             >
-                              <RefreshCw size={12} className={isSyncing ? 'animate-spin text-[#899c08]' : ''} />
+                              <RefreshCw size={12} className={isSyncing ? 'animate-spin text-black' : ''} />
                               <span>{isSyncing ? 'Syncing...' : 'Sync HRMS'}</span>
                             </button>
                           </div>
@@ -3777,11 +5016,11 @@ export default function AiChat() {
                       setVoiceEnabled(nextState);
                       showToast(nextState ? 'Audio Output Enabled' : 'Audio Output Muted');
                     }}
-                    className={`visionos-circle-btn w-9.5 h-9.5 rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${voiceEnabled ? 'text-gray-900 bg-white/95' : 'text-gray-400'
+                    className={`w-8.5 h-8.5 bg-white/60 hover:bg-white/90 backdrop-blur-md border border-white/80 shadow-2xs rounded-full flex items-center justify-center transition cursor-pointer hover:bg-white hover:scale-105 active:scale-95 ${voiceEnabled ? 'text-gray-900 bg-white/95' : 'text-gray-400'
                       }`}
                     title={voiceEnabled ? 'Mute AI Audio Speech' : 'Enable AI Audio Speech'}
                   >
-                    <AudioLines size={16} className={isPlayingAudio ? 'animate-pulse text-emerald-600' : ''} />
+                    <AudioLines size={16} className={isPlayingAudio ? 'animate-pulse text-black' : ''} />
                   </button>
                 </div>
               </div>
@@ -3806,558 +5045,200 @@ export default function AiChat() {
 
                   {/* Subtitle */}
                   <p className="text-base sm:text-lg font-medium text-gray-600 mt-2">
-                    I’m your Enterprise HR Copilot.
+                    {isCompanyAdmin ? `I’m your ${companyName} Admin AI Copilot.` : "I’m your Enterprise HR Copilot."}
                   </p>
 
                   {/* Suggestion Prompts */}
-                  <p className="text-xs sm:text-sm text-gray-400 mt-3 max-w-md mx-auto leading-relaxed">
-                    Ask anything about{' '}
-                    <span
-                      onClick={() => handleSend('Show me hiring pipeline status and requisition breakdown')}
-                      className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
-                      title="Click to ask about hiring pipeline"
-                    >
-                      hiring pipeline
-                    </span>
-                    ,{' '}
-                    <span
-                      onClick={() => handleSend('Analyze team velocity and productivity metrics')}
-                      className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
-                      title="Click to ask about team velocity"
-                    >
-                      team velocity
-                    </span>
-                    , or{' '}
-                    <span
-                      onClick={() => handleSend('Report on workforce health, attendance, and team status')}
-                      className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
-                      title="Click to ask about workforce health"
-                    >
-                      workforce health
-                    </span>
-                    .
-                  </p>
+                  {isCompanyAdmin ? (
+                    <p className="text-xs sm:text-sm text-gray-400 mt-3 max-w-lg mx-auto leading-relaxed">
+                      Ask anything about{' '}
+                      <span
+                        onClick={() => handleSend('List all hiring managers and HR leads in our company')}
+                        className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                        title="Click to list hiring managers"
+                      >
+                        hiring managers
+                      </span>
+                      ,{' '}
+                      <span
+                        onClick={() => handleSend('Show our active job requisitions and candidate counts')}
+                        className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                        title="Click to inspect requisitions"
+                      >
+                        open requisitions
+                      </span>
+                      , or{' '}
+                      <span
+                        onClick={() => handleSend('Show all shortlisted candidates across open positions')}
+                        className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                        title="Click to view shortlisted candidates"
+                      >
+                        shortlisted candidates
+                      </span>
+                      .
+                    </p>
+                  ) : (
+                    <p className="text-xs sm:text-sm text-gray-400 mt-3 max-w-lg mx-auto leading-relaxed">
+                      Ask anything about{' '}
+                      <span
+                        onClick={() => handleSend('Show me hiring pipeline status and requisition breakdown')}
+                        className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                        title="Click to ask about hiring pipeline"
+                      >
+                        hiring pipeline
+                      </span>
+                      ,{' '}
+                      <span
+                        onClick={() => handleSend('Analyze team velocity and productivity metrics')}
+                        className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                        title="Click to ask about team velocity"
+                      >
+                        team velocity
+                      </span>
+                      , or{' '}
+                      <span
+                        onClick={() => handleSend('Report on workforce health, attendance, and team status')}
+                        className="text-gray-700 font-medium hover:underline cursor-pointer transition-colors"
+                        title="Click to ask about workforce health"
+                      >
+                        workforce health
+                      </span>
+                      .
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div
                   ref={chatContainerRef}
                   className="flex-1 overflow-y-auto min-h-0 pt-8 pb-4 pr-1 space-y-4 scrollbar-thin overscroll-contain"
                 >
-                  {messages
-                    .filter((msg) => !msg.isWelcome && msg.id !== 'welcome-init')
-                    .map((msg) => {
-                      if (msg.role === 'user') {
-                        return (
-                          <div key={msg.id} className="flex justify-end items-start py-1 px-1 my-1 mt-2 animate-in fade-in duration-300">
-                            {/* User Chat Text with high background removed */}
-                            <div className="text-gray-950 font-semibold text-[14px] sm:text-[15px] leading-relaxed max-w-[85%] px-2 py-1">
-                              {msg.content}
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
-
-                      return (
-                        <div key={msg.id} className="flex items-start gap-3 py-2 px-1 my-1 animate-in fade-in duration-300">
-                          {/* AI Profile Photo matching /ai-copilot-avatar.jpg */}
-                          <div className="relative shrink-0 mt-0.5" title="Enterprise AI Copilot">
-                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl overflow-hidden border border-white/90 shadow-sm relative flex items-center justify-center bg-black select-none ring-1 ring-black/5">
-                              <img
-                                src="/ai-copilot-avatar.jpg"
-                                alt="Enterprise AI Copilot"
-                                className="w-full h-full object-cover"
-                              />
-                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#D8F929] rounded-tl border border-white/40"></span>
-                            </div>
-                          </div>
-
-                          {/* Clean, unboxed response text with compact typography */}
-                          <div className="flex-1 min-w-0 text-gray-900 text-[13px] sm:text-[13.5px] leading-relaxed font-normal space-y-1">
-                            {msg.heading && (
-                              <div className="font-extrabold text-gray-950 text-[13.5px] sm:text-[14px] tracking-tight">
-                                {msg.heading}
-                              </div>
-                            )}
-
-                            {rawText && (
-                              <div
-                                className="prose prose-sm max-w-none text-gray-900 font-sans text-[13px] sm:text-[13.5px] leading-relaxed"
-                                dangerouslySetInnerHTML={{
-                                  __html: marked.parse(rawText)
-                                }}
-                              />
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-
-                  {loading && (
-                    <div className="flex items-center gap-3 py-2 px-1 text-xs font-semibold text-gray-700 animate-pulse">
-                      <div className="w-9 h-9 rounded-xl overflow-hidden border border-white/90 shadow-2xs relative flex items-center justify-center bg-black shrink-0">
-                        <img
-                          src="/ai-copilot-avatar.jpg"
-                          alt="AI Copilot"
-                          className="w-full h-full object-cover opacity-85"
-                        />
-                        <span className="absolute bottom-0 right-0 w-2 h-2 bg-[#D8F929] rounded-tl border border-white/40"></span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#899c08] animate-ping"></span>
-                        <span>Reviewing enterprise platform data...</span>
-                      </div>
-                    </div>
-                  )}
-                  <div ref={messagesEndRef} />
+                  {renderMessagesContent(messagesEndRef, false)}
                 </div>
               )}
             </div>
 
-            {/* Bottom Floating Glass Capsule Input Dock matching Image 2 */}
-            <div className="flex-shrink-0 w-full max-w-2xl mx-auto px-2 sm:px-4 pb-2 pt-2 relative z-20 mt-auto">
-              {/* Sleek Floating Status Pill when Voice Mode or STT is active */}
-              {continuousMode ? (
-                <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold bg-gray-950/90 text-white border border-gray-800/80 shadow-lg backdrop-blur-md">
-                    {vadStatus === 'listening' && (
-                      <>
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        <span className="text-emerald-400 font-bold text-[11px]">Listening naturally...</span>
-                        <span className="text-gray-400 text-[10px] hidden sm:inline">(Speak anytime or click mic to stop)</span>
-                      </>
-                    )}
-                    {vadStatus === 'user_speaking' && (
-                      <>
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500"></span>
-                        </span>
-                        <span className="text-blue-300 font-bold text-[11px]">Hearing your voice...</span>
-                        <span className="text-gray-400 text-[10px] hidden sm:inline">(Silero VAD active)</span>
-                      </>
-                    )}
-                    {vadStatus === 'transcribing' && (
-                      <>
-                        <RefreshCw size={11} className="animate-spin text-amber-400" />
-                        <span className="text-amber-300 font-bold text-[11px]">Processing speech...</span>
-                      </>
-                    )}
-                    {vadStatus === 'ai_speaking' && (
-                      <>
-                        <Volume2 size={12} className="animate-bounce text-purple-400" />
-                        <span className="text-purple-300 font-bold text-[11px]">Assistant speaking...</span>
-                        <span className="text-gray-400 text-[10px] hidden sm:inline">(Speak to interrupt)</span>
-                      </>
-                    )}
-                    {vadStatus === 'idle' && (
-                      <span className="text-gray-400 text-[11px]">Voice standby</span>
-                    )}
-
-                    {lastSttText && vadStatus !== 'transcribing' && (
-                      <span className="text-gray-400 text-[10px] italic truncate max-w-[140px] sm:max-w-[200px] border-l border-gray-700 pl-2">
-                        "{lastSttText}"
-                      </span>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleToggleVoiceMode}
-                      className="ml-1 p-0.5 rounded-full hover:bg-white/20 text-gray-400 hover:text-white transition cursor-pointer"
-                      title="Stop Voice Mode"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                </div>
-              ) : (lastSttText || isRecording || isTranscribing) && (
-                <div className="mb-2 flex items-center justify-center gap-2 animate-in fade-in duration-150">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold bg-[#0D0E12] text-white shadow-md">
-                    {isRecording && (
-                      <>
-                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span>
-                        <span>Recording audio... speak now</span>
-                      </>
-                    )}
-                    {isTranscribing && (
-                      <>
-                        <RefreshCw size={11} className="animate-spin text-amber-400" />
-                        <span>Transcribing spoken audio...</span>
-                      </>
-                    )}
-                    {!isRecording && !isTranscribing && lastSttText && (
-                      <>
-                        <span className="text-[#D8F929]">🎙️</span>
-                        <span className="truncate max-w-[260px]">"{lastSttText}"</span>
-                      </>
-                    )}
-                  </span>
-                </div>
-              )}
-
-              {/* Floating Pill Capsule Dock matching Image 2 */}
-              <div className="visionos-input-capsule rounded-full pl-4 pr-1.5 py-1.5 flex items-center gap-3 transition-all duration-200">
-                {/* Left Shield Icon */}
-                <div className="text-gray-400 shrink-0 flex items-center justify-center pl-0.5">
-                  <Shield size={18} className="stroke-[1.75]" />
-                </div>
-
-                {/* Input Text Box */}
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSend();
-                    }
-                  }}
-                  placeholder={
-                    continuousMode
-                      ? vadStatus === 'listening'
-                        ? "🎙️ Conversational voice active (Speak naturally or click mic to stop)..."
-                        : vadStatus === 'user_speaking'
-                          ? "🗣️ Hearing you speak..."
-                          : vadStatus === 'ai_speaking'
-                            ? "🔊 Assistant speaking (Speak to interrupt)..."
-                            : vadStatus === 'transcribing'
-                              ? "⚡ Transcribing spoken audio..."
-                              : "Voice agent active..."
-                      : isRecording
-                        ? "🔴 Recording active... Speak now!"
-                        : isTranscribing
-                          ? "⚡ Transcribing spoken audio..."
-                          : "Ask SuperAdmin AI..."
-                  }
-                  className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 placeholder:font-normal font-normal focus:outline-none py-1"
-                />
-
-                {/* Right Controls: Mic + Send */}
-                <div className="flex items-center gap-1.5 shrink-0 pr-0.5">
-                  {/* Mic Button: Conversational Full-Duplex Voice Mode Toggle */}
-                  {continuousMode ? (
-                    <button
-                      type="button"
-                      onClick={handleToggleVoiceMode}
-                      className={`relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full flex items-center justify-center transition shadow-md cursor-pointer hover:scale-105 active:scale-95 group ${vadStatus === 'ai_speaking'
-                          ? 'bg-purple-600 hover:bg-rose-600 text-white'
-                          : vadStatus === 'user_speaking'
-                            ? 'bg-blue-600 hover:bg-rose-600 text-white'
-                            : 'bg-emerald-600 hover:bg-rose-600 text-white'
-                        }`}
-                      title={
-                        vadStatus === 'ai_speaking'
-                          ? "AI Speaking — Click to stop voice or speak to interrupt"
-                          : "Voice Active — Click to stop conversation"
-                      }
-                    >
-                      {/* Pulsing ring indicator */}
-                      <span className={`absolute inset-0 rounded-full animate-ping opacity-35 ${vadStatus === 'ai_speaking' ? 'bg-purple-400' : vadStatus === 'user_speaking' ? 'bg-blue-400' : 'bg-emerald-400'
-                        }`}></span>
-
-                      {vadStatus === 'ai_speaking' ? (
-                        <>
-                          <Volume2 size={16} className="animate-bounce relative z-10 block group-hover:hidden" />
-                          <MicOff size={15} className="relative z-10 hidden group-hover:block" />
-                        </>
-                      ) : (
-                        <>
-                          <Radio size={15} className="relative z-10 block group-hover:hidden animate-pulse" />
-                          <MicOff size={15} className="relative z-10 hidden group-hover:block" />
-                        </>
-                      )}
-                    </button>
-                  ) : isRecording ? (
-                    <button
-                      type="button"
-                      onClick={stopRecording}
-                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-rose-600 hover:bg-rose-700 text-white transition shadow-sm animate-pulse flex items-center justify-center cursor-pointer"
-                      title="Click to stop recording"
-                    >
-                      <MicOff size={15} />
-                    </button>
-                  ) : isTranscribing ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-sm"
-                      title="Transcribing speech..."
-                    >
-                      <RefreshCw size={14} className="animate-spin" />
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleToggleVoiceMode}
-                      className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full text-gray-600 hover:text-black hover:bg-black/5 transition flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95"
-                      title="Start Conversational Voice Agent (Click to speak naturally)"
-                    >
-                      <Mic size={18} />
-                    </button>
-                  )}
-
-                  {/* Send Button: Solid Black Circle with White Send Icon */}
-                  <button
-                    type="button"
-                    disabled={!input.trim() || loading}
-                    onClick={() => handleSend()}
-                    className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-full bg-[#0E1013] hover:bg-black text-white transition shadow-md disabled:opacity-35 cursor-pointer flex items-center justify-center shrink-0 hover:scale-105 active:scale-95"
-                    title="Send message"
-                  >
-                    {loading ? (
-                      <RefreshCw size={13} className="animate-spin text-white" />
-                    ) : (
-                      <Send size={14} className="ml-0.5" />
-                    )}
-                  </button>
-                </div>
-              </div>
-            </div>
+            {/* Bottom Floating Glass Capsule Input Dock */}
+            {renderInputDockPill(false)}
           </motion.section>
 
           {/* ================================================================= */}
-          {/* RIGHT PANEL: DYNAMIC INTERACTIVE DISPLAY & OUTPUT WORKSPACE */}
+          {/* FOREGROUND OVERLAY: Top Tab Modal & Bottom Floating Input Dock */}
           {/* ================================================================= */}
           <AnimatePresence>
-            {isAnalyticsVisible && (
-              <motion.section
-                key="interactive-output-display"
-                initial={{
-                  opacity: 0,
-                  x: 70,
-                  scale: 0.975,
-                }}
-                animate={{
-                  opacity: 1,
-                  x: 0,
-                  scale: 1,
-                }}
-                exit={{
-                  opacity: 0,
-                  x: 70,
-                  scale: 0.975,
-                }}
-                transition={{
-                  duration: 0.6,
-                  ease: [0.22, 1, 0.36, 1],
-                }}
-                style={{ originX: 1, originY: 0.5 }}
-                className="flex-1 min-w-0 aichat-visionos-panel rounded-[32px] p-4 sm:p-6 flex flex-col justify-between relative overflow-hidden h-full min-h-0 z-10 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.04),inset_0_1px_2px_rgba(255,255,255,0.95)]"
-                data-purpose="interactive-output-display"
-              >
-                {/* Continuous Frosted-Glass S-Wave Lines embedded inside the glass */}
-                <div className="absolute inset-0 overflow-hidden pointer-events-none select-none z-0">
-                  <svg
-                    className="w-full h-full object-cover absolute inset-0"
-                    viewBox="0 0 1600 900"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                    preserveAspectRatio="none"
-                  >
-                    <defs>
-                      <filter id="frost-blur-ambient-rp" x="-40%" y="-40%" width="180%" height="180%">
-                        <feGaussianBlur stdDeviation="26" />
-                      </filter>
-                      <filter id="frost-blur-broad-rp" x="-30%" y="-30%" width="160%" height="160%">
-                        <feGaussianBlur stdDeviation="15" />
-                      </filter>
-                      <filter id="frost-blur-mid-rp" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="5.5" />
-                      </filter>
-                      <filter id="frost-blur-core-rp" x="-20%" y="-20%" width="140%" height="140%">
-                        <feGaussianBlur stdDeviation="1.8" />
-                      </filter>
+            {modalTabs.length > 0 && (
+              <div className="absolute inset-0 z-50 flex flex-col justify-between gap-3 p-1 sm:p-2 pointer-events-none">
+                {/* Background Click Scrim to dismiss modal */}
+                <div
+                  className="absolute inset-0 z-0 pointer-events-auto"
+                  onClick={() => setModalTabs([])}
+                />
 
-                      <linearGradient id="frost-white-left-rp" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-                        <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
-                        <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
-                        <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
-                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                      </linearGradient>
-
-                      <linearGradient id="frost-white-right-rp" x1="100%" y1="0%" x2="0%" y2="0%">
-                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.95" />
-                        <stop offset="12%" stopColor="#FFFFFF" stopOpacity="0.90" />
-                        <stop offset="22%" stopColor="#FFFFFF" stopOpacity="0.75" />
-                        <stop offset="32%" stopColor="#FFFFFF" stopOpacity="0.35" />
-                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                      </linearGradient>
-
-                      <linearGradient id="frost-shadow-left-rp" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
-                        <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
-                        <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
-                        <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
-                        <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                        <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                      </linearGradient>
-
-                      <linearGradient id="frost-shadow-right-rp" x1="100%" y1="0%" x2="0%" y2="0%">
-                        <stop offset="0%" stopColor="#8EA4BF" stopOpacity="0.45" />
-                        <stop offset="12%" stopColor="#8EA4BF" stopOpacity="0.38" />
-                        <stop offset="22%" stopColor="#9BB0CA" stopOpacity="0.22" />
-                        <stop offset="32%" stopColor="#B6C6DA" stopOpacity="0.08" />
-                        <stop offset="42%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                        <stop offset="100%" stopColor="#CBD5E1" stopOpacity="0.0" />
-                      </linearGradient>
-
-                      <linearGradient id="frost-veil-left-rp" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
-                        <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
-                        <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
-                        <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
-                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                      </linearGradient>
-
-                      <linearGradient id="frost-veil-right-rp" x1="100%" y1="0%" x2="0%" y2="0%">
-                        <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.65" />
-                        <stop offset="12%" stopColor="#F8FAFC" stopOpacity="0.50" />
-                        <stop offset="22%" stopColor="#F1F5F9" stopOpacity="0.25" />
-                        <stop offset="34%" stopColor="#E2E8F0" stopOpacity="0.06" />
-                        <stop offset="42%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                        <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Veils */}
-                    <path d="M -30,-30 L 160,-30 C 320,120 400,260 400,440 C 400,620 300,780 140,930 L -30,930 Z" fill="url(#frost-veil-left-rp)" filter="url(#frost-blur-ambient-rp)" />
-                    <path d="M 1630,-30 L 1440,-30 C 1280,120 1200,260 1200,440 C 1200,620 1300,780 1460,930 L 1630,930 Z" fill="url(#frost-veil-right-rp)" filter="url(#frost-blur-ambient-rp)" />
-
-                    {/* Left S-Wave */}
-                    <path d="M -30,120 C 140,195 280,265 365,365 C 435,455 385,595 275,715 C 185,815 85,885 -30,935" stroke="url(#frost-shadow-left-rp)" strokeWidth="48" strokeLinecap="round" filter="url(#frost-blur-ambient-rp)" />
-                    <path d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930" stroke="url(#frost-white-left-rp)" strokeWidth="42" strokeLinecap="round" filter="url(#frost-blur-broad-rp)" />
-                    <path d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930" stroke="url(#frost-white-left-rp)" strokeWidth="14" strokeLinecap="round" filter="url(#frost-blur-mid-rp)" />
-                    <path d="M -30,110 C 140,190 280,260 360,360 C 430,450 380,590 270,710 C 180,810 80,880 -30,930" stroke="url(#frost-white-left-rp)" strokeWidth="3.5" strokeLinecap="round" filter="url(#frost-blur-core-rp)" />
-
-                    {/* Right S-Wave */}
-                    <path d="M 1630,120 C 1460,195 1320,265 1235,365 C 1165,455 1215,595 1325,715 C 1415,815 1515,885 1630,935" stroke="url(#frost-shadow-right-rp)" strokeWidth="48" strokeLinecap="round" filter="url(#frost-blur-ambient-rp)" />
-                    <path d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930" stroke="url(#frost-white-right-rp)" strokeWidth="42" strokeLinecap="round" filter="url(#frost-blur-broad-rp)" />
-                    <path d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930" stroke="url(#frost-white-right-rp)" strokeWidth="14" strokeLinecap="round" filter="url(#frost-blur-mid-rp)" />
-                    <path d="M 1630,110 C 1460,190 1320,260 1240,360 C 1170,450 1220,590 1330,710 C 1420,810 1520,880 1630,930" stroke="url(#frost-white-right-rp)" strokeWidth="3.5" strokeLinecap="round" filter="url(#frost-blur-core-rp)" />
-                  </svg>
-                </div>
-
-                <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
-                  {/* DYNAMIC CANVAS CONTENT */}
-                  <div className="flex-1 overflow-y-auto min-h-0 pr-1 py-1 scrollbar-thin">
-                    {activeWidget ? (
-                      <div className="space-y-4 animate-in fade-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-black/[0.06]">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse"></span>
-                            <span className="text-[11px] font-extrabold text-gray-800 tracking-wide uppercase">AI Interactive Display</span>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setActiveWidget(null)}
-                            className="w-7 h-7 rounded-full bg-white/80 hover:bg-white border border-white/90 shadow-2xs flex items-center justify-center transition cursor-pointer text-gray-500 hover:text-black active:scale-95"
-                            title="Close Display"
-                          >
-                            <X size={12} />
-                          </button>
-                        </div>
-                        {activeWidget.type === 'password_change_confirm' && (
-                          <PasswordChangeConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                        )}
-
-                        {activeWidget.type === 'password_updated_success' && (
-                          <PasswordUpdatedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                        )}
-
-                        {activeWidget.type === 'tenant_delete_confirm' && (
-                          <TenantDeleteConfirmWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                        )}
-
-                        {activeWidget.type === 'tenant_deleted_success' && (
-                          <TenantDeletedSuccessWidget data={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                        )}
-
-                        {activeWidget.type === 'tenant_console' && (
-                          <TenantConsoleWidget
-                            tenants={activeWidget.data}
-                            onSendMessage={(txt) => handleSend(txt)}
-                            onCopy={copyToClipboard}
-                          />
-                        )}
-
-                        {activeWidget.type === 'admin_accounts' && (
-                          <AdminAccountsWidget users={activeWidget.data} onCopy={copyToClipboard} />
-                        )}
-
-                        {activeWidget.type === 'platform_metrics' && (
-                          <PlatformMetricsWidget stats={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                        )}
-
-                        {activeWidget.type === 'onboard_draft' && (
-                          <OnboardingDraftPreviewWidget draft={activeWidget.data} onSendMessage={(txt) => handleSend(txt)} />
-                        )}
-
-                        {activeWidget.type === 'onboard_success' && (
-                          <OnboardingSuccessWidget
-                            data={activeWidget.data}
-                            onSendMessage={(txt) => handleSend(txt)}
-                            onCopy={copyToClipboard}
-                          />
-                        )}
-
-                        {activeWidget.type === 'requisitions_console' && (
-                          <RequisitionsConsoleWidget
-                            requisitions={activeWidget.data}
-                            vendorName={activeWidget.vendorName}
-                            onSendMessage={(txt) => handleSend(txt)}
-                          />
-                        )}
-
-                        {activeWidget.type === 'candidates_console' && (
-                          <CandidatesConsoleWidget
-                            candidates={activeWidget.data}
-                            vendorName={activeWidget.vendorName}
-                            onSendMessage={(txt) => handleSend(txt)}
-                            onCopy={copyToClipboard}
-                          />
-                        )}
-
-                        {activeWidget.type === 'candidate_resume' && (
-                          <CandidateResumeWidget
-                            data={activeWidget.data}
-                            onSendMessage={(txt) => handleSend(txt)}
-                            onCopy={copyToClipboard}
-                          />
-                        )}
-
-                        {activeWidget.type === 'database_controller' && (
-                          <DatabaseControllerWidget
-                            dbData={activeWidget.data}
-                            onSendMessage={(txt) => handleSend(txt)}
-                            onCopy={copyToClipboard}
-                          />
-                        )}
-
-                      </div>
-                    ) : (
-                      <StatisticalDashboardWidget
+                {/* Center Tab Modal Section: Single Card or Side-by-Side Dual Tabs */}
+                <div className="flex-1 flex flex-col justify-center items-center w-full min-h-0 pointer-events-none z-10 my-auto">
+                  {modalTabs.length === 1 ? (
+                    <motion.div
+                      key="top-tab-panel-single"
+                      layout
+                      initial={{ opacity: 0, y: 12, scale: 0.99 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 12, scale: 0.99 }}
+                      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                      className="w-full max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 my-auto"
+                    >
+                      <TableModalTab
+                        modalData={modalTabs[0]}
+                        onClose={() => handleCloseTab(0)}
                         onSendMessage={(txt) => handleSend(txt)}
-                        onClose={() => setIsAnalyticsVisible(false)}
+                        copyToClipboard={copyToClipboard}
+                        isCompanyAdmin={isCompanyAdmin}
+                        companyName={companyName}
+                        splitIndex={0}
+                        totalTabs={1}
                       />
-                    )}
-                  </div>
+                    </motion.div>
+                  ) : (
+                    <div className="w-full max-h-[calc(100vh-170px)] grid grid-cols-1 md:grid-cols-2 gap-3 min-h-0 pointer-events-none z-10 my-auto items-start">
+                      {/* Left Tab: Minimized to the left */}
+                      <motion.div
+                        key="top-tab-panel-left"
+                        layout
+                        initial={{ opacity: 0.8, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                        className="w-full max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 min-h-0"
+                      >
+                        <TableModalTab
+                          modalData={modalTabs[0]}
+                          onClose={() => handleCloseTab(0)}
+                          onSendMessage={(txt) => handleSend(txt)}
+                          copyToClipboard={copyToClipboard}
+                          isCompanyAdmin={isCompanyAdmin}
+                          companyName={companyName}
+                          splitIndex={0}
+                          totalTabs={2}
+                        />
+                      </motion.div>
+
+                      {/* Right Tab: Opened at the right */}
+                      <motion.div
+                        key="top-tab-panel-right"
+                        layout
+                        initial={{ opacity: 0, x: 24, scale: 0.98 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 24, scale: 0.96 }}
+                        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+                        className="w-full max-h-[calc(100vh-170px)] flex flex-col overflow-hidden bg-transparent pointer-events-auto z-10 min-h-0"
+                      >
+                        <TableModalTab
+                          modalData={modalTabs[1]}
+                          onClose={() => handleCloseTab(1)}
+                          onSendMessage={(txt) => handleSend(txt)}
+                          copyToClipboard={copyToClipboard}
+                          isCompanyAdmin={isCompanyAdmin}
+                          companyName={companyName}
+                          splitIndex={1}
+                          totalTabs={2}
+                        />
+                      </motion.div>
+                    </div>
+                  )}
                 </div>
 
-              </motion.section>
+                {/* Bottom Floating Compact Chat Typing Card / Input Dock */}
+                <motion.div
+                  key="bottom-compact-input-dock"
+                  initial={{ opacity: 0, y: 16, scale: 0.99 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 16, scale: 0.99 }}
+                  transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                  className="w-full shrink-0 pointer-events-auto z-10 pb-1 mt-auto"
+                  data-purpose="compact-typing-dock"
+                >
+                  {renderInputDockPill(true)}
+                </motion.div>
+              </div>
             )}
           </AnimatePresence>
 
         </main>
       </div>
+
+      {/* Dimmed Faded Backdrop for Background (Header, Margins, Wallpaper) */}
+      <AnimatePresence>
+        {modalTabs.length > 0 && (
+          <motion.div
+            key="table-modal-dimmed-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px] pointer-events-auto cursor-pointer"
+            onClick={() => setModalTabs([])}
+          />
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
