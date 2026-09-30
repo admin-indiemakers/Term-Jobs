@@ -385,7 +385,8 @@ export default function DashboardLayout() {
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
   const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
-  const isAiChatPage = isSuperAdminChat || isHiringManagerChat;
+  const isAdminChat = location.pathname === '/dashboard/admin/chat' || location.pathname.endsWith('/admin/chat');
+  const isAiChatPage = isSuperAdminChat || isHiringManagerChat || isAdminChat;
 
   // ==========================================
   // COMPANY ADMIN DEDICATED LAYOUT (TOP BAR + FULL CANVAS)
@@ -394,6 +395,7 @@ export default function DashboardLayout() {
     const companyName = user?.tenant_name || 'TCS';
     const adminNavLinks = [
       { to: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { to: '/dashboard/admin/chat', label: 'AI Chat', icon: Sparkles, end: true },
       { to: '/dashboard/admin/hiring-managers', label: 'Hiring', icon: Users, end: false },
       { to: '/dashboard/admin/directors', label: 'Directors', icon: UserCheck, end: false },
       { to: '/dashboard/admin/procurement', label: 'Procurement', icon: Building2, end: false },
@@ -402,7 +404,7 @@ export default function DashboardLayout() {
     ];
 
     return (
-      <div className="min-h-screen w-full bg-paper text-ink flex flex-col antialiased relative selection:bg-black selection:text-white font-sans overflow-x-hidden">
+      <div className={`w-full bg-paper text-ink flex flex-col antialiased relative selection:bg-black selection:text-white font-sans ${isAiChatPage ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen overflow-x-hidden'}`}>
         {/* Landing Page Background System (radial light, 96px grid layer, blurred radial light orbs, animated bezier ribbons & grain layer) */}
         <Backdrop tone="light" fixed />
 
@@ -639,7 +641,7 @@ export default function DashboardLayout() {
         )}
 
         {/* Main Workspace Area for Company Admin */}
-        <main className="flex-1 w-full max-w-[1580px] mx-auto px-4 sm:px-8 pt-4 sm:pt-6 pb-4 z-10 flex flex-col justify-start">
+        <main className={`flex-1 w-full min-h-0 ${isAiChatPage ? 'h-[calc(100vh-62px)] max-h-[calc(100vh-62px)] px-3 sm:px-6 pt-1 pb-3 max-w-[1760px]' : 'max-w-[1580px] px-4 sm:px-8 pt-4 sm:pt-6 pb-4 justify-start'} mx-auto z-10 flex flex-col overflow-hidden`}>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={location.pathname}
@@ -647,7 +649,8 @@ export default function DashboardLayout() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="w-full h-full flex-1 flex flex-col"
+              style={{ height: '100%' }}
+              className="w-full h-full flex-1 flex flex-col min-h-0"
             >
               <Outlet />
             </motion.div>
