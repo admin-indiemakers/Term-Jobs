@@ -322,14 +322,13 @@ export function HiringManagerInterviews() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const [summaryRes, roundsRes] = await Promise.all([
-        interviewApi.getSummary(token).catch(() => []),
-        interviewApi.listRounds({}, token).catch(() => []),
-      ]);
+      // The summary already includes the rounds grouped by candidate. Avoid a
+      // second full rounds request just to calculate the KPI cards.
+      const summaryRes = await interviewApi.getSummary(token).catch(() => []);
 
       const sumList = Array.isArray(summaryRes) ? summaryRes : [];
       setCandidatesSummary(sumList);
-      setRounds(Array.isArray(roundsRes) ? roundsRes : []);
+      setRounds(sumList.flatMap((candidate) => candidate.rounds || []));
 
       if (sumList.length > 0) {
         setSelectedCandidate((prev) => {
