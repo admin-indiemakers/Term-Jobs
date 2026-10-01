@@ -25,9 +25,13 @@ else:
 
 try:
     os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
-except Exception as _mkdir_err:
-    ESIGN_UPLOAD_DIR = "/tmp/uploads/work_orders"
-    os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
+except Exception:
+    try:
+        ESIGN_UPLOAD_DIR = "/tmp/uploads/work_orders"
+        os.makedirs(ESIGN_UPLOAD_DIR, exist_ok=True)
+    except Exception:
+        pass
+
 
 
 

@@ -1,12 +1,31 @@
+import os
 import sys
+import traceback
 import urllib.parse
 from pathlib import Path
 
-backend_root = Path(__file__).resolve().parent.parent
-if str(backend_root) not in sys.path:
-    sys.path.insert(0, str(backend_root))
+# Add project root and backend directory to sys.path
+backend_dir = Path(__file__).resolve().parent.parent
+root_dir = backend_dir.parent
 
-from main import app as fastapi_app
+for path_str in (str(backend_dir), str(root_dir)):
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
+os.environ["VERCEL"] = "1"
+
+fastapi_app = None
+init_error = None
+init_traceback = None
+
+try:
+    from main import app as _app
+    fastapi_app = _app
+except Exception as e:
+    init_error = str(e)
+    init_traceback = traceback.format_exc()
+    print(f"[VERCEL INIT ERROR] {init_error}\n{init_traceback}", file=sys.stderr)
+
 
 class VercelASGIApp:
     def __init__(self, asgi_app):
@@ -14,6 +33,27 @@ class VercelASGIApp:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] in ("http", "websocket"):
+            if self.asgi_app is None:
+                import json
+                err_payload = json.dumps({
+                    "error": "Backend initialization failed",
+                    "details": init_error,
+                    "traceback": init_traceback
+                }).encode("utf-8")
+                await send({
+                    "type": "http.response.start",
+                    "status": 500,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"content-length", str(len(err_payload)).encode("ascii")),
+                    ],
+                })
+                await send({
+                    "type": "http.response.body",
+                    "body": err_payload,
+                })
+                return
+
             qs = scope.get("query_string", b"").decode("utf-8", errors="ignore")
             params = urllib.parse.parse_qs(qs)
 
@@ -48,5 +88,6 @@ class VercelASGIApp:
                 scope["query_string"] = urllib.parse.urlencode(cleaned_params, doseq=True).encode("utf-8")
 
         await self.asgi_app(scope, receive, send)
+
 
 app = VercelASGIApp(fastapi_app)
