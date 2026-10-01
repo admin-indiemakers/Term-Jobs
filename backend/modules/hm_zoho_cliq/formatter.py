@@ -9,10 +9,15 @@ from typing import Dict, Any, List, Optional
 def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str, Any]:
     """Helper to build a Zoho Cliq interactive button."""
     return {
-        "label": label,
+        "label": label[:20],
         "type": button_type,  # "+" is positive (green/blue), "-" is negative (red)
-        "action": "invoke.function",
-        "key": key
+        "key": key,
+        "action": {
+            "type": "invoke.function",
+            "data": {
+                "key": key
+            }
+        }
     }
 
 
@@ -27,34 +32,28 @@ def format_cliq_welcome() -> Dict[str, Any]:
     )
     buttons = [
         build_cliq_button("⚡ Pending Works", "menu:pending_works"),
-        build_cliq_button("👥 Shortlisted Pool", "menu:candidates"),
-        build_cliq_button("👷 Working Candidates", "menu:accepted_candidates"),
-        build_cliq_button("📋 Live Requisitions", "menu:requisitions"),
-        build_cliq_button("⏳ Timesheets", "menu:timesheets"),
-        build_cliq_button("💳 Expenses", "menu:expenses"),
-        build_cliq_button("🚀 Onboarding Status", "menu:onboarding"),
+        build_cliq_button("👥 Candidates", "menu:candidates"),
+        build_cliq_button("👷 Working Hires", "menu:accepted_candidates"),
+        build_cliq_button("📋 Requisitions", "menu:requisitions"),
         build_cliq_button("📊 Pipeline Stats", "menu:stats")
     ]
     return {
         "text": text,
         "card": {
             "title": "⚡ TermJobs Hiring Manager AI",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons
+        }
     }
 
 
 def format_cliq_quick_menu() -> List[Dict[str, Any]]:
-    """Standard quick action buttons for Zoho Cliq."""
+    """Standard quick action buttons for Zoho Cliq (max 5)."""
     return [
         build_cliq_button("⚡ Pending Works", "menu:pending_works"),
-        build_cliq_button("👥 Shortlisted Pool", "menu:candidates"),
-        build_cliq_button("👷 Working Candidates", "menu:accepted_candidates"),
-        build_cliq_button("📋 Live Requisitions", "menu:requisitions"),
-        build_cliq_button("⏳ Timesheets", "menu:timesheets"),
-        build_cliq_button("💳 Expenses", "menu:expenses"),
-        build_cliq_button("🚀 Onboarding Pipeline", "menu:onboarding"),
+        build_cliq_button("👥 Candidates", "menu:candidates"),
+        build_cliq_button("👷 Working Hires", "menu:accepted_candidates"),
+        build_cliq_button("📋 Requisitions", "menu:requisitions"),
         build_cliq_button("📊 Pipeline Stats", "menu:stats")
     ]
 
@@ -80,21 +79,20 @@ def format_cliq_pending_works(data: Dict[str, Any], company_name: str = "TermJob
     )
     buttons = []
     if ts_cnt > 0:
-        buttons.append(build_cliq_button(f"⏳ Approve Timesheets ({ts_cnt})", "menu:timesheets"))
+        buttons.append(build_cliq_button(f"⏳ Timesheets ({ts_cnt})", "menu:timesheets"))
     if exp_cnt > 0:
-        buttons.append(build_cliq_button(f"💳 Review Expenses ({exp_cnt})", "menu:expenses"))
-    buttons.append(build_cliq_button("👥 Shortlisted Pool", "menu:candidates"))
-    buttons.append(build_cliq_button("👷 Working Candidates", "menu:accepted_candidates"))
-    buttons.append(build_cliq_button("🚀 Onboarding Status", "menu:onboarding"))
+        buttons.append(build_cliq_button(f"💳 Expenses ({exp_cnt})", "menu:expenses"))
+    buttons.append(build_cliq_button("👥 Candidates", "menu:candidates"))
+    buttons.append(build_cliq_button("👷 Working Hires", "menu:accepted_candidates"))
     buttons.append(build_cliq_button("📊 Pipeline Stats", "menu:stats"))
 
     return {
         "text": text,
         "card": {
             "title": "⚡ Pending Actions Briefing",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -118,20 +116,20 @@ def format_cliq_shortlisted_candidate(cand: Dict[str, Any]) -> Dict[str, Any]:
         f"📊 *Status:* `{status}`"
     )
 
-    cand_key = name[:25]
+    cand_key = name[:20]
     buttons = [
-        build_cliq_button("📅 Schedule Interview", f"sched_int:{cand_key}", "+"),
-        build_cliq_button("👤 Profile Details", f"view_prof:{cand_key}"),
-        build_cliq_button("❌ Reject Candidate", f"rej_cand:{cand_key}", "-")
+        build_cliq_button("📅 Schedule Int", f"sched_int:{cand_key}", "+"),
+        build_cliq_button("👤 Profile", f"view_prof:{cand_key}"),
+        build_cliq_button("❌ Reject", f"rej_cand:{cand_key}", "-")
     ]
 
     return {
         "text": text,
         "card": {
             "title": f"Candidate: {name} ({score})",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -156,9 +154,9 @@ def format_cliq_interview_proposal(sched: Dict[str, Any]) -> Dict[str, Any]:
         f"✨ _Confirm below to notify the candidate and dispatch calendar invites._"
     )
 
-    cand_key = cand[:25]
+    cand_key = cand[:20]
     buttons = [
-        build_cliq_button("✅ Confirm & Send Invite", f"conf_int:{cand_key}", "+"),
+        build_cliq_button("✅ Confirm & Send", f"conf_int:{cand_key}", "+"),
         build_cliq_button("❌ Cancel", "menu:candidates", "-")
     ]
 
@@ -166,9 +164,9 @@ def format_cliq_interview_proposal(sched: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "📅 Interview Proposal",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -197,9 +195,9 @@ def format_cliq_interview_confirmed(res: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "✅ Interview Dispatched",
-            "theme": "modern-inline"
-        },
-        "buttons": format_cliq_quick_menu()
+            "theme": "modern-inline",
+            "buttons": format_cliq_quick_menu()
+        }
     }
 
 
@@ -225,9 +223,9 @@ def format_cliq_candidate_rejected(res: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "🚫 Candidate Rejected",
-            "theme": "modern-inline"
-        },
-        "buttons": format_cliq_quick_menu()
+            "theme": "modern-inline",
+            "buttons": format_cliq_quick_menu()
+        }
     }
 
 
@@ -254,20 +252,20 @@ def format_cliq_candidate_profile(prof: Dict[str, Any]) -> Dict[str, Any]:
         f"📝 *Screening Notes:* _{notes}_"
     )
 
-    cand_key = name[:25]
+    cand_key = name[:20]
     buttons = [
-        build_cliq_button("📅 Schedule Interview", f"sched_int:{cand_key}", "+"),
-        build_cliq_button("❌ Reject Candidate", f"rej_cand:{cand_key}", "-"),
-        build_cliq_button("👥 Shortlisted Pool", "menu:candidates")
+        build_cliq_button("📅 Schedule Int", f"sched_int:{cand_key}", "+"),
+        build_cliq_button("❌ Reject", f"rej_cand:{cand_key}", "-"),
+        build_cliq_button("👥 Candidates", "menu:candidates")
     ]
 
     return {
         "text": text,
         "card": {
             "title": f"Profile: {name}",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -295,7 +293,7 @@ def format_cliq_draft_preview(draft: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     buttons = [
-        build_cliq_button("🚀 Send for Director Approval", "submit_draft", "+"),
+        build_cliq_button("🚀 Send to Director", "submit_draft", "+"),
         build_cliq_button("❌ Discard Draft", "cancel_draft", "-")
     ]
 
@@ -303,9 +301,9 @@ def format_cliq_draft_preview(draft: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Draft: {title}",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -335,9 +333,9 @@ def format_cliq_timesheet(ts: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Timesheet: {cand} ({hrs} hrs)",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -369,9 +367,9 @@ def format_cliq_expense(exp: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Expense: {cand} ({amt})",
-            "theme": "modern-inline"
-        },
-        "buttons": buttons
+            "theme": "modern-inline",
+            "buttons": buttons[:5]
+        }
     }
 
 
@@ -399,7 +397,7 @@ def format_cliq_stats(stats: Dict[str, Any], company_name: str = "TermJobs") -> 
         "text": text,
         "card": {
             "title": f"📊 {company_name} Pipeline Stats",
-            "theme": "modern-inline"
-        },
-        "buttons": format_cliq_quick_menu()
+            "theme": "modern-inline",
+            "buttons": format_cliq_quick_menu()
+        }
     }
