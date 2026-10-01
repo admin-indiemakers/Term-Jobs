@@ -70,50 +70,54 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Modern lifespan context manager for startup & shutdown tasks."""
-    try:
-        from modules.candidate.telegram_service import start_telegram_polling
-        start_telegram_polling()
-        print("[APP STARTUP] Candidate Telegram Bot long-polling initialized successfully.")
-    except Exception as exc:
-        print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
-
-    try:
-        from modules.hm_telegram_bot.bot import start_hm_bot_polling
-        start_hm_bot_polling()
-        print("[APP STARTUP] Hiring Manager Telegram Bot initialized successfully.")
-    except Exception as exc:
-        print(f"[APP STARTUP HM TELEGRAM ERROR] {exc}")
-
-    # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
+    is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
     worker_task = None
-    async def _background_worker():
-        while True:
-            try:
-                await asyncio.sleep(60)
-                _auto_close_expired()
-                from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
-                auto_check_and_dispatch_48h_shortlists()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                pass
-    worker_task = asyncio.create_task(_background_worker())
+
+    if not is_serverless:
+        try:
+            from modules.candidate.telegram_service import start_telegram_polling
+            start_telegram_polling()
+            print("[APP STARTUP] Candidate Telegram Bot long-polling initialized successfully.")
+        except Exception as exc:
+            print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
+
+        try:
+            from modules.hm_telegram_bot.bot import start_hm_bot_polling
+            start_hm_bot_polling()
+            print("[APP STARTUP] Hiring Manager Telegram Bot initialized successfully.")
+        except Exception as exc:
+            print(f"[APP STARTUP HM TELEGRAM ERROR] {exc}")
+
+        # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
+        async def _background_worker():
+            while True:
+                try:
+                    await asyncio.sleep(60)
+                    _auto_close_expired()
+                    from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
+                    auto_check_and_dispatch_48h_shortlists()
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    pass
+        worker_task = asyncio.create_task(_background_worker())
 
     yield
 
     # Shutdown
     if worker_task:
         worker_task.cancel()
-    try:
-        from modules.candidate.telegram_service import stop_telegram_polling
-        stop_telegram_polling()
-    except Exception:
-        pass
-    try:
-        from modules.hm_telegram_bot.bot import stop_hm_bot_polling
-        stop_hm_bot_polling()
-    except Exception:
-        pass
+    if not is_serverless:
+        try:
+            from modules.candidate.telegram_service import stop_telegram_polling
+            stop_telegram_polling()
+        except Exception:
+            pass
+        try:
+            from modules.hm_telegram_bot.bot import stop_hm_bot_polling
+            stop_hm_bot_polling()
+        except Exception:
+            pass
 
 
 app = FastAPI(
