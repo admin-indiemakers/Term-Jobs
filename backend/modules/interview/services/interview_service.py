@@ -116,6 +116,19 @@ def _generate_candidate_passcode() -> str:
     return f"TJ-INT-{digits}"
 
 
+def _resolve_interview_domain(origin: Optional[str] = None, data_origin: Optional[str] = None) -> str:
+    """
+    Resolves the base URL for public interview rooms and candidate access links.
+    Strictly enforces the official TermJobs domain (https://termjobs.in) instead of localhost.
+    Can be configured via INTERVIEW_PUBLIC_DOMAIN env variable.
+    """
+    domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
+    candidate = (origin or data_origin or domain).strip().rstrip("/")
+    if not candidate or "localhost" in candidate or "127.0.0.1" in candidate:
+        return domain
+    return candidate
+
+
 def send_interview_invitation_email(
     candidate_name: str,
     candidate_email: str,
@@ -132,6 +145,13 @@ def send_interview_invitation_email(
 ) -> Dict[str, Any]:
     """Sends an official HTML interview invitation with hosted domain meeting link & passcode."""
     from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
+    import re
+
+    domain = _resolve_interview_domain()
+    if meeting_link:
+        meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, meeting_link)
+    if candidate_portal_link:
+        candidate_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, candidate_portal_link)
     
     subject = f"Interview Invitation: {round_name} for {requisition_title} at {company_name}"
     
@@ -284,11 +304,11 @@ def generate_calendar_links(interview: Dict[str, Any], base_url: Optional[str] =
     req_title = interview.get("requisition_title", "Role")
     
     # Priority: Native TermJobs hosted room on our domain
-    raw_base = (base_url or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    raw_base = _resolve_interview_domain(base_url)
     round_identifier = interview.get("round_id") or interview.get("id") or "active"
     
     meeting_link = interview.get("meeting_link")
-    if not meeting_link or "cal.com" in meeting_link.lower():
+    if not meeting_link or "cal.com" in meeting_link.lower() or "localhost" in meeting_link or "127.0.0.1" in meeting_link:
         meeting_link = f"{raw_base}/interview/room/{round_identifier}"
     
     location = meeting_link
@@ -361,9 +381,9 @@ def generate_ics_content(interview: Dict[str, Any]) -> str:
     end_dt = f"{clean_date}T{end_time.replace(':', '')}00"
     now_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     
-    raw_base = (os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    raw_base = _resolve_interview_domain()
     location = interview.get("meeting_link") or f"{raw_base}/interview/room/{interview.get('round_id') or interview.get('id')}"
-    if "cal.com" in location.lower():
+    if "cal.com" in location.lower() or "localhost" in location or "127.0.0.1" in location:
         location = f"{raw_base}/interview/room/{interview.get('round_id') or interview.get('id')}"
     
     summary = f"{interview.get('interview_round', 'Interview')} - {interview.get('candidate_name', 'Candidate')} ({interview.get('requisition_title', 'Role')})"
@@ -407,8 +427,7 @@ def create_interview_proposal(
     origin: Optional[str] = None
 ) -> Dict[str, Any]:
     """Create a new interview proposal from the Hiring Manager, generating hosted domain links and initializing the InterviewRound."""
-    raw_origin = (origin or data.get("origin") or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
-    base_url = raw_origin
+    base_url = _resolve_interview_domain(origin, data.get("origin"))
     
     cand_sub_id = data.get("candidate_submission_id", "")
     round_name = (data.get("interview_round") or "Technical Round 1").strip()
@@ -472,7 +491,7 @@ def create_interview_proposal(
         interviewer_link = f"{base_url}/interview/staff?token={round_obj.interviewer_token}"
 
         req_meeting_link = (data.get("meeting_link") or "").strip()
-        if not req_meeting_link or "cal.com" in req_meeting_link.lower() or data.get("use_hosted_room", True):
+        if not req_meeting_link or "cal.com" in req_meeting_link.lower() or "localhost" in req_meeting_link.lower() or "127.0.0.1" in req_meeting_link or data.get("use_hosted_room", True):
             meeting_link = hosted_meeting_link
         else:
             meeting_link = req_meeting_link
@@ -725,8 +744,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
     Create a new interview round for a candidate under a requisition.
     Prevents duplicate rounds and duplicate assignments, generates hosted links and dispatches candidate invites.
     """
-    raw_origin = (origin or data.get("origin") or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
-    base_url = raw_origin
+    base_url = _resolve_interview_domain(origin, data.get("origin"))
 
     with get_session() as session:
         cand_sub_id = data.get("candidate_submission_id", "")

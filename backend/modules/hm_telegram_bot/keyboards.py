@@ -11,9 +11,6 @@ def build_requisition_draft_keyboard(draft_data: Dict[str, Any]) -> Dict[str, An
                 {"text": "🚀 Send for Director Approval", "callback_data": f"submit_dir:{title}"}
             ],
             [
-                {"text": "⚡ Publish Directly", "callback_data": f"pub_direct:{title}"}
-            ],
-            [
                 {"text": "❌ Cancel Draft", "callback_data": "cancel_draft"}
             ]
         ]
@@ -60,20 +57,113 @@ def build_expense_approval_keyboard(expense_id: str, candidate_name: str) -> Dic
     }
 
 
+def build_candidates_selection_keyboard(cands: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Buttons for each candidate so tapping their name displays their full profile."""
+    buttons = []
+    row = []
+    for c in cands:
+        name = c.get("candidate_name") or c.get("name") or "Candidate"
+        short_name = name[:20]
+        row.append({"text": f"👤 {short_name}", "callback_data": f"view_prof:{short_name}"})
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    return {"inline_keyboard": buttons}
+
+
+def build_profile_card_keyboard() -> Dict[str, Any]:
+    """Clean back button for candidate profile card."""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "👥 Back to Candidates List", "callback_data": "menu:accepted_candidates"}
+            ]
+        ]
+    }
+
+
+def build_accepted_candidate_keyboard(candidate_name: str) -> Dict[str, Any]:
+    """Deprecated: Clean profile card keyboard."""
+    return build_profile_card_keyboard()
+
+
+def build_onboarding_item_keyboard(candidate_name: str) -> Dict[str, Any]:
+    """Action button for an onboarding candidate card."""
+    cand_short = candidate_name[:25]
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "👤 View Profile & Credentials", "callback_data": f"view_prof:{cand_short}"}
+            ]
+        ]
+    }
+
+
+def build_interview_proposal_keyboard(candidate_name: str) -> Dict[str, Any]:
+    """Action buttons for an interview proposal."""
+    cand_short = candidate_name[:20]
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Confirm & Send Invite", "callback_data": f"conf_int:{cand_short}"},
+                {"text": "❌ Cancel", "callback_data": "menu:candidates"}
+            ]
+        ]
+    }
+
+
+def build_pending_works_keyboard(data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Action buttons for pending works action center."""
+    data = data or {}
+    summary = data.get("summary", {})
+    ts_cnt = summary.get("pending_timesheets_count", 0)
+    exp_cnt = summary.get("pending_expenses_count", 0)
+    
+    keyboard = []
+    row1 = []
+    if ts_cnt > 0:
+        row1.append({"text": f"⏳ Approve Timesheets ({ts_cnt})", "callback_data": "menu:timesheets"})
+    if exp_cnt > 0:
+        row1.append({"text": f"💳 Approve Expenses ({exp_cnt})", "callback_data": "menu:expenses"})
+    if row1:
+        keyboard.append(row1)
+
+    keyboard.append([
+        {"text": "👥 Shortlisted Pool", "callback_data": "menu:candidates"},
+        {"text": "🚀 Onboarding Status", "callback_data": "menu:onboarding"}
+    ])
+    keyboard.append([
+        {"text": "👷 Candidates Under Me", "callback_data": "menu:accepted_candidates"},
+        {"text": "📊 Pipeline Stats", "callback_data": "menu:stats"}
+    ])
+    return {"inline_keyboard": keyboard}
+
+
 def build_quick_menu_keyboard() -> Dict[str, Any]:
     """Persistent quick prompt menu."""
     return {
         "inline_keyboard": [
             [
-                {"text": "📋 Live Requisitions", "callback_data": "menu:requisitions"},
-                {"text": "👥 Shortlisted Candidates", "callback_data": "menu:candidates"}
+                {"text": "⚡️ Pending Works", "callback_data": "menu:pending_works"},
+                {"text": "👷 Candidates Under Me", "callback_data": "menu:accepted_candidates"}
             ],
             [
-                {"text": "⏳ Pending Timesheets", "callback_data": "menu:timesheets"},
-                {"text": "📊 Hiring Stats", "callback_data": "menu:stats"}
+                {"text": "👥 Shortlisted Pool", "callback_data": "menu:candidates"},
+                {"text": "🚀 Onboarding Pipeline", "callback_data": "menu:onboarding"}
+            ],
+            [
+                {"text": "⏳ Timesheets", "callback_data": "menu:timesheets"},
+                {"text": "💳 Expenses", "callback_data": "menu:expenses"}
+            ],
+            [
+                {"text": "📋 Live Requisitions", "callback_data": "menu:requisitions"},
+                {"text": "📊 Pipeline Stats", "callback_data": "menu:stats"}
             ]
         ]
     }
+
 
 
 def build_role_selection_keyboard(roles: Optional[List[str]] = None) -> Dict[str, Any]:

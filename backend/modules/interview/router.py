@@ -57,15 +57,17 @@ router = APIRouter(prefix="/interviews", tags=["Interviews"])
 
 
 def _extract_origin(request: Request, body_origin: Optional[str] = None) -> str:
-    if body_origin and body_origin.strip():
+    default_domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
+    if body_origin and body_origin.strip() and "localhost" not in body_origin and "127.0.0.1" not in body_origin:
         return body_origin.strip().rstrip("/")
     header_origin = request.headers.get("origin") or request.headers.get("referer")
     if header_origin:
         parts = header_origin.split("://")
         if len(parts) == 2:
             domain_part = parts[1].split("/")[0]
-            return f"{parts[0]}://{domain_part}"
-    return (os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").rstrip("/")
+            if "localhost" not in domain_part and "127.0.0.1" not in domain_part:
+                return f"{parts[0]}://{domain_part}"
+    return default_domain
 
 
 def _get_tenant_name(tenant_id: str) -> str:
