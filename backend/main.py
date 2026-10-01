@@ -3791,6 +3791,9 @@ def index(request: Request) -> Any:
 
 @app.get("/health")
 @app.get("/api/health")
+@app.get("/api/index.py", include_in_schema=False)
+@app.get("/api/ping", include_in_schema=False)
+@app.get("/ping", include_in_schema=False)
 def health() -> dict:
     from modules.shared.db import db
 

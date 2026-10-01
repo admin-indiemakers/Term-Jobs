@@ -13,7 +13,7 @@ from modules.hm_zoho_cliq.handlers import (
     format_cliq_welcome
 )
 
-router = APIRouter(prefix="/api/zoho-cliq", tags=["Zoho Cliq"])
+router = APIRouter(tags=["Zoho Cliq"])
 
 
 async def _extract_payload(request: Request) -> Dict[str, Any]:
@@ -54,8 +54,10 @@ async def _extract_payload(request: Request) -> Dict[str, Any]:
     return dict(request.query_params)
 
 
-@router.post("/bot")
-@router.post("/webhook")
+@router.post("/api/zoho-cliq/bot")
+@router.post("/zoho-cliq/bot")
+@router.post("/api/zoho-cliq/webhook")
+@router.post("/zoho-cliq/webhook")
 async def zoho_cliq_bot_handler(request: Request):
     """
     Main webhook endpoint for Zoho Cliq Message Handler, Slash Commands, and Button actions.
@@ -66,7 +68,8 @@ async def zoho_cliq_bot_handler(request: Request):
     return JSONResponse(content=response_data)
 
 
-@router.post("/actions")
+@router.post("/api/zoho-cliq/actions")
+@router.post("/zoho-cliq/actions")
 async def zoho_cliq_action_handler(request: Request):
     """
     Dedicated action callback endpoint if Zoho Cliq Action Handlers are configured separately.
@@ -76,7 +79,8 @@ async def zoho_cliq_action_handler(request: Request):
     return JSONResponse(content=response_data)
 
 
-@router.post("/push-notification")
+@router.post("/api/zoho-cliq/push-notification")
+@router.post("/zoho-cliq/push-notification")
 async def zoho_cliq_push_notification(request: Request):
     """
     Push a proactive notification or card directly into the Zoho Cliq Bot chat
@@ -88,8 +92,10 @@ async def zoho_cliq_push_notification(request: Request):
     return {"status": "success" if success else "failed", "dispatched": success}
 
 
-@router.get("/health")
-@router.get("/test")
+@router.get("/api/zoho-cliq/health")
+@router.get("/zoho-cliq/health")
+@router.get("/api/zoho-cliq/test")
+@router.get("/zoho-cliq/test")
 async def zoho_cliq_health():
     """Health check and setup test for Zoho Cliq integration."""
     return {
