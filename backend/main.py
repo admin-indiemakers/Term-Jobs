@@ -72,9 +72,16 @@ async def lifespan(app: FastAPI):
     try:
         from modules.candidate.telegram_service import start_telegram_polling
         start_telegram_polling()
-        print("[APP STARTUP] Telegram Bot long-polling initialized successfully.")
+        print("[APP STARTUP] Candidate Telegram Bot long-polling initialized successfully.")
     except Exception as exc:
         print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
+
+    try:
+        from modules.hm_telegram_bot.bot import start_hm_bot_polling
+        start_hm_bot_polling()
+        print("[APP STARTUP] Hiring Manager Telegram Bot initialized successfully.")
+    except Exception as exc:
+        print(f"[APP STARTUP HM TELEGRAM ERROR] {exc}")
 
     # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
     worker_task = None
@@ -99,6 +106,11 @@ async def lifespan(app: FastAPI):
     try:
         from modules.candidate.telegram_service import stop_telegram_polling
         stop_telegram_polling()
+    except Exception:
+        pass
+    try:
+        from modules.hm_telegram_bot.bot import stop_hm_bot_polling
+        stop_hm_bot_polling()
     except Exception:
         pass
 

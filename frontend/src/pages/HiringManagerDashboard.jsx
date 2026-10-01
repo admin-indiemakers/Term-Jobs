@@ -20,6 +20,8 @@ import {
   FileText,
   Award,
   Activity,
+  Send,
+  ExternalLink,
 } from 'lucide-react';
 import { interviewApi } from '../interview/services/interviewApi';
 
@@ -248,7 +250,21 @@ export default function HiringManagerDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <a
+            href="https://t.me/HirMngerbot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-2 cursor-pointer group"
+            title="Chat directly with Hiring Manager AI Bot on Telegram"
+          >
+            <Send size={13} className="transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+            <span>Start Telegram Bot</span>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] bg-white/20 text-white font-extrabold tracking-wider">
+              @HirMngerbot
+            </span>
+          </a>
+
           <button
             type="button"
             onClick={() => navigate('/dashboard/requisitions/new')}
@@ -257,6 +273,54 @@ export default function HiringManagerDashboard() {
             <Plus size={14} />
             <span>New Requisition</span>
           </button>
+        </div>
+      </div>
+
+      {/* Telegram AI Co-pilot Feature Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950 p-4 sm:p-5 text-white shadow-xs border border-blue-900/30">
+        <div className="absolute right-0 top-0 -mt-6 -mr-6 w-48 h-48 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
+        <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
+              <Send size={20} className="-translate-x-0.5 -translate-y-0.5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400">
+                  Hiring Manager AI Co-Pilot
+                </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">
+                  ● Telegram Live
+                </span>
+              </div>
+              <h2 className="text-sm sm:text-base font-bold text-white mt-0.5">
+                Control TermJobs from Telegram by chatting with @HirMngerbot
+              </h2>
+              <p className="text-xs text-gray-300 font-normal mt-0.5">
+                Draft requisitions, submit to Director, review shortlisted candidates & approve timesheets by sending casual prompts.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <a
+              href="https://t.me/HirMngerbot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Send size={13} />
+              <span>Launch @HirMngerbot</span>
+              <ExternalLink size={12} className="opacity-70" />
+            </a>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/hiring-manager-chat')}
+              className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Web AI Chat</span>
+              <ArrowRight size={13} />
+            </button>
+          </div>
         </div>
       </div>
 

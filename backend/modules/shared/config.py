@@ -50,5 +50,9 @@ class Settings(BaseSettings):
     telegram_bot_token: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
     telegram_bot_username: str = os.getenv("TELEGRAM_BOT_USERNAME", "Termjobs_alertbot")
 
+    # Hiring Manager Telegram AI Bot
+    hm_telegram_bot_token: str = os.getenv("HM_TELEGRAM_BOT_TOKEN", "")
+    hm_telegram_bot_username: str = os.getenv("HM_TELEGRAM_BOT_USERNAME", "Termjobs_hm_bot")
+
 
 settings = Settings()
