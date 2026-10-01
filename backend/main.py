@@ -310,23 +310,22 @@ def _build_service():
 
 
 service = _build_service()
-try:
-    init_db()
+if not bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")):
     try:
-        from scripts.seed_super_admin import seed_super_admin
-        seed_super_admin()
-    except Exception as s_exc:
+        init_db()
+        try:
+            from scripts.seed_super_admin import seed_super_admin
+            seed_super_admin()
+        except Exception as s_exc:
+            import logging
+            logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
+    except Exception as exc:  # noqa: BLE001
         import logging
-        logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
-except Exception as exc:  # noqa: BLE001
-    # Do not hard-crash at startup if MongoDB is unreachable (e.g. Atlas
-    # paused / IP allowlist changed). The server boots and reports degraded
-    # status via /health so callers can diagnose instead of a blank port.
-    import logging
 
-    logging.getLogger("uvicorn.error").warning(
-        "init_db failed (MongoDB unreachable?): %s", exc
-    )
+        logging.getLogger("uvicorn.error").warning(
+            "init_db failed (MongoDB unreachable?): %s", exc
+        )
+
 
 
 # --- request/response models ------------------------------------------------
