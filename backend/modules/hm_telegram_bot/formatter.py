@@ -352,4 +352,96 @@ def format_pending_works_briefing(data: Dict[str, Any], company_name: str = "Ter
     return "\n".join(lines)
 
 
+def format_offboarding_proposal_card(plan: Dict[str, Any]) -> str:
+    """Format structured offboarding clearance proposal card for Telegram."""
+    cand = plan.get("candidate_name") or "Candidate"
+    role = plan.get("requisition_title") or "Contractor Role"
+    company = plan.get("company_name") or "TermJobs"
+    email = plan.get("candidate_email") or "—"
+    wo_id = plan.get("work_order_id") or "WO-ACTIVE"
+    laptop = plan.get("laptop_spec") or "Standard build"
+
+    return (
+        f"🚪 *CANDIDATE OFFBOARDING PROPOSAL*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 *Candidate:* {cand}\n"
+        f"💼 *Role:* {role}\n"
+        f"🏢 *Company:* {company}\n"
+        f"📄 *Work Order:* `{wo_id}`\n"
+        f"📬 *Candidate Email:* `{email}`\n\n"
+        f"📦 *Asset Recovery Checklist:*\n"
+        f"• 💻 *Laptop Return:* `{laptop}` (Courier / Drop-off return required)\n"
+        f"• 🪪 *Security Badge:* Facility access badge return\n\n"
+        f"🔐 *Access Revocation (48h Grace Window):*\n"
+        f"• 🐙 *Code Repositories:* GitHub / GitLab access revocation\n"
+        f"• ☁️ *Cloud Infra:* AWS / GCP / Azure production access removal\n"
+        f"• 💬 *Workspace:* Slack, Jira & corporate Google Workspace deactivation\n\n"
+        f"📋 *Handover & Clearances:*\n"
+        f"• 🤝 Knowledge transfer session with engineering lead\n"
+        f"• 🔏 Final NDA & intellectual property exit clearance\n"
+        f"• ⏱️ Final timesheet submission & verification\n\n"
+        f"⚠️ *Timesheet Policy:* Timesheet submissions will be frozen upon offboarding completion.\n\n"
+        f"✨ _Confirm below to initiate offboarding, dispatch exit clearance to candidate, and notify IT/HR._"
+    )
+
+
+def format_offboarding_confirmed_card(res: Dict[str, Any]) -> str:
+    """Format offboarding initiation confirmation card."""
+    cand = res.get("candidate_name") or "Candidate"
+    email = res.get("candidate_email") or "Candidate Email"
+    role = res.get("requisition_title") or "Role"
+
+    return (
+        f"✅ *Candidate Offboarding Initiated!*\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 *Candidate:* {cand}\n"
+        f"💼 *Role:* {role}\n"
+        f"📬 *Exit Clearance Notice Sent:* `{email}`\n"
+        f"📋 *Status:* `in_progress`\n"
+        f"⏱️ *Access Policy:* 48-hour grace window until full deactivation\n"
+        f"🔒 *Timesheet Submissions:* Scheduled to freeze upon clearance completion\n\n"
+        f"✨ _Official exit clearance checklist & handover link delivered via TermJobs Gmail SMTP._"
+    )
+
+
+def format_upcoming_meetings_list(meetings: List[Dict[str, Any]], company_name: str = "TermJobs") -> str:
+    """Format upcoming interviews and meetings briefing for Telegram."""
+    if not meetings:
+        return (
+            f"📅 *NO UPCOMING MEETINGS SCHEDULED*\n"
+            f"🏢 *{company_name}*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"You have no interviews or meetings currently scheduled.\n\n"
+            f"💡 _To schedule an interview, say:_ `Schedule interview with Arjun on Friday at 3pm`"
+        )
+
+    lines = [
+        f"📅 *UPCOMING MEETINGS & SCHEDULED INTERVIEWS*",
+        f"🏢 *{company_name}* — {len(meetings)} Scheduled Session(s)",
+        "━━━━━━━━━━━━━━━━━━━━\n"
+    ]
+
+    for idx, m in enumerate(meetings, 1):
+        c_name = m.get("candidate_name") or "Candidate"
+        role = m.get("requisition_title") or "Engineering Role"
+        round_name = m.get("round_name") or "Technical Round"
+        dt = m.get("date") or "Upcoming Date"
+        tm = m.get("time") or "Time TBD"
+        link = m.get("meeting_link") or "https://termjobs.in/interview/room"
+        code = m.get("passcode") or "TJ-INT-2026"
+        status = m.get("status") or "Scheduled"
+
+        lines.append(f"*{idx}. {c_name}* — `{role}`")
+        lines.append(f"   🎯 *Round:* {round_name}")
+        lines.append(f"   📆 *Date & Time:* {dt} at *{tm}*")
+        lines.append(f"   🎥 *Room:* `{link}`")
+        lines.append(f"   🔑 *Passcode:* `{code}` (`{status}`)\n")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━")
+    lines.append("💬 _Tap any button below to join the video room or schedule a new round:_")
+    return "\n".join(lines)
+
+
+
+
 

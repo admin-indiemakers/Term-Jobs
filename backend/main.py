@@ -62,6 +62,7 @@ from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
 from modules.onboarding.offboarding_router import router as offboarding_router
 from modules.candidate_profile.router import router as candidate_profile_router
+from modules.hm_zoho_cliq import zoho_cliq_router
 
 
 from contextlib import asynccontextmanager
@@ -284,6 +285,7 @@ app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
 app.include_router(candidate_profile_router)
+app.include_router(zoho_cliq_router)
 
 # Reload trigger for interview module updates
 

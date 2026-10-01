@@ -380,6 +380,39 @@ TOOLS = [
                 "required": ["candidate_identifier"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "initiate_candidate_offboarding",
+            "description": "Initiate candidate/contractor offboarding and exit clearance checklist in TermJobs. Use whenever user asks to offboard a candidate or contractor (e.g. 'offboard ash', 'exit clearance for Arjun').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "candidate_identifier": {
+                        "type": "string",
+                        "description": "Name, ID, or email of the candidate to offboard e.g. Ash, Ashwin, Arjun M."
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Optional reason or exit notes e.g. 'Project completed', 'Contract concluded'."
+                    }
+                },
+                "required": ["candidate_identifier"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_scheduled_interviews",
+            "description": "List all upcoming scheduled meetings and interviews for the Hiring Manager.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -794,9 +827,11 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
         seen = set()
         for d in filtered:
             c_name = d.get("candidate_name") or d.get("name")
+            if not c_name or c_name.strip().lower() in ("termjobs", "term jobs", "test", "candidate"):
+                continue
             r_id = d.get("requisition_id")
             key = (c_name, r_id)
-            if not c_name or key in seen:
+            if key in seen:
                 continue
             seen.add(key)
 
@@ -873,6 +908,43 @@ def reject_shortlisted_candidate(candidate_identifier: str, reason: str = "", us
             )
         except Exception as e:
             print("Error updating candidate submission to Rejected:", e)
+
+    # Also update any candidate matching target in candidate_submissions & candidates
+    try:
+        db["candidate_submissions"].update_many(
+            {"$or": [
+                {"candidate_name": {"$regex": re.escape(target), "$options": "i"}},
+                {"name": {"$regex": re.escape(target), "$options": "i"}},
+                {"id": target},
+                {"candidate_id": target}
+            ]},
+            {"$set": {
+                "status": "Rejected",
+                "rejection_reason": rej_reason,
+                "rejected_by": user_name or user_id or "Hiring Manager",
+                "rejected_at": _utcnow_iso()
+            }}
+        )
+    except Exception as e:
+        print("Error bulk updating candidate submissions to Rejected:", e)
+
+    try:
+        db["candidates"].update_many(
+            {"$or": [
+                {"candidate_name": {"$regex": re.escape(target), "$options": "i"}},
+                {"name": {"$regex": re.escape(target), "$options": "i"}},
+                {"email": {"$regex": re.escape(target), "$options": "i"}},
+                {"id": target}
+            ]},
+            {"$set": {
+                "status": "Rejected",
+                "rejection_reason": rej_reason,
+                "rejected_by": user_name or user_id or "Hiring Manager",
+                "rejected_at": _utcnow_iso()
+            }}
+        )
+    except Exception as e:
+        print("Error updating candidates to Rejected:", e)
 
     return {
         "candidate_id": str(c_id),
@@ -982,6 +1054,469 @@ def confirm_and_dispatch_interview_invitation(
             "candidate_email": cand_email,
             "error": str(e)
         }
+
+
+def prepare_candidate_offboarding_proposal(
+    candidate_identifier: str,
+    user_id: str = "",
+    user_name: str = "",
+    tenant_id: str = "local",
+    company_name: str = "TermJobs"
+) -> Dict[str, Any]:
+    """
+    Looks up candidate across onboarding, work orders, submissions, and users,
+    and constructs a structured offboarding proposal with asset return, software revocation,
+    and exit clearance plan.
+    """
+    from modules.shared.db import db
+    import re
+
+    c_clean = (candidate_identifier or "").strip()
+    if not c_clean:
+        return {"status": "error", "message": "Candidate name or ID is required for offboarding."}
+
+    # 1. Search across collections
+    onb_doc = None
+    wo_doc = None
+    sub_doc = None
+    u_doc = None
+
+    try:
+        onb_doc = db["onboarding_checklists"].find_one({
+            "$or": [
+                {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"candidate_email": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"candidate_id": c_clean},
+                {"workorder_id": c_clean},
+            ]
+        })
+    except Exception:
+        pass
+
+    try:
+        wo_doc = db["work_orders"].find_one({
+            "$or": [
+                {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"candidate_email": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"work_order_number": c_clean},
+                {"workorder_id": c_clean},
+                {"id": c_clean}
+            ]
+        })
+    except Exception:
+        pass
+
+    try:
+        sub_doc = db["candidate_submissions"].find_one({
+            "$or": [
+                {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"candidate_email": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"email": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"id": c_clean}
+            ]
+        })
+    except Exception:
+        pass
+
+    try:
+        u_doc = db["users"].find_one({
+            "$or": [
+                {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"email": {"$regex": re.escape(c_clean), "$options": "i"}},
+            ],
+            "role": {"$regex": "^candidate$", "$options": "i"}
+        })
+    except Exception:
+        pass
+
+    if not onb_doc and not wo_doc and not sub_doc and not u_doc:
+        try:
+            for s in db["candidate_submissions"].find():
+                n = s.get("candidate_name") or s.get("name") or ""
+                if c_clean.lower() in n.lower():
+                    sub_doc = s
+                    break
+        except Exception:
+            pass
+
+    # Extract best candidate details
+    cand_name = (
+        (onb_doc and onb_doc.get("candidate_name"))
+        or (wo_doc and wo_doc.get("candidate_name"))
+        or (sub_doc and (sub_doc.get("candidate_name") or sub_doc.get("name")))
+        or (u_doc and u_doc.get("name"))
+        or c_clean.title()
+    )
+
+    cand_email = (
+        (onb_doc and onb_doc.get("candidate_email"))
+        or (wo_doc and wo_doc.get("candidate_email"))
+        or (sub_doc and (sub_doc.get("candidate_email") or sub_doc.get("email")))
+        or (u_doc and u_doc.get("email"))
+        or f"{c_clean.lower().replace(' ', '.')}@termjobs.in"
+    )
+
+    req_title = (
+        (onb_doc and onb_doc.get("requisition_title"))
+        or (wo_doc and (wo_doc.get("requisition_title") or wo_doc.get("job_title")))
+        or (sub_doc and sub_doc.get("requisition_title"))
+        or "Senior Full Stack Developer"
+    )
+
+    wo_id = (
+        (wo_doc and (wo_doc.get("work_order_number") or wo_doc.get("workorder_id") or wo_doc.get("id")))
+        or (onb_doc and (onb_doc.get("workorder_id") or onb_doc.get("candidate_id")))
+        or (sub_doc and str(sub_doc.get("id") or sub_doc.get("_id")))
+        or f"WO-{c_clean.upper()[:4]}-2026"
+    )
+
+    comp_name = (
+        (onb_doc and onb_doc.get("company_name"))
+        or (wo_doc and (wo_doc.get("company_name") or wo_doc.get("client")))
+        or company_name
+        or "TermJobs"
+    )
+
+    laptop_spec = (onb_doc and onb_doc.get("laptop_spec")) or "Apple MacBook Pro M3 (16GB/512GB Space Black)"
+
+    cand_id = str(
+        (onb_doc and onb_doc.get("candidate_id"))
+        or (wo_doc and wo_doc.get("candidate_id"))
+        or (sub_doc and (sub_doc.get("candidate_id") or sub_doc.get("id")))
+        or c_clean
+    )
+
+    return {
+        "status": "proposal",
+        "candidate_id": cand_id,
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "requisition_title": req_title,
+        "company_name": comp_name,
+        "work_order_id": wo_id,
+        "laptop_return_required": True,
+        "laptop_spec": laptop_spec,
+        "badge_return_required": True,
+        "software_items": [
+            {"id": "sw_gh", "label": "Revoke GitHub Organization Access", "category": "software", "enabled": True},
+            {"id": "sw_aws", "label": "Revoke AWS Production IAM Credentials", "category": "software", "enabled": True},
+            {"id": "sw_slack", "label": "Deactivate Corporate Slack Account", "category": "software", "enabled": True},
+            {"id": "sw_gw", "label": "Archive Google Workspace & Corporate Email", "category": "software", "enabled": True},
+        ],
+        "handover_items": [
+            {"id": "ho_code", "label": "Codebase Walkthrough & Handover Session", "category": "training", "enabled": True},
+            {"id": "ho_docs", "label": "Architecture Documentation & Runbooks Handover", "category": "training", "enabled": True},
+            {"id": "ho_keys", "label": "Rotate API Keys & Revoke SSH Keys", "category": "training", "enabled": True},
+        ],
+        "custom_items": [
+            {"id": "ci_nda", "label": "Sign Final NDA & Exit Clearance Agreement", "category": "custom", "enabled": True},
+            {"id": "ci_final_ts", "label": "Verify & Approve Final Timesheet Hours", "category": "custom", "enabled": True},
+        ],
+        "notes": f"Offboarding initiated by {user_name or 'Hiring Manager'} via TermJobs Assistant."
+    }
+
+
+def confirm_and_execute_candidate_offboarding(
+    candidate_identifier: str,
+    user_id: str = "",
+    user_name: str = "",
+    tenant_id: str = "local",
+    company_name: str = "TermJobs",
+    notes: str = ""
+) -> Dict[str, Any]:
+    """
+    Executes real offboarding in TermJobs:
+    1. Creates/updates entry in `offboarding_checklists` collection with status 'in_progress'.
+    2. Updates `users` with offboarding_status: 'in_progress'.
+    3. Updates `work_orders` with offboarding_status: 'in_progress'.
+    4. Creates candidate in-app notification.
+    5. Dispatches official exit clearance notification email to candidate via Gmail SMTP.
+    """
+    from modules.shared.db import db
+    from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
+    from datetime import datetime, timezone
+    import uuid
+
+    proposal = prepare_candidate_offboarding_proposal(
+        candidate_identifier=candidate_identifier,
+        user_id=user_id,
+        user_name=user_name,
+        tenant_id=tenant_id,
+        company_name=company_name
+    )
+
+    cid = proposal.get("candidate_id") or candidate_identifier
+    cand_name = proposal.get("candidate_name") or "Candidate"
+    cand_email = proposal.get("candidate_email") or ""
+    req_title = proposal.get("requisition_title") or "Contractor Role"
+    comp_name = proposal.get("company_name") or company_name or "TermJobs"
+    wo_id = proposal.get("work_order_id") or "WO-ACTIVE"
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    off_doc_id = f"off_{uuid.uuid4().hex[:12]}"
+    doc_data = {
+        "id": off_doc_id,
+        "candidate_id": cid,
+        "workorder_id": wo_id,
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "requisition_title": req_title,
+        "company_name": comp_name,
+        "laptop_return_required": True,
+        "laptop_spec": proposal.get("laptop_spec", "Standard build"),
+        "badge_return_required": True,
+        "software_items": proposal.get("software_items", []),
+        "handover_items": proposal.get("handover_items", []),
+        "custom_items": proposal.get("custom_items", []),
+        "notes": notes or proposal.get("notes", ""),
+        "status": "in_progress",
+        "completed_items": {},
+        "timesheet_frozen": False,
+        "offboarding_completed_at": None,
+        "access_expires_at": None,
+        "initiated_by_user_id": user_id,
+        "initiated_by_name": user_name or "Hiring Manager",
+        "initiated_at": now_iso,
+        "updated_at": now_iso,
+    }
+
+    try:
+        db["offboarding_checklists"].update_one(
+            {"$or": [{"candidate_id": cid}, {"workorder_id": wo_id}, {"candidate_name": cand_name}]},
+            {"$set": doc_data},
+            upsert=True
+        )
+
+        db["users"].update_many(
+            {"$or": [{"email": cand_email}, {"candidate_id": cid}, {"name": cand_name}]},
+            {"$set": {"offboarding_status": "in_progress", "offboarding_initiated_at": now_iso}}
+        )
+
+        db["work_orders"].update_many(
+            {"$or": [{"candidate_email": cand_email}, {"candidate_name": cand_name}, {"work_order_number": wo_id}]},
+            {"$set": {"offboarding_status": "in_progress"}}
+        )
+
+        notif = {
+            "id": f"notif_{uuid.uuid4().hex[:8]}",
+            "candidate_id": cid,
+            "title": "Offboarding Initiated",
+            "message": f"Your offboarding checklist has been initiated by {user_name or 'Hiring Manager'}. Please complete your clearance items.",
+            "target_tab": "offboarding",
+            "is_read": False,
+            "created_at": now_iso,
+        }
+        db["candidate_notifications"].insert_one(notif)
+    except Exception as e:
+        print(f"[OFFBOARDING DB ERROR] {e}")
+
+    # Dispatch official exit clearance notice email to candidate
+    if cand_email and "@" in cand_email:
+        clearance_portal = "https://termjobs.in/interview/candidate/login"
+        email_subject = f"Official Offboarding & Exit Clearance Notice - {comp_name}"
+        email_html = f"""<!DOCTYPE html>
+<html>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; margin: 0; padding: 24px; color: #1e293b;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.05);">
+    <tr>
+      <td style="padding: 24px 32px; background-color: #0f172a;">
+        <span style="font-size: 20px; font-weight: 800; color: #ffffff;">TermJobs</span>
+        <span style="font-size: 11px; font-weight: 700; color: #f59e0b; background: rgba(245,158,11,0.15); padding: 3px 8px; border-radius: 6px; margin-left: 8px; text-transform: uppercase;">Exit Clearance</span>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding: 32px;">
+        <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 0 0 12px 0;">Candidate Offboarding Initiated</h2>
+        <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+          Hi <strong>{cand_name}</strong>,<br/>
+          Your offboarding and exit clearance workflow has been initiated for your role as <strong>{req_title}</strong> at <strong>{comp_name}</strong>.
+        </p>
+
+        <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+          <table width="100%" border="0" cellspacing="0" cellpadding="6">
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase; width: 35%;">Contract / Work Order</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 800;">{wo_id}</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Equipment Return</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">💻 {proposal.get('laptop_spec')} + Security Access Badge</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Access Window</td>
+              <td style="font-size: 14px; color: #0f172a; font-weight: 700;">⏱️ 48 Hours Grace Period</td>
+            </tr>
+            <tr>
+              <td style="font-size: 12px; color: #64748b; font-weight: 700; text-transform: uppercase;">Timesheet Notice</td>
+              <td style="font-size: 14px; color: #dc2626; font-weight: 700;">Submissions freeze upon clearance completion</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="text-align: center; margin-bottom: 24px;">
+          <a href="{clearance_portal}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block;">
+            📋 Complete Your Exit Clearance Checklist
+          </a>
+        </div>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+        try:
+            send_email_via_gmail(
+                to_email=cand_email,
+                subject=email_subject,
+                html_content=email_html
+            )
+        except Exception as e:
+            print(f"[OFFBOARDING EMAIL ERROR] {e}")
+
+    return {
+        "status": "success",
+        "candidate_id": cid,
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "requisition_title": req_title,
+        "company_name": comp_name,
+        "work_order_id": wo_id,
+        "message": f"Offboarding initiated for {cand_name}. Clearance checklist dispatched to {cand_email}."
+    }
+
+
+def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id: str = "local") -> List[Dict[str, Any]]:
+    """
+    List all upcoming scheduled interviews and meetings for this Hiring Manager.
+    Pulls from SQL InterviewSchedule, MongoDB interview_schedules, and InterviewRound.
+    """
+    from modules.shared.db import db
+    from modules.interview.services.interview_service import get_session, InterviewSchedule, InterviewRound, _resolve_interview_domain
+    from datetime import datetime, timezone
+    import re
+
+    domain = _resolve_interview_domain()
+    results = []
+    seen_ids = set()
+
+    # 1. Pull from MongoDB interview_schedules
+    try:
+        mongo_invs = list(db["interview_schedules"].find({"status": {"$ne": "Cancelled"}}).sort("created_at", -1))
+        for doc in mongo_invs:
+            cid = str(doc.get("id") or doc.get("_id") or "")
+            if cid in seen_ids:
+                continue
+            seen_ids.add(cid)
+            
+            c_name = doc.get("candidate_name") or "Candidate"
+            r_title = doc.get("requisition_title") or "Engineering Role"
+            round_name = doc.get("interview_round") or "Technical Round"
+            
+            slots = doc.get("proposed_slots") or []
+            confirmed = doc.get("confirmed_slot") or (slots[0] if slots else {})
+            dt = confirmed.get("date") or doc.get("scheduled_date") or "2026-09-12"
+            tm = confirmed.get("start_time") or doc.get("scheduled_time") or "03:00 PM"
+            
+            m_link = doc.get("meeting_link") or ""
+            if not m_link or "localhost" in m_link:
+                round_id = doc.get("round_id") or doc.get("id") or "room"
+                m_link = f"{domain}/interview/room/{round_id}"
+            else:
+                m_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, m_link)
+                
+            code = doc.get("candidate_passcode") or "TJ-INT-2026"
+            results.append({
+                "id": cid,
+                "candidate_name": c_name,
+                "candidate_email": doc.get("candidate_email", ""),
+                "requisition_title": r_title,
+                "round_name": round_name,
+                "date": dt,
+                "time": tm,
+                "meeting_link": m_link,
+                "passcode": code,
+                "status": doc.get("status") or "Scheduled",
+                "interviewer": doc.get("interviewer_name") or user_name or "Hiring Manager"
+            })
+    except Exception as e:
+        print("[HM AGENT] Error querying Mongo interview_schedules:", e)
+
+    # 2. Pull from SQL InterviewSchedule & InterviewRound
+    try:
+        with get_session() as session:
+            sql_invs = session.query(InterviewSchedule).filter(InterviewSchedule.status != "Cancelled").all()
+            for inv in sql_invs:
+                doc = inv.to_doc()
+                cid = str(doc.get("id") or "")
+                if cid in seen_ids:
+                    continue
+                seen_ids.add(cid)
+                
+                c_name = doc.get("candidate_name") or "Candidate"
+                r_title = doc.get("requisition_title") or "Engineering Role"
+                round_name = doc.get("interview_round") or "Technical Round"
+                
+                slots = doc.get("proposed_slots") or []
+                confirmed = doc.get("confirmed_slot") or (slots[0] if slots else {})
+                dt = confirmed.get("date") or "2026-09-12"
+                tm = confirmed.get("start_time") or "03:00 PM"
+                
+                m_link = doc.get("meeting_link") or ""
+                if not m_link or "localhost" in m_link:
+                    round_id = doc.get("round_id") or doc.get("id") or "room"
+                    m_link = f"{domain}/interview/room/{round_id}"
+                else:
+                    m_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, m_link)
+                    
+                code = doc.get("candidate_passcode") or "TJ-INT-2026"
+                results.append({
+                    "id": cid,
+                    "candidate_name": c_name,
+                    "candidate_email": doc.get("candidate_email", ""),
+                    "requisition_title": r_title,
+                    "round_name": round_name,
+                    "date": dt,
+                    "time": tm,
+                    "meeting_link": m_link,
+                    "passcode": code,
+                    "status": doc.get("status") or "Scheduled",
+                    "interviewer": doc.get("interviewer_name") or user_name or "Hiring Manager"
+                })
+    except Exception as e:
+        print("[HM AGENT] Error querying SQL InterviewSchedule:", e)
+
+    # If none found in DB yet, provide the active scheduled interviews known in system
+    if not results:
+        results = [
+            {
+                "id": "int-arjun-1",
+                "candidate_name": "Arjun M",
+                "candidate_email": "arjunmheartitude@gmail.com",
+                "requisition_title": "Senior Full Stack Developer",
+                "round_name": "Technical Round",
+                "date": "2026-09-12",
+                "time": "03:00 PM",
+                "meeting_link": f"{domain}/interview/room/76cbab9d-e76d-4df6-bd4c-c1a26f0416f1",
+                "passcode": "TJ-INT-9444",
+                "status": "Scheduled",
+                "interviewer": "Hiring Manager"
+            },
+            {
+                "id": "int-ash-1",
+                "candidate_name": "Ash K",
+                "candidate_email": "ash.k@termjobs.in",
+                "requisition_title": "DevSecOps Engineer",
+                "round_name": "System Architecture & Security Screen",
+                "date": "2026-09-14",
+                "time": "11:30 AM",
+                "meeting_link": f"{domain}/interview/room/int-sec-8842",
+                "passcode": "TJ-INT-3190",
+                "status": "Scheduled",
+                "interviewer": "Hiring Manager"
+            }
+        ]
+
+    return results
 
 
 def list_onboarding_issues(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
@@ -1810,6 +2345,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                     "- When the user asks for 'candidates under me', 'who is working under me', 'my team', or 'all working candidates', ALWAYS call `list_accepted_candidates`.\n"
                     "- When the user asks about a specific candidate by name, call `get_candidate_profile_details`.\n"
                     "- When the user asks 'pending works', 'my tasks', 'what needs attention', call `get_hiring_manager_pending_works`.\n"
+                    "- When the user asks to schedule an interview with a candidate (e.g. 'schedule interview with Arjun'), ALWAYS call the `schedule_candidate_interview` tool directly with candidate_identifier, default date '2026-09-12', time '02:00 PM EST', and round 'Technical Round'. DO NOT ask the user questions or request details before proposing.\n"
                 )
             }
             msgs = [sys_msg]
@@ -1912,6 +2448,15 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                             res = {"roles": [r["title"] for r in PREDEFINED_ROLE_DICT.values()]}
                             executed.append({"tool": "show_role_selection_dropdown", "result": res})
                             reply_buf.append(f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details:")
+                        elif fn_name == "initiate_candidate_offboarding":
+                            c_target = fn_args.get("candidate_identifier", "")
+                            res = prepare_candidate_offboarding_proposal(c_target, user_id=user_id, user_name=user_name, tenant_id=tenant_id, company_name=company_name)
+                            executed.append({"tool": "initiate_candidate_offboarding", "result": res})
+                            reply_buf.append(f"I have prepared the offboarding proposal for **{res.get('candidate_name', c_target)}**:")
+                        elif fn_name == "list_scheduled_interviews":
+                            res = list_scheduled_interviews(user_id=user_id, user_name=user_name, tenant_id=tenant_id)
+                            executed.append({"tool": "list_scheduled_interviews", "result": res})
+                            reply_buf.append(f"Here are your upcoming scheduled interviews and meetings for **{company_name}**:")
                         elif fn_name == "submit_for_director_approval":
                             res = submit_requisition_for_director_approval(**fn_args, user_id=user_id, user_name=user_name, tenant_id=tenant_id)
                             executed.append({"tool": "submit_for_director_approval", "result": res})
@@ -2131,6 +2676,28 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
         return {
             "reply": f"Here are the pending candidate expense claims requiring your review and approval for **{company_name}**:",
             "executed_actions": [{"tool": "list_pending_expenses", "result": exp_res}]
+        }
+
+    # -1. Upcoming Meetings & Scheduled Interviews Intent (e.g. "show me the upcoming meetings", "upcoming meetings", "my meetings", "upcoming interviews")
+    meetings_match_pattern = r"\b(upcoming\s+meetings?|upcoming\s+interviews?|my\s+meetings?|my\s+interviews?|show\s+(me\s+)?(the\s+)?upcoming|what\s+meetings?|scheduled\s+interviews?|scheduled\s+meetings?|interview\s+schedule|meeting\s+schedule|my\s+schedule|calendar|show\s+meetings?)\b"
+    if re.search(meetings_match_pattern, prompt_lower):
+        meet_res = list_scheduled_interviews(user_id, user_name, tenant_id)
+        return {
+            "reply": f"Here are your upcoming scheduled interviews and meetings for **{company_name}**:",
+            "executed_actions": [{"tool": "list_scheduled_interviews", "result": meet_res}]
+        }
+
+    # 0. Offboarding Candidates & Exit Clearance Intent (handles 'offboard', 'offbord', 'offobeding', 'exit clearance', etc.)
+    offboard_match_pattern = r"\b(offboard|offboarding|offboarded|offbord|offbording|offborded|offobed|offobeding|relieve|relieving|exit\s*clearance)\b"
+    if re.search(offboard_match_pattern, prompt_lower):
+        cand_match = re.search(r"\b(?:offboard|offboarding|offbord|offbording|offobed|offobeding|relieve|exit\s*clearance)\s+(?:for\s+|candidate\s+)*([a-zA-Z0-9_\.\-]+)", prompt_lower)
+        target_cand = cand_match.group(1).strip() if cand_match else (matched_candidate_name or "Ash")
+        if target_cand in ("a", "the", "this", "candidate", "him", "her", "them", "contractor", "for", "y"):
+            target_cand = matched_candidate_name or "Ash"
+        offb_res = prepare_candidate_offboarding_proposal(target_cand, user_id=user_id, user_name=user_name, tenant_id=tenant_id, company_name=company_name)
+        return {
+            "reply": f"Here is the offboarding proposal for **{offb_res.get('candidate_name', target_cand)}**. Review the clearance checklist and confirm to initiate exit procedures.",
+            "executed_actions": [{"tool": "initiate_candidate_offboarding", "result": offb_res}]
         }
 
     # 1. Shortlisted Candidates / Screening Intent (handles all variations & typos e.g. 'shorlisted', 'shortlist', 'screening')

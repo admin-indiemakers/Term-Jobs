@@ -191,3 +191,34 @@ def build_role_selection_keyboard(roles: Optional[List[str]] = None) -> Dict[str
             row.append({"text": f"💼 {r2[:24]}", "callback_data": f"select_role:{r2[:30]}"})
         keyboard.append(row)
     return {"inline_keyboard": keyboard}
+
+
+def build_offboarding_proposal_keyboard(candidate_identifier: str) -> Dict[str, Any]:
+    """Action buttons to confirm or cancel candidate offboarding initiation."""
+    cand_safe = (candidate_identifier or "candidate")[:30]
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "🚪 Confirm & Initiate Offboarding", "callback_data": f"conf_offb:{cand_safe}"},
+                {"text": "❌ Cancel", "callback_data": "cancel_offb"}
+            ]
+        ]
+    }
+
+
+def build_upcoming_meetings_keyboard(meetings: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Action buttons for upcoming interviews and meetings."""
+    buttons = []
+    for m in meetings[:3]:
+        name = (m.get("candidate_name") or "Candidate").split()[0]
+        link = m.get("meeting_link") or "https://termjobs.in/interview/room"
+        buttons.append([
+            {"text": f"🎥 Join {name}'s Interview Room", "url": link}
+        ])
+    buttons.append([
+        {"text": "➕ Schedule Interview", "callback_data": "menu:candidates"},
+        {"text": "⚡ Quick Menu", "callback_data": "menu:help"}
+    ])
+    return {"inline_keyboard": buttons}
+
+
