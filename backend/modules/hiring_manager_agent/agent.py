@@ -23,6 +23,16 @@ def _utcnow_iso():
 
 
 PREDEFINED_ROLE_DICT = {
+    "devops": {
+        "title": "DevOps Engineer",
+        "department": "Infrastructure & Cloud",
+        "location": "Bengaluru / Hybrid",
+        "employment_type": "Contract (6 Months)",
+        "experience_level": "Mid (2-5 yrs)",
+        "salary_range": "₹1,500 - ₹2,200 / hr",
+        "skills": "AWS, Docker, Kubernetes, CI/CD, Terraform, Linux",
+        "job_description": "Deploy and maintain cloud infrastructure on AWS, design automated CI/CD pipelines, containerize microservices with Docker/K8s, and monitor system performance."
+    },
     "devsecops": {
         "title": "DevSecOps Engineer",
         "department": "Security & Infrastructure",
@@ -196,6 +206,28 @@ TOOLS = [
                     "salary_range": {"type": "string", "description": "Salary range"},
                     "skills": {"type": "string", "description": "Required skills"},
                     "job_description": {"type": "string", "description": "Job description"}
+                },
+                "required": ["title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_for_director_approval",
+            "description": "Submit a drafted or new job requisition to the Director for official review and approval.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Job title e.g. DevOps Engineer"},
+                    "department": {"type": "string", "description": "Department e.g. Infrastructure & Cloud"},
+                    "location": {"type": "string", "description": "Location e.g. Bengaluru / Hybrid"},
+                    "employment_type": {"type": "string", "description": "Employment type e.g. Contract (6 Months)"},
+                    "experience_level": {"type": "string", "description": "Experience level e.g. Mid (2-5 yrs)"},
+                    "salary_range": {"type": "string", "description": "Salary range e.g. ₹1,500 - ₹2,200 / hr"},
+                    "skills": {"type": "string", "description": "Required tech stack / skills"},
+                    "job_description": {"type": "string", "description": "Job description"},
+                    "req_id": {"type": "string", "description": "Optional requisition ID if already drafted"}
                 },
                 "required": ["title"]
             }
@@ -475,6 +507,118 @@ def create_hiring_requisition(title: str, department: str = "", location: str = 
         }
     finally:
         pass
+
+
+def submit_requisition_for_director_approval(
+    title: str,
+    department: str = "",
+    location: str = "",
+    employment_type: str = "",
+    experience_level: str = "",
+    salary_range: str = "",
+    skills: str = "",
+    job_description: str = "",
+    user_id: str = "",
+    user_name: str = "",
+    tenant_id: str = "local",
+    req_id: str = ""
+):
+    """Save requisition with 'Pending Approval' status and trigger Director notification."""
+    session = get_session()
+    now_iso = _utcnow_iso()
+    new_id = req_id if req_id else str(uuid.uuid4())
+    structured_role = {
+        "title": title,
+        "department": department or "Engineering & Product",
+        "location": location or "Bangalore / Hybrid Remote",
+        "employment_type": employment_type or "Contract (6 Months)",
+        "experience_level": experience_level or "Mid-Level",
+        "salary_range": salary_range or "₹1,500 - ₹2,200 / hr",
+        "skills": skills or "AWS, Docker, Kubernetes, CI/CD",
+        "job_description": job_description or f"Job requisition for {title} submitted for Director approval."
+    }
+
+    try:
+        existing = session.get(Requisition, new_id) if new_id else None
+        if existing:
+            existing.status = "Pending Approval"
+            existing.director_approved = False
+            existing.structured_role = structured_role
+            if job_description:
+                existing.generated_jd_markdown = job_description
+            session.commit()
+        else:
+            req = Requisition(
+                id=new_id,
+                tenant_id=tenant_id,
+                created_by=user_id,
+                status="Pending Approval",
+                title=title,
+                structured_role=structured_role,
+                generated_jd_markdown=job_description or f"Requisition for {title}",
+                director_approved=False
+            )
+            session.add(req)
+            session.commit()
+    except Exception as e:
+        print("[HM AGENT] Error saving requisition in Postgres:", e)
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
+
+    # Sync to MongoDB requisitions collection
+    try:
+        db["requisitions"].update_one(
+            {"id": new_id},
+            {"$set": {
+                "id": new_id,
+                "tenant_id": tenant_id,
+                "created_by": user_id,
+                "created_by_name": user_name or "Hiring Manager",
+                "status": "Pending Approval",
+                "title": title,
+                "department": department or "Engineering & Product",
+                "location": location or "Bangalore / Hybrid Remote",
+                "structured_role": structured_role,
+                "generated_jd_markdown": job_description,
+                "director_approved": False,
+                "updated_at": now_iso
+            },
+            "$setOnInsert": {
+                "created_at": now_iso
+            }},
+            upsert=True
+        )
+    except Exception as e:
+        print("[HM AGENT] Error saving requisition in MongoDB:", e)
+
+    # Create in-app Director Notification
+    try:
+        db["notifications"].insert_one({
+            "id": str(uuid.uuid4()),
+            "tenant_id": tenant_id,
+            "type": "requisition_approval_request",
+            "title": f"New Requisition Approval Request: {title}",
+            "message": f"{user_name or 'Hiring Manager'} submitted a new requisition '{title}' for your review and approval.",
+            "requisition_id": new_id,
+            "target_role": "Director",
+            "status": "unread",
+            "created_at": now_iso
+        })
+    except Exception as e:
+        print("[HM AGENT] Error dispatching Director notification:", e)
+
+    return {
+        "req_id": new_id,
+        "title": title,
+        "status": "Pending Approval",
+        "department": department or "Engineering & Product",
+        "director_notified": True,
+        "message": f"Job Requisition '{title}' has been submitted to the Director for approval. The Director has been notified!"
+    }
+
 
 
 def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
@@ -1010,8 +1154,12 @@ STOP_WORDS = {
 
 def find_matched_candidate_in_db(prompt_text: str):
     prompt_lower = prompt_text.lower()
-    cands = list(db["candidate_submissions"].find({}, {"candidate_name": 1, "name": 1}))
-    cands += list(db["candidates"].find({}, {"candidate_name": 1, "name": 1}))
+    cands = []
+    try:
+        cands = list(db["candidate_submissions"].find({}, {"candidate_name": 1, "name": 1}))
+        cands += list(db["candidates"].find({}, {"candidate_name": 1, "name": 1}))
+    except Exception:
+        pass
     
     for c in cands:
         name = c.get("candidate_name") or c.get("name")
@@ -1070,123 +1218,69 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
         except Exception:
             pass
 
-    # Dynamic Candidate Matcher from MongoDB
-    matched_candidate_name = find_matched_candidate_in_db(prompt_clean)
+    # Intercept explicit submit to director commands
+    if prompt_clean.startswith("CONFIRM_SUBMIT_TO_DIRECTOR:"):
+        try:
+            parts = {}
+            for token_str in prompt_clean.replace("CONFIRM_SUBMIT_TO_DIRECTOR:", "").split(", "):
+                if "=" in token_str:
+                    k, v = token_str.split("=", 1)
+                    parts[k.strip()] = v.strip().strip('"')
 
-    expense_pattern = r"(expense|expenses|espense|espenses|expence|expences|exspense|exspenses|espens|espenss|reimburse|reimbursement|reimbursemnt|claim|claims|expense claim|expense report)"
-    timesheet_pattern = r"(timesheet|timesheets|timeshet|timeshets|timsheet|timsheets|timecard|timecards|time card|time cards|hours logged|logged hours|time seat|time seats|tyme sheet|timeshit|timesheet approval|pending hours|pending time|hours pending|time log|timelogs|time logs|approve time|timeseet|time seet|timeseats)"
-    # Generic "pending/waiting for approval" that implies timesheets (most common approval context in hiring)
-    approval_pending_pattern = r"(waiting for approval|wait for approval|pending approval|needs approval|need approval|awaiting approval|approve pending|pending review|needs review|pending submit|submit.*approval|approval.*pending)"
-    shortlist_pattern = r"(shortlist|shortlisted|shotlist|shotlisted|shrtlist|shrtlisted|sortlist|sortlisted|shorted|list shortlisted|show shortlisted|short candidates)"
-    onboard_pattern = r"(onboard|onbord|obord|ombord|omboard|hired|accepted|joining|joined|onb|obor|onbording|onbordd|obordd)"
-    reject_pattern = r"(reject|rejekt|rejct|disqualify|decline|drop candidate|drop shortlisted)"
-    create_req_pattern = r"(create|draft|new|add|make|build|post)\s+(a\s+)?(requisition|req|job|role|position|opening|job post|job posting|contract role)"
-
-    # Intercept Requisition Creation / Drafting intent
-    if re.search(create_req_pattern, prompt_lower):
-        matched_role = None
-        for key, role_data in PREDEFINED_ROLE_DICT.items():
-            if key in prompt_lower or role_data["title"].lower() in prompt_lower:
-                matched_role = role_data
-                break
-
-        if matched_role:
-            draft_res = draft_requisition_preview(
-                title=matched_role["title"],
-                department=matched_role["department"],
-                location=matched_role["location"],
-                employment_type=matched_role["employment_type"],
-                experience_level=matched_role["experience_level"],
-                salary_range=matched_role["salary_range"],
-                skills=matched_role["skills"],
-                job_description=matched_role["job_description"]
+            title = parts.get("title", "Job Requisition")
+            res = submit_requisition_for_director_approval(
+                title=title,
+                department=parts.get("department", "Engineering & Product"),
+                location=parts.get("location", "Bangalore / Hybrid Remote"),
+                employment_type=parts.get("employment_type", "Contract (6 Months)"),
+                experience_level=parts.get("experience_level", "Mid-Level"),
+                salary_range=parts.get("salary_range", "₹1,500 - ₹2,200 / hr"),
+                skills=parts.get("skills", "AWS, Docker, Kubernetes, CI/CD"),
+                job_description=parts.get("job_description", f"Requisition for {title} submitted for Director approval."),
+                user_id=user_id,
+                user_name=user_name,
+                tenant_id=tenant_id,
+                req_id=parts.get("req_id", "")
             )
             return {
-                "reply": f"✨ **All position details for {matched_role['title']} have been 100% autofilled!**\n\nI have generated the structured job requisition preview card with all parameters prefilled (Role, Department, Location, Salary Budget, Skills & Job Description). No unfilled boxes remain. Review the preview card on your right panel or click **Publish Requisition** to launch it live.",
-                "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
+                "reply": f"✅ Job Requisition **{title}** has been sent to the Director for approval!\n\nThe Director has been notified. You'll receive updates as soon as they review it.",
+                "executed_actions": [{"tool": "submit_for_director_approval", "result": res}]
             }
-        else:
-            return {
-                "reply": f"Which role would you like to create for **{company_name}**? Select a role from the dropdown below to **100% autofill** all position details instantly!",
-                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": [r["title"] for r in PREDEFINED_ROLE_DICT.values()]}}]
-            }
+        except Exception:
+            pass
 
-    # Intercept candidate rejection queries (handles typos e.g. 'rejekt', 'rejct')
-    if re.search(reject_pattern, prompt_lower):
-        cand_target = matched_candidate_name or prompt_clean
-        for pref in ["reject shortlisted candidate", "reject candidate", "reject", "disqualify candidate", "disqualify", "decline candidate", "decline"]:
-            if pref in prompt_lower:
-                idx = prompt_lower.find(pref) + len(pref)
-                cand_target = prompt_clean[idx:].strip(" .!?")
+    # Conversational "yes send it / submit to director" confirmation
+    send_director_pattern = r"^(yes\s*,?\s*(send|submit|please)|send\s+(it\s+)?(to|for)\s+(the\s+)?director|submit\s+(it\s+)?(to|for)\s+(the\s+)?director|send\s+for\s+approval|submit\s+for\s+approval|yes\s+send\s+it|send\s+it)"
+    if re.search(send_director_pattern, prompt_lower):
+        last_role = None
+        for h in reversed(history):
+            content = (h.get("content") or h.get("text") or "").lower()
+            for r_key, r_info in PREDEFINED_ROLE_DICT.items():
+                if r_key in content or r_info["title"].lower() in content:
+                    last_role = r_info
+                    break
+            if last_role:
                 break
-
-        if not cand_target or len(cand_target) < 2 or cand_target.lower() in ["candidate", "shortlisted candidate", "candidate submission"]:
-            cand_target = matched_candidate_name or "Candidate"
-
-        rej_res = reject_shortlisted_candidate(cand_target, "Not aligned with requisition requirements.", user_id, user_name, tenant_id)
-        return {
-            "reply": f"Candidate **{rej_res['candidate_name']}** for **{rej_res['requisition_title']}** has been marked as **Rejected**.",
-            "executed_actions": [{"tool": "reject_shortlisted_candidate", "result": rej_res}]
-        }
-
-    # Intercept shortlisted candidates query (handles typos e.g. 'shotlisted', 'shrtlisted', 'kist the shortlisted')
-    if re.search(shortlist_pattern, prompt_lower) or ("short" in prompt_lower and "cand" in prompt_lower) or ("kist" in prompt_lower and "cand" in prompt_lower):
-        cand_res = list_shortlisted_candidates(user_id, user_name, tenant_id)
-        return {
-            "reply": f"Here are the shortlisted candidates for your open requisitions in **{company_name}**:",
-            "executed_actions": [{"tool": "list_shortlisted_candidates", "result": cand_res}]
-        }
-
-    # 1. Candidate Specific Profile Query (requires matched candidate name in DB or explicit profile card request)
-    is_cand_profile_query = bool(matched_candidate_name) or any(k in prompt_lower for k in ["profile card", "candidate detail", "workforce detail", "employee profile"])
-    if is_cand_profile_query and not (re.search(expense_pattern, prompt_lower) or re.search(timesheet_pattern, prompt_lower) or re.search(shortlist_pattern, prompt_lower) or re.search(onboard_pattern, prompt_lower) or re.search(reject_pattern, prompt_lower) or re.search(approval_pending_pattern, prompt_lower)):
-        profile_res = get_candidate_profile_details(matched_candidate_name or "", tenant_id)
-        return {
-            "reply": f"Here is the detailed workforce profile, timesheet summary, expense claims, and onboarding status for candidate **{profile_res['candidate_name']}**:",
-            "executed_actions": [{"tool": "get_candidate_profile_details", "result": profile_res}]
-        }
-
-    # 2. General Pending Timesheets Query (without candidate name)
-    if re.search(timesheet_pattern, prompt_lower) and not matched_candidate_name:
-        ts_res = list_pending_timesheets(user_id, user_name, tenant_id)
-        return {
-            "reply": f"Here are the pending timesheet submissions requiring your review and approval for **{company_name}**:",
-            "executed_actions": [{"tool": "list_pending_timesheets", "result": ts_res}]
-        }
-
-    # 2b. Generic "waiting for approval" / "pending approval" intent → show timesheets + expenses
-    if re.search(approval_pending_pattern, prompt_lower) and not matched_candidate_name:
-        # Check if they mentioned expense-related words — show expenses instead
-        if re.search(expense_pattern, prompt_lower):
-            exp_res = list_pending_expenses(user_id, user_name, tenant_id)
+        if last_role:
+            res = submit_requisition_for_director_approval(
+                title=last_role["title"],
+                department=last_role["department"],
+                location=last_role["location"],
+                employment_type=last_role["employment_type"],
+                experience_level=last_role["experience_level"],
+                salary_range=last_role["salary_range"],
+                skills=last_role["skills"],
+                job_description=last_role["job_description"],
+                user_id=user_id,
+                user_name=user_name,
+                tenant_id=tenant_id
+            )
             return {
-                "reply": f"Here are the pending expense claims awaiting your approval for **{company_name}**:",
-                "executed_actions": [{"tool": "list_pending_expenses", "result": exp_res}]
+                "reply": f"✅ Requisition for **{last_role['title']}** has been sent to the Director for approval!\n\nThe Director has been notified and will review it shortly.",
+                "executed_actions": [{"tool": "submit_for_director_approval", "result": res}]
             }
-        # Default: show timesheets (most common approval context)
-        ts_res = list_pending_timesheets(user_id, user_name, tenant_id)
-        return {
-            "reply": f"Here are the pending timesheet submissions waiting for your approval for **{company_name}**:",
-            "executed_actions": [{"tool": "list_pending_timesheets", "result": ts_res}]
-        }
 
-    # 3. General Pending Expenses Query (without candidate name)
-    if re.search(expense_pattern, prompt_lower) and not matched_candidate_name:
-        exp_res = list_pending_expenses(user_id, user_name, tenant_id)
-        return {
-            "reply": f"Here are the pending candidate expense claims requiring your review and approval for **{company_name}**:",
-            "executed_actions": [{"tool": "list_pending_expenses", "result": exp_res}]
-        }
-
-    # Intercept onboarding / hired / accepted candidates queries (handles all typos e.g. 'onborded', 'oborded', 'onboarded', 'onbordd', 'hired', 'joining')
-    if re.search(onboard_pattern, prompt_lower):
-        issue_res = list_onboarding_issues(user_id, user_name, tenant_id)
-        return {
-            "reply": f"Here are the candidates currently in onboarding and reported onboarding issues for **{company_name}**:",
-            "executed_actions": [{"tool": "list_onboarding_issues", "result": issue_res}]
-        }
-
-    # 1. Attempt Groq LLM Completion if API key is present
+    # 1. First Attempt Groq Cloud LLM Completion (Full Natural Language & Dynamic Tech Stacks)
     if getattr(settings, "groq_api_key", None):
         try:
             url = f"{settings.groq_base_url.rstrip('/')}/chat/completions"
@@ -1198,8 +1292,9 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                 "role": "system",
                 "content": (
                     f"You are the TermJobs AI Hiring Assistant for {user_name} at {company_name}.\n"
-                    "You help Hiring Managers inspect live requisitions, draft new job postings, review shortlisted candidates, schedule candidate interviews, track candidate profile details/timesheets/expenses, and monitor onboarding issues.\n"
-                    "Call the appropriate function tools when asked about requisitions, candidate shortlists, interviews, candidate profile details, timesheets, expenses, or onboarding."
+                    "You help Hiring Managers inspect live requisitions, draft new job postings with flexible custom tech stacks, review shortlisted candidates, schedule candidate interviews, track timesheets/expenses, and submit requisitions for Director approval.\n"
+                    "When the user asks to draft/create a requisition with ANY tech stack or role requirements, extract the exact technologies requested (e.g. Python, React, Go, etc.) into the `skills` field and generate a tailored `job_description`.\n"
+                    "Call the appropriate function tools when asked about requisitions, candidate shortlists, interviews, timesheets, expenses, or onboarding."
                 )
             }
             msgs = [sys_msg]
@@ -1211,8 +1306,9 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
 
             msgs.append({"role": "user", "content": prompt_clean})
 
+            active_model = getattr(settings, "groq_default_model", None) or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": active_model,
                 "messages": msgs,
                 "tools": TOOLS,
                 "tool_choice": "auto",
@@ -1243,7 +1339,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                         elif fn_name == "draft_hiring_requisition":
                             res = draft_requisition_preview(**fn_args)
                             executed.append({"tool": "draft_hiring_requisition", "result": res})
-                            reply_buf.append(f"I have created a draft for **{res['title']}**. Review below and click **Confirm & Publish Requisition**:")
+                            reply_buf.append(f"Sure! I've drafted the requisition for **{res['title']}** ({res.get('experience_level', 'Mid-Level')}).\n\nReview the draft details below — would you like me to send this to the Director for approval?")
                         elif fn_name == "list_shortlisted_candidates":
                             res = list_shortlisted_candidates(user_id, user_name, tenant_id)
                             executed.append({"tool": "list_shortlisted_candidates", "result": res})
@@ -1275,6 +1371,14 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                             res = reject_shortlisted_candidate(c_target, r_reason, user_id, user_name, tenant_id)
                             executed.append({"tool": "reject_shortlisted_candidate", "result": res})
                             reply_buf.append(f"Candidate **{res['candidate_name']}** has been marked as Rejected for **{company_name}**:")
+                        elif fn_name == "create_hiring_requisition":
+                            res = create_hiring_requisition(**fn_args, user_id=user_id, tenant_id=tenant_id)
+                            executed.append({"tool": "create_hiring_requisition", "result": res})
+                            reply_buf.append(f"Job Requisition **{res.get('title', '')}** has been published successfully!")
+                        elif fn_name == "submit_for_director_approval":
+                            res = submit_requisition_for_director_approval(**fn_args, user_id=user_id, user_name=user_name, tenant_id=tenant_id)
+                            executed.append({"tool": "submit_for_director_approval", "result": res})
+                            reply_buf.append(f"Job Requisition **{res.get('title', '')}** has been sent to the Director for approval!")
 
                     if executed:
                         return {
@@ -1287,7 +1391,82 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                         "executed_actions": []
                     }
         except Exception as groq_err:
-            pass
+            print("[HM AGENT] Groq LLM fallback due to:", groq_err)
+
+    # 2. Resilient Rule-Based Fallback
+    # Dynamic Candidate Matcher from MongoDB
+    matched_candidate_name = find_matched_candidate_in_db(prompt_clean)
+
+    expense_pattern = r"(expense|expenses|espense|espenses|expence|expences|exspense|exspenses|espens|espenss|reimburse|reimbursement|reimbursemnt|claim|claims|expense claim|expense report)"
+    timesheet_pattern = r"(timesheet|timesheets|timeshet|timeshets|timsheet|timsheets|timecard|timecards|time card|time cards|hours logged|logged hours|time seat|time seats|tyme sheet|timeshit|timesheet approval|pending hours|pending time|hours pending|time log|timelogs|time logs|approve time|timeseet|time seet|timeseats)"
+    approval_pending_pattern = r"(waiting for approval|wait for approval|pending approval|needs approval|need approval|awaiting approval|approve pending|pending review|needs review|pending submit|submit.*approval|approval.*pending)"
+    shortlist_pattern = r"(shortlist|shortlisted|shotlist|shotlisted|shrtlist|shrtlisted|sortlist|sortlisted|shorted|list shortlisted|show shortlisted|short candidates)"
+    onboard_pattern = r"(onboard|onbord|obord|ombord|omboard|hired|accepted|joining|joined|onb|obor|onbording|onbordd|obordd)"
+    reject_pattern = r"(reject|rejekt|rejct|disqualify|decline|drop candidate|drop shortlisted)"
+    create_req_pattern = r"((create|draft|new|add|make|build|post)\s+(a\s+)?(requisition|req|job|role|position|opening|job post|job posting|contract role))|((i\s+)?(need|nned|want|looking\s+for|hire|hiring|require)\s+(a\s+|an\s+)?([a-z0-9\s/]+))"
+
+    # Intercept Requisition Creation / Drafting intent (with custom tech stack extraction)
+    if re.search(create_req_pattern, prompt_lower):
+        matched_role = None
+        for key, role_data in PREDEFINED_ROLE_DICT.items():
+            if key in prompt_lower or role_data["title"].lower() in prompt_lower:
+                matched_role = role_data
+                break
+
+        if matched_role:
+            # Extract experience if mentioned (e.g. '2 yr', '3-5 years', '5 yrs')
+            exp_match = re.search(r"(\d+)\s*(?:-|to)?\s*(\d+)?\s*(?:yr|yrs|year|years)\b", prompt_lower)
+            exp_val = matched_role["experience_level"]
+            if exp_match:
+                if exp_match.group(2):
+                    exp_val = f"{exp_match.group(1)}-{exp_match.group(2)} Years"
+                else:
+                    exp_val = f"{exp_match.group(1)} Years"
+
+            # Extract any custom tech stacks mentioned
+            detected_skills = []
+            known_techs = [
+                ("python", "Python"), ("golang", "Go / Golang"), ("go", "Go"), ("rust", "Rust"), ("java", "Java"),
+                ("c++", "C++"), ("c#", "C#"), (".net", ".NET"), ("php", "PHP"), ("ruby", "Ruby on Rails"),
+                ("react", "React"), ("next.js", "Next.js"), ("vue", "Vue.js"), ("angular", "Angular"),
+                ("svelte", "Svelte"), ("typescript", "TypeScript"), ("javascript", "JavaScript"), ("node", "Node.js"),
+                ("fastapi", "FastAPI"), ("django", "Django"), ("flask", "Flask"), ("spring", "Spring Boot"),
+                ("aws", "AWS"), ("gcp", "GCP"), ("azure", "Azure"), ("docker", "Docker"), ("kubernetes", "Kubernetes"),
+                ("terraform", "Terraform"), ("ansible", "Ansible"), ("ci/cd", "CI/CD"), ("jenkins", "Jenkins"),
+                ("linux", "Linux"), ("postgresql", "PostgreSQL"), ("mysql", "MySQL"), ("mongodb", "MongoDB"),
+                ("redis", "Redis"), ("snowflake", "Snowflake"), ("spark", "Apache Spark"), ("kafka", "Kafka"),
+                ("figma", "Figma"), ("selenium", "Selenium"), ("playwright", "Playwright")
+            ]
+            for kw, proper in known_techs:
+                if re.search(r"\b" + re.escape(kw) + r"\b", prompt_lower):
+                    detected_skills.append(proper)
+
+            if detected_skills:
+                skills_val = ", ".join(detected_skills)
+                jd_val = f"We are seeking a talented {matched_role['title']} with {exp_val} of experience and hands-on expertise in {skills_val}. You will design, automate, and maintain core services and pipelines in a collaborative engineering culture."
+            else:
+                skills_val = matched_role["skills"]
+                jd_val = matched_role["job_description"]
+
+            draft_res = draft_requisition_preview(
+                title=matched_role["title"],
+                department=matched_role["department"],
+                location=matched_role["location"],
+                employment_type=matched_role["employment_type"],
+                experience_level=exp_val,
+                salary_range=matched_role["salary_range"],
+                skills=skills_val,
+                job_description=jd_val
+            )
+            return {
+                "reply": f"Sure! I've drafted the requisition for **{matched_role['title']}** ({exp_val}) with tech stack: **{skills_val}**.\n\nReview the draft details below — would you like me to send this to the Director for approval?",
+                "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
+            }
+        else:
+            return {
+                "reply": f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details:",
+                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": [r["title"] for r in PREDEFINED_ROLE_DICT.values()]}}]
+            }
 
     # 2. Smart Resilient Fuzzy Matcher (Typo & Synonyms Tolerant)
     req_pattern = r"(req|requ|requisition|requsition|requstion|requsitions|requisitions|role|roles|job|jobs|posting|postings|livce|live)"
@@ -1297,9 +1476,9 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
     is_count_query = bool(re.search(count_pattern, prompt_lower))
 
     # Draft / Create Requisition Intent
-    if any(k in prompt_lower for k in ["draft", "create", "post", "hire for", "add job"]):
+    if any(k in prompt_lower for k in ["draft", "create", "post", "hire for", "add job", "i need", "need a", "looking for", "hire"]):
         title_guess = prompt_clean
-        for prefix in ["draft a new job requisition for", "draft requisition for", "create job for", "new req for", "post job for", "hire for", "add job for", "draft"]:
+        for prefix in ["draft a new job requisition for", "draft requisition for", "create job for", "new req for", "post job for", "hire for", "add job for", "looking for a", "looking for an", "looking for", "i need a", "i need an", "i need", "need a", "need an", "need", "draft"]:
             if prefix in prompt_lower:
                 idx = prompt_lower.find(prefix) + len(prefix)
                 title_guess = prompt_clean[idx:].strip(" .!?")

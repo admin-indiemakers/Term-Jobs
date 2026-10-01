@@ -529,7 +529,19 @@ export default function HiringManagerChat() {
           </div>
 
           {/* Controls: Voice / Audio / VAD / Sign Out */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Launch Telegram Bot */}
+            <a
+              href="https://t.me/HirMngerbot"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 text-white rounded-lg text-xs font-bold transition-all shadow-2xs cursor-pointer group"
+              title="Chat with Hiring Manager AI Bot on Telegram"
+            >
+              <Send className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+              <span>Telegram Bot</span>
+            </a>
+
             {/* Exit to Requisitions */}
             <button
               onClick={() => navigate('/dashboard/requisitions')}
