@@ -5,6 +5,29 @@ import { useAuth } from '../context/AuthContext';
 import { request, API_BASE_URL } from '../api/client';
 import { Icons, StatCard, WelcomeBanner } from '../components/Dashboard';
 
+// Utility: pick only required keys from API objects to avoid holding large unused payloads
+const pick = (obj = {}, keys = []) => {
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  keys.forEach((k) => {
+    if (Object.prototype.hasOwnProperty.call(obj, k)) out[k] = obj[k];
+  });
+  return out;
+};
+
+const minimalRequisition = (r = {}) => pick(r, [
+  'id', 'title', 'status', 'company_name', 'client_name', 'location', 'submission_deadline', 'hiring_manager_name', 'requisition_ref', 'created_by_name', 'structured_role', 'intake_answers'
+]);
+
+const minimalCandidate = (c = {}) => pick(c, [
+  'id', 'submission_id', 'candidate_id', 'candidate_name', 'candidate_email', 'candidate_title', 'vendor_name', 'company_name', 'requisition_id', 'requisition_title', 'match_score', 'recommendation', 'summary', 'filename', 'status', 'skills', 'extracted_text'
+]);
+
+const minimalBankCandidate = (c = {}) => pick(c, [
+  'id', 'candidate_name', 'candidate_email', 'candidate_title', 'vendor_company_name', 'skills', 'created_at', 'extracted_text'
+]);
+
+
 function scoreColor(score) {
   if (score == null) return '#94a3b8';
   if (score >= 70) return '#059669';
@@ -311,7 +334,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         throw new Error(data.detail || data.message || 'Could not save candidate.');
       }
       const updatedBank = await request('/candidates/bank', { token: authToken });
-      setBankCandidates(updatedBank || []);
+      setBankCandidates((updatedBank || []).map(minimalBankCandidate));
 
       setShowAddCandidateModal(false);
       setBulkFiles([]);
@@ -651,9 +674,11 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       ]);
 
       const list = Array.isArray(rawRequisitions) ? rawRequisitions : rawRequisitions?.requisitions || [];
-      setRequisitions(list);
+      // Store only minimal requisition fields
+      setRequisitions(list.map(minimalRequisition));
       let listShortlisted = Array.isArray(candidateData) ? candidateData : candidateData?.shortlisted_candidates || [];
-      setShortlisted(listShortlisted);
+      // Store only required candidate fields
+      setShortlisted(listShortlisted.map(minimalCandidate));
       setLoading(false);
 
       if (list.length) {
@@ -671,10 +696,10 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         request('/api/auth/portal-users', { token: activeToken }).catch(() => []),
       ]).then(([limitData, bankData, interviewData, screenedSummaryData, acceptedData, portalUsersData]) => {
         setCandidateLimit(limitData?.limit ?? null);
-        setBankCandidates(bankData || []);
+        setBankCandidates((bankData || []).map(minimalBankCandidate));
         setInterviews(Array.isArray(interviewData) ? interviewData : []);
         const acceptedList = Array.isArray(acceptedData) ? acceptedData : (acceptedData?.candidates || []);
-        setAcceptedCandidates(acceptedList);
+        setAcceptedCandidates(acceptedList.map(minimalCandidate));
         setPortalUsers(Array.isArray(portalUsersData) ? portalUsersData : []);
         setScreenedReqSummary(screenedSummaryData?.screened_requisitions || {});
       });
@@ -1004,7 +1029,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       if (response.status === 'success') {
         setScreeningProgress({ total: totalCount, processed: totalCount, pct: 100, stage: 'Rank' });
         if (Array.isArray(response.screened_candidates) && response.screened_candidates.length) {
-          setScreenedSubmissions(response.screened_candidates);
+            setScreenedSubmissions(response.screened_candidates.map(minimalCandidate));
           setScreenedReqSummary((prev) => ({
             ...prev,
             [activeReqId]: { screened_count: response.screened_candidates.length, has_cache: true },
@@ -1088,7 +1113,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
         });
         setSelectedCandidateIds([]);
         if (Array.isArray(response.screened_candidates) && response.screened_candidates.length) {
-          setScreenedSubmissions(response.screened_candidates);
+          setScreenedSubmissions(response.screened_candidates.map(minimalCandidate));
           setScreenedReqSummary((prev) => ({
             ...prev,
             [selectedReqId]: {
@@ -1098,7 +1123,7 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
           }));
         } else {
           const subs = await request(`/candidates?requisition_id=${selectedReqId}`, { token: authToken }).catch(() => []);
-          setScreenedSubmissions(subs || []);
+          setScreenedSubmissions((subs || []).map(minimalCandidate));
         }
       } else {
         throw new Error(response.message || 'Failed to complete screening.');
@@ -1142,22 +1167,25 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       ]);
 
       if (details) {
-        setFullReq(details);
+        setFullReq(minimalRequisition(details));
         setJdText(formatJd(details));
       }
 
+      // Use minimal shapes for screened submissions to avoid storing large blobs
+      const subsList = Array.isArray(subs) ? subs.map(minimalCandidate) : [];
       if (cacheRes?.has_cache && Array.isArray(cacheRes.screened_candidates) && cacheRes.screened_candidates.length) {
-        const permanentMap = new Map((subs || []).map((s) => [s.candidate_name?.toLowerCase() || s.id, s]));
+        const permanentMap = new Map(subsList.map((s) => [s.candidate_name?.toLowerCase() || s.id, s]));
         const merged = cacheRes.screened_candidates.map((cand) => {
-          const perm = permanentMap.get(cand.candidate_name?.toLowerCase()) || permanentMap.get(cand.id);
+          const candMin = minimalCandidate(cand);
+          const perm = permanentMap.get(candMin.candidate_name?.toLowerCase()) || permanentMap.get(candMin.id);
           if (perm && perm.status) {
-            return { ...cand, status: perm.status, id: perm.id || cand.id };
+            return { ...candMin, status: perm.status, id: perm.id || candMin.id };
           }
-          return cand;
+          return candMin;
         });
         setScreenedSubmissions(merged);
-      } else if (Array.isArray(subs) && subs.length) {
-        setScreenedSubmissions(subs);
+      } else if (subsList.length) {
+        setScreenedSubmissions(subsList);
       } else if (!screening) {
         setScreenedSubmissions([]);
       }
@@ -1202,7 +1230,8 @@ export default function RecruiterDashboard({ view = 'dashboard' }) {
       });
       setScreeningResult((result) => ({ ...result, ranked_candidates: result.ranked_candidates.filter((item) => item.submission_id !== candidate.submission_id) }));
       const data = await request('/api/candidates/shortlisted', { token: authToken });
-      setShortlisted(Array.isArray(data) ? data : data?.shortlisted_candidates || []);
+      const shortlistArr = Array.isArray(data) ? data : data?.shortlisted_candidates || [];
+      setShortlisted(shortlistArr.map(minimalCandidate));
     } catch (err) {
       setError(err.message || 'Unable to shortlist this candidate.');
     }
