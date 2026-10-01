@@ -21,9 +21,9 @@ def format_cliq_welcome() -> Dict[str, Any]:
     text = (
         "*Welcome to TermJobs AI Hiring Assistant!* 🤖\n\n"
         "I am your dedicated enterprise workforce assistant. You can chat with me naturally or use the quick actions below to manage your pipeline:\n\n"
-        "• *Draft Requisition:* Type _\"Draft a React developer role\"_\n"
-        "• *Candidate Screening:* Check match scores, review profiles, and schedule interviews\n"
-        "• *Approvals:* Review timesheets, expenses, and submit requisitions for Director Approval"
+        "- *Draft Requisition:* Type _'Draft a React developer role'_\n"
+        "- *Candidate Screening:* Check match scores, review profiles, and schedule interviews\n"
+        "- *Approvals:* Review timesheets, expenses, and submit requisitions for Director Approval"
     )
     buttons = [
         build_cliq_button("⚡ Pending Works", "menu:pending_works"),
