@@ -1,3 +1,4 @@
+
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
@@ -53,8 +54,17 @@ export default function ManageDirectors() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [directors, setDirectors] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [directors, setDirectors] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_directors');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) { }
+    return [];
+  });
+  const [loading, setLoading] = useState(() => directors.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -75,12 +85,19 @@ export default function ManageDirectors() {
 
   const searchInputRef = useRef(null);
 
-  const load = () => {
-    setLoading(true);
-    request('/api/auth/users', { token })
+
+  const load = (forceRefresh = false) => {
+    if (directors.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
+    request('/api/auth/users?role=Director&compact=true', { token, forceRefresh })
       .then((data) => {
-        const all = Array.isArray(data) ? data : [];
-        setDirectors(all.filter((u) => u.role === 'Director'));
+        const list = Array.isArray(data) ? data : [];
+        const filtered = list.filter((u) => u.role === 'Director');
+        setDirectors(filtered);
+        try {
+          sessionStorage.setItem('tj_cached_directors', JSON.stringify(filtered));
+        } catch (e) { }
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -162,7 +179,7 @@ export default function ManageDirectors() {
       setForm(EMPTY_FORM);
       setEmailError('');
       setShowCreateModal(false);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to create director account');
     } finally {
@@ -180,7 +197,7 @@ export default function ManageDirectors() {
         token,
       });
       setSuccess(`Director "${director.name || director.email}" approved and activated.`);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to approve director account');
     } finally {
@@ -197,7 +214,7 @@ export default function ManageDirectors() {
       await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
       setSuccess(`Director account "${confirmDelete.name || confirmDelete.email}" removed.`);
       setConfirmDelete(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to remove account');
     } finally {
@@ -221,7 +238,7 @@ export default function ManageDirectors() {
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess(`Director "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to update director account');
     } finally {
@@ -695,9 +712,8 @@ export default function ManageDirectors() {
                     setError('');
                   }}
                   placeholder="director@company.com"
-                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-xl focus:outline-hidden focus:ring-1 transition-all ${
-                    emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'
-                  }`}
+                  className={`w-full px-3.5 py-2 text-xs text-gray-900 bg-white border rounded-xl focus:outline-hidden focus:ring-1 transition-all ${emailError ? 'border-red-400 focus:ring-red-400' : 'border-gray-200 focus:ring-black'
+                    }`}
                 />
                 {emailError && (
                   <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">

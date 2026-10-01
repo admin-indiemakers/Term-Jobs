@@ -979,51 +979,74 @@ def create_user(
     )
 
 
-@router.get("/users", response_model=list[UserListResponse])
+@router.get("/users")
 def list_users(
+    role: str | None = None,
+    compact: bool = False,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Super Admin sees all accounts; Admin sees their tenant's users; HR sees the Hiring Managers they created."""
-    # Cache per-role results for 30s to avoid repeated full collection scans
-    _cache_key = f"users:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    """Super Admin sees all accounts; Admin sees their tenant's users; HR sees the Hiring Managers they created.
+    Pass ?role=Director (or any role name) to fetch only users of that role — filtered at the DB level.
+    """
+    _cache_key = f"users:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{role or 'all'}:{'compact' if compact else 'full'}"
     _cached = _cache.get(_cache_key)
     if _cached is not None:
         return _cached
 
+    user_fields = (
+        "id", "email", "name", "role", "tenant_id", "department",
+        "is_active", "created_by", "created_at", "candidate_limit", "phone", "is_deleted"
+    )
+    if compact:
+        # List pages need identity, display and status fields only. This also
+        # avoids the tenant lookup performed for the full account response.
+        user_fields = (
+            "id", "email", "name", "role", "department", "is_active",
+            "created_at", "is_deleted",
+        )
+    role_list = [r.strip() for r in role.split(",") if r.strip()] if role else []
+
     if current_user.role == "Super Admin":
-        users = db.query(User).all()
+        q = db.query(User).only(*user_fields)
+        if len(role_list) == 1:
+            q = q.filter(User.role == role_list[0])
+        elif len(role_list) > 1:
+            q = q.filter(User.role.in_(role_list))
+        users = q.all()
     elif current_user.role == "Admin":
-        users = (
+        q = (
             db.query(User)
+            .only(*user_fields)
             .filter(
                 User.tenant_id == current_user.tenant_id,
                 User.role != "Candidate",
             )
-            .all()
         )
+        if len(role_list) == 1:
+            q = q.filter(User.role == role_list[0])
+        elif len(role_list) > 1:
+            q = q.filter(User.role.in_(role_list))
+        users = q.all()
     elif current_user.role == "HR":
-        users = (
+        q = (
             db.query(User)
+            .only(*user_fields)
             .filter(
                 User.created_by == current_user.id,
                 User.role != "Candidate",
             )
-            .all()
         )
+        if len(role_list) == 1:
+            q = q.filter(User.role == role_list[0])
+        elif len(role_list) > 1:
+            q = q.filter(User.role.in_(role_list))
+        users = q.all()
     else:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not allowed to list users",
         )
-    all_tenants = db.query(Tenant).all()
-    tenant_map = {t.id: t for t in all_tenants if not getattr(t, 'is_deleted', False) and getattr(t, 'is_active', True) is not False and t.name not in ("Acme Systems Client", "Bearitt Client")}
-    users = [
-        u for u in users 
-        if not getattr(u, 'is_deleted', False) 
-        and (not u.tenant_id or u.tenant_id in tenant_map or u.role == "Super Admin")
-        and (current_user.role == "Super Admin" or u.role != "Candidate")
-    ]
 
     def _safe_iso(dt_val):
         """Safely convert a datetime to ISO string, handling string values."""
@@ -1033,9 +1056,52 @@ def list_users(
             return dt_val.isoformat()
         return str(dt_val)
 
+    if compact:
+        result = [
+            {
+                "id": u.id,
+                "email": u.email,
+                "name": u.name,
+                "role": u.role,
+                "department": u.department or "",
+                "is_active": bool(u.is_active),
+                "created_at": _safe_iso(u.created_at),
+            }
+            for u in users
+            if not getattr(u, "is_deleted", False)
+        ]
+        _cache.set(_cache_key, result, ttl=30)
+        return result
+
+    # Only fetch tenants that actually belong to the filtered users instead of scanning the full collection
+    tenant_ids = list({u.tenant_id for u in users if getattr(u, 'tenant_id', None)})
+    if tenant_ids:
+        tenants = (
+            db.query(Tenant)
+            .only("id", "name", "tenant_type", "is_deleted", "is_active")
+            .filter(Tenant.id.in_(tenant_ids))
+            .all()
+        )
+        tenant_map = {
+            t.id: t for t in tenants
+            if not getattr(t, 'is_deleted', False)
+            and getattr(t, 'is_active', True) is not False
+            and t.name not in ("Acme Systems Client", "Bearitt Client")
+        }
+    else:
+        tenant_map = {}
+
+    users = [
+        u for u in users 
+        if not getattr(u, 'is_deleted', False) 
+        and (not u.tenant_id or u.tenant_id in tenant_map or u.role == "Super Admin")
+        and (current_user.role == "Super Admin" or u.role != "Candidate")
+    ]
+
     result = [
         UserListResponse(
             id=u.id,
+            phone=getattr(u, 'phone', '') or '',
             email=u.email,
             name=u.name,
             role=u.role,
@@ -1052,6 +1118,7 @@ def list_users(
     ]
     _cache.set(_cache_key, result, ttl=30)
     return result
+
 
 
 @router.patch("/users/{user_id}", response_model=UserResponse)

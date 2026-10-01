@@ -49,7 +49,7 @@ export default function ConfigureAccounts({ defaultTab }) {
   const load = () => {
     setLoading(true);
     Promise.all([
-      request('/api/auth/users', { token }),
+      request('/api/auth/users?role=Admin,Recruiter', { token }),
       request('/api/auth/tenants', { token }),
     ])
       .then(([usersRes, tenantsRes]) => {

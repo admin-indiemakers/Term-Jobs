@@ -1,5 +1,5 @@
 """FastAPI router exposing notifications for the current user."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
@@ -14,13 +14,17 @@ router = APIRouter(prefix="/api/notifications", tags=["Notifications"])
 def list_notifications(
     current_user: User = Depends(get_current_user),
     unread_only: bool = False,
+    compact: bool = False,
+    limit: int = Query(default=60, ge=1, le=60),
 ) -> list[dict]:
     """Return the current user's notifications, newest first."""
     with get_session() as session:
         query = session.query(Notification).filter(Notification.user_id == current_user.id)
         if unread_only:
             query = query.filter(Notification.read == False)  # noqa: E712
-        items = query.order_by(Notification.created_at.desc()).limit(60).all()
+        if compact:
+            query = query.only("id", "type", "title", "body", "created_at")
+        items = query.order_by(Notification.created_at.desc()).limit(limit).all()
         return [notification_dict(n) for n in items]
 
 
