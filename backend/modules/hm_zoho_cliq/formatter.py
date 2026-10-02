@@ -41,9 +41,9 @@ def format_cliq_welcome() -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "⚡ TermJobs Hiring Manager AI",
-            "theme": "modern-inline",
-            "buttons": buttons
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -90,9 +90,9 @@ def format_cliq_pending_works(data: Dict[str, Any], company_name: str = "TermJob
         "text": text,
         "card": {
             "title": "⚡ Pending Actions Briefing",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -127,9 +127,9 @@ def format_cliq_shortlisted_candidate(cand: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Candidate: {name} ({score})",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -164,9 +164,9 @@ def format_cliq_interview_proposal(sched: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "📅 Interview Proposal",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -195,9 +195,9 @@ def format_cliq_interview_confirmed(res: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "✅ Interview Dispatched",
-            "theme": "modern-inline",
-            "buttons": format_cliq_quick_menu()
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": format_cliq_quick_menu()
     }
 
 
@@ -223,9 +223,9 @@ def format_cliq_candidate_rejected(res: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": "🚫 Candidate Rejected",
-            "theme": "modern-inline",
-            "buttons": format_cliq_quick_menu()
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": format_cliq_quick_menu()
     }
 
 
@@ -263,9 +263,9 @@ def format_cliq_candidate_profile(prof: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Profile: {name}",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -301,9 +301,9 @@ def format_cliq_draft_preview(draft: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Draft: {title}",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -333,9 +333,9 @@ def format_cliq_timesheet(ts: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Timesheet: {cand} ({hrs} hrs)",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -367,9 +367,9 @@ def format_cliq_expense(exp: Dict[str, Any]) -> Dict[str, Any]:
         "text": text,
         "card": {
             "title": f"Expense: {cand} ({amt})",
-            "theme": "modern-inline",
-            "buttons": buttons[:5]
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
     }
 
 
@@ -397,7 +397,7 @@ def format_cliq_stats(stats: Dict[str, Any], company_name: str = "TermJobs") -> 
         "text": text,
         "card": {
             "title": f"📊 {company_name} Pipeline Stats",
-            "theme": "modern-inline",
-            "buttons": format_cliq_quick_menu()
-        }
+            "theme": "modern-inline"
+        },
+        "buttons": format_cliq_quick_menu()
     }
