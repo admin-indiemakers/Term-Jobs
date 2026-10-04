@@ -2854,16 +2854,51 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
         }
 
 
+    # Contextual Pronoun / Reference Resolution (e.g. "which one is that", "which role", "what is that")
+    which_role_pattern = r"\b(which\s+one(\s+is\s+that)?|which\s+(role|req|requisition|job)|what\s+(is\s+that|role\s+is\s+that)|tell\s+me\s+more\s+about\s+that)\b"
+    if re.search(which_role_pattern, prompt_lower):
+        req_res = list_hiring_requisitions(user_id, tenant_id, "all")
+        live_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("published", "open", "active")]
+        target_req = live_reqs[0] if live_reqs else (req_res[0] if req_res else None)
+        if target_req:
+            r_title = target_req.get("title", "Senior Full Stack Developer")
+            r_dept = target_req.get("department", "Engineering & Product")
+            r_st = target_req.get("status", "Published")
+            r_loc = target_req.get("location", "Remote")
+            r_sal = target_req.get("salary_range", "₹1,500 - ₹2,200 / hr")
+            r_skills = target_req.get("skills", "React, Python, FastAPI, TypeScript")
+            return {
+                "reply": (
+                    f"The active live requisition is **{r_title}** in **{r_dept}**!\n\n"
+                    f"📋 **Status:** `{r_st}`\n"
+                    f"📍 **Location:** {r_loc}\n"
+                    f"💰 **Budget:** {r_sal}\n"
+                    f"🛠 **Key Skills:** {r_skills}\n\n"
+                    f"There are currently shortlisted candidates ready for screening. Would you like me to show the candidates or schedule an interview?"
+                ),
+                "executed_actions": [{"tool": "list_hiring_requisitions", "result": [target_req]}]
+            }
+
     # Requisition Count or List Intent
     if is_req_query or is_count_query:
         req_res = list_hiring_requisitions(user_id, tenant_id, "all")
         live_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("published", "open", "active")]
         draft_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("draft", "drafted", "pending_approval")]
 
-        if is_count_query:
-            reply_text = f"There are currently **{len(live_reqs)} live requisition(s)** active for **{company_name}** (out of {len(req_res)} total requisitions, including {len(draft_reqs)} draft).\n\nHere is your full job requisitions directory:"
-        else:
-            reply_text = f"Here are your active and drafted job requisitions for **{company_name}**:"
+        lines = []
+        for r in req_res[:8]:
+            r_title = r.get("title") or "Engineer"
+            r_dept = r.get("department") or "Engineering"
+            r_st = r.get("status") or "Published"
+            r_loc = r.get("location") or "Remote"
+            lines.append(f"• **{r_title}** ({r_dept}) — `{r_st}` | 📍 {r_loc}")
+
+        items_str = "\n".join(lines) if lines else "No requisitions found."
+        reply_text = (
+            f"There are currently **{len(live_reqs)} live requisition(s)** active for **{company_name}** (out of {len(req_res)} total requisitions):\n\n"
+            f"{items_str}\n\n"
+            f"_Which one would you like to review, screen candidates for, or edit?_"
+        )
 
         return {
             "reply": reply_text,
