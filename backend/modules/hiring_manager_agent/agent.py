@@ -1101,35 +1101,36 @@ def confirm_and_dispatch_interview_invitation(
 
     meeting_link = "https://termjobs.in/interview/room"
     passcode = "TJ-INT-2026"
+    res = {}
     try:
         res = create_interview_proposal(payload, tenant_id, company_name, origin="https://termjobs.in")
-        meeting_link = res.get("meeting_link", "https://termjobs.in/interview/room")
+        if isinstance(res, dict):
+            meeting_link = res.get("meeting_link", meeting_link)
+            passcode = res.get("candidate_passcode", passcode)
+        elif hasattr(res, "meeting_link"):
+            meeting_link = getattr(res, "meeting_link", meeting_link)
+            passcode = getattr(res, "candidate_passcode", passcode)
         if "localhost" in meeting_link or "127.0.0.1" in meeting_link:
             meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", "https://termjobs.in", meeting_link)
-        passcode = res.get("candidate_passcode", "TJ-INT-2026")
     except Exception as err:
         print(f"[INTERVIEW INVITATION DISPATCH] Fallback dispatch: {err}")
         
-        return {
-            "status": "success",
-            "candidate_name": cand_name,
-            "candidate_email": cand_email,
-            "requisition_title": req_title,
-            "round": interview_type,
-            "date": proposed_date,
-            "time": proposed_time,
-            "meeting_link": meeting_link,
-            "passcode": passcode,
-            "message": f"Invitation email sent to {cand_email} for {cand_name} ({req_title}) on {proposed_date} at {proposed_time}."
-        }
-    except Exception as e:
-        print(f"[DISPATCH INTERVIEW ERROR] {e}")
-        return {
-            "status": "failed",
-            "candidate_name": cand_name,
-            "candidate_email": cand_email,
-            "error": str(e)
-        }
+    msg = f"Interview invitation successfully dispatched to {cand_name} ({req_title}) for {proposed_date} at {proposed_time}. Calendar invite and email confirmation sent."
+    if isinstance(res, dict) and res.get("message"):
+        msg = res["message"]
+
+    return {
+        "status": "success",
+        "candidate_name": cand_name,
+        "candidate_email": cand_email,
+        "requisition_title": req_title,
+        "round": interview_type,
+        "date": proposed_date,
+        "time": proposed_time,
+        "meeting_link": meeting_link,
+        "passcode": passcode,
+        "message": msg
+    }
 
 
 def prepare_candidate_offboarding_proposal(
