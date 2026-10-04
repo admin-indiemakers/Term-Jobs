@@ -2293,7 +2293,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
 
-    prompt_clean = prompt.strip()
+    prompt_clean = re.sub(r"[\]\[\)\(\}\{\"';,.]+$", "", prompt.strip()).strip()
     prompt_lower = prompt_clean.lower()
 
     # Intercept explicit confirmation commands
@@ -2386,6 +2386,35 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                 "reply": f"✅ Requisition for **{last_role['title']}** has been sent to the Director for approval!\n\nThe Director has been notified and will review it shortly.",
                 "executed_actions": [{"tool": "submit_for_director_approval", "result": res}]
             }
+
+    # Candidates Working Under Me / Active Working Team (e.g. "candidates under me", "who is working under me", "my team")
+    cand_under_me_pattern = r"\b(candidates?\s+under\s+me|who\s+is\s+working(\s+under\s+me)?|working\s+under\s+me|my\s+team|active\s+workers?|active\s+contractors?|contractors?\s+under\s+me|my\s+hires|hired\s+candidates?|my\s+candidates)\b"
+    if re.search(cand_under_me_pattern, prompt_lower):
+        acc_res = list_accepted_candidates(user_id, user_name, tenant_id)
+        if not acc_res:
+            return {
+                "reply": f"ℹ️ There are currently no active candidates or contractors working under your requisitions for **{company_name}**.",
+                "executed_actions": [{"tool": "list_accepted_candidates", "result": []}]
+            }
+        lines = []
+        for c in acc_res[:8]:
+            c_name = c.get("candidate_name") or c.get("name") or "Contractor"
+            c_role = c.get("role") or c.get("requisition_title") or "Engineer"
+            c_st = c.get("status") or "Accepted & Working"
+            c_hrs = c.get("total_hours", 0)
+            c_rate = c.get("rate") or "Standard Rate"
+            lines.append(f"• **{c_name}** — {c_role}\n  📊 **Status:** `{c_st}` | ⏱ **Hours Logged:** {c_hrs}h | 💰 **Rate:** {c_rate}")
+        
+        reply_text = (
+            f"👷 **CANDIDATES WORKING UNDER YOU — {company_name} ({len(acc_res)} Active):**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{chr(10).join(lines)}\n\n"
+            f"_You can review their timesheets, approve expenses, or check onboarding details anytime._"
+        )
+        return {
+            "reply": reply_text,
+            "executed_actions": [{"tool": "list_accepted_candidates", "result": acc_res}]
+        }
 
     # Direct Requisition Inquiry & Disambiguation Routing (100% precision for active, draft, and all requisitions)
     which_role_pattern = r"\b(which\s+one(\s+is\s+that)?|which\s+(role|req|requisition|job)|what\s+(is\s+that|role\s+is\s+that)|tell\s+me\s+about\s+(the\s+)?(published|live|active|that))\b"

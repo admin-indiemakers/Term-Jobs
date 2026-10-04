@@ -485,10 +485,32 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             save_cliq_session(session)
             return format_cliq_candidate_profile(res)
 
-        elif tool_name == "get_hiring_manager_stats" and isinstance(res, dict):
+        elif tool_name == "list_accepted_candidates" and isinstance(res, list):
             company_name = session["current_user"].get("company_name", "Client Workspace")
             save_cliq_session(session)
-            return format_cliq_stats(res, company_name)
+            if not res:
+                return {
+                    "text": f"ℹ️ No active contractors or candidates are currently working under your requisitions for **{company_name}**.",
+                    "card": {"title": "Active Working Team", "theme": "modern-inline"}
+                }
+            lines = [f"👷 *CANDIDATES WORKING UNDER YOU — {company_name.upper()} ({len(res)} Active):*", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"]
+            for c in res[:6]:
+                c_name = c.get("candidate_name") or c.get("name") or "Contractor"
+                c_role = c.get("role") or c.get("requisition_title") or "Engineer"
+                c_st = c.get("status") or "Active"
+                c_hrs = c.get("total_hours", 0)
+                lines.append(f"• *{c_name}* — {c_role} (`{c_st}` | ⏱ {c_hrs}h logged)")
+            return {
+                "text": "\n".join(lines),
+                "card": {"title": "Active Working Team", "theme": "modern-inline"}
+            }
+
+        elif tool_name == "get_hiring_manager_stats" and isinstance(res, dict):
+            # Only return dedicated stats card if user explicitly asked for stats/metrics
+            if any(w in raw_text.lower() for w in ["stat", "pipeline", "kpi", "metric", "overview"]) or action_key == "menu:stats":
+                company_name = session["current_user"].get("company_name", "Client Workspace")
+                save_cliq_session(session)
+                return format_cliq_stats(res, company_name)
 
     # Conversational agentic reply: persist in MongoDB and return clean response without broken buttons
     session["history"].append({"sender": "assistant", "text": reply_text})
