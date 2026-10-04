@@ -47,27 +47,72 @@ from modules.hm_zoho_cliq.formatter import (
 
 CLIQ_INCOMING_WEBHOOK = "https://cliq.zoho.in/api/v2/bots/hiringmanagerterm/incoming"
 
-# Chat session memory for Zoho Cliq users
+# Chat session memory for Zoho Cliq users with MongoDB persistence
 _CLIQ_SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 
-def get_cliq_session(user_id: str, user_name: str = "Hiring Manager") -> Dict[str, Any]:
-    """Retrieve or initialize session for a Zoho Cliq user."""
-    if user_id not in _CLIQ_SESSIONS:
-        # Default user context scoped to TermJobs enterprise
-        _CLIQ_SESSIONS[user_id] = {
-            "current_user": {
-                "id": user_id,
-                "name": user_name or "Hiring Manager",
-                "email": "hiring.manager@termjobs.in",
-                "role": "HIRING_MANAGER",
-                "tenant_id": "local",
-                "company_name": "TermJobs"
-            },
-            "history": [],
-            "last_draft": None
-        }
-    return _CLIQ_SESSIONS[user_id]
+def get_cliq_session(user_id: str, user_name: str = "Hiring Manager", user_email: str = "") -> Dict[str, Any]:
+    """Retrieve or initialize session for a Zoho Cliq user with MongoDB persistence."""
+    try:
+        doc = db["cliq_sessions"].find_one({"user_id": user_id})
+        if doc:
+            doc.pop("_id", None)
+            # Update user name/email if freshly provided
+            if user_name and user_name != "Hiring Manager":
+                doc.setdefault("current_user", {})["name"] = user_name
+            if user_email:
+                doc.setdefault("current_user", {})["email"] = user_email
+            _CLIQ_SESSIONS[user_id] = doc
+            return doc
+    except Exception as e:
+        print("[CLIQ DB SESSION LOAD ERROR]", e)
+
+    if user_id in _CLIQ_SESSIONS:
+        return _CLIQ_SESSIONS[user_id]
+
+    session = {
+        "user_id": user_id,
+        "current_user": {
+            "id": user_id,
+            "name": user_name or "Hiring Manager",
+            "email": user_email or "hiring.manager@termjobs.in",
+            "role": "HIRING_MANAGER",
+            "tenant_id": "local",
+            "company_name": "Client Workspace"
+        },
+        "history": [],
+        "last_draft": None
+    }
+    _CLIQ_SESSIONS[user_id] = session
+    try:
+        db["cliq_sessions"].update_one(
+            {"user_id": user_id},
+            {"$set": session},
+            upsert=True
+        )
+    except Exception:
+        pass
+    return session
+
+
+def save_cliq_session(session: Dict[str, Any]):
+    """Persist session history and active draft to MongoDB."""
+    user_id = session.get("user_id") or session.get("current_user", {}).get("id")
+    if not user_id:
+        return
+    _CLIQ_SESSIONS[str(user_id)] = session
+    try:
+        db["cliq_sessions"].update_one(
+            {"user_id": str(user_id)},
+            {"$set": {
+                "history": session.get("history", [])[-24:],
+                "last_draft": session.get("last_draft"),
+                "current_user": session.get("current_user")
+            }},
+            upsert=True
+        )
+    except Exception as e:
+        print("[CLIQ DB SESSION SAVE ERROR]", e)
 
 
 async def dispatch_cliq_incoming_message(message_payload: Dict[str, Any]) -> bool:
@@ -87,7 +132,8 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     user_info = payload.get("user") or {}
     user_id = str(user_info.get("id") or user_info.get("zuid") or "cliq_user")
     user_name = user_info.get("name") or user_info.get("first_name") or "Hiring Manager"
-    session = get_cliq_session(user_id, user_name)
+    user_email = user_info.get("email") or ""
+    session = get_cliq_session(user_id, user_name, user_email)
 
     # 2. Extract action key (button click) or message text
     # In Cliq, button clicks send `action`, `button.id`, `key`, or `arguments`
@@ -415,35 +461,42 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         if tool_name == "draft_hiring_requisition" and isinstance(res, dict):
             session["last_draft"] = res
+            save_cliq_session(session)
             return format_cliq_draft_preview(res)
 
         elif tool_name == "schedule_candidate_interview" and isinstance(res, dict):
+            save_cliq_session(session)
             return format_cliq_interview_proposal(res)
 
         elif tool_name == "reject_shortlisted_candidate" and isinstance(res, dict):
+            save_cliq_session(session)
             return format_cliq_candidate_rejected(res)
 
         elif tool_name == "list_shortlisted_candidates" and isinstance(res, list) and res:
+            save_cliq_session(session)
             return format_cliq_shortlisted_candidate(res[0])
 
         elif tool_name == "get_hiring_manager_pending_works" and isinstance(res, dict):
-            company_name = session["current_user"].get("company_name", "TermJobs")
+            company_name = session["current_user"].get("company_name", "Client Workspace")
+            save_cliq_session(session)
             return format_cliq_pending_works(res, company_name)
 
         elif tool_name == "get_candidate_profile_details" and isinstance(res, dict):
+            save_cliq_session(session)
             return format_cliq_candidate_profile(res)
 
         elif tool_name == "get_hiring_manager_stats" and isinstance(res, dict):
-            company_name = session["current_user"].get("company_name", "TermJobs")
+            company_name = session["current_user"].get("company_name", "Client Workspace")
+            save_cliq_session(session)
             return format_cliq_stats(res, company_name)
 
-    # Fallback to sanitized conversational text with quick actions
+    # Conversational agentic reply: persist in MongoDB and return clean response without broken buttons
     session["history"].append({"sender": "assistant", "text": reply_text})
+    save_cliq_session(session)
     return {
         "text": reply_text or "How can I assist you with your hiring pipeline today?",
         "card": {
             "title": "⚡ TermJobs Hiring Assistant",
             "theme": "modern-inline"
-        },
-        "buttons": format_cliq_quick_menu()
+        }
     }

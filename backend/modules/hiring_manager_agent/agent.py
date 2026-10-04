@@ -2454,7 +2454,21 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                             res = list_hiring_requisitions(user_id, tenant_id, fn_args.get("status", "all"))
                             executed.append({"tool": "list_hiring_requisitions", "result": res})
                             live_cnt = len([r for r in res if r.get("status") in ("Published", "Open", "Active")])
-                            reply_buf.append(f"There are currently **{live_cnt} live requisition(s)** active for **{company_name}** (out of {len(res)} total requisitions):")
+                            req_items = []
+                            for r in res[:8]:
+                                r_title = r.get("title") or "Engineer"
+                                r_dept = r.get("department") or "Engineering"
+                                r_st = r.get("status") or "Published"
+                                r_loc = r.get("location") or "Remote"
+                                r_sal = r.get("salary_range") or ""
+                                sal_str = f" | {r_sal}" if r_sal else ""
+                                req_items.append(f"• **{r_title}** ({r_dept}) — `{r_st}` | 📍 {r_loc}{sal_str}")
+                            items_text = "\n".join(req_items) if req_items else "No requisitions found."
+                            reply_buf.append(
+                                f"There are currently **{live_cnt} live requisition(s)** active for **{company_name}** (out of {len(res)} total requisitions):\n\n"
+                                f"{items_text}\n\n"
+                                f"_Ask me for details on any requisition, or to draft a new role!_"
+                            )
                         elif fn_name == "get_hiring_manager_stats":
                             res = get_hiring_manager_stats(user_id, tenant_id, user_name)
                             executed.append({"tool": "get_hiring_manager_stats", "result": res})
@@ -2529,6 +2543,41 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                             res = submit_requisition_for_director_approval(**fn_args, user_id=user_id, user_name=user_name, tenant_id=tenant_id)
                             executed.append({"tool": "submit_for_director_approval", "result": res})
                             reply_buf.append(f"Job Requisition **{res.get('title', '')}** has been sent to the Director for approval!")
+
+                    # 2nd pass LLM synthesis: If tools were purely informational (e.g. requisitions, candidates, stats),
+                    # allow the LLM to write a natural, intelligent agentic summary response.
+                    has_card_tool = any(e["tool"] in ("draft_hiring_requisition", "schedule_candidate_interview") for e in executed)
+                    if not has_card_tool and executed:
+                        try:
+                            second_msgs = list(msgs)
+                            second_msgs.append({
+                                "role": "assistant",
+                                "tool_calls": choice["tool_calls"]
+                            })
+                            for tc in choice["tool_calls"]:
+                                t_name = tc["function"]["name"]
+                                match_res = next((e["result"] for e in executed if e["tool"] == t_name), {})
+                                second_msgs.append({
+                                    "role": "tool",
+                                    "tool_call_id": tc["id"],
+                                    "content": json.dumps(match_res, default=str)[:3500]
+                                })
+                            second_payload = {
+                                "model": active_model,
+                                "messages": second_msgs,
+                                "temperature": 0.3,
+                                "max_tokens": 800
+                            }
+                            second_resp = httpx.post(url, headers=headers, json=second_payload, timeout=8.0)
+                            if second_resp.status_code == 200:
+                                second_content = second_resp.json()["choices"][0]["message"].get("content")
+                                if second_content and len(second_content.strip()) > 10:
+                                    return {
+                                        "reply": second_content,
+                                        "executed_actions": executed
+                                    }
+                        except Exception as synth_err:
+                            print("[HM AGENT] 2nd pass LLM synthesis fallback:", synth_err)
 
                     if executed:
                         return {
