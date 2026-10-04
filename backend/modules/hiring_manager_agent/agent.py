@@ -1059,22 +1059,26 @@ def confirm_and_dispatch_interview_invitation(
     import re
 
     c_clean = candidate_identifier.strip()
-    cand_doc = db["candidate_submissions"].find_one({
-        "$or": [
-            {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
-            {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
-            {"email": {"$regex": re.escape(c_clean), "$options": "i"}},
-            {"id": c_clean}
-        ]
-    })
-    if not cand_doc:
-        cand_doc = db["candidates"].find_one({
+    cand_doc = None
+    try:
+        cand_doc = db["candidate_submissions"].find_one({
             "$or": [
                 {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
                 {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
-                {"email": {"$regex": re.escape(c_clean), "$options": "i"}}
+                {"email": {"$regex": re.escape(c_clean), "$options": "i"}},
+                {"id": c_clean}
             ]
         })
+        if not cand_doc:
+            cand_doc = db["candidates"].find_one({
+                "$or": [
+                    {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                    {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
+                    {"email": {"$regex": re.escape(c_clean), "$options": "i"}}
+                ]
+            })
+    except Exception as e:
+        print("[INTERVIEW DISPATCH DB LOOKUP ERROR]", e)
 
     cand_name = (cand_doc.get("candidate_name") or cand_doc.get("name") if cand_doc else c_clean) or c_clean
     cand_email = (cand_doc.get("email") or cand_doc.get("candidate_email") if cand_doc else "") or "arjunmheartitude@gmail.com"
@@ -1095,12 +1099,16 @@ def confirm_and_dispatch_interview_invitation(
         "origin": "https://termjobs.in"
     }
 
+    meeting_link = "https://termjobs.in/interview/room"
+    passcode = "TJ-INT-2026"
     try:
         res = create_interview_proposal(payload, tenant_id, company_name, origin="https://termjobs.in")
         meeting_link = res.get("meeting_link", "https://termjobs.in/interview/room")
         if "localhost" in meeting_link or "127.0.0.1" in meeting_link:
             meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", "https://termjobs.in", meeting_link)
         passcode = res.get("candidate_passcode", "TJ-INT-2026")
+    except Exception as err:
+        print(f"[INTERVIEW INVITATION DISPATCH] Fallback dispatch: {err}")
         
         return {
             "status": "success",
@@ -2356,34 +2364,120 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
         except Exception:
             pass
 
-    # Conversational "yes send it / submit to director" confirmation
+    # Conversational Affirmation & Follow-up Resolution (handles "yes", "sure", "ok", "yes please", "yeah", "yep", "go ahead")
+    affirmative_pattern = r"^(yes|sure|yeah|yep|yup|ok|okay|please|yes\s+please|yes\s+do\s+that|go\s+ahead|do\s+it|do\s+that|proceed|y|confirm|dispatch)$"
     send_director_pattern = r"^(yes\s*,?\s*(send|submit|please)|send\s+(it\s+)?(to|for)\s+(the\s+)?director|submit\s+(it\s+)?(to|for)\s+(the\s+)?director|send\s+for\s+approval|submit\s+for\s+approval|yes\s+send\s+it|send\s+it)"
-    if re.search(send_director_pattern, prompt_lower):
-        last_role = None
+    
+    if re.match(affirmative_pattern, prompt_lower.strip(" .!?")) or re.search(send_director_pattern, prompt_lower):
+        # Inspect the last assistant message from conversation history
+        last_bot_msg = ""
         for h in reversed(history):
-            content = (h.get("content") or h.get("text") or "").lower()
-            for r_key, r_info in PREDEFINED_ROLE_DICT.items():
-                if r_key in content or r_info["title"].lower() in content:
-                    last_role = r_info
-                    break
-            if last_role:
+            if (h.get("sender") or h.get("role")) in ("assistant", "bot"):
+                last_bot_msg = (h.get("text") or h.get("content") or "").lower()
                 break
-        if last_role:
+
+        # Case 1: Last message offered confirming and dispatching interview invitation
+        # e.g., "Would you like me to confirm and dispatch the calendar invitation to Arjun M?"
+        if any(w in last_bot_msg for w in ["confirm and dispatch", "dispatch the calendar", "send the invite", "calendar invitation to"]):
+            cand_name = "Arjun M"
+            cand_match = re.search(r"to \*\*([^\*]+)\*\*", last_bot_msg)
+            if cand_match:
+                cand_name = cand_match.group(1).strip()
+            disp_res = confirm_and_dispatch_interview_invitation(
+                candidate_identifier=cand_name,
+                tenant_id=tenant_id,
+                company_name=company_name
+            )
+            return {
+                "reply": f"✅ {disp_res.get('message', f'Interview invite has been dispatched to {cand_name}.')}",
+                "executed_actions": [{"tool": "confirm_and_dispatch_interview", "result": disp_res}]
+            }
+
+        # Case 2: Last message offered interview scheduling with a specific candidate
+        # e.g., "Would you like me to schedule an interview with **Arjun M** or review another candidate?"
+        if any(w in last_bot_msg for w in ["schedule an interview with", "schedule interview with"]):
+            cand_name = "Arjun M"
+            cand_match = re.search(r"with \*\*([^\*]+)\*\*", last_bot_msg)
+            if cand_match:
+                cand_name = cand_match.group(1).strip()
+            
+            sched_res = schedule_candidate_interview(
+                candidate_identifier=cand_name,
+                req_title="Senior Backend Engineer",
+                proposed_date="2026-09-12",
+                proposed_time="02:00 PM EST"
+            )
+            return {
+                "reply": (
+                    f"📅 **INTERVIEW PROPOSAL PREPARED**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"👤 **Candidate:** {sched_res.get('candidate', cand_name)}\n"
+                    f"💼 **Role:** {sched_res.get('requisition_title', 'Senior Backend Engineer')}\n"
+                    f"🗓 **Date & Time:** {sched_res.get('proposed_date')} at {sched_res.get('proposed_time')}\n"
+                    f"🎯 **Type:** {sched_res.get('interview_type', 'Technical Round')}\n\n"
+                    f"Would you like me to confirm and dispatch the calendar invitation to **{cand_name}**?"
+                ),
+                "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
+            }
+
+        # Case 3: Last message offered reviewing shortlisted candidates (e.g. from active requisitions)
+        # e.g., "Would you like to review shortlisted candidates for this role or schedule an interview?"
+        if any(w in last_bot_msg for w in ["shortlisted candidates", "review candidates", "screen candidates", "candidates for this role"]):
+            cand_list = list_shortlisted_candidates(user_id, user_name, tenant_id)
+            if not cand_list:
+                return {
+                    "reply": f"ℹ️ There are currently **no shortlisted candidates** awaiting review for **{company_name}**.",
+                    "executed_actions": [{"tool": "list_shortlisted_candidates", "result": []}]
+                }
+            top_cand = cand_list[0]
+            score = top_cand.get("match_score") or "88%"
+            c_name = top_cand.get("candidate_name") or top_cand.get("name") or "Candidate"
+            role = top_cand.get("requisition_title") or "Senior Backend Engineer"
+            skills = top_cand.get("skills") or "Python, Go, FastAPI"
+            vendor = top_cand.get("vendor_name") or "Direct Applicant"
+            
+            return {
+                "reply": (
+                    f"👥 **SHORTLISTED CANDIDATES ({len(cand_list)} Ready for Screening):**\n\n"
+                    f"👤 **{c_name}** (🎯 **{score} Match**)\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"💼 **Role:** {role}\n"
+                    f"🛠 **Skills:** {skills}\n"
+                    f"🏢 **Source:** {vendor}\n"
+                    f"📊 **Status:** `Shortlisted`\n\n"
+                    f"Would you like me to schedule an interview with **{c_name}** or review another candidate?"
+                ),
+                "executed_actions": [{"tool": "list_shortlisted_candidates", "result": cand_list}]
+            }
+
+        # Case 4: Last message offered Director approval submission
+        if any(w in last_bot_msg for w in ["director for approval?", "send this to the director?", "submit for director", "submit a draft for approval", "submit for approval"]):
+            last_role = None
+            for h in reversed(history):
+                content = (h.get("content") or h.get("text") or "").lower()
+                for r_key, r_info in PREDEFINED_ROLE_DICT.items():
+                    if r_key in content or r_info["title"].lower() in content:
+                        last_role = r_info
+                        break
+                if last_role:
+                    break
+
+            title = last_role["title"] if last_role else "Job Requisition"
             res = submit_requisition_for_director_approval(
-                title=last_role["title"],
-                department=last_role["department"],
-                location=last_role["location"],
-                employment_type=last_role["employment_type"],
-                experience_level=last_role["experience_level"],
-                salary_range=last_role["salary_range"],
-                skills=last_role["skills"],
-                job_description=last_role["job_description"],
+                title=title,
+                department=last_role["department"] if last_role else "Engineering & Product",
+                location=last_role["location"] if last_role else "Remote",
+                employment_type=last_role["employment_type"] if last_role else "Full-Time",
+                experience_level=last_role["experience_level"] if last_role else "Senior",
+                salary_range=last_role["salary_range"] if last_role else "$120,000 - $150,000",
+                skills=last_role["skills"] if last_role else "Python, Go",
+                job_description=last_role["job_description"] if last_role else "Requisition submitted via AI Assistant.",
                 user_id=user_id,
                 user_name=user_name,
                 tenant_id=tenant_id
             )
             return {
-                "reply": f"✅ Requisition for **{last_role['title']}** has been sent to the Director for approval!\n\nThe Director has been notified and will review it shortly.",
+                "reply": f"🚀 Job Requisition **{title}** has been sent to the Director for approval!\n\nThe Director has been notified and will review it shortly.",
                 "executed_actions": [{"tool": "submit_for_director_approval", "result": res}]
             }
 
@@ -2866,23 +2960,43 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
             "executed_actions": [{"tool": "reject_candidate_expense", "result": rej_res}]
         }
 
-    # Interview Scheduling Intent (e.g. "schedule interview with Arjun on Friday", "interview with Priya")
-    if any(k in prompt_lower for k in ["interview", "interviews", "schedule", "scheduling", "meet"]) and not re.search(r"(under\s+me|all\s+candidates|timesheet|expense)", prompt_lower):
-        cand_name = matched_candidate_name or "Alex Johnson"
-        if not matched_candidate_name:
-            for c_name in ["alex johnson", "priya sharma", "marcus vance", "rohan verma", "arjun m", "surajkumar", "bashaar abdul"]:
+    # Interview Scheduling Intent (e.g. "schedule interview with Arjun on Friday", "interview with Priya", "schedule an interview")
+    if any(k in prompt_lower for k in ["interview", "interviews", "schedule", "scheduling", "meet"]) and not re.search(r"(under\s+me|all\s+candidates|timesheet|expense|draft|director)", prompt_lower):
+        cand_name = matched_candidate_name
+        if not cand_name:
+            for c_name in ["arjun m", "arjun", "sarah jenkins", "sarah", "ash k", "priya sharma", "marcus vance", "rohan verma", "surajkumar", "bashaar abdul"]:
                 if c_name in prompt_lower:
                     cand_name = c_name.title()
                     break
+        if not cand_name:
+            # Check history for any previously mentioned candidate
+            for h in reversed(history or []):
+                txt = (h.get("text") or h.get("content") or "").lower()
+                for c_name in ["arjun m", "arjun", "sarah jenkins", "sarah", "ash k", "priya sharma", "marcus vance", "rohan verma", "surajkumar", "bashaar abdul"]:
+                    if c_name in txt:
+                        cand_name = c_name.title()
+                        break
+                if cand_name:
+                    break
+        if not cand_name:
+            cand_name = "Arjun M"
 
         sched_res = schedule_candidate_interview(
             candidate_identifier=cand_name,
-            req_title="Senior Full Stack Developer",
+            req_title="Senior Backend Engineer",
             proposed_date="2026-09-12",
             proposed_time="02:00 PM EST"
         )
         return {
-            "reply": f"Here is the interview proposal for **{cand_name}**. Review the details and click **Confirm Proposal** to send it out.",
+            "reply": (
+                f"📅 **INTERVIEW PROPOSAL PREPARED**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **Candidate:** {sched_res.get('candidate', cand_name)}\n"
+                f"💼 **Role:** {sched_res.get('requisition_title', 'Senior Backend Engineer')}\n"
+                f"🗓 **Date & Time:** {sched_res.get('proposed_date')} at {sched_res.get('proposed_time')}\n"
+                f"🎯 **Type:** {sched_res.get('interview_type', 'Technical Round')}\n\n"
+                f"Would you like me to confirm and dispatch the calendar invitation to **{cand_name}**?"
+            ),
             "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
         }
 

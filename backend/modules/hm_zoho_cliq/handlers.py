@@ -447,13 +447,21 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         current_user=session["current_user"]
     )
 
-    # Save to history
+    # Save user message to history
     session["history"].append({"sender": "user", "text": raw_text})
-    if len(session["history"]) > 16:
-        session["history"] = session["history"][-16:]
+    if len(session["history"]) > 24:
+        session["history"] = session["history"][-24:]
 
     reply_text = agent_result.get("reply", "")
     executed_actions = agent_result.get("executed_actions", [])
+
+    def respond_and_save(resp: Dict[str, Any]) -> Dict[str, Any]:
+        resp_text = resp.get("text") or reply_text or ""
+        session["history"].append({"sender": "assistant", "text": resp_text})
+        if len(session["history"]) > 24:
+            session["history"] = session["history"][-24:]
+        save_cliq_session(session)
+        return resp
 
     for action in executed_actions:
         tool_name = action.get("tool")
@@ -461,38 +469,43 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
 
         if tool_name == "draft_hiring_requisition" and isinstance(res, dict):
             session["last_draft"] = res
-            save_cliq_session(session)
-            return format_cliq_draft_preview(res)
+            return respond_and_save(format_cliq_draft_preview(res))
 
         elif tool_name == "schedule_candidate_interview" and isinstance(res, dict):
-            save_cliq_session(session)
-            return format_cliq_interview_proposal(res)
+            # If agent already produced a conversational proposal reply, prioritize that
+            if reply_text:
+                return respond_and_save({
+                    "text": reply_text,
+                    "card": {"title": "📅 Interview Proposal", "theme": "modern-inline"}
+                })
+            return respond_and_save(format_cliq_interview_proposal(res))
 
         elif tool_name == "reject_shortlisted_candidate" and isinstance(res, dict):
-            save_cliq_session(session)
-            return format_cliq_candidate_rejected(res)
+            return respond_and_save(format_cliq_candidate_rejected(res))
 
         elif tool_name == "list_shortlisted_candidates" and isinstance(res, list) and res:
-            save_cliq_session(session)
-            return format_cliq_shortlisted_candidate(res[0])
+            # Return agentic conversational reply without broken deluge buttons
+            if reply_text:
+                return respond_and_save({
+                    "text": reply_text,
+                    "card": {"title": "👥 Shortlisted Candidates", "theme": "modern-inline"}
+                })
+            return respond_and_save(format_cliq_shortlisted_candidate(res[0]))
 
         elif tool_name == "get_hiring_manager_pending_works" and isinstance(res, dict):
             company_name = session["current_user"].get("company_name", "Client Workspace")
-            save_cliq_session(session)
-            return format_cliq_pending_works(res, company_name)
+            return respond_and_save(format_cliq_pending_works(res, company_name))
 
         elif tool_name == "get_candidate_profile_details" and isinstance(res, dict):
-            save_cliq_session(session)
-            return format_cliq_candidate_profile(res)
+            return respond_and_save(format_cliq_candidate_profile(res))
 
         elif tool_name == "list_accepted_candidates" and isinstance(res, list):
             company_name = session["current_user"].get("company_name", "Client Workspace")
-            save_cliq_session(session)
             if not res:
-                return {
+                return respond_and_save({
                     "text": f"ℹ️ No active contractors or candidates are currently working under your requisitions for **{company_name}**.",
                     "card": {"title": "Active Working Team", "theme": "modern-inline"}
-                }
+                })
             lines = [f"👷 *CANDIDATES WORKING UNDER YOU — {company_name.upper()} ({len(res)} Active):*", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"]
             for c in res[:6]:
                 c_name = c.get("candidate_name") or c.get("name") or "Contractor"
@@ -500,25 +513,22 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
                 c_st = c.get("status") or "Active"
                 c_hrs = c.get("total_hours", 0)
                 lines.append(f"• *{c_name}* — {c_role} (`{c_st}` | ⏱ {c_hrs}h logged)")
-            return {
+            return respond_and_save({
                 "text": "\n".join(lines),
                 "card": {"title": "Active Working Team", "theme": "modern-inline"}
-            }
+            })
 
         elif tool_name == "get_hiring_manager_stats" and isinstance(res, dict):
             # Only return dedicated stats card if user explicitly asked for stats/metrics
             if any(w in raw_text.lower() for w in ["stat", "pipeline", "kpi", "metric", "overview"]) or action_key == "menu:stats":
                 company_name = session["current_user"].get("company_name", "Client Workspace")
-                save_cliq_session(session)
-                return format_cliq_stats(res, company_name)
+                return respond_and_save(format_cliq_stats(res, company_name))
 
     # Conversational agentic reply: persist in MongoDB and return clean response without broken buttons
-    session["history"].append({"sender": "assistant", "text": reply_text})
-    save_cliq_session(session)
-    return {
+    return respond_and_save({
         "text": reply_text or "How can I assist you with your hiring pipeline today?",
         "card": {
             "title": "⚡ TermJobs Hiring Assistant",
             "theme": "modern-inline"
         }
-    }
+    })
