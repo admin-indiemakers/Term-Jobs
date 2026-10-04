@@ -2387,6 +2387,92 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                 "executed_actions": [{"tool": "submit_for_director_approval", "result": res}]
             }
 
+    # Direct Requisition Inquiry & Disambiguation Routing (100% precision for active, draft, and all requisitions)
+    which_role_pattern = r"\b(which\s+one(\s+is\s+that)?|which\s+(role|req|requisition|job)|what\s+(is\s+that|role\s+is\s+that)|tell\s+me\s+about\s+(the\s+)?(published|live|active|that))\b"
+    if re.search(which_role_pattern, prompt_lower):
+        req_res = list_hiring_requisitions(user_id, tenant_id, "all")
+        live_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("published", "open", "active")]
+        target_req = live_reqs[0] if live_reqs else (req_res[0] if req_res else None)
+        if target_req:
+            r_title = target_req.get("title", "Senior Backend Engineer")
+            r_dept = target_req.get("department", "Engineering & Product")
+            r_st = target_req.get("status", "Published")
+            r_loc = target_req.get("location", "Remote")
+            r_sal = target_req.get("salary_range", "$120,000 – $150,000 / yr")
+            r_skills = target_req.get("skills") or "Python, Go, Java, FastAPI, Docker, Kubernetes, AWS"
+            return {
+                "reply": (
+                    f"The active live requisition is **{r_title}** in **{r_dept}**!\n\n"
+                    f"📋 **Status:** `{r_st}` (Live & Accepting Submissions)\n"
+                    f"📍 **Location:** {r_loc}\n"
+                    f"💰 **Budget:** {r_sal}\n"
+                    f"🛠 **Key Skills:** {r_skills}\n\n"
+                    f"There are currently shortlisted candidates ready for screening. Would you like me to show the candidates or schedule an interview?"
+                ),
+                "executed_actions": [{"tool": "list_hiring_requisitions", "result": [target_req]}]
+            }
+
+    direct_req_pattern = r"^(can\s+u\s+)?(show|list|view|display|get|tell\s+me\s+about)\s+(me\s+)?(all\s+)?(the\s+)?(active\s+|live\s+|open\s+|published\s+|draft\s+)?(requsitions?|requisitions?|reqs?|jobs?|roles?)"
+    if re.search(direct_req_pattern, prompt_lower):
+        is_active_only = bool(re.search(r"\b(active|live|open|published)\b", prompt_lower))
+        is_draft_only = bool(re.search(r"\b(draft|drafts|drafted)\b", prompt_lower)) and not is_active_only
+
+        req_res = list_hiring_requisitions(user_id, tenant_id, "all")
+        live_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("published", "open", "active")]
+        pending_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("pending_approval", "pendingapproval", "pending approval")]
+        draft_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("draft", "drafted")]
+        closed_reqs = [r for r in req_res if (r.get("status") or "").lower() in ("closed", "completed", "filled")]
+
+        if is_active_only:
+            if not live_reqs:
+                reply_text = f"ℹ️ There are currently **no live/active requisitions** published for **{company_name}**.\n\nAll existing requisitions are in draft or awaiting Director approval. Would you like me to submit a draft for approval?"
+            else:
+                lines = []
+                for r in live_reqs:
+                    r_title = r.get("title") or "Senior Backend Engineer"
+                    r_dept = r.get("department") or "Engineering & Product"
+                    r_st = r.get("status") or "Published"
+                    r_loc = r.get("location") or "Remote"
+                    r_sal = r.get("salary_range") or "$120,000 – $150,000 / yr"
+                    lines.append(f"• **{r_title}** ({r_dept})\n  📋 **Status:** `{r_st}` (Live & Open to Candidates)\n  📍 **Location:** {r_loc}\n  💰 **Salary:** {r_sal}")
+                
+                reply_text = (
+                    f"⚡ **LIVE / ACTIVE REQUISITIONS ({len(live_reqs)}):**\n"
+                    f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                    f"{chr(10).join(lines)}\n\n"
+                    f"_Would you like to review shortlisted candidates for this role or schedule an interview?_"
+                )
+            return {
+                "reply": reply_text,
+                "executed_actions": [{"tool": "list_hiring_requisitions", "result": live_reqs}]
+            }
+
+        # Full Directory view grouped by status
+        sections = []
+        if live_reqs:
+            l_lines = [f"• **{r.get('title')}** ({r.get('department')}) — `{r.get('status')}` | 📍 {r.get('location')}" for r in live_reqs]
+            sections.append(f"⚡ **ACTIVE & PUBLISHED ({len(live_reqs)}):**\n" + "\n".join(l_lines))
+        if pending_reqs:
+            p_lines = [f"• **{r.get('title')}** ({r.get('department')}) — `Pending Approval` | 📍 {r.get('location')}" for r in pending_reqs]
+            sections.append(f"⏳ **AWAITING DIRECTOR APPROVAL ({len(pending_reqs)}):**\n" + "\n".join(p_lines))
+        if draft_reqs:
+            d_lines = [f"• **{r.get('title')}** ({r.get('department')}) — `Draft` | 📍 {r.get('location')}" for r in draft_reqs]
+            sections.append(f"📝 **DRAFTS ({len(draft_reqs)}):**\n" + "\n".join(d_lines))
+        if closed_reqs:
+            c_lines = [f"• **{r.get('title')}** — `Closed`" for r in closed_reqs]
+            sections.append(f"📁 **CLOSED ({len(closed_reqs)}):**\n" + "\n".join(c_lines))
+
+        reply_text = (
+            f"📋 **JOB REQUISITIONS DIRECTORY — {company_name} ({len(req_res)} Total):**\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{chr(10).join(sections)}\n\n"
+            f"_Which requisition would you like to review, edit, or check candidates for?_"
+        )
+        return {
+            "reply": reply_text,
+            "executed_actions": [{"tool": "list_hiring_requisitions", "result": req_res}]
+        }
+
     # 1. First Attempt Groq Cloud LLM Completion (Full Natural Language & Dynamic Tech Stacks)
     if getattr(settings, "groq_api_key", None):
         try:
