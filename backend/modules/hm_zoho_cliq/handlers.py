@@ -94,10 +94,15 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     action_key = (
         payload.get("action") or
         payload.get("key") or
-        payload.get("button", {}).get("id") or
-        payload.get("button", {}).get("name") or
+        (payload.get("arguments", {}).get("key") if isinstance(payload.get("arguments"), dict) else None) or
+        (payload.get("button", {}).get("key") if isinstance(payload.get("button"), dict) else None) or
+        (payload.get("button", {}).get("id") if isinstance(payload.get("button"), dict) else None) or
+        (payload.get("button", {}).get("name") if isinstance(payload.get("button"), dict) else None) or
         ""
-    ).strip()
+    )
+    if not isinstance(action_key, str):
+        action_key = str(action_key or "")
+    action_key = action_key.strip()
 
     raw_text = (
         payload.get("message") or
@@ -105,6 +110,26 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         payload.get("command") or
         ""
     ).strip()
+
+    # Conversational shortcuts if no button action key was passed
+    clean_text = raw_text.lower().strip()
+    if not action_key:
+        if clean_text in ("/start", "/help", "hi", "hello", "hey", "menu", "start", "help"):
+            action_key = "menu:welcome"
+        elif clean_text in ("pending", "pending works", "pending work", "actions", "pending actions", "pending action", "tasks"):
+            action_key = "menu:pending_works"
+        elif clean_text in ("candidate", "candidates", "shortlist", "shortlisted", "show candidates", "list candidates", "view candidates", "candidates list"):
+            action_key = "menu:candidates"
+        elif clean_text in ("working hires", "hires", "contractors", "working", "team", "active hires", "accepted candidates"):
+            action_key = "menu:accepted_candidates"
+        elif clean_text in ("timesheet", "timesheets", "pending timesheets", "review timesheets"):
+            action_key = "menu:timesheets"
+        elif clean_text in ("expense", "expenses", "pending expenses", "review expenses"):
+            action_key = "menu:expenses"
+        elif clean_text in ("requisition", "requisitions", "jobs", "open roles", "open jobs", "open requisitions", "active roles"):
+            action_key = "menu:requisitions"
+        elif clean_text in ("stats", "pipeline", "pipeline stats", "analytics", "metrics"):
+            action_key = "menu:stats"
 
     # Determine intent
     key_to_process = action_key or raw_text
