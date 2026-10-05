@@ -4,6 +4,7 @@ Equipped with tool-calling capabilities, multi-turn conversation memory, and fuz
 to manage job requisitions, review candidate shortlists, schedule candidate interviews, track onboarding issues,
 and monitor workforce analytics for Hiring Managers.
 """
+import os
 import json
 import re
 import uuid
@@ -624,7 +625,8 @@ def submit_requisition_for_director_approval(
         print("[HM AGENT] Error saving requisition in Postgres:", e)
     finally:
         try:
-            session.close()
+            if hasattr(session, "close"):
+                session.close()
         except Exception:
             pass
 
@@ -2292,7 +2294,7 @@ def find_matched_candidate_in_db(prompt_text: str):
 
 # ── MAIN AGENT ORCHESTRATOR ──────────────────────────────────────────────────
 
-def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_user: dict = None):
+def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = None, current_user: Optional[Dict[str, Any]] = None):
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
     history = history or []
     current_user = current_user or {}

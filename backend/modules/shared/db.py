@@ -390,6 +390,13 @@ class Session:
     def delete(self, obj: Model) -> None:
         self._deleted.append(obj)
 
+    def close(self) -> None:
+        """No-op close method for compatibility with session context managers."""
+        self._pending = []
+        self._tracked = []
+        self._snapshots = {}
+        self._deleted = []
+
 
 def get_session() -> Session:
     return Session()
