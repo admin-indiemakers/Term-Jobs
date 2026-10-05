@@ -55,11 +55,9 @@ def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str,
         "type": button_type,  # "+" is positive (green/blue), "-" is negative (red)
         "key": key,
         "action": {
-            "type": "invoke.bot",
+            "type": "invoke.function",
             "data": {
-                "bot_name": "hiringmanagerterm",
-                "name": "hiringmanagerterm",
-                "message": msg
+                "name": "hiringmanagerterm"
             }
         }
     }
@@ -333,7 +331,8 @@ def format_cliq_draft_preview(draft: Dict[str, Any]) -> Dict[str, Any]:
         f"💰 *Budget Range:* {budget}\n"
         f"📍 *Work Mode:* {loc}\n"
         f"🛠 *Required Tech Stack:* {skills}\n\n"
-        f"⚠️ *Policy Requirement:* Direct publication is disabled. Requisitions must be submitted to the Director for approval."
+        f"⚠️ *Policy Requirement:* Direct publication is disabled. Requisitions must be submitted to the Director for approval.\n\n"
+        f"👉 *Quick Action:* Click *🚀 Send to Director* below, or simply reply *'submit to director'*."
     )
 
     buttons = [
