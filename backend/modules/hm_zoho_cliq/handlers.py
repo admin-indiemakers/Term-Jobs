@@ -664,13 +664,10 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             return respond_and_save(format_cliq_candidate_rejected(res))
 
         elif tool_name == "list_shortlisted_candidates" and isinstance(res, list) and res:
-            # Return agentic conversational reply without broken deluge buttons
-            if reply_text:
-                return respond_and_save({
-                    "text": reply_text,
-                    "card": {"title": "👥 Shortlisted Candidates", "theme": "modern-inline"}
-                })
-            return respond_and_save(format_cliq_shortlisted_candidate(res[0]))
+            first_card = format_cliq_shortlisted_candidate(res[0])
+            if len(res) > 1:
+                first_card["text"] = f"👥 *Found {len(res)} Shortlisted Candidates (Showing Top Match):*\n\n" + first_card["text"]
+            return respond_and_save(first_card)
 
         elif tool_name == "get_hiring_manager_pending_works" and isinstance(res, dict):
             company_name = session["current_user"].get("company_name", "Client Workspace")
