@@ -239,11 +239,17 @@ async def zoho_cliq_health():
 
 
 @router.get("/api/zoho-cliq/candidates/{candidate_identifier}/resume")
+@router.head("/api/zoho-cliq/candidates/{candidate_identifier}/resume")
 @router.get("/zoho-cliq/candidates/{candidate_identifier}/resume")
+@router.head("/zoho-cliq/candidates/{candidate_identifier}/resume")
 @router.get("/api/zoho-cliq/candidates/{candidate_identifier}/resume.pdf")
+@router.head("/api/zoho-cliq/candidates/{candidate_identifier}/resume.pdf")
 @router.get("/zoho-cliq/candidates/{candidate_identifier}/resume.pdf")
+@router.head("/zoho-cliq/candidates/{candidate_identifier}/resume.pdf")
 @router.get("/api/candidates/{candidate_identifier}/resume-public")
+@router.head("/api/candidates/{candidate_identifier}/resume-public")
 @router.get("/candidates/{candidate_identifier}/resume-public")
+@router.head("/candidates/{candidate_identifier}/resume-public")
 async def get_cliq_candidate_resume(candidate_identifier: str):
     """
     Serve candidate resume PDF directly for Zoho Cliq links and buttons without requiring token auth.
@@ -254,7 +260,8 @@ async def get_cliq_candidate_resume(candidate_identifier: str):
     import os
     import re
     import urllib.parse
-    from fastapi.responses import Response, FileResponse, HTTPException
+    from fastapi import HTTPException
+    from fastapi.responses import Response, FileResponse
     from modules.shared.db import db
     from bson import ObjectId
 
