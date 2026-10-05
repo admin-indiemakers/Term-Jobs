@@ -27,7 +27,9 @@ from modules.hiring_manager_agent.agent import (
     reject_contractor_timesheet,
     approve_candidate_expense,
     reject_candidate_expense,
-    submit_requisition_for_director_approval
+    submit_requisition_for_director_approval,
+    draft_requisition_preview,
+    PREDEFINED_ROLE_DICT
 )
 from modules.hm_zoho_cliq.formatter import (
     format_cliq_welcome,
@@ -201,7 +203,7 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     # Conversational shortcuts if no button action key was passed
     clean_text = raw_text.lower().strip()
     if not action_key:
-        if clean_text in ("/start", "/help", "hi", "hello", "hey", "menu", "start", "help"):
+        if clean_text in ("/start", "/help", "hi", "hii", "hiii", "hello", "helo", "helloo", "hey", "heyy", "hlo", "hllo", "hlllo", "menu", "start", "help"):
             action_key = "menu:welcome"
         elif clean_text in ("pending", "pending works", "pending work", "actions", "pending actions", "pending action", "tasks"):
             action_key = "menu:pending_works"
@@ -501,6 +503,86 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     # -------------------------------------------------------------
     # 5. Direct Natural Language Regex (Instant Cards)
     # -------------------------------------------------------------
+    # Instant Requisition Draft Handler (Matches variations & typos: "draft a requsition fro devopse enfinner", "draft a requsition for devops", "hi can u draft a requsition for a devops enginneer")
+    draft_intent = bool(re.search(r"\b(draft|create|open|post|make|hire)\b.*\b(req|requ|requisition|requsition|requstion|job|role|posting)?\b", raw_text, re.IGNORECASE)) or ("draft" in raw_text.lower())
+    if draft_intent and not any(w in raw_text.lower() for w in ["timesheet", "expense", "reject", "schedule", "status", "cancel draft", "discard draft"]):
+        t_lower = raw_text.lower()
+        matched_role = None
+
+        role_keyword_map = [
+            ("devsecops", "devsecops"),
+            ("devops", "devops"),
+            ("devopse", "devops"),
+            ("dev op", "devops"),
+            ("dev ops", "devops"),
+            ("backend", "backend"),
+            ("python", "backend"),
+            ("fastapi", "backend"),
+            ("node", "backend"),
+            ("golang", "backend"),
+            ("frontend", "frontend"),
+            ("react", "frontend"),
+            ("nextjs", "frontend"),
+            ("next.js", "frontend"),
+            ("data engineer", "data engineer"),
+            ("data", "data engineer"),
+            ("mobile", "mobile"),
+            ("flutter", "mobile"),
+            ("react native", "mobile"),
+            ("ios", "mobile"),
+            ("android", "mobile"),
+            ("ui/ux", "ui/ux"),
+            ("ui", "ui/ux"),
+            ("ux", "ui/ux"),
+            ("designer", "ui/ux"),
+            ("product manager", "product manager"),
+            ("pm", "product manager"),
+            ("qa", "qa"),
+            ("quality assurance", "qa"),
+            ("tester", "qa"),
+            ("automation", "qa"),
+            ("sre", "sre"),
+            ("reliability", "sre"),
+            ("technical writer", "technical writer"),
+            ("writer", "technical writer"),
+        ]
+
+        for kw, r_key in role_keyword_map:
+            if kw in t_lower:
+                matched_role = PREDEFINED_ROLE_DICT.get(r_key)
+                break
+
+        if matched_role:
+            draft_res = draft_requisition_preview(
+                title=matched_role["title"],
+                department=matched_role["department"],
+                location=matched_role["location"],
+                employment_type=matched_role["employment_type"],
+                experience_level=matched_role["experience_level"],
+                salary_range=matched_role["salary_range"],
+                skills=matched_role["skills"],
+                job_description=matched_role["job_description"]
+            )
+        else:
+            clean_title = re.sub(
+                r"^(hi|hello|hey|can\s+u|can\s+you|please)?\s*(draft|create|make|post)?\s*(a|an)?\s*(new)?\s*(requsition|requisition|requstion|req|job|role|position)?\s*(for|as|of|in|to|fro)?\s*",
+                "",
+                raw_text,
+                flags=re.IGNORECASE
+            ).strip(" .!?")
+            if not clean_title or len(clean_title) < 3 or clean_title.lower() in ("draft", "req", "requisition", "role"):
+                clean_title = "Senior DevOps Engineer"
+            draft_res = draft_requisition_preview(
+                title=clean_title.title(),
+                department="Engineering & Product",
+                location="Bangalore / Hybrid Remote",
+                salary_range="₹1,500 - ₹2,200 / hr"
+            )
+
+        session["last_draft"] = draft_res
+        save_cliq_session(session)
+        return format_cliq_draft_preview(draft_res)
+
     sched_match = re.search(r"\b(schedule|set\s*up)\s+(an\s+)?interview(\s+with\s+([a-zA-Z0-9_\s\.\-]+))?", raw_text, re.IGNORECASE)
     if sched_match:
         cand_name = (sched_match.group(4) or "").strip()

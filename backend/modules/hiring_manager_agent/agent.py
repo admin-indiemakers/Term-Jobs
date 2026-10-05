@@ -2645,7 +2645,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                 "max_tokens": 800
             }
 
-            resp = httpx.post(url, headers=headers, json=payload, timeout=8.0)
+            resp = httpx.post(url, headers=headers, json=payload, timeout=4.0)
             if resp.status_code == 200:
                 data = resp.json()
                 choice = data["choices"][0]["message"]
@@ -2778,7 +2778,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                                 "temperature": 0.3,
                                 "max_tokens": 800
                             }
-                            second_resp = httpx.post(url, headers=headers, json=second_payload, timeout=8.0)
+                            second_resp = httpx.post(url, headers=headers, json=second_payload, timeout=4.0)
                             if second_resp.status_code == 200:
                                 second_content = second_resp.json()["choices"][0]["message"].get("content")
                                 if second_content and len(second_content.strip()) > 10:
