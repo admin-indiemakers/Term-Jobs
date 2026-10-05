@@ -25,7 +25,12 @@ import {
   Check,
   Edit3,
   X,
-  Plus
+  Plus,
+  Bot,
+  Send,
+  MessageSquare,
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react';
 
 const INDUSTRY_OPTIONS = [
@@ -123,6 +128,155 @@ export default function CompanyAdminProfile() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
+  // Bot Integrations State
+  const [botConfig, setBotConfig] = useState({
+    telegram: { enabled: true, bot_token: '', bot_username: '', webhook_url: '', is_verified: false, is_custom: false },
+    zoho_cliq: { enabled: true, bot_name: '', incoming_webhook_url: '', webhook_url: '', is_verified: false }
+  });
+  const [testingTelegram, setTestingTelegram] = useState(false);
+  const [testingCliq, setTestingCliq] = useState(false);
+  const [savingBots, setSavingBots] = useState(false);
+  const [botMessage, setBotMessage] = useState({ type: '', text: '' });
+  const [showTelegramToken, setShowTelegramToken] = useState(false);
+  const [copiedTgWebhook, setCopiedTgWebhook] = useState(false);
+  const [copiedCliqWebhook, setCopiedCliqWebhook] = useState(false);
+
+  const loadBotConfig = async () => {
+    try {
+      const data = await request('/api/integrations/tenant-bots', { token });
+      if (data) {
+        setBotConfig({
+          telegram: {
+            enabled: data.telegram?.enabled ?? false,
+            bot_token: data.telegram?.bot_token_masked || '',
+            bot_username: data.telegram?.bot_username || '',
+            webhook_url: data.telegram?.webhook_url || '',
+            is_verified: data.telegram?.is_verified ?? false,
+            is_custom: data.telegram?.is_custom ?? false,
+            last_synced_at: data.telegram?.last_synced_at
+          },
+          zoho_cliq: {
+            enabled: data.zoho_cliq?.enabled ?? false,
+            bot_name: data.zoho_cliq?.bot_name || 'TermJobs Assistant',
+            incoming_webhook_url: data.zoho_cliq?.incoming_webhook_url || '',
+            webhook_url: data.zoho_cliq?.webhook_url || '',
+            is_verified: data.zoho_cliq?.is_verified ?? false,
+            last_synced_at: data.zoho_cliq?.last_synced_at
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load bot config:', err);
+    }
+  };
+
+  const handleSaveTelegram = async () => {
+    setSavingBots(true);
+    setBotMessage({ type: '', text: '' });
+    try {
+      await request('/api/integrations/tenant-bots', {
+        method: 'POST',
+        token,
+        body: {
+          telegram: {
+            enabled: botConfig.telegram.enabled,
+            bot_token: botConfig.telegram.bot_token,
+            bot_username: botConfig.telegram.bot_username
+          }
+        }
+      });
+      setBotMessage({ type: 'success', text: 'Telegram Bot credentials verified and webhook registered successfully!' });
+      await loadBotConfig();
+    } catch (err) {
+      setBotMessage({ type: 'error', text: err.message || 'Failed to save Telegram Bot credentials' });
+    } finally {
+      setSavingBots(false);
+    }
+  };
+
+  const handleTestTelegram = async () => {
+    setTestingTelegram(true);
+    setBotMessage({ type: '', text: '' });
+    try {
+      const res = await request('/api/integrations/tenant-bots/test-telegram', {
+        method: 'POST',
+        token,
+        body: { bot_token: botConfig.telegram.bot_token }
+      });
+      if (res.success) {
+        setBotMessage({ type: 'success', text: `Verified! Bot identity: @${res.bot_username} (${res.bot_name})` });
+      } else {
+        setBotMessage({ type: 'error', text: res.error || 'Telegram verification failed.' });
+      }
+    } catch (err) {
+      setBotMessage({ type: 'error', text: err.message || 'Telegram test failed' });
+    } finally {
+      setTestingTelegram(false);
+    }
+  };
+
+  const handleSaveCliq = async () => {
+    setSavingBots(true);
+    setBotMessage({ type: '', text: '' });
+    try {
+      await request('/api/integrations/tenant-bots', {
+        method: 'POST',
+        token,
+        body: {
+          zoho_cliq: {
+            enabled: botConfig.zoho_cliq.enabled,
+            bot_name: botConfig.zoho_cliq.bot_name,
+            incoming_webhook_url: botConfig.zoho_cliq.incoming_webhook_url
+          }
+        }
+      });
+      setBotMessage({ type: 'success', text: 'Zoho Cliq configuration saved successfully!' });
+      await loadBotConfig();
+    } catch (err) {
+      setBotMessage({ type: 'error', text: err.message || 'Failed to save Zoho Cliq config' });
+    } finally {
+      setSavingBots(false);
+    }
+  };
+
+  const handleTestCliq = async () => {
+    setTestingCliq(true);
+    setBotMessage({ type: '', text: '' });
+    try {
+      const res = await request('/api/integrations/tenant-bots/test-cliq', {
+        method: 'POST',
+        token,
+        body: {
+          bot_name: botConfig.zoho_cliq.bot_name,
+          incoming_webhook_url: botConfig.zoho_cliq.incoming_webhook_url
+        }
+      });
+      if (res.success) {
+        setBotMessage({ type: 'success', text: 'Test message delivered to your Zoho Cliq channel!' });
+      } else {
+        setBotMessage({ type: 'error', text: res.error || 'Failed to dispatch test message to Zoho Cliq.' });
+      }
+    } catch (err) {
+      setBotMessage({ type: 'error', text: err.message || 'Zoho Cliq test failed' });
+    } finally {
+      setTestingCliq(false);
+    }
+  };
+
+  const handleDisconnectBot = async (platform) => {
+    if (!window.confirm(`Are you sure you want to disconnect ${platform.toUpperCase()} Bot?`)) return;
+    setSavingBots(true);
+    try {
+      await request(`/api/integrations/tenant-bots/${platform}`, { method: 'DELETE', token });
+      setBotMessage({ type: 'success', text: `${platform.toUpperCase()} Bot disconnected.` });
+      await loadBotConfig();
+    } catch (err) {
+      setBotMessage({ type: 'error', text: err.message || 'Failed to disconnect bot' });
+    } finally {
+      setSavingBots(false);
+    }
+  };
+
   // Fetch company profile on load
   const loadProfile = async () => {
     setLoading(true);
@@ -159,6 +313,7 @@ export default function CompanyAdminProfile() {
 
   useEffect(() => {
     loadProfile();
+    loadBotConfig();
   }, [token]);
 
   // Auto-dismiss notifications
@@ -479,6 +634,19 @@ export default function CompanyAdminProfile() {
           >
             <Lock size={15} />
             <span>Password & Security</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('bots')}
+            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+              activeTab === 'bots'
+                ? 'bg-black text-white shadow-2xs font-semibold'
+                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
+            }`}
+          >
+            <Bot size={15} />
+            <span>Bot Integrations</span>
           </button>
         </div>
 
@@ -1177,6 +1345,356 @@ export default function CompanyAdminProfile() {
                         </button>
                       </div>
                     </form>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 4: BOT INTEGRATIONS */}
+              {activeTab === 'bots' && (
+                <div className="space-y-4">
+                  {/* Status Banner / Feedback */}
+                  {botMessage.text && (
+                    <div
+                      className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-all ${
+                        botMessage.type === 'success'
+                          ? 'bg-emerald-50/90 text-emerald-800 border border-emerald-200'
+                          : 'bg-red-50/90 text-red-800 border border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {botMessage.type === 'success' ? (
+                          <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertCircle size={15} className="text-red-600 shrink-0" />
+                        )}
+                        <span>{botMessage.text}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setBotMessage({ type: '', text: '' })}
+                        className="text-gray-400 hover:text-black cursor-pointer"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Card 1: Telegram Bot Integration */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center">
+                          <Send size={16} className="-translate-x-0.5 -translate-y-0.5" />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-[13px] font-bold text-gray-900">
+                            Telegram Hiring Assistant Bot
+                          </h3>
+                          <p className="text-[11px] text-gray-500">
+                            Configure your company's dedicated Telegram bot for Hiring Managers.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        {botConfig.telegram.is_verified ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Connected {botConfig.telegram.bot_username ? `@${botConfig.telegram.bot_username}` : ''}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                            Not Configured
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                            Bot Username
+                          </label>
+                          <div className="relative">
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-bold">@</span>
+                            <input
+                              type="text"
+                              value={botConfig.telegram.bot_username}
+                              onChange={(e) =>
+                                setBotConfig({
+                                  ...botConfig,
+                                  telegram: { ...botConfig.telegram, bot_username: e.target.value.replace(/^@/, '') }
+                                })
+                              }
+                              placeholder="AcmeHiringBot"
+                              className="w-full pl-7 pr-3 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                            Telegram Bot Token
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showTelegramToken ? 'text' : 'password'}
+                              value={botConfig.telegram.bot_token}
+                              onChange={(e) =>
+                                setBotConfig({
+                                  ...botConfig,
+                                  telegram: { ...botConfig.telegram, bot_token: e.target.value }
+                                })
+                              }
+                              placeholder="7123456789:AAH..."
+                              className="w-full pl-2.5 pr-8 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowTelegramToken(!showTelegramToken)}
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            >
+                              {showTelegramToken ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Dynamic Webhook URL */}
+                      {botConfig.telegram.webhook_url && (
+                        <div className="bg-sky-50/50 border border-sky-200/60 rounded-xl p-3 text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wider">
+                              Dynamic Telegram Webhook Endpoint
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(botConfig.telegram.webhook_url);
+                                setCopiedTgWebhook(true);
+                                setTimeout(() => setCopiedTgWebhook(false), 2000);
+                              }}
+                              className="text-[11px] font-semibold text-sky-700 hover:text-sky-900 flex items-center gap-1 cursor-pointer"
+                            >
+                              {copiedTgWebhook ? (
+                                <>
+                                  <Check size={12} className="text-emerald-600" />
+                                  <span className="text-emerald-600">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} />
+                                  <span>Copy URL</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="font-mono text-[11px] text-gray-700 break-all select-all">
+                            {botConfig.telegram.webhook_url}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handleSaveTelegram}
+                          disabled={savingBots}
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        >
+                          {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                          <span>Verify & Register Webhook</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleTestTelegram}
+                          disabled={testingTelegram}
+                          className="px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-800 border border-gray-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        >
+                          {testingTelegram ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                          <span>Test Token</span>
+                        </button>
+
+                        {botConfig.telegram.bot_token && (
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectBot('telegram')}
+                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                          >
+                            <Trash2 size={13} />
+                            <span>Disconnect</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Setup Instructions */}
+                      <div className="bg-gray-50/80 rounded-xl p-3 text-[11px] text-gray-600 space-y-1 border border-gray-200/50">
+                        <div className="font-bold text-gray-800">Quick Setup Instructions:</div>
+                        <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
+                          <li>Open Telegram and search for <b>@BotFather</b>.</li>
+                          <li>Send <code>/newbot</code> and follow instructions to name your bot.</li>
+                          <li>Copy the provided <b>HTTP API Token</b> and paste it in the field above.</li>
+                          <li>Click <b>Verify & Register Webhook</b>. TermJobs will automatically configure the endpoint.</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Zoho Cliq Bot Integration */}
+                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                          <MessageSquare size={16} />
+                        </div>
+                        <div>
+                          <h3 className="text-xs sm:text-[13px] font-bold text-gray-900">
+                            Zoho Cliq Bot Integration
+                          </h3>
+                          <p className="text-[11px] text-gray-500">
+                            Connect your workspace's Zoho Cliq channel to receive proactive notifications and manage candidates.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        {botConfig.zoho_cliq.is_verified ? (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Connected
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
+                            Not Configured
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="pt-4 space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                            Bot Name in Zoho Cliq
+                          </label>
+                          <input
+                            type="text"
+                            value={botConfig.zoho_cliq.bot_name}
+                            onChange={(e) =>
+                              setBotConfig({
+                                ...botConfig,
+                                zoho_cliq: { ...botConfig.zoho_cliq, bot_name: e.target.value }
+                              })
+                            }
+                            placeholder="TermJobs Assistant"
+                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                            Incoming Webhook URL
+                          </label>
+                          <input
+                            type="text"
+                            value={botConfig.zoho_cliq.incoming_webhook_url}
+                            onChange={(e) =>
+                              setBotConfig({
+                                ...botConfig,
+                                zoho_cliq: { ...botConfig.zoho_cliq, incoming_webhook_url: e.target.value }
+                              })
+                            }
+                            placeholder="https://cliq.zoho.in/api/v2/bots/your_bot/incoming"
+                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Zoho Cliq Message Handler URL to configure in Zoho Developer Console */}
+                      {botConfig.zoho_cliq.webhook_url && (
+                        <div className="bg-emerald-50/50 border border-emerald-200/60 rounded-xl p-3 text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+                              Zoho Cliq Bot Message Handler URL
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(botConfig.zoho_cliq.webhook_url);
+                                setCopiedCliqWebhook(true);
+                                setTimeout(() => setCopiedCliqWebhook(false), 2000);
+                              }}
+                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                            >
+                              {copiedCliqWebhook ? (
+                                <>
+                                  <Check size={12} className="text-emerald-600" />
+                                  <span className="text-emerald-600">Copied!</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Copy size={12} />
+                                  <span>Copy URL</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                          <div className="font-mono text-[11px] text-gray-700 break-all select-all">
+                            {botConfig.zoho_cliq.webhook_url}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={handleSaveCliq}
+                          disabled={savingBots}
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        >
+                          {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                          <span>Save Zoho Cliq Config</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleTestCliq}
+                          disabled={testingCliq || !botConfig.zoho_cliq.incoming_webhook_url}
+                          className="px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-800 border border-gray-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                        >
+                          {testingCliq ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                          <span>Send Test Message</span>
+                        </button>
+
+                        {botConfig.zoho_cliq.incoming_webhook_url && (
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectBot('zoho_cliq')}
+                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                          >
+                            <Trash2 size={13} />
+                            <span>Disconnect</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Setup Instructions */}
+                      <div className="bg-gray-50/80 rounded-xl p-3 text-[11px] text-gray-600 space-y-1 border border-gray-200/50">
+                        <div className="font-bold text-gray-800">Zoho Developer Console Setup:</div>
+                        <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
+                          <li>Go to <b>Zoho Cliq Developer Console</b> &gt; <b>Bots</b> &gt; Create Bot.</li>
+                          <li>In Bot Details, copy the <b>Incoming Webhook URL</b> into the field above.</li>
+                          <li>Under <b>Bot Handlers</b>, select <i>Message Handler</i> and paste the <b>Message Handler URL</b> shown above.</li>
+                          <li>Click Save in both Zoho Cliq Console and on this page.</li>
+                        </ol>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}

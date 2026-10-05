@@ -54,42 +54,76 @@ CLIQ_INCOMING_WEBHOOK = "https://cliq.zoho.in/api/v2/bots/hiringmanagerterm/inco
 _CLIQ_SESSIONS: Dict[str, Dict[str, Any]] = {}
 
 
-def get_cliq_session(user_id: str, user_name: str = "Hiring Manager", user_email: str = "") -> Dict[str, Any]:
-    """Retrieve or initialize session for a Zoho Cliq user with MongoDB persistence."""
+def get_cliq_session(
+    user_id: str,
+    user_name: str = "Hiring Manager",
+    user_email: str = "",
+    tenant_id: Optional[str] = None
+) -> Dict[str, Any]:
+    """Retrieve or initialize session for a Zoho Cliq user with MongoDB persistence and tenant isolation."""
+    # Attempt to link user from TermJobs database
+    linked_user = None
     try:
-        doc = db["cliq_sessions"].find_one({"user_id": user_id})
+        if tenant_id and user_email:
+            linked_user = db["users"].find_one({"tenant_id": tenant_id, "email": user_email})
+        elif user_email:
+            linked_user = db["users"].find_one({"email": user_email})
+        if not linked_user and user_id and user_id != "cliq_user":
+            linked_user = db["users"].find_one({"zoho_cliq_user_id": user_id})
+    except Exception as e:
+        print("[CLIQ DB USER LOOKUP ERROR]", e)
+
+    effective_tenant_id = str(linked_user.get("tenant_id")) if (linked_user and linked_user.get("tenant_id")) else (tenant_id or "local")
+    company_name = "Client Workspace"
+    try:
+        t_doc = db["tenants"].find_one({"$or": [{"id": effective_tenant_id}, {"_id": effective_tenant_id}]})
+        if t_doc and t_doc.get("name"):
+            company_name = t_doc.get("name")
+    except Exception:
+        pass
+
+    session_key = f"{effective_tenant_id}:{user_id}" if effective_tenant_id != "local" else user_id
+
+    try:
+        doc = db["cliq_sessions"].find_one({"session_key": session_key}) or db["cliq_sessions"].find_one({"user_id": user_id})
         if doc:
             doc.pop("_id", None)
-            # Update user name/email if freshly provided
             if user_name and user_name != "Hiring Manager":
                 doc.setdefault("current_user", {})["name"] = user_name
             if user_email:
                 doc.setdefault("current_user", {})["email"] = user_email
-            _CLIQ_SESSIONS[user_id] = doc
+            if effective_tenant_id:
+                doc.setdefault("current_user", {})["tenant_id"] = effective_tenant_id
+                doc.setdefault("current_user", {})["company_name"] = company_name
+            _CLIQ_SESSIONS[session_key] = doc
             return doc
     except Exception as e:
         print("[CLIQ DB SESSION LOAD ERROR]", e)
 
-    if user_id in _CLIQ_SESSIONS:
-        return _CLIQ_SESSIONS[user_id]
+    if session_key in _CLIQ_SESSIONS:
+        return _CLIQ_SESSIONS[session_key]
+
+    resolved_user_name = (linked_user.get("name") if linked_user else None) or user_name or "Hiring Manager"
+    resolved_email = (linked_user.get("email") if linked_user else None) or user_email or "hiring.manager@termjobs.in"
 
     session = {
+        "session_key": session_key,
         "user_id": user_id,
         "current_user": {
-            "id": user_id,
-            "name": user_name or "Hiring Manager",
-            "email": user_email or "hiring.manager@termjobs.in",
-            "role": "HIRING_MANAGER",
-            "tenant_id": "local",
-            "company_name": "Client Workspace"
+            "id": str(linked_user.get("_id") or linked_user.get("id")) if linked_user else user_id,
+            "name": resolved_user_name,
+            "email": resolved_email,
+            "role": (linked_user.get("role") if linked_user else None) or "HIRING_MANAGER",
+            "tenant_id": effective_tenant_id,
+            "company_name": company_name
         },
         "history": [],
         "last_draft": None
     }
-    _CLIQ_SESSIONS[user_id] = session
+    _CLIQ_SESSIONS[session_key] = session
     try:
         db["cliq_sessions"].update_one(
-            {"user_id": user_id},
+            {"session_key": session_key},
             {"$set": session},
             upsert=True
         )
@@ -129,9 +163,10 @@ async def dispatch_cliq_incoming_message(message_payload: Dict[str, Any]) -> boo
         return False
 
 
-async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str] = None) -> Dict[str, Any]:
     """Process incoming request from Zoho Cliq Message Handler or Button Handler."""
     # 1. Extract user information
+    eff_tenant_id = tenant_id or payload.get("_tenant_id")
     user_info = payload.get("user") or payload.get("user_info") or {}
     if isinstance(user_info, str):
         try:
@@ -157,10 +192,10 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     # If user_id is generic "cliq_user" and no email provided, recover active session
     if user_id == "cliq_user" and not user_email:
         try:
-            active_doc = db["cliq_sessions"].find_one({
-                "user_id": {"$ne": "cliq_user"},
-                "current_user.email": {"$regex": r"@asimovx\.se|@termjobs\.in"}
-            })
+            query = {"user_id": {"$ne": "cliq_user"}}
+            if eff_tenant_id:
+                query["current_user.tenant_id"] = eff_tenant_id
+            active_doc = db["cliq_sessions"].find_one(query)
             if active_doc and active_doc.get("user_id"):
                 user_id = str(active_doc["user_id"])
                 user_name = active_doc.get("current_user", {}).get("name", user_name)
@@ -168,7 +203,7 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             pass
 
-    session = get_cliq_session(user_id, user_name, user_email)
+    session = get_cliq_session(user_id, user_name, user_email, tenant_id=eff_tenant_id)
 
     # 2. Extract action key (button click) or message text
     action_key = (

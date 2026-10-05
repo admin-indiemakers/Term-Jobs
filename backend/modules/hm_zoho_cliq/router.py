@@ -180,6 +180,19 @@ async def _extract_payload(request: Request) -> Dict[str, Any]:
     return extracted
 
 
+@router.post("/api/zoho-cliq/webhook/{tenant_id}")
+@router.post("/zoho-cliq/webhook/{tenant_id}")
+async def zoho_cliq_tenant_webhook(tenant_id: str, request: Request):
+    """
+    Dedicated tenant-specific Zoho Cliq webhook for multi-tenant bots.
+    Configured in Zoho Cliq Developer Console per tenant.
+    """
+    payload = await _extract_payload(request)
+    payload["_tenant_id"] = tenant_id
+    response_data = await process_cliq_request(payload, tenant_id=tenant_id)
+    return JSONResponse(content=response_data)
+
+
 @router.post("/api/zoho-cliq/bot")
 @router.post("/zoho-cliq/bot")
 @router.post("/api/zoho-cliq/webhook")

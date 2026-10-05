@@ -22,6 +22,12 @@ import {
   Activity,
   Send,
   ExternalLink,
+  Bot,
+  MessageSquare,
+  Loader2,
+  RefreshCw,
+  X,
+  Trash2
 } from 'lucide-react';
 import { interviewApi } from '../interview/services/interviewApi';
 
@@ -77,6 +83,97 @@ export default function HiringManagerDashboard() {
   const [wfStats, setWfStats] = useState(null);
   const [interviewSummary, setInterviewSummary] = useState([]);
 
+  // Bot Integration states
+  const [botStatus, setBotStatus] = useState(null);
+  const [linkingTelegram, setLinkingTelegram] = useState(false);
+  const [pingingBot, setPingingBot] = useState(false);
+  const [showCliqModal, setShowCliqModal] = useState(false);
+  const [botFeedback, setBotFeedback] = useState({ type: '', text: '' });
+
+  const loadBotStatus = useCallback(async () => {
+    try {
+      const res = await request('/api/integrations/user-bot-status', { token });
+      if (res) setBotStatus(res);
+    } catch (err) {
+      console.error('Error fetching bot status:', err);
+    }
+  }, [token]);
+
+  const handleConnectTelegram = async () => {
+    setLinkingTelegram(true);
+    setBotFeedback({ type: '', text: '' });
+    try {
+      const res = await request('/api/integrations/telegram/generate-link', {
+        method: 'POST',
+        token,
+      });
+      if (res?.direct_link) {
+        window.open(res.direct_link, '_blank');
+        setBotFeedback({
+          type: 'info',
+          text: `Opened Telegram! Tap START in @${res.bot_username || 'bot'} to complete connection.`
+        });
+        let pollCount = 0;
+        const interval = setInterval(async () => {
+          pollCount += 1;
+          try {
+            const statusRes = await request('/api/integrations/user-bot-status', { token });
+            if (statusRes?.telegram?.is_linked) {
+              setBotStatus(statusRes);
+              setBotFeedback({
+                type: 'success',
+                text: `🎉 Successfully connected to Telegram as @${statusRes.telegram.username || 'User'}!`
+              });
+              clearInterval(interval);
+              setLinkingTelegram(false);
+            }
+          } catch {
+            // ignore polling errors
+          }
+          if (pollCount > 30) {
+            clearInterval(interval);
+            setLinkingTelegram(false);
+          }
+        }, 3000);
+      }
+    } catch (err) {
+      setBotFeedback({ type: 'error', text: err.message || 'Failed to generate connection link' });
+      setLinkingTelegram(false);
+    }
+  };
+
+  const handleTestPing = async () => {
+    setPingingBot(true);
+    setBotFeedback({ type: '', text: '' });
+    try {
+      const res = await request('/api/integrations/telegram/test-ping', {
+        method: 'POST',
+        token,
+        body: { message: "👋 Hello from TermJobs Dashboard! Your AI Assistant is online and operational." }
+      });
+      if (res.success) {
+        setBotFeedback({ type: 'success', text: '✅ Instant test notification delivered to your Telegram!' });
+      } else {
+        setBotFeedback({ type: 'error', text: res.error || 'Failed to dispatch Telegram ping' });
+      }
+    } catch (err) {
+      setBotFeedback({ type: 'error', text: err.message || 'Failed to send test notification' });
+    } finally {
+      setPingingBot(false);
+    }
+  };
+
+  const handleUnlinkTelegram = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your Telegram account from TermJobs?')) return;
+    try {
+      await request('/api/integrations/telegram/unlink', { method: 'POST', token });
+      setBotFeedback({ type: 'info', text: 'Telegram account unlinked.' });
+      await loadBotStatus();
+    } catch (err) {
+      setBotFeedback({ type: 'error', text: err.message || 'Failed to unlink account' });
+    }
+  };
+
   const isFetchingRef = useRef(false);
   const hasLoadedRef = useRef(false);
   const prevTokenRef = useRef(token);
@@ -131,8 +228,9 @@ export default function HiringManagerDashboard() {
     }
     if (!hasLoadedRef.current) {
       loadDashboardData();
+      loadBotStatus();
     }
-  }, [token, loadDashboardData]);
+  }, [token, loadDashboardData, loadBotStatus]);
 
   // Derived Exact Real Metrics from Live Backend Data
   const liveRequisitions = useMemo(() => {
@@ -276,7 +374,38 @@ export default function HiringManagerDashboard() {
         </div>
       </div>
 
-      {/* Telegram AI Co-pilot Feature Card */}
+      {/* Live Bot Feedback Banner */}
+      {botFeedback.text && (
+        <div
+          className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-all shadow-xs ${
+            botFeedback.type === 'success'
+              ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+              : botFeedback.type === 'info'
+              ? 'bg-sky-50 text-sky-800 border border-sky-200'
+              : 'bg-red-50 text-red-800 border border-red-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {botFeedback.type === 'success' ? (
+              <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+            ) : botFeedback.type === 'info' ? (
+              <Loader2 size={15} className="text-sky-600 animate-spin shrink-0" />
+            ) : (
+              <AlertCircle size={15} className="text-red-600 shrink-0" />
+            )}
+            <span>{botFeedback.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBotFeedback({ type: '', text: '' })}
+            className="text-gray-400 hover:text-black cursor-pointer"
+          >
+            <X size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Dynamic Multi-Tenant AI Co-pilot Feature Card */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950 p-4 sm:p-5 text-white shadow-xs border border-blue-900/30">
         <div className="absolute right-0 top-0 -mt-6 -mr-6 w-48 h-48 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -289,29 +418,84 @@ export default function HiringManagerDashboard() {
                 <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400">
                   Hiring Manager AI Co-Pilot
                 </span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                  ● Telegram Live
-                </span>
+                {botStatus?.telegram?.is_linked ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    ● Connected as @{botStatus.telegram.username || user?.name || 'User'}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">
+                    ● Multi-Bot Available
+                  </span>
+                )}
               </div>
               <h2 className="text-sm sm:text-base font-bold text-white mt-0.5">
-                Control TermJobs from Telegram by chatting with @HirMngerbot
+                {botStatus?.telegram?.is_linked
+                  ? `Active on Telegram (@${botStatus.telegram.bot_username || 'HirMngerbot'})`
+                  : `Connect your Telegram or Zoho Cliq (@${botStatus?.telegram?.bot_username || 'HirMngerbot'})`}
               </h2>
               <p className="text-xs text-gray-300 font-normal mt-0.5">
-                Draft requisitions, submit to Director, review shortlisted candidates & approve timesheets by sending casual prompts.
+                {botStatus?.telegram?.is_linked
+                  ? 'Your account is paired. You can draft requisitions, approve timesheets, and review candidate screenings right from Telegram.'
+                  : 'Pair your account in 1 click to manage requisitions, review candidates, and approve timesheets directly from your messaging app.'}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 shrink-0">
-            <a
-              href="https://t.me/HirMngerbot"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <Send size={13} />
-              <span>Launch @HirMngerbot</span>
-              <ExternalLink size={12} className="opacity-70" />
-            </a>
+
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+            {botStatus?.telegram?.is_linked ? (
+              <>
+                <a
+                  href={`https://t.me/${botStatus.telegram.bot_username || 'HirMngerbot'}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Send size={13} />
+                  <span>Open @{botStatus.telegram.bot_username || 'HirMngerbot'}</span>
+                  <ExternalLink size={12} className="opacity-70" />
+                </a>
+                <button
+                  type="button"
+                  onClick={handleTestPing}
+                  disabled={pingingBot}
+                  className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  title="Send instant notification to your Telegram"
+                >
+                  {pingingBot ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  <span>Test Ping</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleUnlinkTelegram}
+                  className="px-3 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-semibold border border-red-500/30 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Disconnect Telegram account"
+                >
+                  <Trash2 size={13} />
+                  <span className="hidden sm:inline">Unlink</span>
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleConnectTelegram}
+                  disabled={linkingTelegram}
+                  className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                >
+                  {linkingTelegram ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                  <span>{linkingTelegram ? 'Waiting for /start...' : 'Connect Telegram'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowCliqModal(true)}
+                  className="px-3.5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+                >
+                  <MessageSquare size={13} />
+                  <span>Zoho Cliq</span>
+                </button>
+              </>
+            )}
+
             <button
               type="button"
               onClick={() => navigate('/dashboard/hiring-manager-chat')}
@@ -323,6 +507,55 @@ export default function HiringManagerDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Zoho Cliq Integration Modal */}
+      {showCliqModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-gray-100 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
+                <MessageSquare size={17} />
+                <span>Zoho Cliq Connection</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCliqModal(false)}
+                className="text-gray-400 hover:text-black cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs text-gray-600">
+              <p>
+                To connect your Zoho Cliq account with TermJobs, ensure your Zoho Cliq email matches your TermJobs email:
+              </p>
+              <div className="p-3 bg-gray-50 rounded-xl font-mono text-[11px] text-gray-800 break-all border border-gray-200">
+                {user?.email || 'hiring.manager@termjobs.in'}
+              </div>
+              <div className="space-y-1.5">
+                <div className="font-bold text-gray-800">Quick Steps:</div>
+                <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                  <li>Open your workspace's Zoho Cliq channel.</li>
+                  <li>Search for your company's TermJobs Bot in the Bot directory.</li>
+                  <li>Send any message (e.g. <code>hi</code> or <code>show requisitions</code>).</li>
+                  <li>The bot automatically recognizes your email and links your hiring manager profile!</li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowCliqModal(false)}
+                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 cursor-pointer"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">

@@ -4,13 +4,17 @@ import httpx
 from typing import Dict, Any, Optional
 
 from modules.hiring_manager_agent.agent import run_hiring_manager_agent_chat
+import time
+import datetime
+from modules.shared.db import db
 from .session import (
     get_or_create_session,
     add_history_message,
     get_chat_history,
     set_last_draft,
     get_last_draft,
-    clear_session
+    clear_session,
+    invalidate_session
 )
 from .keyboards import (
     build_requisition_draft_keyboard,
@@ -231,7 +235,8 @@ async def answer_callback_query(
 
 async def handle_message(
     token: str,
-    message: Dict[str, Any]
+    message: Dict[str, Any],
+    tenant_id: Optional[str] = None
 ):
     """Process incoming text message from Telegram."""
     chat = message.get("chat", {})
@@ -242,14 +247,73 @@ async def handle_message(
     if not chat_id or not text:
         return
 
-    session = get_or_create_session(chat_id, from_user)
+    # 0. Check for 1-Click Dashboard Pairing Link: /start link_<token>
+    if text.startswith("/start"):
+        parts = text.split()
+        if len(parts) > 1 and parts[1].startswith("link_"):
+            pairing_code = parts[1].replace("link_", "").strip()
+            now = time.time()
+            u_filter = {
+                "bot_pairing_token": pairing_code,
+                "bot_pairing_token_expires_at": {"$gt": now}
+            }
+            if tenant_id:
+                u_filter["tenant_id"] = tenant_id
+
+            target_user = None
+            try:
+                target_user = db["users"].find_one(u_filter)
+            except Exception as e:
+                print(f"[HM TELEGRAM PAIRING LOOKUP ERROR] {e}")
+
+            if target_user:
+                # Link user
+                username_clean = (from_user.get("username") or "").strip().lstrip("@")
+                db["users"].update_one(
+                    {"_id": target_user["_id"]},
+                    {"$set": {
+                        "telegram_chat_id": str(chat_id),
+                        "telegram_username": username_clean,
+                        "telegram_linked_at": datetime.datetime.utcnow().isoformat(),
+                        "bot_pairing_token": None,
+                        "bot_pairing_token_expires_at": None
+                    }}
+                )
+                invalidate_session(chat_id, tenant_id)
+                session = get_or_create_session(chat_id, from_user, tenant_id=tenant_id)
+                user_name = target_user.get("name") or from_user.get("first_name") or "Hiring Manager"
+                company_name = session["current_user"].get("company_name", "TermJobs")
+
+                success_msg = (
+                    f"🎉 *Account Connected Successfully!*\n\n"
+                    f"Hello *{user_name}*! Your Telegram account has been linked to your *{company_name}* hiring manager workspace on TermJobs.\n\n"
+                    f"⚡ *What you can do directly from Telegram:*\n"
+                    f"• _\"Show me pending works\"_\n"
+                    f"• _\"Draft a React developer with 3 yrs exp\"_\n"
+                    f"• _\"Show candidates working under me\"_\n"
+                    f"• _\"Approve pending timesheets & expenses\"_\n\n"
+                    f"Tap an option below or send any instruction to get started:"
+                )
+                await send_telegram_message(token, chat_id, success_msg, build_quick_menu_keyboard())
+                return
+            else:
+                invalid_msg = (
+                    "⚠️ *Expired or Invalid Pairing Link*\n\n"
+                    "This connection link has expired or has already been used.\n"
+                    "Please return to your *TermJobs Dashboard* and click *Connect Telegram* to generate a fresh link."
+                )
+                await send_telegram_message(token, chat_id, invalid_msg)
+                return
+
+    session = get_or_create_session(chat_id, from_user, tenant_id=tenant_id)
     text_lower = text.lower().strip()
 
     # 1. Greetings (e.g. "hi", "hello", "hey", "/start")
     if text.startswith("/start") or re.match(r"^(hi|hello|hey|greetings|good\s+morning|good\s+afternoon|good\s+evening|start)[\s!.]*$", text_lower):
         user_name = session["current_user"].get("name") or "Hiring Manager"
+        company_name = session["current_user"].get("company_name", "TermJobs")
         welcome_msg = (
-            f"👋 *Hello, {user_name}!* Welcome to your *TermJobs AI Assistant*.\n\n"
+            f"👋 *Hello, {user_name}!* Welcome to your *{company_name} AI Assistant*.\n\n"
             f"How can I assist your hiring pipeline today?\n\n"
             f"💡 *You can ask naturally or tap an option below:*\n"
             f"• _\"Show me pending works\"_\n"
@@ -735,7 +799,8 @@ async def handle_message(
 
 async def handle_callback_query(
     token: str,
-    callback_query: Dict[str, Any]
+    callback_query: Dict[str, Any],
+    tenant_id: Optional[str] = None
 ):
     """Handle taps on inline buttons."""
     query_id = callback_query.get("id")
@@ -748,7 +813,7 @@ async def handle_callback_query(
         await answer_callback_query(token, query_id)
         return
 
-    session = get_or_create_session(chat_id, from_user)
+    session = get_or_create_session(chat_id, from_user, tenant_id=tenant_id)
 
     # 1. Requisition Actions
     if data.startswith("submit_dir:"):
