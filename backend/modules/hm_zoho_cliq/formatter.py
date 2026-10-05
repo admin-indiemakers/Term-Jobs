@@ -4,6 +4,21 @@ Converts AI agent responses, candidate data, interview proposals, timesheets,
 and requisition briefings into Zoho Cliq compatible JSON schemas.
 """
 from typing import Dict, Any, List, Optional
+import urllib.parse
+
+
+def build_cliq_url_button(label: str, url: str, button_type: str = "+") -> Dict[str, Any]:
+    """Helper to build a Zoho Cliq open.url button that opens a web link directly in the browser."""
+    return {
+        "label": label[:20],
+        "type": button_type,
+        "action": {
+            "type": "open.url",
+            "data": {
+                "web": url
+            }
+        }
+    }
 
 
 def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str, Any]:
@@ -32,6 +47,9 @@ def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str,
         elif key.startswith("view_prof:"):
             cand = key.replace("view_prof:", "").strip()
             msg = f"view profile of {cand}"
+        elif key.startswith("view_res:"):
+            cand = key.replace("view_res:", "").strip()
+            msg = f"send resume of {cand}"
         elif key.startswith("rej_cand:"):
             cand = key.replace("rej_cand:", "").strip()
             msg = f"reject candidate {cand}"
@@ -149,19 +167,25 @@ def format_cliq_shortlisted_candidate(cand: Dict[str, Any]) -> Dict[str, Any]:
     vendor = cand.get("vendor_name") or "Vendorqueue"
     status = cand.get("status") or "Shortlisted"
 
+    cand_identifier = cand.get("candidate_id") or cand.get("id") or name
+    encoded_id = urllib.parse.quote(str(cand_identifier))
+    resume_url = f"https://termjobs.in/api/zoho-cliq/candidates/{encoded_id}/resume"
+
     text = (
         f"👤 *{name}* (🎯 *{score} Match*)\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"💼 *Role:* {role}\n"
         f"🛠 *Skills:* {skills}\n"
         f"🏢 *Vendor:* {vendor}\n"
+        f"📄 *Resume:* [📥 View Resume PDF]({resume_url})\n"
         f"📊 *Status:* `{status}`"
     )
 
     cand_key = name[:20]
     buttons = [
-        build_cliq_button("📅 Schedule Int", f"sched_int:{cand_key}", "+"),
+        build_cliq_url_button("📄 Resume", resume_url),
         build_cliq_button("👤 Profile", f"view_prof:{cand_key}"),
+        build_cliq_button("📅 Schedule Int", f"sched_int:{cand_key}", "+"),
         build_cliq_button("❌ Reject", f"rej_cand:{cand_key}", "-")
     ]
 
@@ -272,7 +296,7 @@ def format_cliq_candidate_rejected(res: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def format_cliq_candidate_profile(prof: Dict[str, Any]) -> Dict[str, Any]:
-    """Format candidate detailed profile card for Zoho Cliq."""
+    """Format candidate detailed profile card for Zoho Cliq with direct resume access."""
     name = prof.get("name") or prof.get("candidate_name") or "Candidate"
     role = prof.get("role") or prof.get("requisition_title") or "Full Stack Engineer"
     skills = prof.get("skills") or "React, Node.js, Python, AWS"
@@ -281,7 +305,11 @@ def format_cliq_candidate_profile(prof: Dict[str, Any]) -> Dict[str, Any]:
     rate = prof.get("hourly_rate") or "$75/hr"
     status = prof.get("status") or "Shortlisted"
     score = prof.get("match_score") or "88%"
-    notes = prof.get("screening_notes") or "Demonstrated solid technical depth in system architecture."
+    notes = prof.get("screening_notes") or prof.get("notes") or "Demonstrated solid technical depth in system architecture."
+
+    cand_identifier = prof.get("candidate_id") or prof.get("id") or name
+    encoded_id = urllib.parse.quote(str(cand_identifier))
+    resume_url = f"https://termjobs.in/api/zoho-cliq/candidates/{encoded_id}/resume"
 
     text = (
         f"👤 *CANDIDATE WORKFORCE PROFILE: {name}*\n"
@@ -291,11 +319,13 @@ def format_cliq_candidate_profile(prof: Dict[str, Any]) -> Dict[str, Any]:
         f"📊 *Current Status:* `{status}`\n"
         f"💵 *Rate:* {rate}\n"
         f"🛠 *Skills:* {skills}\n"
+        f"📄 *Resume PDF:* [📥 View / Download Full Resume]({resume_url})\n"
         f"📝 *Screening Notes:* _{notes}_"
     )
 
     cand_key = name[:20]
     buttons = [
+        build_cliq_url_button("📄 View Resume", resume_url),
         build_cliq_button("📅 Schedule Int", f"sched_int:{cand_key}", "+"),
         build_cliq_button("❌ Reject", f"rej_cand:{cand_key}", "-"),
         build_cliq_button("👥 Candidates", "menu:candidates")
@@ -304,7 +334,44 @@ def format_cliq_candidate_profile(prof: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "text": text,
         "card": {
-            "title": f"Profile: {name}",
+            "title": f"Profile: {name} ({score})",
+            "theme": "modern-inline"
+        },
+        "buttons": buttons[:5]
+    }
+
+
+def format_cliq_candidate_resume(prof: Dict[str, Any]) -> Dict[str, Any]:
+    """Format dedicated candidate resume card for Zoho Cliq with one-click PDF viewing."""
+    name = prof.get("name") or prof.get("candidate_name") or "Candidate"
+    role = prof.get("role") or prof.get("requisition_title") or "Full Stack Engineer"
+    score = prof.get("match_score") or "88%"
+    cand_identifier = prof.get("candidate_id") or prof.get("id") or name
+    encoded_id = urllib.parse.quote(str(cand_identifier))
+    resume_url = f"https://termjobs.in/api/zoho-cliq/candidates/{encoded_id}/resume"
+    notes = prof.get("screening_notes") or prof.get("notes") or "Verified credentials and technical background on file."
+
+    text = (
+        f"📄 *CANDIDATE RESUME & CREDENTIALS: {name.upper()}*\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💼 *Role:* {role} (🎯 *{score} Match*)\n"
+        f"📎 *Resume Document:* [📥 Click Here to View / Download PDF]({resume_url})\n\n"
+        f"💡 *Summary:* _{notes}_\n\n"
+        f"👉 Click *📄 Open Resume PDF* below to view the complete resume directly in your browser."
+    )
+
+    cand_key = name[:20]
+    buttons = [
+        build_cliq_url_button("📄 Open Resume PDF", resume_url),
+        build_cliq_button("👤 Full Profile", f"view_prof:{cand_key}"),
+        build_cliq_button("📅 Schedule Int", f"sched_int:{cand_key}", "+"),
+        build_cliq_button("❌ Reject", f"rej_cand:{cand_key}", "-")
+    ]
+
+    return {
+        "text": text,
+        "card": {
+            "title": f"Resume: {name}",
             "theme": "modern-inline"
         },
         "buttons": buttons[:5]

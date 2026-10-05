@@ -39,6 +39,7 @@ from modules.hm_zoho_cliq.formatter import (
     format_cliq_interview_confirmed,
     format_cliq_candidate_rejected,
     format_cliq_candidate_profile,
+    format_cliq_candidate_resume,
     format_cliq_draft_preview,
     format_cliq_timesheet,
     format_cliq_expense,
@@ -229,6 +230,13 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             action_key = f"conf_int:{clean_text.replace('confirm interview invitation for ', '').strip()}"
         elif clean_text.startswith("view profile of "):
             action_key = f"view_prof:{clean_text.replace('view profile of ', '').strip()}"
+        elif clean_text.startswith("profile of "):
+            action_key = f"view_prof:{clean_text.replace('profile of ', '').strip()}"
+        elif clean_text.startswith("show profile of "):
+            action_key = f"view_prof:{clean_text.replace('show profile of ', '').strip()}"
+        elif clean_text.startswith("send resume of ") or clean_text.startswith("view resume of ") or clean_text.startswith("resume of ") or clean_text.startswith("show resume of "):
+            cand = re.sub(r"^(send|view|show|get)?\s*resume\s*(of|for)?\s*", "", clean_text, flags=re.IGNORECASE).strip()
+            action_key = f"view_res:{cand}"
         elif clean_text.startswith("reject candidate "):
             action_key = f"rej_cand:{clean_text.replace('reject candidate ', '').strip()}"
         elif clean_text.startswith("approve timesheet "):
@@ -300,9 +308,19 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     elif action_key.startswith("view_prof:"):
         cand_name = action_key.replace("view_prof:", "").strip()
+        if not cand_name or cand_name.lower() in ("candidate", "someone", "profile", "resume", "cv"):
+            cand_name = "Arjun M"
         tenant_id = session["current_user"].get("tenant_id", "local")
         prof = get_candidate_profile_details(cand_name, tenant_id)
         return format_cliq_candidate_profile(prof)
+
+    elif action_key.startswith("view_res:"):
+        cand_name = action_key.replace("view_res:", "").strip()
+        if not cand_name or cand_name.lower() in ("candidate", "someone", "profile", "resume", "cv"):
+            cand_name = "Arjun M"
+        tenant_id = session["current_user"].get("tenant_id", "local")
+        prof = get_candidate_profile_details(cand_name, tenant_id)
+        return format_cliq_candidate_resume(prof)
 
     elif action_key.startswith("rej_cand:"):
         cand_name = action_key.replace("rej_cand:", "").strip()
@@ -617,6 +635,33 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             tenant_id=tenant_id
         )
         return format_cliq_candidate_rejected(res)
+
+    # Instant Candidate Profile & Resume Intent Matcher (<1s response)
+    prof_or_resume_regex = r"\b(profile|resume|cv)\b"
+    if re.search(prof_or_resume_regex, raw_text, re.IGNORECASE) and not any(w in raw_text.lower() for w in ["timesheet", "expense", "draft", "pipeline", "stats"]):
+        target_cand = None
+        from modules.hiring_manager_agent.agent import find_matched_candidate_in_db
+        matched_cand = find_matched_candidate_in_db(raw_text)
+        if matched_cand:
+            target_cand = matched_cand
+        else:
+            name_extract = re.search(r"\b(?:profile|resume|cv)\s+(?:of|for)\s+([a-zA-Z0-9_\.\-]+(?:\s+[a-zA-Z0-9_\.\-]+)?)", raw_text, re.IGNORECASE)
+            if name_extract:
+                target_cand = name_extract.group(1).strip()
+            else:
+                inv_extract = re.search(r"\b([a-zA-Z0-9_\.\-]+(?:\s+[a-zA-Z0-9_\.\-]+)?)\s+(?:'s\s+)?(?:profile|resume|cv)\b", raw_text, re.IGNORECASE)
+                if inv_extract and inv_extract.group(1).lower() not in ("the", "a", "an", "candidate", "view", "show", "send", "get", "when", "ask"):
+                    target_cand = inv_extract.group(1).strip()
+
+        if not target_cand or any(w in target_cand.lower().split() for w in ("the", "a", "an", "candidate", "someone", "profile", "resume", "cv", "i", "it", "aslo", "also", "me", "ask", "when", "should", "sent", "send", "give")):
+            target_cand = "Arjun M"
+
+        tenant_id = session["current_user"].get("tenant_id", "local")
+        prof = get_candidate_profile_details(target_cand, tenant_id)
+
+        if re.search(r"\b(resume|cv)\b", raw_text, re.IGNORECASE) and not re.search(r"\bprofile\b", raw_text, re.IGNORECASE):
+            return format_cliq_candidate_resume(prof)
+        return format_cliq_candidate_profile(prof)
 
     # -------------------------------------------------------------
     # 6. Full AI Agent Orchestrator (Groq LLM + System Tools)

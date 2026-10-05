@@ -2125,7 +2125,14 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
     doc = None
     try:
         if target_name:
-            query = {"candidate_name": {"$regex": re.escape(target_name), "$options": "i"}}
+            query = {
+                "$or": [
+                    {"candidate_name": {"$regex": re.escape(target_name), "$options": "i"}},
+                    {"name": {"$regex": re.escape(target_name), "$options": "i"}},
+                    {"id": target_name},
+                    {"candidate_id": target_name}
+                ]
+            }
             doc = db["candidate_submissions"].find_one(query) or db["candidates"].find_one(query)
         
         if not doc:
@@ -2207,7 +2214,16 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
             {"label": "Slack Workspace", "value": "Engineering Channels", "status": "Active"}
         ]
 
+    skills_val = doc.get("matched_skills") or doc.get("skills") or ["React", "Node.js", "Python", "AWS"]
+    skills_str = ", ".join(skills_val) if isinstance(skills_val, list) else str(skills_val)
+    has_res = bool(doc.get("resume_pdf") or doc.get("filename") or doc.get("extracted_text"))
+    import urllib.parse
+    cand_identifier = cand_id or c_name
+    resume_link = f"https://termjobs.in/api/zoho-cliq/candidates/{urllib.parse.quote(str(cand_identifier))}/resume"
+
     return {
+        "candidate_id": cand_id,
+        "id": cand_id,
         "candidate_name": c_name,
         "name": c_name,
         "email": email_addr,
@@ -2215,6 +2231,11 @@ def get_candidate_profile_details(candidate_name: str = "", tenant_id: str = "lo
         "vendor_name": vendor,
         "match_score": score_str,
         "status": f"{cand_status} - Onboarding {onboard_doc.get('status', 'Completed')}",
+        "skills": skills_str,
+        "has_resume": has_res,
+        "resume_filename": doc.get("filename") or f"{c_name}_Resume.pdf",
+        "resume_url": resume_link,
+        "screening_notes": doc.get("summary") or doc.get("details") or f"Evaluation record for {req_title} with {score_str} match score.",
         "work_order": {
             "id": wo_id,
             "status": wo_doc.get("status", "ACTIVE"),
@@ -2252,7 +2273,7 @@ def find_matched_candidate_in_db(prompt_text: str):
     prompt_lower = prompt_text.lower().strip()
 
     # If the user is asking a category or listing query, do NOT match individual candidate names
-    listing_patterns = r"\b(shortlist|shortlisted|shorlist|shorlisted|shotlist|shotlisted|shrtlist|sortlist|onboard|onboarding|onbording|onboarded|onborded|under\s+me|all\s+candidates|working\s+under|accepted|pending|timesheet|expense|requisition|role|stats|dashboard|metrics|overview|candidate|candidates|candiate|candiates)\b"
+    listing_patterns = r"\b(shortlist|shortlisted|shorlist|shorlisted|shotlist|shotlisted|shrtlist|sortlist|onboard|onboarding|onbording|onboarded|onborded|under\s+me|all\s+candidates|working\s+under|accepted\s+candidates|pending\s+candidates|timesheet|expense|requisition|role|stats|dashboard|metrics|overview|list\s+candidates|show\s+candidates)\b"
     if re.search(listing_patterns, prompt_lower):
         return None
 
