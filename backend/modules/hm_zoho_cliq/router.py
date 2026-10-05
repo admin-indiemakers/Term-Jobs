@@ -16,42 +16,168 @@ from modules.hm_zoho_cliq.handlers import (
 router = APIRouter(tags=["Zoho Cliq"])
 
 
+def parse_deluge_map_str(raw: str) -> Dict[str, Any]:
+    """Parse Deluge Map string representation `{k1=v1, k2={sub_k=sub_v}}` into Python dict."""
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    s = raw.strip()
+    if s.startswith("{") and s.endswith("}"):
+        s = s[1:-1].strip()
+
+    result = {}
+    tokens = []
+    current = []
+    brace_depth = 0
+    in_quote = False
+    quote_char = ""
+
+    for char in s:
+        if char in ('"', "'"):
+            if not in_quote:
+                in_quote = True
+                quote_char = char
+            elif char == quote_char:
+                in_quote = False
+            current.append(char)
+        elif not in_quote and char == "{":
+            brace_depth += 1
+            current.append(char)
+        elif not in_quote and char == "}":
+            brace_depth -= 1
+            current.append(char)
+        elif not in_quote and brace_depth == 0 and char == ",":
+            token = "".join(current).strip()
+            if token:
+                tokens.append(token)
+            current = []
+        else:
+            current.append(char)
+    last_token = "".join(current).strip()
+    if last_token:
+        tokens.append(last_token)
+
+    for token in tokens:
+        if "=" in token:
+            k, v = token.split("=", 1)
+            k = k.strip().strip('"').strip("'")
+            v = v.strip().strip('"').strip("'")
+            if v.startswith("{") and v.endswith("}"):
+                result[k] = parse_deluge_map_str(v)
+            else:
+                result[k] = v
+    return result
+
+
 async def _extract_payload(request: Request) -> Dict[str, Any]:
-    """Gracefully extract payload from JSON body, Form data, or Query params."""
-    content_type = request.headers.get("content-type", "")
-    
-    # 1. Try parsing JSON body
-    if "application/json" in content_type:
+    """Gracefully extract payload from JSON body, Form data, Deluge Map string, or Query params."""
+    body_bytes = b""
+    try:
+        body_bytes = await request.body()
+    except Exception:
+        pass
+
+    raw_str = ""
+    if body_bytes:
         try:
-            return await request.json()
+            raw_str = body_bytes.decode("utf-8", errors="replace").strip()
         except Exception:
             pass
 
-    # 2. Try parsing form data
-    try:
-        form = await request.form()
-        if form:
-            data = dict(form)
-            # Check if payload was wrapped in a 'payload' or 'data' field
-            if "payload" in data:
+    content_type = request.headers.get("content-type", "").lower()
+    extracted: Dict[str, Any] = {}
+
+    # 1. Try standard JSON parsing
+    if raw_str:
+        try:
+            parsed = json.loads(raw_str)
+            if isinstance(parsed, str):
+                # Double-encoded JSON string
                 try:
-                    return json.loads(data["payload"])
+                    parsed = json.loads(parsed)
                 except Exception:
                     pass
-            return data
-    except Exception:
-        pass
+            if isinstance(parsed, dict):
+                # Unpack 'payload' or 'data' subfield if wrapped
+                if "payload" in parsed and isinstance(parsed["payload"], str):
+                    try:
+                        inner = json.loads(parsed["payload"])
+                        if isinstance(inner, dict):
+                            parsed = inner
+                    except Exception:
+                        pass
+                elif "data" in parsed and isinstance(parsed["data"], str):
+                    try:
+                        inner = json.loads(parsed["data"])
+                        if isinstance(inner, dict):
+                            parsed = inner
+                    except Exception:
+                        pass
+                extracted = parsed
+        except Exception:
+            pass
 
-    # 3. Try reading raw body as JSON fallback
-    try:
-        body = await request.body()
-        if body:
-            return json.loads(body.decode("utf-8"))
-    except Exception:
-        pass
+    # 2. Try Deluge Map string parsing `{key=val, key2={...}}`
+    if not extracted and raw_str and (raw_str.startswith("{") or "=" in raw_str):
+        try:
+            deluge_dict = parse_deluge_map_str(raw_str)
+            if deluge_dict and any(k in deluge_dict for k in ("message", "text", "user", "action", "key", "command")):
+                extracted = deluge_dict
+        except Exception:
+            pass
+
+    # 3. Try parsing form data
+    if not extracted:
+        try:
+            form = await request.form()
+            if form:
+                data = dict(form)
+                if "payload" in data and isinstance(data["payload"], str):
+                    try:
+                        inner = json.loads(data["payload"])
+                        if isinstance(inner, dict):
+                            data = inner
+                    except Exception:
+                        pass
+                for k, v in list(data.items()):
+                    if isinstance(v, str) and (v.startswith("{") or "=" in v):
+                        try:
+                            data[k] = json.loads(v)
+                        except Exception:
+                            deluge_v = parse_deluge_map_str(v)
+                            if deluge_v:
+                                data[k] = deluge_v
+                extracted = data
+        except Exception:
+            pass
 
     # 4. Fallback to query params
-    return dict(request.query_params)
+    if not extracted:
+        extracted = dict(request.query_params)
+
+    # 5. Regex salvage from raw_str if both message and user are still missing
+    if not extracted.get("message") and not extracted.get("text") and raw_str:
+        import re
+        m_match = re.search(r'["\']?(?:message|text)["\']?\s*[:=]\s*["\']?([^"\'}\n,]+)', raw_str, re.IGNORECASE)
+        if m_match:
+            extracted["message"] = m_match.group(1).strip()
+        u_match = re.search(r'["\']?(?:id|zuid|user_id)["\']?\s*[:=]\s*["\']?(\d+)', raw_str, re.IGNORECASE)
+        if u_match:
+            extracted.setdefault("user", {})["id"] = u_match.group(1).strip()
+
+    # Log incoming payload for visibility and debugging
+    try:
+        from modules.shared.db import db
+        import datetime
+        db["cliq_incoming_logs"].insert_one({
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "content_type": content_type,
+            "raw_snippet": raw_str[:300],
+            "extracted": {k: str(v)[:150] for k, v in extracted.items()}
+        })
+    except Exception:
+        pass
+
+    return extracted
 
 
 @router.post("/api/zoho-cliq/bot")

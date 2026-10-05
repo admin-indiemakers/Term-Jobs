@@ -129,14 +129,45 @@ async def dispatch_cliq_incoming_message(message_payload: Dict[str, Any]) -> boo
 async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     """Process incoming request from Zoho Cliq Message Handler or Button Handler."""
     # 1. Extract user information
-    user_info = payload.get("user") or {}
-    user_id = str(user_info.get("id") or user_info.get("zuid") or "cliq_user")
-    user_name = user_info.get("name") or user_info.get("first_name") or "Hiring Manager"
-    user_email = user_info.get("email") or ""
+    user_info = payload.get("user") or payload.get("user_info") or {}
+    if isinstance(user_info, str):
+        try:
+            user_info = json.loads(user_info)
+        except Exception:
+            from modules.hm_zoho_cliq.router import parse_deluge_map_str
+            user_info = parse_deluge_map_str(user_info)
+    if not isinstance(user_info, dict):
+        user_info = {}
+
+    user_id = str(
+        user_info.get("id") or
+        user_info.get("zuid") or
+        payload.get("user_id") or
+        payload.get("zuid") or
+        payload.get("userId") or
+        payload.get("sender_id") or
+        "cliq_user"
+    )
+    user_name = user_info.get("name") or user_info.get("first_name") or payload.get("user_name") or "Hiring Manager"
+    user_email = user_info.get("email") or payload.get("user_email") or ""
+
+    # If user_id is generic "cliq_user" and no email provided, recover active session
+    if user_id == "cliq_user" and not user_email:
+        try:
+            active_doc = db["cliq_sessions"].find_one({
+                "user_id": {"$ne": "cliq_user"},
+                "current_user.email": {"$regex": r"@asimovx\.se|@termjobs\.in"}
+            })
+            if active_doc and active_doc.get("user_id"):
+                user_id = str(active_doc["user_id"])
+                user_name = active_doc.get("current_user", {}).get("name", user_name)
+                user_email = active_doc.get("current_user", {}).get("email", user_email)
+        except Exception:
+            pass
+
     session = get_cliq_session(user_id, user_name, user_email)
 
     # 2. Extract action key (button click) or message text
-    # In Cliq, button clicks send `action`, `button.id`, `key`, or `arguments`
     action_key = (
         payload.get("action") or
         payload.get("key") or
@@ -150,12 +181,22 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
         action_key = str(action_key or "")
     action_key = action_key.strip()
 
-    raw_text = (
+    raw_msg = (
         payload.get("message") or
         payload.get("text") or
         payload.get("command") or
+        payload.get("content") or
+        payload.get("msg") or
+        payload.get("query") or
         ""
-    ).strip()
+    )
+    if isinstance(raw_msg, dict):
+        raw_msg = raw_msg.get("text") or raw_msg.get("content") or raw_msg.get("message") or ""
+    raw_text = str(raw_msg or "").strip()
+
+    # If user opened the chat or sent an empty string without action key, show welcome menu
+    if not raw_text and not action_key:
+        return format_cliq_welcome()
 
     # Conversational shortcuts if no button action key was passed
     clean_text = raw_text.lower().strip()

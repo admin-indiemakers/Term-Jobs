@@ -2483,8 +2483,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
             }
 
     # Candidates Working Under Me / Active Working Team (e.g. "candidates under me", "who is working under me", "my team")
-    cand_under_me_pattern = r"\b(candidates?\s+under\s+me|who\s+is\s+working(\s+under\s+me)?|working\s+under\s+me|my\s+team|active\s+workers?|active\s+contractors?|contractors?\s+under\s+me|my\s+hires|hired\s+candidates?|my\s+candidates)\b"
-    if re.search(cand_under_me_pattern, prompt_lower):
+    cand_under_me_pattern = r"\b(candidates?\s+(under|working\s+for)\s+me|working\s+under\s+me|who\s+is\s+working(\s+under\s+me)?|who\s+are\s+under\s+me|people\s+under\s+me|team\s+under\s+me|my\s+team|active\s+workers?|active\s+contractors?|contractors?\s+under\s+me|my\s+hires|hired\s+candidates?|my\s+candidates|working\s+hires|accepted\s+candidates)\b"
+    if re.search(cand_under_me_pattern, prompt_lower) or ("under me" in prompt_lower) or ("under my" in prompt_lower):
         acc_res = list_accepted_candidates(user_id, user_name, tenant_id)
         if not acc_res:
             return {
