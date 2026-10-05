@@ -57,7 +57,7 @@ def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str,
         "action": {
             "type": "invoke.function",
             "data": {
-                "name": "hiringmanagertermjobs"
+                "name": "HiringmanagerTermjobs"
             }
         }
     }
