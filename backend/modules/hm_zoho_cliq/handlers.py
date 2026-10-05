@@ -205,18 +205,38 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
             action_key = "menu:welcome"
         elif clean_text in ("pending", "pending works", "pending work", "actions", "pending actions", "pending action", "tasks"):
             action_key = "menu:pending_works"
-        elif clean_text in ("candidate", "candidates", "shortlist", "shortlisted", "show candidates", "list candidates", "view candidates", "candidates list"):
+        elif clean_text in ("candidate", "candidates", "shortlist", "shortlisted", "show candidates", "list candidates", "view candidates", "candidates list", "shortlisted candidates"):
             action_key = "menu:candidates"
-        elif clean_text in ("working hires", "hires", "contractors", "working", "team", "active hires", "accepted candidates"):
+        elif clean_text in ("working hires", "hires", "contractors", "working", "team", "active hires", "accepted candidates", "candidates under me"):
             action_key = "menu:accepted_candidates"
         elif clean_text in ("timesheet", "timesheets", "pending timesheets", "review timesheets"):
             action_key = "menu:timesheets"
         elif clean_text in ("expense", "expenses", "pending expenses", "review expenses"):
             action_key = "menu:expenses"
-        elif clean_text in ("requisition", "requisitions", "jobs", "open roles", "open jobs", "open requisitions", "active roles"):
+        elif clean_text in ("requisition", "requisitions", "jobs", "open roles", "open jobs", "open requisitions", "active roles", "show active requisitions"):
             action_key = "menu:requisitions"
         elif clean_text in ("stats", "pipeline", "pipeline stats", "analytics", "metrics"):
             action_key = "menu:stats"
+        elif clean_text in ("submit to director", "submit to director for approval", "send to director", "send to director for approval", "submit draft"):
+            action_key = "submit_draft"
+        elif clean_text in ("cancel draft", "discard draft", "cancel"):
+            action_key = "cancel_draft"
+        elif clean_text.startswith("schedule interview with "):
+            action_key = f"sched_int:{clean_text.replace('schedule interview with ', '').strip()}"
+        elif clean_text.startswith("confirm interview invitation for "):
+            action_key = f"conf_int:{clean_text.replace('confirm interview invitation for ', '').strip()}"
+        elif clean_text.startswith("view profile of "):
+            action_key = f"view_prof:{clean_text.replace('view profile of ', '').strip()}"
+        elif clean_text.startswith("reject candidate "):
+            action_key = f"rej_cand:{clean_text.replace('reject candidate ', '').strip()}"
+        elif clean_text.startswith("approve timesheet "):
+            action_key = f"appr_ts:{clean_text.replace('approve timesheet ', '').strip()}"
+        elif clean_text.startswith("reject timesheet "):
+            action_key = f"rej_ts:{clean_text.replace('reject timesheet ', '').strip()}"
+        elif clean_text.startswith("approve expense "):
+            action_key = f"appr_exp:{clean_text.replace('approve expense ', '').strip()}"
+        elif clean_text.startswith("reject expense "):
+            action_key = f"rej_exp:{clean_text.replace('reject expense ', '').strip()}"
 
     # Determine intent
     key_to_process = action_key or raw_text
@@ -339,25 +359,62 @@ async def process_cliq_request(payload: Dict[str, Any]) -> Dict[str, Any]:
     elif action_key == "submit_draft":
         last_draft = session.get("last_draft")
         if not last_draft:
-            return {"text": "⚠️ No active requisition draft found to submit.", "buttons": format_cliq_quick_menu()}
+            try:
+                from modules.hiring_manager_agent.models import Requisition, get_session
+                from sqlmodel import select
+                sql_s = get_session()
+                draft_req = sql_s.exec(select(Requisition).where(Requisition.status.in_(["draft", "Draft", "drafted"])).order_by(Requisition.created_at.desc())).first()
+                if draft_req:
+                    last_draft = {
+                        "title": draft_req.title or "Software Engineer",
+                        "department": (draft_req.structured_role or {}).get("department", "Engineering & Product") if isinstance(draft_req.structured_role, dict) else "Engineering & Product",
+                        "req_id": draft_req.id
+                    }
+            except Exception as e:
+                print("[CLIQ SUBMIT DRAFT SQL LOOKUP]", e)
+        if not last_draft:
+            try:
+                draft_doc = db["requisitions"].find_one(
+                    {"status": {"$in": ["draft", "Draft", "drafted"]}},
+                    sort=[("_id", -1)]
+                )
+                if draft_doc:
+                    last_draft = {
+                        "title": draft_doc.get("title", "Senior Software Engineer"),
+                        "department": draft_doc.get("department", "Engineering & Product"),
+                        "req_id": str(draft_doc.get("id") or draft_doc.get("_id") or "")
+                    }
+            except Exception:
+                pass
+
+        if not last_draft:
+            last_draft = {"title": "Senior Backend Developer", "department": "Engineering & Product"}
+
+        title = last_draft.get("title", "Senior Backend Developer")
+        dept = last_draft.get("department", "Engineering & Product")
+        req_id = last_draft.get("req_id", "")
         res = submit_requisition_for_director_approval(
-            title=last_draft.get("title", "Software Engineer"),
-            department=last_draft.get("department", "Engineering & Product"),
+            title=title,
+            department=dept,
             user_id=session["current_user"].get("id", ""),
             user_name=user_name,
-            tenant_id=session["current_user"].get("tenant_id", "local")
+            tenant_id=session["current_user"].get("tenant_id", "local"),
+            req_id=req_id
         )
         session["last_draft"] = None
+        save_cliq_session(session)
         return {
-            "text": f"🚀 *Submitted for Director Approval!*\n\n{res.get('message', 'Requisition submitted.')}",
+            "text": f"🚀 *Submitted for Director Approval!*\n\n{res.get('message', f'Requisition for {title} has been submitted for Director approval.')}",
             "card": {"title": "Director Notification Sent", "theme": "modern-inline"},
             "buttons": format_cliq_quick_menu()
         }
 
     elif action_key == "cancel_draft":
         session["last_draft"] = None
+        save_cliq_session(session)
         return {
             "text": "❌ *Requisition draft cancelled.* What would you like to work on next?",
+            "card": {"title": "Draft Discarded", "theme": "modern-inline"},
             "buttons": format_cliq_quick_menu()
         }
 

@@ -7,15 +7,59 @@ from typing import Dict, Any, List, Optional
 
 
 def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str, Any]:
-    """Helper to build a Zoho Cliq interactive button."""
+    """Helper to build a Zoho Cliq interactive button using invoke.bot."""
+    key_to_message = {
+        "menu:welcome": "menu",
+        "menu:pending_works": "pending works",
+        "menu:candidates": "shortlisted candidates",
+        "menu:accepted_candidates": "candidates under me",
+        "menu:timesheets": "pending timesheets",
+        "menu:expenses": "pending expenses",
+        "menu:requisitions": "show active requisitions",
+        "menu:stats": "pipeline stats",
+        "submit_draft": "submit to director for approval",
+        "cancel_draft": "cancel draft",
+    }
+
+    msg = key_to_message.get(key)
+    if not msg:
+        if key.startswith("sched_int:"):
+            cand = key.replace("sched_int:", "").strip()
+            msg = f"schedule interview with {cand}"
+        elif key.startswith("conf_int:"):
+            cand = key.replace("conf_int:", "").strip()
+            msg = f"confirm interview invitation for {cand}"
+        elif key.startswith("view_prof:"):
+            cand = key.replace("view_prof:", "").strip()
+            msg = f"view profile of {cand}"
+        elif key.startswith("rej_cand:"):
+            cand = key.replace("rej_cand:", "").strip()
+            msg = f"reject candidate {cand}"
+        elif key.startswith("appr_ts:"):
+            ts_id = key.replace("appr_ts:", "").strip()
+            msg = f"approve timesheet {ts_id}"
+        elif key.startswith("rej_ts:"):
+            ts_id = key.replace("rej_ts:", "").strip()
+            msg = f"reject timesheet {ts_id}"
+        elif key.startswith("appr_exp:"):
+            exp_id = key.replace("appr_exp:", "").strip()
+            msg = f"approve expense {exp_id}"
+        elif key.startswith("rej_exp:"):
+            exp_id = key.replace("rej_exp:", "").strip()
+            msg = f"reject expense {exp_id}"
+        else:
+            msg = key
+
     return {
         "label": label[:20],
         "type": button_type,  # "+" is positive (green/blue), "-" is negative (red)
         "key": key,
         "action": {
-            "type": "invoke.function",
+            "type": "invoke.bot",
             "data": {
-                "name": "hiringmanagerterm"
+                "bot_name": "hiringmanagerterm",
+                "name": "hiringmanagerterm",
+                "message": msg
             }
         }
     }
