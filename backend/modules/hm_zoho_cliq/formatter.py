@@ -82,11 +82,14 @@ def build_cliq_button(label: str, key: str, button_type: str = "+") -> Dict[str,
     }
 
 
-def format_cliq_welcome() -> Dict[str, Any]:
-    """Welcome greeting and quick action bar in Zoho Cliq."""
+def format_cliq_welcome(user_name: str = "Hiring Manager", company_name: str = "TermJobs") -> Dict[str, Any]:
+    """Welcome greeting and quick action bar in Zoho Cliq personalized for the hiring manager."""
+    greeting = f"Hello *{user_name}*! 👋" if user_name and user_name != "Hiring Manager" else "Welcome to TermJobs! 🤖"
+    company_context = f" for *{company_name}*" if company_name and company_name not in ("Client Workspace", "TermJobs") else ""
     text = (
-        "*Welcome to TermJobs AI Hiring Assistant!* 🤖\n\n"
-        "I am your dedicated enterprise workforce assistant. You can chat with me naturally or use the quick actions below to manage your pipeline:\n\n"
+        f"{greeting}\n"
+        f"I am your dedicated enterprise AI Hiring Assistant{company_context}.\n\n"
+        f"You are connected as *{user_name}* (Hiring Manager). You can chat with me naturally or use the quick actions below to manage your pipeline:\n\n"
         "- *Draft Requisition:* Type _'Draft a React developer role'_\n"
         "- *Candidate Screening:* Check match scores, review profiles, and schedule interviews\n"
         "- *Approvals:* Review timesheets, expenses, and submit requisitions for Director Approval"
@@ -98,10 +101,11 @@ def format_cliq_welcome() -> Dict[str, Any]:
         build_cliq_button("📋 Requisitions", "menu:requisitions"),
         build_cliq_button("📊 Pipeline Stats", "menu:stats")
     ]
+    card_title = f"⚡ {user_name} — Hiring AI" if user_name and user_name != "Hiring Manager" else "⚡ TermJobs Hiring Manager AI"
     return {
         "text": text,
         "card": {
-            "title": "⚡ TermJobs Hiring Manager AI",
+            "title": card_title,
             "theme": "modern-inline"
         },
         "buttons": buttons[:5]

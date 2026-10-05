@@ -65,6 +65,7 @@ from modules.candidate_profile.router import router as candidate_profile_router
 from modules.hm_zoho_cliq import zoho_cliq_router
 from modules.integrations import integrations_router
 from modules.hm_telegram_bot import telegram_bot_router
+from modules.hm_teams_bot import teams_bot_router
 
 
 from contextlib import asynccontextmanager
@@ -294,6 +295,7 @@ app.include_router(candidate_profile_router)
 app.include_router(zoho_cliq_router)
 app.include_router(integrations_router)
 app.include_router(telegram_bot_router)
+app.include_router(teams_bot_router)
 
 # Reload trigger for interview module updates
 

@@ -93,13 +93,16 @@ def start_hm_bot_polling():
     global _polling_task
     if _polling_task is None or _polling_task.done():
         try:
-            loop = asyncio.get_event_loop()
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.get_event_loop()
             if loop.is_running():
                 _polling_task = loop.create_task(hm_bot_polling_loop())
             else:
                 print("[HM TELEGRAM BOT] Event loop is not running yet.")
-        except RuntimeError:
-            pass
+        except Exception as e:
+            print(f"[HM TELEGRAM BOT] Failed to start polling: {e}")
 
 
 def stop_hm_bot_polling():

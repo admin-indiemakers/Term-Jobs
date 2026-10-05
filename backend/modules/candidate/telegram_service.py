@@ -765,8 +765,8 @@ async def telegram_polling_loop():
                         except Exception:
                             pass
                     else:
-                        print(f"[TELEGRAM WORKER 409] Conflict: {err_msg}. Another uvicorn or bot instance is currently running with the same token.")
-                    await asyncio.sleep(10)
+                        print(f"[TELEGRAM WORKER 409] Conflict: {err_msg}. Another bot instance is active. Retrying in 60s...")
+                    await asyncio.sleep(60)
                 else:
                     await asyncio.sleep(3)
         except asyncio.CancelledError:

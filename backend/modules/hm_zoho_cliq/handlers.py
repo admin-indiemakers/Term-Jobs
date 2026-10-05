@@ -4,6 +4,8 @@ Coordinates between Zoho Cliq webhook events (Message Handler, Action Handler,
 Button clicks) and the Hiring Manager AI Agent & Database.
 """
 import re
+import datetime
+from datetime import timezone
 import httpx
 from typing import Dict, Any, Optional
 
@@ -65,47 +67,85 @@ def get_cliq_session(
     # Attempt to link user from TermJobs database
     linked_user = None
     try:
-        if tenant_id and user_email:
-            linked_user = db["users"].find_one({"tenant_id": tenant_id, "email": user_email})
-        elif user_email:
-            linked_user = db["users"].find_one({"email": user_email})
+        clean_email = (user_email or "").strip().lower()
+        if tenant_id and clean_email:
+            linked_user = db["users"].find_one({"tenant_id": tenant_id, "email": {"$regex": f"^{re.escape(clean_email)}$", "$options": "i"}})
+        elif clean_email:
+            linked_user = db["users"].find_one({"email": {"$regex": f"^{re.escape(clean_email)}$", "$options": "i"}})
         if not linked_user and user_id and user_id != "cliq_user":
             linked_user = db["users"].find_one({"zoho_cliq_user_id": user_id})
+        # Attempt match by display name if provided and not generic
+        if not linked_user and user_name and user_name != "Hiring Manager":
+            if tenant_id:
+                linked_user = db["users"].find_one({"tenant_id": tenant_id, "name": {"$regex": f"^{re.escape(user_name)}$", "$options": "i"}})
+            if not linked_user:
+                linked_user = db["users"].find_one({"name": {"$regex": f"^{re.escape(user_name)}$", "$options": "i"}})
+        # Fallback to single hiring manager in this tenant if unique
+        if not linked_user and tenant_id and tenant_id != "local":
+            hms = list(db["users"].find({"tenant_id": tenant_id, "role": {"$in": ["HIRING_MANAGER", "Hiring Manager", "hiring_manager"]}}).limit(2))
+            if len(hms) == 1:
+                linked_user = hms[0]
+        # Link user's zoho_cliq_user_id in DB if not already linked
+        if linked_user and user_id and user_id != "cliq_user" and linked_user.get("zoho_cliq_user_id") != user_id:
+            try:
+                db["users"].update_one(
+                    {"_id": linked_user["_id"]},
+                    {"$set": {
+                        "zoho_cliq_user_id": user_id,
+                        "zoho_cliq_email": clean_email or linked_user.get("email"),
+                        "zoho_cliq_linked_at": datetime.datetime.now(timezone.utc).isoformat()
+                    }}
+                )
+            except Exception:
+                pass
     except Exception as e:
         print("[CLIQ DB USER LOOKUP ERROR]", e)
 
     effective_tenant_id = str(linked_user.get("tenant_id")) if (linked_user and linked_user.get("tenant_id")) else (tenant_id or "local")
-    company_name = "Client Workspace"
-    try:
-        t_doc = db["tenants"].find_one({"$or": [{"id": effective_tenant_id}, {"_id": effective_tenant_id}]})
-        if t_doc and t_doc.get("name"):
-            company_name = t_doc.get("name")
-    except Exception:
-        pass
+    from modules.hiring_manager_agent.agent import _get_tenant_company_context
+    comp_ctx = _get_tenant_company_context(effective_tenant_id)
+    company_name = comp_ctx.get("company_name") or "Client Workspace"
 
     session_key = f"{effective_tenant_id}:{user_id}" if effective_tenant_id != "local" else user_id
+
+    resolved_user_name = (linked_user.get("name") if linked_user else None) or (user_name if user_name != "Hiring Manager" else None) or "Hiring Manager"
+    resolved_email = (linked_user.get("email") if linked_user else None) or clean_email or "hiring.manager@termjobs.in"
 
     try:
         doc = db["cliq_sessions"].find_one({"session_key": session_key}) or db["cliq_sessions"].find_one({"user_id": user_id})
         if doc:
             doc.pop("_id", None)
-            if user_name and user_name != "Hiring Manager":
+            if resolved_user_name and resolved_user_name != "Hiring Manager":
+                doc.setdefault("current_user", {})["name"] = resolved_user_name
+            elif user_name and user_name != "Hiring Manager":
                 doc.setdefault("current_user", {})["name"] = user_name
-            if user_email:
-                doc.setdefault("current_user", {})["email"] = user_email
+            if resolved_email:
+                doc.setdefault("current_user", {})["email"] = resolved_email
+            if linked_user:
+                doc.setdefault("current_user", {})["id"] = str(linked_user.get("_id") or linked_user.get("id"))
+                if linked_user.get("role"):
+                    doc.setdefault("current_user", {})["role"] = linked_user.get("role")
             if effective_tenant_id:
                 doc.setdefault("current_user", {})["tenant_id"] = effective_tenant_id
                 doc.setdefault("current_user", {})["company_name"] = company_name
+                doc.setdefault("current_user", {})["company_context"] = comp_ctx
+                doc.setdefault("current_user", {})["tech_stack"] = comp_ctx.get("tech_stack", [])
+                doc.setdefault("current_user", {})["location"] = comp_ctx.get("location", "Remote")
+                doc.setdefault("current_user", {})["industry"] = comp_ctx.get("industry", "Technology")
+                doc.setdefault("current_user", {})["director_name"] = comp_ctx.get("director_name", "Director")
+                doc.setdefault("current_user", {})["director_email"] = comp_ctx.get("director_email", "")
             _CLIQ_SESSIONS[session_key] = doc
             return doc
     except Exception as e:
         print("[CLIQ DB SESSION LOAD ERROR]", e)
 
     if session_key in _CLIQ_SESSIONS:
-        return _CLIQ_SESSIONS[session_key]
-
-    resolved_user_name = (linked_user.get("name") if linked_user else None) or user_name or "Hiring Manager"
-    resolved_email = (linked_user.get("email") if linked_user else None) or user_email or "hiring.manager@termjobs.in"
+        cached = _CLIQ_SESSIONS[session_key]
+        if resolved_user_name and resolved_user_name != "Hiring Manager":
+            cached.setdefault("current_user", {})["name"] = resolved_user_name
+        cached.setdefault("current_user", {})["company_name"] = company_name
+        cached.setdefault("current_user", {})["company_context"] = comp_ctx
+        return cached
 
     session = {
         "session_key": session_key,
@@ -116,7 +156,13 @@ def get_cliq_session(
             "email": resolved_email,
             "role": (linked_user.get("role") if linked_user else None) or "HIRING_MANAGER",
             "tenant_id": effective_tenant_id,
-            "company_name": company_name
+            "company_name": company_name,
+            "company_context": comp_ctx,
+            "tech_stack": comp_ctx.get("tech_stack", []),
+            "location": comp_ctx.get("location", "Remote"),
+            "industry": comp_ctx.get("industry", "Technology"),
+            "director_name": comp_ctx.get("director_name", "Director"),
+            "director_email": comp_ctx.get("director_email", "")
         },
         "history": [],
         "last_draft": None
@@ -151,6 +197,22 @@ def save_cliq_session(session: Dict[str, Any]):
         )
     except Exception as e:
         print("[CLIQ DB SESSION SAVE ERROR]", e)
+
+
+def invalidate_cliq_session(user_id: str, tenant_id: Optional[str] = None):
+    """Invalidate cached in-memory and database session for pairing refreshes."""
+    keys_to_del = [k for k in list(_CLIQ_SESSIONS.keys()) if str(user_id) in k]
+    for k in keys_to_del:
+        _CLIQ_SESSIONS.pop(k, None)
+    try:
+        db["cliq_sessions"].delete_many({
+            "$or": [
+                {"user_id": str(user_id)},
+                {"session_key": {"$regex": str(user_id)}}
+            ]
+        })
+    except Exception:
+        pass
 
 
 async def dispatch_cliq_incoming_message(message_payload: Dict[str, Any]) -> bool:
@@ -233,9 +295,71 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
         raw_msg = raw_msg.get("text") or raw_msg.get("content") or raw_msg.get("message") or ""
     raw_text = str(raw_msg or "").strip()
 
+    cur_u = session.get("current_user", {})
+    eff_user_name = cur_u.get("name") or user_name or "Hiring Manager"
+    eff_comp_name = cur_u.get("company_name") or "TermJobs"
+
     # If user opened the chat or sent an empty string without action key, show welcome menu
     if not raw_text and not action_key:
-        return format_cliq_welcome()
+        return format_cliq_welcome(eff_user_name, eff_comp_name)
+
+    # 0. Check for explicit /pair or /connect command
+    clean_raw = raw_text.strip()
+    if clean_raw.lower().startswith("/pair") or clean_raw.lower().startswith("pair ") or clean_raw.lower().startswith("/connect") or clean_raw.lower().startswith("connect "):
+        parts = clean_raw.split(None, 1)
+        token_or_email = parts[1].strip() if len(parts) > 1 else ""
+        if token_or_email:
+            clean_arg = token_or_email.lstrip("@").strip()
+            target_user = None
+            try:
+                target_user = db["users"].find_one({
+                    "$or": [
+                        {"bot_pairing_token": clean_arg},
+                        {"email": {"$regex": f"^{re.escape(clean_arg)}$", "$options": "i"}}
+                    ]
+                })
+            except Exception as e:
+                print(f"[CLIQ PAIR ERROR] {e}")
+
+            if target_user:
+                target_tenant_id = str(target_user.get("tenant_id") or "local")
+                try:
+                    db["users"].update_one(
+                        {"_id": target_user["_id"]},
+                        {"$set": {
+                            "zoho_cliq_user_id": user_id,
+                            "zoho_cliq_email": target_user.get("email"),
+                            "zoho_cliq_linked_at": datetime.datetime.now(timezone.utc).isoformat(),
+                            "bot_pairing_token": None,
+                            "bot_pairing_token_expires_at": None
+                        }}
+                    )
+                except Exception:
+                    pass
+                invalidate_cliq_session(user_id, target_tenant_id)
+                session = get_cliq_session(user_id, target_user.get("name"), target_user.get("email"), tenant_id=target_tenant_id)
+                u_name = target_user.get("name") or "Hiring Manager"
+                c_name = session.get("current_user", {}).get("company_name", "TermJobs")
+                success_text = (
+                    f"🎉 *Account Connected to {c_name}!* 💼\n\n"
+                    f"Hello *{u_name}*! Your Zoho Cliq account is now linked with your *{c_name}* hiring manager workspace.\n\n"
+                    f"All requisitions, candidates, and approvals in this chat are strictly isolated to **{c_name}**."
+                )
+                return {
+                    "text": success_text,
+                    "card": {"title": f"Connected — {c_name}", "theme": "modern-inline"},
+                    "buttons": format_cliq_quick_menu()
+                }
+            else:
+                return {
+                    "text": f"⚠️ *No account found matching '{token_or_email}'.*\n\nPlease make sure you provided the exact email address or pairing token from your TermJobs dashboard.",
+                    "buttons": format_cliq_quick_menu()
+                }
+        else:
+            return {
+                "text": "ℹ️ *Usage:* `/pair <email_or_token>`\nExample: `/pair henry@privatea.com` or `/pair sur@tcs.com`",
+                "buttons": format_cliq_quick_menu()
+            }
 
     # Conversational shortcuts if no button action key was passed
     clean_text = raw_text.lower().strip()
@@ -256,6 +380,8 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
             action_key = "menu:requisitions"
         elif clean_text in ("stats", "pipeline", "pipeline stats", "analytics", "metrics"):
             action_key = "menu:stats"
+        elif re.search(r"\b(who\s+am\s+i|what\s+is\s+my\s+name|what['’]?s\s+my\s+name|do\s+you\s+know\s+(who\s+i\s+am|my\s+name)|who\s+are\s+you\s+talking\s+to|who\s+is\s+(the\s+)?hiring\s+manager|tell\s+me\s+my\s+name|my\s+name|my\s+profile|my\s+account)\b", clean_text):
+            action_key = "menu:profile"
         elif clean_text in ("submit to director", "submit to director for approval", "send to director", "send to director for approval", "submit draft"):
             action_key = "submit_draft"
         elif clean_text in ("cancel draft", "discard draft", "cancel"):
@@ -481,17 +607,36 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
         menu_item = action_key.replace("menu:", "") if action_key.startswith("menu:") else "welcome"
         user_id_val = session["current_user"].get("id", "")
         tenant_id = session["current_user"].get("tenant_id", "local")
-        company_name = session["current_user"].get("company_name", "TermJobs")
+        cur_u = session.get("current_user", {})
+        eff_user_name = cur_u.get("name") or user_name or "Hiring Manager"
+        eff_comp_name = cur_u.get("company_name") or "TermJobs"
 
         if menu_item == "welcome" or raw_text.lower() in ("/start", "/help", "hi", "hello"):
-            return format_cliq_welcome()
+            return format_cliq_welcome(eff_user_name, eff_comp_name)
+
+        elif menu_item == "profile" or re.search(r"\b(who\s+am\s+i|what\s+is\s+my\s+name|what['’]?s\s+my\s+name|do\s+you\s+know\s+(who\s+i\s+am|my\s+name)|who\s+are\s+you\s+talking\s+to|who\s+is\s+(the\s+)?hiring\s+manager|tell\s+me\s+my\s+name|my\s+name|my\s+profile|my\s+account)\b", raw_text.lower()):
+            u_email = cur_u.get("email") or user_email or ""
+            text = (
+                f"👤 *You are connected as {eff_user_name}!* 💼\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"• *Role:* Hiring Manager\n"
+                f"• *Company:* {eff_comp_name}\n"
+            )
+            if u_email:
+                text += f"• *Email:* `{u_email}`\n"
+            text += "\nAll requisitions, candidates, and approvals in this chat are paired to your hiring manager workspace."
+            return {
+                "text": text,
+                "card": {"title": f"Profile — {eff_user_name}", "theme": "modern-inline"},
+                "buttons": format_cliq_quick_menu()
+            }
 
         elif menu_item == "pending_works":
-            res = get_hiring_manager_pending_works(user_id_val, user_name, tenant_id)
-            return format_cliq_pending_works(res, company_name)
+            res = get_hiring_manager_pending_works(user_id_val, eff_user_name, tenant_id)
+            return format_cliq_pending_works(res, eff_comp_name)
 
         elif menu_item == "candidates":
-            cand_list = list_shortlisted_candidates(user_id_val, user_name, tenant_id)
+            cand_list = list_shortlisted_candidates(user_id_val, eff_user_name, tenant_id)
             if not cand_list:
                 return {
                     "text": "ℹ️ *No candidates currently shortlisted.* You are all caught up!",
@@ -505,10 +650,10 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
             return card
 
         elif menu_item == "accepted_candidates":
-            res = list_accepted_candidates(user_id_val, user_name, tenant_id)
+            res = list_accepted_candidates(user_id_val, eff_user_name, tenant_id)
             if not res:
-                return {"text": "ℹ️ No candidates currently working under your requisitions.", "buttons": format_cliq_quick_menu()}
-            lines = ["👷 *CANDIDATES WORKING UNDER YOU:*", "━━━━━━━━━━━━━━━━━━━━━━━━━━"]
+                return {"text": f"ℹ️ No candidates currently working under your requisitions for {eff_comp_name}.", "buttons": format_cliq_quick_menu()}
+            lines = [f"👷 *CANDIDATES WORKING UNDER YOU — {eff_comp_name.upper()}:*", "━━━━━━━━━━━━━━━━━━━━━━━━━━"]
             for c in res[:5]:
                 c_name = c.get("name") or c.get("candidate_name") or "Contractor"
                 role = c.get("role") or c.get("requisition_title") or "Engineer"
@@ -517,19 +662,19 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
             return {"text": "\n".join(lines), "card": {"title": "Active Team", "theme": "modern-inline"}, "buttons": format_cliq_quick_menu()}
 
         elif menu_item == "timesheets":
-            ts_list = list_pending_timesheets(user_id_val, user_name, tenant_id)
+            ts_list = list_pending_timesheets(user_id_val, eff_user_name, tenant_id)
             if not ts_list:
                 return {"text": "✅ *All contractor timesheets are reviewed!* None pending.", "buttons": format_cliq_quick_menu()}
             return format_cliq_timesheet(ts_list[0])
 
         elif menu_item == "expenses":
-            exp_list = list_pending_expenses(user_id_val, user_name, tenant_id)
+            exp_list = list_pending_expenses(user_id_val, eff_user_name, tenant_id)
             if not exp_list:
                 return {"text": "✅ *All expense claims are reviewed!* None pending.", "buttons": format_cliq_quick_menu()}
             return format_cliq_expense(exp_list[0])
 
         elif menu_item == "onboarding":
-            issues = list_onboarding_issues(user_id_val, user_name, tenant_id)
+            issues = list_onboarding_issues(user_id_val, eff_user_name, tenant_id)
             if not issues:
                 return {"text": "🚀 *All candidates fully onboarded!* No blocking access issues.", "buttons": format_cliq_quick_menu()}
             lines = [f"📋 *ACTIVE ONBOARDING CHECKS ({len(issues)}):*", "━━━━━━━━━━━━━━━━━━━━━━━━━━"]
@@ -542,7 +687,7 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
 
         elif menu_item == "requisitions":
             reqs = list_hiring_requisitions(user_id_val, tenant_id)
-            lines = [f"📋 *LIVE REQUISITIONS DIRECTORY — {company_name}:*", "━━━━━━━━━━━━━━━━━━━━━━━━━━"]
+            lines = [f"📋 *LIVE REQUISITIONS DIRECTORY — {eff_comp_name}:*", "━━━━━━━━━━━━━━━━━━━━━━━━━━"]
             for r in reqs[:6]:
                 r_title = r.get("title") or "Engineer"
                 r_st = r.get("status") or "Published"
@@ -551,8 +696,8 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
             return {"text": "\n".join(lines), "card": {"title": "Requisitions", "theme": "modern-inline"}, "buttons": format_cliq_quick_menu()}
 
         elif menu_item == "stats":
-            st = get_hiring_manager_stats(user_id_val, tenant_id, user_name)
-            return format_cliq_stats(st, company_name)
+            st = get_hiring_manager_stats(user_id_val, tenant_id, eff_user_name)
+            return format_cliq_stats(st, eff_comp_name)
 
     # -------------------------------------------------------------
     # 5. Direct Natural Language Regex (Instant Cards)

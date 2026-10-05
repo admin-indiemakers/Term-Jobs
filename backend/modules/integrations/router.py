@@ -56,11 +56,20 @@ class ZohoCliqConfigIn(BaseModel):
     bot_name: Optional[str] = None
     incoming_webhook_url: Optional[str] = None
     bot_url: Optional[str] = None
+    extension_install_url: Optional[str] = None
+
+
+class MsTeamsConfigIn(BaseModel):
+    enabled: bool = True
+    app_id: Optional[str] = None
+    app_password: Optional[str] = None
+    bot_name: Optional[str] = None
 
 
 class TenantBotConfigUpdate(BaseModel):
     telegram: Optional[TelegramConfigIn] = None
     zoho_cliq: Optional[ZohoCliqConfigIn] = None
+    ms_teams: Optional[MsTeamsConfigIn] = None
 
 
 class TestPingIn(BaseModel):
@@ -86,6 +95,7 @@ async def get_tenant_bot_config(
 
     tg_doc = (doc or {}).get("telegram") or {}
     cliq_doc = (doc or {}).get("zoho_cliq") or {}
+    teams_doc = (doc or {}).get("ms_teams") or {}
 
     # Check fallback environment variables if not configured
     default_tg_token = getattr(settings, "hm_telegram_bot_token", "") or os.getenv("HM_TELEGRAM_BOT_TOKEN", "").strip()
@@ -113,10 +123,23 @@ async def get_tenant_bot_config(
             "bot_url_in": f"https://cliq.zoho.in/#chat:bot:{effective_cliq_name}",
             "bot_url_com": f"https://cliq.zoho.com/#chat:bot:{effective_cliq_name}",
             "bot_url_eu": f"https://cliq.zoho.eu/#chat:bot:{effective_cliq_name}",
+            "extension_install_url": cliq_doc.get("extension_install_url") or "",
             "incoming_webhook_url": cliq_doc.get("incoming_webhook_url") or "",
             "webhook_url": f"{api_base}/api/zoho-cliq/webhook/{tenant_id}",
             "is_verified": bool(cliq_doc.get("is_verified", False)),
             "last_synced_at": cliq_doc.get("last_synced_at"),
+        },
+        "ms_teams": {
+            "enabled": bool(teams_doc.get("enabled", True)),
+            "app_id": teams_doc.get("app_id") or os.getenv("MS_TEAMS_APP_ID", "") or os.getenv("MICROSOFT_APP_ID", ""),
+            "app_id_masked": _mask_token(teams_doc.get("app_id") or os.getenv("MS_TEAMS_APP_ID", "") or os.getenv("MICROSOFT_APP_ID", "")),
+            "app_password_masked": _mask_token(teams_doc.get("app_password") or os.getenv("MS_TEAMS_APP_PASSWORD", "") or os.getenv("MICROSOFT_APP_PASSWORD", "")),
+            "bot_name": teams_doc.get("bot_name") or "TermJobs Assistant",
+            "bot_endpoint": f"{api_base}/api/teams/messages/{tenant_id}",
+            "manifest_url": f"{api_base}/api/teams/manifest/{tenant_id}",
+            "package_url": f"{api_base}/api/teams/package/{tenant_id}",
+            "is_verified": bool(teams_doc.get("is_verified", False)),
+            "last_synced_at": teams_doc.get("last_synced_at"),
         }
     }
 
@@ -204,8 +227,27 @@ async def save_tenant_bot_config(
             cliq_data["last_synced_at"] = datetime.datetime.utcnow().isoformat()
         if payload.zoho_cliq.bot_url is not None:
             cliq_data["bot_url"] = payload.zoho_cliq.bot_url.strip()
+        if payload.zoho_cliq.extension_install_url is not None:
+            cliq_data["extension_install_url"] = payload.zoho_cliq.extension_install_url.strip()
         cliq_data["webhook_url"] = f"{api_base}/api/zoho-cliq/webhook/{tenant_id}"
         update_doc["zoho_cliq"] = cliq_data
+
+    # 3. Handle Microsoft Teams configuration
+    if payload.ms_teams is not None:
+        teams_data = existing.get("ms_teams") or {}
+        teams_data["enabled"] = payload.ms_teams.enabled
+        if payload.ms_teams.app_id:
+            teams_data["app_id"] = payload.ms_teams.app_id.strip()
+        if payload.ms_teams.app_password and not payload.ms_teams.app_password.startswith("..."):
+            teams_data["app_password"] = payload.ms_teams.app_password.strip()
+            teams_data["is_verified"] = True
+            teams_data["last_synced_at"] = datetime.datetime.utcnow().isoformat()
+        if payload.ms_teams.bot_name:
+            teams_data["bot_name"] = payload.ms_teams.bot_name.strip()
+        teams_data["bot_endpoint"] = f"{api_base}/api/teams/messages/{tenant_id}"
+        teams_data["manifest_url"] = f"{api_base}/api/teams/manifest/{tenant_id}"
+        teams_data["package_url"] = f"{api_base}/api/teams/package/{tenant_id}"
+        update_doc["ms_teams"] = teams_data
 
     # Save to MongoDB
     db["tenant_bot_configs"].update_one(
@@ -356,9 +398,14 @@ async def get_user_bot_status(
     bot_username = tg_cfg.get("bot_username") or (DEFAULT_TELEGRAM_BOT_USERNAME if default_tg_token else "")
 
     cliq_cfg = tenant_cfg.get("zoho_cliq") or {}
+    teams_cfg = tenant_cfg.get("ms_teams") or {}
 
     is_telegram_linked = bool(u.get("telegram_chat_id"))
     is_cliq_linked = bool(u.get("zoho_cliq_user_id"))
+    is_teams_linked = bool(u.get("ms_teams_user_id"))
+
+    ms_app_id = teams_cfg.get("app_id") or os.getenv("MS_TEAMS_APP_ID", "") or os.getenv("MICROSOFT_APP_ID", "") or "7b3f9c6d-5a82-4f2c-b173-e38db0fa4b12"
+    ms_bot_name = teams_cfg.get("bot_name") or "TermJobs Assistant"
 
     return {
         "user_id": user_id,
@@ -384,6 +431,19 @@ async def get_user_bot_status(
             "bot_url_in": f"https://cliq.zoho.in/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
             "bot_url_com": f"https://cliq.zoho.com/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
             "bot_url_eu": f"https://cliq.zoho.eu/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
+            "extension_install_url": cliq_cfg.get("extension_install_url") or "",
+        },
+        "ms_teams": {
+            "is_linked": is_teams_linked,
+            "user_id": u.get("ms_teams_user_id") or "",
+            "aad_id": u.get("ms_teams_aad_id") or "",
+            "linked_at": u.get("ms_teams_linked_at"),
+            "bot_available": True,
+            "bot_name": ms_bot_name,
+            "app_id": ms_app_id,
+            "bot_url": f"https://teams.microsoft.com/l/chat/0/0?users=28:{ms_app_id}",
+            "package_url": f"/api/teams/package/{tenant_id}",
+            "manifest_url": f"/api/teams/manifest/{tenant_id}"
         }
     }
 
@@ -499,3 +559,58 @@ async def send_telegram_test_ping(
             }
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@router.post("/teams/generate-link")
+async def generate_teams_pairing_link(
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Generate a secure, single-use 10-minute deep-link for pairing the user's Microsoft Teams."""
+    user_id = str(current_user.id)
+    tenant_id = str(current_user.tenant_id or "local")
+
+    pair_token = secrets.token_urlsafe(16)
+    expires_at = time.time() + 600
+
+    db["users"].update_one(
+        {"$or": [{"_id": user_id}, {"id": user_id}, {"email": current_user.email}]},
+        {"$set": {
+            "bot_pairing_token": pair_token,
+            "bot_pairing_token_expires_at": expires_at
+        }}
+    )
+
+    tenant_cfg = db["tenant_bot_configs"].find_one({"tenant_id": tenant_id}) or {}
+    teams_cfg = tenant_cfg.get("ms_teams") or {}
+    app_id = teams_cfg.get("app_id") or os.getenv("MS_TEAMS_APP_ID", "") or os.getenv("MICROSOFT_APP_ID", "") or "7b3f9c6d-5a82-4f2c-b173-e38db0fa4b12"
+    bot_name = teams_cfg.get("bot_name") or "TermJobs Assistant"
+
+    direct_link = f"https://teams.microsoft.com/l/chat/0/0?users=28:{app_id}&message=/start%20link_{pair_token}"
+
+    return {
+        "pairing_token": pair_token,
+        "direct_link": direct_link,
+        "app_id": app_id,
+        "bot_name": bot_name,
+        "expires_in_seconds": 600
+    }
+
+
+@router.post("/teams/unlink")
+async def unlink_teams_account(
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Unlink the user's Microsoft Teams account from their TermJobs profile."""
+    user_id = str(current_user.id)
+    db["users"].update_one(
+        {"$or": [{"_id": user_id}, {"id": user_id}, {"email": current_user.email}]},
+        {"$unset": {
+            "ms_teams_user_id": "",
+            "ms_teams_aad_id": "",
+            "ms_teams_linked_at": "",
+            "bot_pairing_token": "",
+            "bot_pairing_token_expires_at": ""
+        }}
+    )
+    return {"status": "success", "message": "Microsoft Teams account unlinked successfully."}
+

@@ -131,15 +131,19 @@ export default function CompanyAdminProfile() {
   // Bot Integrations State
   const [botConfig, setBotConfig] = useState({
     telegram: { enabled: true, bot_token: '', bot_username: '', webhook_url: '', is_verified: false, is_custom: false },
-    zoho_cliq: { enabled: true, bot_name: '', incoming_webhook_url: '', bot_url: '', webhook_url: '', is_verified: false }
+    zoho_cliq: { enabled: true, bot_name: '', incoming_webhook_url: '', bot_url: '', extension_install_url: '', webhook_url: '', is_verified: false },
+    ms_teams: { enabled: true, app_id: '', app_password: '', bot_name: 'TermJobs Assistant', bot_endpoint: '', manifest_url: '', package_url: '', is_verified: false }
   });
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingCliq, setTestingCliq] = useState(false);
+  const [testingTeams, setTestingTeams] = useState(false);
   const [savingBots, setSavingBots] = useState(false);
   const [botMessage, setBotMessage] = useState({ type: '', text: '' });
   const [showTelegramToken, setShowTelegramToken] = useState(false);
+  const [showTeamsPassword, setShowTeamsPassword] = useState(false);
   const [copiedTgWebhook, setCopiedTgWebhook] = useState(false);
   const [copiedCliqWebhook, setCopiedCliqWebhook] = useState(false);
+  const [copiedTeamsEndpoint, setCopiedTeamsEndpoint] = useState(false);
 
   const loadBotConfig = async () => {
     try {
@@ -160,9 +164,21 @@ export default function CompanyAdminProfile() {
             bot_name: data.zoho_cliq?.bot_name || 'TermJobs Assistant',
             incoming_webhook_url: data.zoho_cliq?.incoming_webhook_url || '',
             bot_url: data.zoho_cliq?.bot_url || '',
+            extension_install_url: data.zoho_cliq?.extension_install_url || '',
             webhook_url: data.zoho_cliq?.webhook_url || '',
             is_verified: data.zoho_cliq?.is_verified ?? false,
             last_synced_at: data.zoho_cliq?.last_synced_at
+          },
+          ms_teams: {
+            enabled: data.ms_teams?.enabled ?? true,
+            app_id: data.ms_teams?.app_id || '',
+            app_password: data.ms_teams?.app_password_masked || '',
+            bot_name: data.ms_teams?.bot_name || 'TermJobs Assistant',
+            bot_endpoint: data.ms_teams?.bot_endpoint || '',
+            manifest_url: data.ms_teams?.manifest_url || '',
+            package_url: data.ms_teams?.package_url || '',
+            is_verified: data.ms_teams?.is_verified ?? false,
+            last_synced_at: data.ms_teams?.last_synced_at
           }
         });
       }
@@ -228,7 +244,8 @@ export default function CompanyAdminProfile() {
             enabled: botConfig.zoho_cliq.enabled,
             bot_name: botConfig.zoho_cliq.bot_name,
             incoming_webhook_url: botConfig.zoho_cliq.incoming_webhook_url,
-            bot_url: botConfig.zoho_cliq.bot_url
+            bot_url: botConfig.zoho_cliq.bot_url,
+            extension_install_url: botConfig.zoho_cliq.extension_install_url
           }
         }
       });
@@ -262,6 +279,31 @@ export default function CompanyAdminProfile() {
       setBotMessage({ type: 'error', text: err.message || 'Zoho Cliq test failed' });
     } finally {
       setTestingCliq(false);
+    }
+  };
+
+  const handleSaveTeams = async () => {
+    setSavingBots(true);
+    setBotMessage({ type: '', text: '' });
+    try {
+      await request('/api/integrations/tenant-bots', {
+        method: 'POST',
+        token,
+        body: {
+          ms_teams: {
+            enabled: botConfig.ms_teams.enabled,
+            app_id: botConfig.ms_teams.app_id,
+            app_password: botConfig.ms_teams.app_password,
+            bot_name: botConfig.ms_teams.bot_name
+          }
+        }
+      });
+      setBotMessage({ type: 'success', text: 'Microsoft Teams configuration saved successfully!' });
+      await loadBotConfig();
+    } catch (err) {
+      setBotMessage({ type: 'error', text: err.message || 'Failed to save Microsoft Teams config' });
+    } finally {
+      setSavingBots(false);
     }
   };
 
@@ -1639,6 +1681,33 @@ export default function CompanyAdminProfile() {
                         </p>
                       </div>
 
+                      {/* Universal Extension Installation URL (For External Organizations) */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+                            Universal Extension Install Link (For Cross-Organization Access)
+                          </label>
+                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                            Recommended for External Users
+                          </span>
+                        </div>
+                        <input
+                          type="text"
+                          value={botConfig.zoho_cliq.extension_install_url || ''}
+                          onChange={(e) =>
+                            setBotConfig({
+                              ...botConfig,
+                              zoho_cliq: { ...botConfig.zoho_cliq, extension_install_url: e.target.value }
+                            })
+                          }
+                          placeholder="https://cliq.zoho.in/install/extension?key=... or Marketplace URL"
+                          className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                        />
+                        <p className="text-[10px] text-gray-500 mt-1">
+                          Zoho Cliq bots are organization-private by default. If you package your bot as an <b>Extension</b> in Zoho Developer Console (Extensions &gt; New Extension &gt; Share Link), paste the generated installation link here. Any external company can then install the bot in 1 click!
+                        </p>
+                      </div>
+
                       {/* Zoho Cliq Message Handler URL to configure in Zoho Developer Console */}
                       {botConfig.zoho_cliq.webhook_url && (
                         <div className="bg-emerald-50/50 border border-emerald-200/60 rounded-xl p-3 text-xs space-y-1">
@@ -1720,8 +1789,196 @@ export default function CompanyAdminProfile() {
                       </div>
                     </div>
                   </div>
+
+                {/* 3. Microsoft Teams Bot Card */}
+                <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-200/80 shadow-xs space-y-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs">
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-sm font-bold text-gray-900">Microsoft Teams Hiring Assistant</h4>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
+                            Teams Bot & Adaptive Cards
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Enable your Hiring Managers to approve requisitions, review candidate match cards, and manage timesheets right inside Microsoft Teams.
+                        </p>
+                      </div>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={botConfig.ms_teams.enabled}
+                        onChange={(e) => setBotConfig({
+                          ...botConfig,
+                          ms_teams: { ...botConfig.ms_teams, enabled: e.target.checked }
+                        })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="space-y-4 pt-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Microsoft App ID */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                          Microsoft App ID (Bot Client ID)
+                        </label>
+                        <input
+                          type="text"
+                          value={botConfig.ms_teams.app_id}
+                          onChange={(e) => setBotConfig({
+                            ...botConfig,
+                            ms_teams: { ...botConfig.ms_teams, app_id: e.target.value }
+                          })}
+                          placeholder="e.g. 7b3f9c6d-5a82-4f2c-b173-e38db0fa4b12"
+                          className="w-full px-3 py-2 bg-gray-50/70 border border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-black"
+                        />
+                        <span className="text-[10px] text-gray-400 mt-1 block">
+                          From Azure Bot Service or Microsoft Teams Developer Portal.
+                        </span>
+                      </div>
+
+                      {/* Microsoft App Password */}
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                          Microsoft App Password (Client Secret)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showTeamsPassword ? 'text' : 'password'}
+                            value={botConfig.ms_teams.app_password}
+                            onChange={(e) => setBotConfig({
+                              ...botConfig,
+                              ms_teams: { ...botConfig.ms_teams, app_password: e.target.value }
+                            })}
+                            placeholder="Azure Bot Client Secret"
+                            className="w-full px-3 py-2 pr-9 bg-gray-50/70 border border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-black"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowTeamsPassword(!showTeamsPassword)}
+                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                          >
+                            {showTeamsPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                          </button>
+                        </div>
+                        <span className="text-[10px] text-gray-400 mt-1 block">
+                          Used to authenticate outbound Adaptive Card replies back to Teams.
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bot Name */}
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                        Bot Display Name in Teams
+                      </label>
+                      <input
+                        type="text"
+                        value={botConfig.ms_teams.bot_name}
+                        onChange={(e) => setBotConfig({
+                          ...botConfig,
+                          ms_teams: { ...botConfig.ms_teams, bot_name: e.target.value }
+                        })}
+                        placeholder="e.g. TermJobs Assistant"
+                        className="w-full sm:w-1/2 px-3 py-2 bg-gray-50/70 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-black"
+                      />
+                    </div>
+
+                    {/* Bot Messaging Endpoint URL */}
+                    <div className="bg-indigo-50/60 rounded-xl p-3 border border-indigo-100 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
+                          Bot Messaging Endpoint URL (Paste into Azure Bot Service)
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(botConfig.ms_teams.bot_endpoint || `${window.location.origin}/api/teams/messages`);
+                            setCopiedTeamsEndpoint(true);
+                            setTimeout(() => setCopiedTeamsEndpoint(false), 2000);
+                          }}
+                          className="text-[10px] text-indigo-700 hover:text-indigo-950 font-semibold flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-indigo-200 shadow-2xs"
+                        >
+                          {copiedTeamsEndpoint ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
+                          <span>{copiedTeamsEndpoint ? 'Copied URL!' : 'Copy Endpoint'}</span>
+                        </button>
+                      </div>
+                      <div className="font-mono text-[11px] text-indigo-950 bg-white/90 p-2 rounded-lg border border-indigo-200/80 break-all select-all">
+                        {botConfig.ms_teams.bot_endpoint || `${window.location.origin}/api/teams/messages`}
+                      </div>
+                      <p className="text-[11px] text-indigo-800/80">
+                        In Azure Portal &gt; Bot Services &gt; Configuration, set this URL as your <b>Messaging Endpoint</b>.
+                      </p>
+                    </div>
+
+                    {/* Sideload App Package Download */}
+                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <div className="text-xs font-bold text-gray-800">Microsoft Teams App Package (.zip)</div>
+                        <div className="text-[11px] text-gray-500">
+                          Pre-packaged with manifest.json and icons. Sideload into Microsoft Teams or upload to Teams Admin Center.
+                        </div>
+                      </div>
+                      <a
+                        href={botConfig.ms_teams.package_url || '/api/teams/package'}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-100 text-indigo-700 border border-indigo-200 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <ExternalLink size={13} />
+                        <span>Download Teams App (.zip)</span>
+                      </a>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={handleSaveTeams}
+                        disabled={savingBots}
+                        className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                      >
+                        {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                        <span>Save Microsoft Teams Config</span>
+                      </button>
+
+                      {botConfig.ms_teams.app_id && (
+                        <button
+                          type="button"
+                          onClick={() => handleDisconnectBot('ms_teams')}
+                          className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                        >
+                          <Trash2 size={13} />
+                          <span>Disconnect</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Step-by-Step Instructions */}
+                    <div className="bg-gray-50/80 rounded-xl p-3 text-[11px] text-gray-600 space-y-1 border border-gray-200/50">
+                      <div className="font-bold text-gray-800">How to Setup Microsoft Teams Bot:</div>
+                      <ol className="list-decimal list-inside space-y-1 text-gray-600">
+                        <li>Register an Azure Bot in <b>Azure Portal</b> &gt; <b>Azure Bot</b> (or use Microsoft Teams Developer Portal).</li>
+                        <li>Copy the <b>Microsoft App ID</b> and create a <b>Client Secret</b>, then paste them above.</li>
+                        <li>Copy the <b>Bot Messaging Endpoint URL</b> above and paste it into the Azure Bot Configuration.</li>
+                        <li>Click <b>Download Teams App (.zip)</b> and upload it to <b>Teams Admin Center</b> &gt; <i>Manage apps</i> or sideload in Teams client.</li>
+                      </ol>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
+            )}
             </>
           )}
         </div>

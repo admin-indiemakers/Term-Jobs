@@ -90,6 +90,8 @@ export default function HiringManagerDashboard() {
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [pingingBot, setPingingBot] = useState(false);
   const [showCliqModal, setShowCliqModal] = useState(false);
+  const [showTeamsModal, setShowTeamsModal] = useState(false);
+  const [linkingTeams, setLinkingTeams] = useState(false);
   const [copiedCliqBotName, setCopiedCliqBotName] = useState(false);
   const [copiedCliqUrl, setCopiedCliqUrl] = useState(false);
   const [botFeedback, setBotFeedback] = useState({ type: '', text: '' });
@@ -175,6 +177,60 @@ export default function HiringManagerDashboard() {
       await loadBotStatus();
     } catch (err) {
       setBotFeedback({ type: 'error', text: err.message || 'Failed to unlink account' });
+    }
+  };
+
+  const handleConnectTeams = async () => {
+    setLinkingTeams(true);
+    setBotFeedback({ type: '', text: '' });
+    try {
+      const res = await request('/api/integrations/teams/generate-link', {
+        method: 'POST',
+        token,
+      });
+      if (res?.direct_link) {
+        window.open(res.direct_link, '_blank');
+        setBotFeedback({
+          type: 'info',
+          text: 'Opening Microsoft Teams! Tap Send to link your account.'
+        });
+        let pollCount = 0;
+        const interval = setInterval(async () => {
+          pollCount += 1;
+          try {
+            const statusRes = await request('/api/integrations/user-bot-status', { token });
+            if (statusRes?.ms_teams?.is_linked) {
+              setBotStatus(statusRes);
+              setBotFeedback({
+                type: 'success',
+                text: '🎉 Successfully connected to Microsoft Teams!'
+              });
+              clearInterval(interval);
+              setLinkingTeams(false);
+            }
+          } catch {
+            // ignore
+          }
+          if (pollCount > 30) {
+            clearInterval(interval);
+            setLinkingTeams(false);
+          }
+        }, 3000);
+      }
+    } catch (err) {
+      setBotFeedback({ type: 'error', text: err?.message || 'Failed to generate Microsoft Teams link.' });
+      setLinkingTeams(false);
+    }
+  };
+
+  const handleUnlinkTeams = async () => {
+    if (!window.confirm('Are you sure you want to disconnect your Microsoft Teams account?')) return;
+    try {
+      await request('/api/integrations/teams/unlink', { method: 'POST', token });
+      setBotFeedback({ type: 'info', text: 'Microsoft Teams account unlinked.' });
+      await loadBotStatus();
+    } catch (err) {
+      setBotFeedback({ type: 'error', text: err?.message || 'Failed to unlink Teams account' });
     }
   };
 
@@ -501,6 +557,22 @@ export default function HiringManagerDashboard() {
               <span>Zoho Cliq</span>
             </button>
 
+            {/* Microsoft Teams Connection Action */}
+            <button
+              type="button"
+              onClick={() => setShowTeamsModal(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-xs font-semibold border border-indigo-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Connect or launch Microsoft Teams AI Assistant"
+            >
+              <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
+              </svg>
+              <span>MS Teams</span>
+              {botStatus?.ms_teams?.is_linked && (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              )}
+            </button>
+
             <button
               type="button"
               onClick={() => navigate('/dashboard/hiring-manager-chat')}
@@ -664,6 +736,41 @@ export default function HiringManagerDashboard() {
                 </p>
               </div>
 
+              {/* Universal 1-Click Extension Installation for External Organizations */}
+              <div className="bg-sky-50/90 border border-sky-200/90 rounded-2xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-sky-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    External Organization / Multi-Company Access
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-200 text-sky-900 border border-sky-300">
+                    1-Click Extension
+                  </span>
+                </div>
+                <p className="text-[12px] text-sky-950 font-medium leading-relaxed">
+                  Zoho Cliq keeps bots private to the creating company by default. If your team is in a different Zoho organization, click below to install the bot directly into your organization:
+                </p>
+                <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                  <a
+                    href={
+                      botStatus?.zoho_cliq?.extension_install_url ||
+                      'https://cliq.zoho.in/developer'
+                    }
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Install TermJobs Extension in Zoho Cliq</span>
+                    <ExternalLink size={12} className="opacity-80" />
+                  </a>
+                </div>
+                <p className="text-[10px] text-sky-700">
+                  {botStatus?.zoho_cliq?.extension_install_url
+                    ? 'Clicking install adds the bot and slash commands to your Zoho workspace with zero manual coding.'
+                    : 'Company Admins can generate a universal Extension link from Zoho Developer Console and paste it in Company Settings > Bot Integrations.'}
+                </p>
+              </div>
+
               {/* How to add if not present in workspace */}
               <div className="bg-gray-50 rounded-xl p-3.5 text-[11px] text-gray-600 space-y-2 border border-gray-200/70">
                 <div className="font-bold text-gray-800 flex items-center gap-1.5">
@@ -672,10 +779,10 @@ export default function HiringManagerDashboard() {
                 </div>
                 <ul className="list-decimal list-inside space-y-1.5 text-gray-600 pl-0.5 leading-relaxed">
                   <li>
-                    Click <b>Launch in Zoho Cliq</b> above, or open your workspace's Zoho Cliq channel.
+                    Click <b>Install TermJobs Extension</b> above if your company is external.
                   </li>
                   <li>
-                    In the left sidebar next to <b>Bots</b>, click the <b>+</b> icon, search for <code>@{botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}</code>, and click <b>Subscribe</b>.
+                    Or inside Zoho Cliq, click the <b>+</b> icon next to <b>Bots</b> in the left sidebar, search for <code>@{botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}</code>, and click <b>Subscribe</b>.
                   </li>
                   <li>
                     Send any message (e.g. <code>hi</code> or <code>show requisitions</code>) to begin chatting!
@@ -688,6 +795,130 @@ export default function HiringManagerDashboard() {
               <button
                 type="button"
                 onClick={() => setShowCliqModal(false)}
+                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Microsoft Teams Integration Modal */}
+      {showTeamsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-gray-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5 text-indigo-700 font-bold text-sm sm:text-base">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
+                  </svg>
+                </div>
+                <span>Microsoft Teams AI Assistant</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTeamsModal(false)}
+                className="text-gray-400 hover:text-black cursor-pointer p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs text-gray-600">
+              {/* Connection Status Card */}
+              <div className={`p-4 rounded-2xl border space-y-3 ${
+                botStatus?.ms_teams?.is_linked
+                  ? 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+                  : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full ${botStatus?.ms_teams?.is_linked ? 'bg-emerald-500' : 'bg-indigo-500 animate-pulse'}`}></span>
+                    {botStatus?.ms_teams?.is_linked ? 'Account Linked' : 'Connect in 1 Click'}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/80 border font-mono">
+                    {botStatus?.ms_teams?.bot_name || 'TermJobs Assistant'}
+                  </span>
+                </div>
+
+                <p className="text-[12px] font-medium leading-relaxed">
+                  {botStatus?.ms_teams?.is_linked
+                    ? `Your Teams user is authenticated and paired to your ${botStatus?.ms_teams?.bot_name || 'TermJobs'} workspace. You will receive Adaptive Cards for candidate match alerts and pending approvals.`
+                    : 'Pair your Microsoft Teams account in 1 click to draft job requisitions, approve contractor timesheets, and review candidate profiles directly inside Teams.'}
+                </p>
+
+                <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                  {botStatus?.ms_teams?.is_linked ? (
+                    <>
+                      <a
+                        href={botStatus?.ms_teams?.bot_url || `https://teams.microsoft.com/l/chat/0/0?users=28:${botStatus?.ms_teams?.app_id || ''}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <ExternalLink size={13} />
+                        <span>Launch in Teams</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={handleUnlinkTeams}
+                        className="px-3.5 py-2.5 rounded-xl bg-red-100 hover:bg-red-200 text-red-700 font-semibold text-xs transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 size={13} />
+                        <span>Disconnect</span>
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleConnectTeams}
+                      disabled={linkingTeams}
+                      className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                    >
+                      {linkingTeams ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}
+                      <span>{linkingTeams ? 'Opening Teams...' : 'Connect to Microsoft Teams'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Download App Manifest Package */}
+              <div className="p-3.5 bg-gray-50 rounded-xl border border-gray-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="font-bold text-gray-800 text-xs">Microsoft Teams App Package (.zip)</div>
+                  <a
+                    href={botStatus?.ms_teams?.package_url || '/api/teams/package'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 rounded-lg bg-white hover:bg-gray-100 text-indigo-700 border border-indigo-200 text-[11px] font-semibold shadow-2xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <ExternalLink size={12} />
+                    <span>Download App (.zip)</span>
+                  </a>
+                </div>
+                <p className="text-[11px] text-gray-500 leading-normal">
+                  If the bot is not yet installed in your company's Teams workspace, download the package and upload it in <b>Teams</b> &gt; <b>Apps</b> &gt; <i>Manage your apps</i> &gt; <b>Upload an app</b>.
+                </p>
+              </div>
+
+              {/* What you can do inside Teams */}
+              <div className="bg-indigo-50/50 rounded-xl p-3 text-[11px] text-indigo-950 space-y-1.5 border border-indigo-100">
+                <div className="font-bold text-indigo-900">⚡ What you can do directly inside Microsoft Teams:</div>
+                <ul className="list-disc list-inside space-y-0.5 text-indigo-900/80">
+                  <li>Type <code>pending works</code> to review active approval cards.</li>
+                  <li>Type <code>draft a React developer with 3 yrs exp</code> to generate requisitions.</li>
+                  <li>Type <code>upcoming meetings</code> to inspect today's candidate interviews.</li>
+                  <li>Click <b>Approve</b> or <b>Reject</b> directly on Teams Adaptive Cards.</li>
+                </ul>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setShowTeamsModal(false)}
                 className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 cursor-pointer transition-colors"
               >
                 Close

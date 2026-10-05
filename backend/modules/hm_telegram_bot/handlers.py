@@ -233,12 +233,12 @@ async def answer_callback_query(
         pass
 
 
-async def handle_message(
+async def _handle_message_inner(
     token: str,
     message: Dict[str, Any],
     tenant_id: Optional[str] = None
 ):
-    """Process incoming text message from Telegram."""
+    """Process incoming text message from Telegram (internal)."""
     chat = message.get("chat", {})
     chat_id = chat.get("id")
     from_user = message.get("from", {})
@@ -302,7 +302,51 @@ async def handle_message(
                     "This connection link has expired or has already been used.\n"
                     "Please return to your *TermJobs Dashboard* and click *Connect Telegram* to generate a fresh link."
                 )
-                await send_telegram_message(token, chat_id, invalid_msg)
+    # 0.1 Check for explicit /pair command (e.g. /pair <token> or /pair <email>)
+    text_stripped = text.strip()
+    if text_stripped.lower().startswith("/pair") or text_stripped.lower().startswith("pair "):
+        token_or_email = text_stripped.split(None, 1)[1].strip() if len(text_stripped.split(None, 1)) > 1 else ""
+        if token_or_email:
+            clean_arg = token_or_email.lstrip("@").strip()
+            target_user = None
+            try:
+                target_user = db["users"].find_one({
+                    "$or": [
+                        {"bot_pairing_token": clean_arg},
+                        {"email": {"$regex": f"^{re.escape(clean_arg)}$", "$options": "i"}}
+                    ]
+                })
+            except Exception as e:
+                print(f"[HM TELEGRAM PAIR ERROR] {e}")
+
+            if target_user:
+                username_clean = (from_user.get("username") or "").strip().lstrip("@")
+                db["users"].update_one(
+                    {"_id": target_user["_id"]},
+                    {"$set": {
+                        "telegram_chat_id": str(chat_id),
+                        "telegram_username": username_clean,
+                        "telegram_linked_at": _utcnow_iso(),
+                        "bot_pairing_token": None,
+                        "bot_pairing_token_expires_at": None
+                    }}
+                )
+                invalidate_session(chat_id, target_user.get("tenant_id"))
+                session = get_or_create_session(chat_id, from_user, tenant_id=target_user.get("tenant_id"))
+                user_name = target_user.get("name") or from_user.get("first_name") or "Hiring Manager"
+                company_name = session["current_user"].get("company_name", "TermJobs")
+                success_msg = (
+                    f"🎉 *Account Connected to {company_name}!* 💼\n\n"
+                    f"Hello *{user_name}*! Your Telegram account is now paired with your *{company_name}* hiring manager workspace.\n\n"
+                    f"All requisitions, candidates, and timesheets in this session are strictly isolated to **{company_name}**."
+                )
+                await send_telegram_message(token, chat_id, success_msg, build_quick_menu_keyboard())
+                return
+            else:
+                await send_telegram_message(
+                    token, chat_id,
+                    f"⚠️ *No account found matching '{token_or_email}'.*\n\nPlease make sure you provided the exact email address or pairing token from your TermJobs dashboard."
+                )
                 return
 
     session = get_or_create_session(chat_id, from_user, tenant_id=tenant_id)
@@ -322,6 +366,26 @@ async def handle_message(
             f"• _\"Check pending timesheets or expenses\"_"
         )
         await send_telegram_message(token, chat_id, welcome_msg, build_quick_menu_keyboard())
+        return
+
+    # 1.1 Identity & Profile Questions (e.g. "who am I", "what is my name", "do you know who I am", "who are you talking to", "who is the hiring manager", "my profile")
+    identity_inquiry_pattern = r"\b(who\s+am\s+i|what\s+is\s+my\s+name|what['’]?s\s+my\s+name|do\s+you\s+know\s+(who\s+i\s+am|my\s+name)|who\s+are\s+you\s+talking\s+to|who\s+is\s+(the\s+)?hiring\s+manager|tell\s+me\s+my\s+name|my\s+name|my\s+profile|my\s+account)\b"
+    if re.search(identity_inquiry_pattern, text_lower):
+        u_name = session["current_user"].get("name") or "Hiring Manager"
+        u_comp = session["current_user"].get("company_name", "TermJobs Workspace")
+        u_email = session["current_user"].get("email", "")
+        reply = (
+            f"👤 *You are connected as {u_name}!* 💼\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• *Role:* Hiring Manager\n"
+            f"• *Company:* {u_comp}\n"
+        )
+        if u_email:
+            reply += f"• *Email:* `{u_email}`\n"
+        reply += f"\nAll requisitions, candidates, and approvals in this chat are paired directly to your profile."
+        await send_telegram_message(token, chat_id, reply, build_quick_menu_keyboard())
+        add_history_message(chat_id, "user", text)
+        add_history_message(chat_id, "assistant", reply)
         return
 
     # 2. Upcoming Meetings & Scheduled Interviews Intent (e.g. "show me the upcoming meetings", "upcoming meetings", "my meetings", "upcoming interviews")
@@ -502,27 +566,25 @@ async def handle_message(
     sched_match = re.search(r"\b(schedule|set\s*up)\s+(an\s+)?interview(\s+with\s+([a-zA-Z0-9_\s\.\-]+))?", text, re.IGNORECASE)
     if sched_match:
         from modules.hiring_manager_agent.agent import schedule_candidate_interview
-        from modules.shared.db import db
-        import re as re_mod
 
         raw_target = (sched_match.group(4) or "").strip()
         cand_name = raw_target if raw_target and raw_target.lower() not in ("termjobs", "candidate", "someone") else "Arjun M"
-        cand_name = re_mod.split(r"\s+(on|at|for|tomorrow|next)\b", cand_name, flags=re_mod.IGNORECASE)[0].strip()
+        cand_name = re.split(r"\s+(on|at|for|tomorrow|next)\b", cand_name, flags=re.IGNORECASE)[0].strip()
         if not cand_name:
             cand_name = "Arjun M"
 
         req_title = "Senior Full Stack Developer"
         cand_doc = db["candidate_submissions"].find_one({
             "$or": [
-                {"candidate_name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}},
-                {"name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}}
+                {"candidate_name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}},
+                {"name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}}
             ]
         })
         if not cand_doc:
             cand_doc = db["candidates"].find_one({
                 "$or": [
-                    {"candidate_name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}},
-                    {"name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}}
+                    {"candidate_name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}},
+                    {"name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}}
                 ]
             })
 
@@ -797,12 +859,41 @@ async def handle_message(
         add_history_message(chat_id, "assistant", reply_text)
 
 
-async def handle_callback_query(
+async def handle_message(
+    token: str,
+    message: Dict[str, Any],
+    tenant_id: Optional[str] = None
+):
+    """Safe outer entrypoint for incoming Telegram messages."""
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    text = (message.get("text") or "").strip()
+    if not chat_id or not text:
+        return
+
+    try:
+        await _handle_message_inner(token, message, tenant_id=tenant_id)
+    except Exception as e:
+        print(f"[HM TELEGRAM BOT MESSAGE ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        try:
+            await send_telegram_message(
+                token,
+                chat_id,
+                "⚠️ *I encountered an issue processing your request.*\nPlease try again or tap an option below:",
+                build_quick_menu_keyboard()
+            )
+        except Exception:
+            pass
+
+
+async def _handle_callback_query_inner(
     token: str,
     callback_query: Dict[str, Any],
     tenant_id: Optional[str] = None
 ):
-    """Handle taps on inline buttons."""
+    """Handle taps on inline buttons (internal)."""
     query_id = callback_query.get("id")
     from_user = callback_query.get("from", {})
     message = callback_query.get("message", {})
@@ -932,8 +1023,6 @@ async def handle_callback_query(
         load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
 
         from modules.hiring_manager_agent.agent import schedule_candidate_interview
-        from modules.shared.db import db
-        import re
 
         # Fallback if candidate name is generic/mock
         if not cand_name or cand_name.lower().strip() in ("termjobs", "term jobs", "test", "candidate"):
@@ -1192,3 +1281,25 @@ async def handle_callback_query(
 
     else:
         await answer_callback_query(token, query_id)
+
+
+async def handle_callback_query(
+    token: str,
+    callback_query: Dict[str, Any],
+    tenant_id: Optional[str] = None
+):
+    """Safe outer entrypoint for Telegram inline button callbacks."""
+    query_id = callback_query.get("id")
+    message = callback_query.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    try:
+        await _handle_callback_query_inner(token, callback_query, tenant_id=tenant_id)
+    except Exception as e:
+        print(f"[HM TELEGRAM BOT CALLBACK ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        if query_id:
+            try:
+                await answer_callback_query(token, query_id, "⚠️ Error processing request.")
+            except Exception:
+                pass
