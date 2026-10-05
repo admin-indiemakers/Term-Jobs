@@ -3,13 +3,91 @@ import re
 from typing import Dict, Any, List, Optional
 
 
+def convert_markdown_tables_to_cards(text: str) -> str:
+    """Detect and convert Markdown pipe tables (| a | b |) into clean mobile-friendly emoji cards."""
+    if "|" not in text:
+        return text
+
+    lines = text.split("\n")
+    out = []
+    i = 0
+    num_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+    header_emojis = {
+        "id": "🆔", "requisition id": "🆔", "candidate id": "🆔", "req id": "🆔",
+        "title": "💼", "role": "💼", "job": "💼", "position": "💼", "job title": "💼",
+        "department": "🏢", "dept": "🏢",
+        "location": "📍",
+        "salary": "💰", "salary range": "💰", "budget": "💰", "rate": "💰", "compensation": "💰",
+        "status": "📊",
+        "closed": "📅", "closed on": "📅", "date": "📅", "created": "📅", "created on": "📅", "deadline": "📅",
+        "skills": "🛠", "experience": "⏳", "experience level": "⏳",
+        "vendor": "🏷️", "type": "📄", "employment type": "📄"
+    }
+
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("|") and line.endswith("|") and i + 1 < len(lines) and re.match(r"^\|(\s*:?-+:?\s*\|)+$", lines[i+1].strip()):
+            headers = [h.strip() for h in line.strip("|").split("|")]
+            i += 2  # skip header and separator
+            table_rows = []
+            while i < len(lines) and lines[i].strip().startswith("|") and lines[i].strip().endswith("|"):
+                row_cells = [c.strip() for c in lines[i].strip("|").split("|")]
+                table_rows.append(row_cells)
+                i += 1
+
+            for idx, row in enumerate(table_rows):
+                row_dict = {}
+                for h_idx, h in enumerate(headers):
+                    val = row[h_idx] if h_idx < len(row) else ""
+                    row_dict[h.lower()] = val
+
+                row_num = num_emojis[idx] if idx < len(num_emojis) else f"{idx+1}."
+                main_val = row_dict.get("title") or row_dict.get("role") or row_dict.get("name") or row_dict.get("candidate") or ""
+                card_lines = []
+                if main_val:
+                    card_lines.append(f"{row_num} *{main_val}*")
+                else:
+                    card_lines.append(f"{row_num} *Item #{idx+1}*")
+
+                for h_idx, h in enumerate(headers):
+                    val = row[h_idx] if h_idx < len(row) else ""
+                    h_clean = h.strip()
+                    h_low = h_clean.lower()
+                    if h_low in ("#", "no", "no.", "title", "role", "name", "candidate") and main_val:
+                        continue
+                    if not val:
+                        continue
+                    uuid_match = re.search(r"([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", val)
+                    if uuid_match:
+                        val = f"`{uuid_match.group(1)}`"
+                    val = val.strip("\"\"“”\x27")
+
+                    ico = header_emojis.get(h_low, "•")
+                    card_lines.append(f"  {ico} *{h_clean}:* {val}")
+
+                out.append("\n".join(card_lines) + "\n")
+        else:
+            out.append(lines[i])
+            i += 1
+    return "\n".join(out)
+
+
 def sanitize_telegram_markdown(text: str) -> str:
     """Ensure text is safe for Telegram Markdown parser."""
     if not text:
         return ""
-    # Strip double asterisks if redundant, or retain standard bold
-    # Telegram Markdown supports *bold*, _italic_, `inline code`, ```pre```
-    # Replace markdown header hashtags (# Title) with *Title*
+    # 1. Convert pipe tables into clean emoji cards
+    text = convert_markdown_tables_to_cards(text)
+
+    # 2. Shorten UUIDs
+    text = re.sub(
+        r'["“\']?([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}["”\']?',
+        r'`\1`',
+        text
+    )
+
+    # 3. Replace markdown header hashtags (# Title) with *Title*
     lines = []
     for line in text.split("\n"):
         header_match = re.match(r"^#{1,6}\s*(.+)$", line)

@@ -27,7 +27,9 @@ import {
   Loader2,
   RefreshCw,
   X,
-  Trash2
+  Trash2,
+  Copy,
+  Info
 } from 'lucide-react';
 import { interviewApi } from '../interview/services/interviewApi';
 
@@ -88,6 +90,8 @@ export default function HiringManagerDashboard() {
   const [linkingTelegram, setLinkingTelegram] = useState(false);
   const [pingingBot, setPingingBot] = useState(false);
   const [showCliqModal, setShowCliqModal] = useState(false);
+  const [copiedCliqBotName, setCopiedCliqBotName] = useState(false);
+  const [copiedCliqUrl, setCopiedCliqUrl] = useState(false);
   const [botFeedback, setBotFeedback] = useState({ type: '', text: '' });
 
   const loadBotStatus = useCallback(async () => {
@@ -475,26 +479,27 @@ export default function HiringManagerDashboard() {
                 </button>
               </>
             ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={handleConnectTelegram}
-                  disabled={linkingTelegram}
-                  className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                >
-                  {linkingTelegram ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                  <span>{linkingTelegram ? 'Waiting for /start...' : 'Connect Telegram'}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCliqModal(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <MessageSquare size={13} />
-                  <span>Zoho Cliq</span>
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={handleConnectTelegram}
+                disabled={linkingTelegram}
+                className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+              >
+                {linkingTelegram ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                <span>{linkingTelegram ? 'Waiting for /start...' : 'Connect Telegram'}</span>
+              </button>
             )}
+
+            {/* Zoho Cliq Connection Action (Always Visible) */}
+            <button
+              type="button"
+              onClick={() => setShowCliqModal(true)}
+              className="px-3.5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Connect or open Zoho Cliq AI Assistant"
+            >
+              <MessageSquare size={13} />
+              <span>Zoho Cliq</span>
+            </button>
 
             <button
               type="button"
@@ -511,46 +516,181 @@ export default function HiringManagerDashboard() {
       {/* Zoho Cliq Integration Modal */}
       {showCliqModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border border-gray-100 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-              <div className="flex items-center gap-2 text-emerald-700 font-bold text-sm">
-                <MessageSquare size={17} />
-                <span>Zoho Cliq Connection</span>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl border border-gray-100 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5 text-emerald-700 font-bold text-sm sm:text-base">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                  <MessageSquare size={17} />
+                </div>
+                <span>Zoho Cliq Assistant Connection</span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowCliqModal(false)}
-                className="text-gray-400 hover:text-black cursor-pointer"
+                className="text-gray-400 hover:text-black cursor-pointer p-1 rounded-lg hover:bg-gray-100 transition-colors"
               >
-                <X size={16} />
+                <X size={17} />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-gray-600">
-              <p>
-                To connect your Zoho Cliq account with TermJobs, ensure your Zoho Cliq email matches your TermJobs email:
-              </p>
-              <div className="p-3 bg-gray-50 rounded-xl font-mono text-[11px] text-gray-800 break-all border border-gray-200">
-                {user?.email || 'hiring.manager@termjobs.in'}
+            <div className="space-y-4 text-xs text-gray-600">
+              {/* Primary Direct Launch Card */}
+              <div className="bg-emerald-50/90 border border-emerald-200/90 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Direct Bot Access Link
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300/60 font-mono">
+                    @{botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}
+                  </span>
+                </div>
+                <p className="text-[12px] text-emerald-950 font-medium leading-relaxed">
+                  Open the bot in Zoho Cliq to chat, draft requisitions, and review candidates:
+                </p>
+                <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                  <a
+                    href={botStatus?.zoho_cliq?.bot_url_in || botStatus?.zoho_cliq?.bot_url || `https://cliq.zoho.in/#chat:bot:${botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageSquare size={13} />
+                    <span>Launch in Zoho Cliq (.in)</span>
+                    <ExternalLink size={12} className="opacity-80" />
+                  </a>
+                  <a
+                    href={botStatus?.zoho_cliq?.bot_url_com || `https://cliq.zoho.com/#chat:bot:${botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2.5 rounded-xl bg-white hover:bg-emerald-100/70 text-emerald-900 border border-emerald-300 font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Zoho Cliq (.com)</span>
+                    <ExternalLink size={12} className="opacity-70" />
+                  </a>
+                  <a
+                    href={botStatus?.zoho_cliq?.bot_url_eu || `https://cliq.zoho.eu/#chat:bot:${botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2.5 rounded-xl bg-white hover:bg-emerald-100/70 text-emerald-900 border border-emerald-300 font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>(.eu)</span>
+                    <ExternalLink size={12} className="opacity-70" />
+                  </a>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <div className="font-bold text-gray-800">Quick Steps:</div>
-                <ol className="list-decimal list-inside space-y-1 text-gray-600">
-                  <li>Open your workspace's Zoho Cliq channel.</li>
-                  <li>Search for your company's TermJobs Bot in the Bot directory.</li>
-                  <li>Send any message (e.g. <code>hi</code> or <code>show requisitions</code>).</li>
-                  <li>The bot automatically recognizes your email and links your hiring manager profile!</li>
-                </ol>
+
+              {/* Shareable Direct URL Input */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  Direct Bot Chat URL (Click or Copy)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={botStatus?.zoho_cliq?.bot_url || `https://cliq.zoho.in/#chat:bot:${botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}`}
+                    className="flex-1 px-3 py-2 bg-gray-50 rounded-xl font-mono text-[11px] text-gray-800 border border-gray-200 select-all focus:outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        botStatus?.zoho_cliq?.bot_url || `https://cliq.zoho.in/#chat:bot:${botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}`
+                      );
+                      setCopiedCliqUrl(true);
+                      setTimeout(() => setCopiedCliqUrl(false), 2000);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold text-xs border border-gray-200 transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    {copiedCliqUrl ? (
+                      <>
+                        <Check size={13} className="text-emerald-600" />
+                        <span className="text-emerald-600 font-bold">Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={13} />
+                        <span>Copy URL</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Bot Handle & Copy Helper */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  Bot Name / Search Handle
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 px-3 py-2 bg-gray-50 rounded-xl font-mono text-xs text-gray-800 border border-gray-200 flex items-center justify-between">
+                    <span>@{botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm');
+                        setCopiedCliqBotName(true);
+                        setTimeout(() => setCopiedCliqBotName(false), 2000);
+                      }}
+                      className="text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer text-[11px]"
+                    >
+                      {copiedCliqBotName ? (
+                        <>
+                          <Check size={12} className="text-emerald-600" />
+                          <span className="text-emerald-600">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          <span>Copy Handle</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Verified Account Email */}
+              <div>
+                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  Your Linked TermJobs Email
+                </label>
+                <div className="px-3 py-2 bg-gray-50 rounded-xl font-mono text-xs text-gray-800 border border-gray-200">
+                  {user?.email || 'hiring.manager@termjobs.in'}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">
+                  When you message the bot from your Zoho account with this email, your workspace pipeline is automatically recognized and paired.
+                </p>
+              </div>
+
+              {/* How to add if not present in workspace */}
+              <div className="bg-gray-50 rounded-xl p-3.5 text-[11px] text-gray-600 space-y-2 border border-gray-200/70">
+                <div className="font-bold text-gray-800 flex items-center gap-1.5">
+                  <Info size={13} className="text-emerald-600 shrink-0" />
+                  <span>Don't have this bot in your Cliq yet?</span>
+                </div>
+                <ul className="list-decimal list-inside space-y-1.5 text-gray-600 pl-0.5 leading-relaxed">
+                  <li>
+                    Click <b>Launch in Zoho Cliq</b> above, or open your workspace's Zoho Cliq channel.
+                  </li>
+                  <li>
+                    In the left sidebar next to <b>Bots</b>, click the <b>+</b> icon, search for <code>@{botStatus?.zoho_cliq?.bot_name || 'hiringmanagerterm'}</code>, and click <b>Subscribe</b>.
+                  </li>
+                  <li>
+                    Send any message (e.g. <code>hi</code> or <code>show requisitions</code>) to begin chatting!
+                  </li>
+                </ul>
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100">
               <button
                 type="button"
                 onClick={() => setShowCliqModal(false)}
-                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 cursor-pointer transition-colors"
               >
-                Got It
+                Close
               </button>
             </div>
           </div>

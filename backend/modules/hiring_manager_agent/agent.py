@@ -2647,6 +2647,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     "- When the user asks about a specific candidate by name, call `get_candidate_profile_details`.\n"
                     "- When the user asks 'pending works', 'my tasks', 'what needs attention', call `get_hiring_manager_pending_works`.\n"
                     "- When the user asks to schedule an interview with a candidate (e.g. 'schedule interview with Arjun'), ALWAYS call the `schedule_candidate_interview` tool directly with candidate_identifier, default date '2026-09-12', time '02:00 PM EST', and round 'Technical Round'. DO NOT ask the user questions or request details before proposing.\n"
+                    "- CRITICAL FORMATTING GUIDELINE FOR CHAT CLIENTS: NEVER output markdown pipe tables (| col | col |). Telegram and Zoho Cliq CANNOT render pipe tables and they display as broken text. Always format data as clean, beautifully spaced numbered or bulleted item cards using emojis (e.g. 1️⃣, 2️⃣, •) and shortened 8-char IDs in backticks (e.g. `23548610`).\n"
                 )
             }
             msgs = [sys_msg]
@@ -2795,6 +2796,10 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                                     "tool_call_id": tc["id"],
                                     "content": json.dumps(match_res, default=str)[:3500]
                                 })
+                            second_msgs.append({
+                                "role": "system",
+                                "content": "FORMATTING RULE: NEVER output markdown pipe tables (| col |). Format data as clean, spaced emoji item cards (1️⃣, 2️⃣) with bold labels and short 8-char IDs."
+                            })
                             second_payload = {
                                 "model": active_model,
                                 "messages": second_msgs,

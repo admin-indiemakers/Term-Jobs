@@ -45,7 +45,8 @@ from modules.hm_zoho_cliq.formatter import (
     format_cliq_expense,
     format_cliq_stats,
     format_cliq_quick_menu,
-    build_cliq_button
+    build_cliq_button,
+    sanitize_cliq_markdown
 )
 
 CLIQ_INCOMING_WEBHOOK = "https://cliq.zoho.in/api/v2/bots/hiringmanagerterm/incoming"
@@ -717,7 +718,9 @@ async def process_cliq_request(payload: Dict[str, Any], tenant_id: Optional[str]
 
     def respond_and_save(resp: Dict[str, Any]) -> Dict[str, Any]:
         resp_text = resp.get("text") or reply_text or ""
-        session["history"].append({"sender": "assistant", "text": resp_text})
+        clean_text = sanitize_cliq_markdown(resp_text)
+        resp["text"] = clean_text
+        session["history"].append({"sender": "assistant", "text": clean_text})
         if len(session["history"]) > 24:
             session["history"] = session["history"][-24:]
         save_cliq_session(session)

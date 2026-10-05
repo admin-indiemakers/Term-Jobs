@@ -55,6 +55,7 @@ class ZohoCliqConfigIn(BaseModel):
     enabled: bool = True
     bot_name: Optional[str] = None
     incoming_webhook_url: Optional[str] = None
+    bot_url: Optional[str] = None
 
 
 class TenantBotConfigUpdate(BaseModel):
@@ -91,6 +92,7 @@ async def get_tenant_bot_config(
 
     tg_token = tg_doc.get("bot_token") or ""
     effective_tg_username = tg_doc.get("bot_username") or (DEFAULT_TELEGRAM_BOT_USERNAME if default_tg_token else "")
+    effective_cliq_name = cliq_doc.get("bot_name") or "hiringmanagerterm"
 
     return {
         "tenant_id": tenant_id,
@@ -105,8 +107,12 @@ async def get_tenant_bot_config(
             "last_synced_at": tg_doc.get("last_synced_at"),
         },
         "zoho_cliq": {
-            "enabled": bool(cliq_doc.get("enabled", False)),
-            "bot_name": cliq_doc.get("bot_name") or "TermJobs Bot",
+            "enabled": bool(cliq_doc.get("enabled", True)),
+            "bot_name": effective_cliq_name,
+            "bot_url": cliq_doc.get("bot_url") or f"https://cliq.zoho.in/#chat:bot:{effective_cliq_name}",
+            "bot_url_in": f"https://cliq.zoho.in/#chat:bot:{effective_cliq_name}",
+            "bot_url_com": f"https://cliq.zoho.com/#chat:bot:{effective_cliq_name}",
+            "bot_url_eu": f"https://cliq.zoho.eu/#chat:bot:{effective_cliq_name}",
             "incoming_webhook_url": cliq_doc.get("incoming_webhook_url") or "",
             "webhook_url": f"{api_base}/api/zoho-cliq/webhook/{tenant_id}",
             "is_verified": bool(cliq_doc.get("is_verified", False)),
@@ -196,6 +202,8 @@ async def save_tenant_bot_config(
             cliq_data["incoming_webhook_url"] = payload.zoho_cliq.incoming_webhook_url.strip()
             cliq_data["is_verified"] = bool(cliq_data["incoming_webhook_url"])
             cliq_data["last_synced_at"] = datetime.datetime.utcnow().isoformat()
+        if payload.zoho_cliq.bot_url is not None:
+            cliq_data["bot_url"] = payload.zoho_cliq.bot_url.strip()
         cliq_data["webhook_url"] = f"{api_base}/api/zoho-cliq/webhook/{tenant_id}"
         update_doc["zoho_cliq"] = cliq_data
 
@@ -370,7 +378,12 @@ async def get_user_bot_status(
             "user_id": u.get("zoho_cliq_user_id") or "",
             "email": u.get("zoho_cliq_email") or u.get("email") or current_user.email,
             "linked_at": u.get("zoho_cliq_linked_at"),
-            "bot_available": bool(cliq_cfg.get("enabled")),
+            "bot_available": True,
+            "bot_name": cliq_cfg.get("bot_name") or "hiringmanagerterm",
+            "bot_url": cliq_cfg.get("bot_url") or f"https://cliq.zoho.in/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
+            "bot_url_in": f"https://cliq.zoho.in/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
+            "bot_url_com": f"https://cliq.zoho.com/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
+            "bot_url_eu": f"https://cliq.zoho.eu/#chat:bot:{cliq_cfg.get('bot_name') or 'hiringmanagerterm'}",
         }
     }
 

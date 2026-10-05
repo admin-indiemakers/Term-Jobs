@@ -131,7 +131,7 @@ export default function CompanyAdminProfile() {
   // Bot Integrations State
   const [botConfig, setBotConfig] = useState({
     telegram: { enabled: true, bot_token: '', bot_username: '', webhook_url: '', is_verified: false, is_custom: false },
-    zoho_cliq: { enabled: true, bot_name: '', incoming_webhook_url: '', webhook_url: '', is_verified: false }
+    zoho_cliq: { enabled: true, bot_name: '', incoming_webhook_url: '', bot_url: '', webhook_url: '', is_verified: false }
   });
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingCliq, setTestingCliq] = useState(false);
@@ -159,6 +159,7 @@ export default function CompanyAdminProfile() {
             enabled: data.zoho_cliq?.enabled ?? false,
             bot_name: data.zoho_cliq?.bot_name || 'TermJobs Assistant',
             incoming_webhook_url: data.zoho_cliq?.incoming_webhook_url || '',
+            bot_url: data.zoho_cliq?.bot_url || '',
             webhook_url: data.zoho_cliq?.webhook_url || '',
             is_verified: data.zoho_cliq?.is_verified ?? false,
             last_synced_at: data.zoho_cliq?.last_synced_at
@@ -226,7 +227,8 @@ export default function CompanyAdminProfile() {
           zoho_cliq: {
             enabled: botConfig.zoho_cliq.enabled,
             bot_name: botConfig.zoho_cliq.bot_name,
-            incoming_webhook_url: botConfig.zoho_cliq.incoming_webhook_url
+            incoming_webhook_url: botConfig.zoho_cliq.incoming_webhook_url,
+            bot_url: botConfig.zoho_cliq.bot_url
           }
         }
       });
@@ -1613,6 +1615,28 @@ export default function CompanyAdminProfile() {
                             className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
                           />
                         </div>
+                      </div>
+
+                      {/* Direct Bot Chat URL or Marketplace Link */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                          Direct Bot Chat URL / Invite Link (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={botConfig.zoho_cliq.bot_url || ''}
+                          onChange={(e) =>
+                            setBotConfig({
+                              ...botConfig,
+                              zoho_cliq: { ...botConfig.zoho_cliq, bot_url: e.target.value }
+                            })
+                          }
+                          placeholder="https://cliq.zoho.in/#chat:bot:hiringmanagerterm or Marketplace URL"
+                          className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                        />
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          If left blank, defaults to <code>https://cliq.zoho.in/#chat:bot:{'{bot_name}'}</code>.
+                        </p>
                       </div>
 
                       {/* Zoho Cliq Message Handler URL to configure in Zoho Developer Console */}

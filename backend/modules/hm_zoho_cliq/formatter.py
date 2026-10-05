@@ -4,6 +4,7 @@ Converts AI agent responses, candidate data, interview proposals, timesheets,
 and requisition briefings into Zoho Cliq compatible JSON schemas.
 """
 from typing import Dict, Any, List, Optional
+import re
 import urllib.parse
 
 
@@ -511,3 +512,102 @@ def format_cliq_stats(stats: Dict[str, Any], company_name: str = "TermJobs") -> 
         },
         "buttons": format_cliq_quick_menu()
     }
+
+
+def convert_markdown_tables_to_cards(text: str) -> str:
+    """Detect and convert Markdown pipe tables (| a | b |) into clean mobile-friendly emoji cards."""
+    if "|" not in text:
+        return text
+
+    lines = text.split("\n")
+    out = []
+    i = 0
+    num_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "🔟"]
+
+    header_emojis = {
+        "id": "🆔", "requisition id": "🆔", "candidate id": "🆔", "req id": "🆔",
+        "title": "💼", "role": "💼", "job": "💼", "position": "💼", "job title": "💼",
+        "department": "🏢", "dept": "🏢",
+        "location": "📍",
+        "salary": "💰", "salary range": "💰", "budget": "💰", "rate": "💰", "compensation": "💰",
+        "status": "📊",
+        "closed": "📅", "closed on": "📅", "date": "📅", "created": "📅", "created on": "📅", "deadline": "📅",
+        "skills": "🛠", "experience": "⏳", "experience level": "⏳",
+        "vendor": "🏷️", "type": "📄", "employment type": "📄"
+    }
+
+    while i < len(lines):
+        line = lines[i].strip()
+        # Check if line looks like table header and next line is separator
+        if line.startswith("|") and line.endswith("|") and i + 1 < len(lines) and re.match(r"^\|(\s*:?-+:?\s*\|)+$", lines[i+1].strip()):
+            headers = [h.strip() for h in line.strip("|").split("|")]
+            i += 2  # skip header and separator line
+            table_rows = []
+            while i < len(lines) and lines[i].strip().startswith("|") and lines[i].strip().endswith("|"):
+                row_cells = [c.strip() for c in lines[i].strip("|").split("|")]
+                table_rows.append(row_cells)
+                i += 1
+
+            # Format rows as clean card blocks
+            for idx, row in enumerate(table_rows):
+                row_dict = {}
+                for h_idx, h in enumerate(headers):
+                    val = row[h_idx] if h_idx < len(row) else ""
+                    row_dict[h.lower()] = val
+
+                row_num = num_emojis[idx] if idx < len(num_emojis) else f"{idx+1}."
+                main_val = row_dict.get("title") or row_dict.get("role") or row_dict.get("name") or row_dict.get("candidate") or ""
+                card_lines = []
+                if main_val:
+                    card_lines.append(f"{row_num} *{main_val}*")
+                else:
+                    card_lines.append(f"{row_num} *Item #{idx+1}*")
+
+                for h_idx, h in enumerate(headers):
+                    val = row[h_idx] if h_idx < len(row) else ""
+                    h_clean = h.strip()
+                    h_low = h_clean.lower()
+                    if h_low in ("#", "no", "no.", "title", "role", "name", "candidate") and main_val:
+                        continue
+                    if not val:
+                        continue
+                    # Shorten 36-char UUIDs to 8 chars
+                    uuid_match = re.search(r"([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}", val)
+                    if uuid_match:
+                        val = f"`{uuid_match.group(1)}`"
+                    val = val.strip("\"\"“”\x27")
+
+                    ico = header_emojis.get(h_low, "•")
+                    card_lines.append(f"  {ico} *{h_clean}:* {val}")
+
+                out.append("\n".join(card_lines) + "\n")
+        else:
+            out.append(lines[i])
+            i += 1
+    return "\n".join(out)
+
+
+def sanitize_cliq_markdown(text: str) -> str:
+    """Sanitize and enhance text formatting for Zoho Cliq."""
+    if not text:
+        return ""
+    # 1. Convert pipe tables to clean cards
+    text = convert_markdown_tables_to_cards(text)
+
+    # 2. Convert markdown headers `# Heading` -> `*Heading*`
+    text = re.sub(r'^(?:#{1,6})\s+(.+)$', r'*\1*', text, flags=re.MULTILINE)
+
+    # 3. Convert double asterisks **bold** to single *bold* (Zoho Cliq standard)
+    text = re.sub(r'\*\*([^*]+)\*\*', r'*\1*', text)
+
+    # 4. Shorten remaining long UUIDs
+    text = re.sub(
+        r'["“\']?([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}["”\']?',
+        r'`\1`',
+        text
+    )
+
+    # 5. Clean up redundant empty lines
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
