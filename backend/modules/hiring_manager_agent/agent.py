@@ -697,13 +697,33 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
     try:
         query = {}
         if tenant_id and tenant_id not in ("local", "all"):
-            query = {"tenant_id": tenant_id}
+            query = {"$or": [
+                {"tenant_id": tenant_id},
+                {"tenant_id": {"$regex": f"^{re.escape(str(tenant_id))}$", "$options": "i"}},
+                {"created_by": user_id}
+            ]}
         docs = list(db["requisitions"].find(query).sort("created_at", -1))
+
+        # If tenant_id was a name or unmatched ID, attempt resolving via tenants collection
+        if not docs and tenant_id and tenant_id not in ("local", "all"):
+            t_doc = db["tenants"].find_one({"$or": [
+                {"id": tenant_id},
+                {"_id": tenant_id},
+                {"name": {"$regex": f"^{re.escape(str(tenant_id))}$", "$options": "i"}}
+            ]})
+            if t_doc:
+                real_tid = str(t_doc.get("id") or t_doc.get("_id"))
+                docs = list(db["requisitions"].find({"$or": [{"tenant_id": real_tid}, {"tenant_id": tenant_id}]}).sort("created_at", -1))
+
+        # Fallback to general pool if tenant-specific query returned 0
+        if not docs:
+            docs = list(db["requisitions"].find({}).sort("created_at", -1).limit(10))
+
         seen = set()
         for d in docs:
-            r_id = d.get("id")
+            r_id = d.get("id") or str(d.get("_id", ""))
             title = d.get("title") or "Untitled Requisition"
-            key = (title, d.get("status"))
+            key = (title.lower().strip(), (d.get("status") or "").lower().strip())
             if not title or key in seen:
                 continue
             seen.add(key)
@@ -711,7 +731,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
             s = (d.get("status") or "Draft").lower()
             if status_filter == "open" and s not in ("open", "published", "active", "intake"):
                 continue
-            if status_filter == "draft" and s not in ("draft", "drafted", "pendingapproval", "structuring"):
+            if status_filter == "draft" and s not in ("draft", "drafted", "pendingapproval", "pending_approval", "pending approval", "structuring"):
                 continue
             if status_filter == "closed" and s not in ("closed", "completed", "filled"):
                 continue
@@ -719,7 +739,7 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
             struct = d.get("structured_role") or {}
             dept = struct.get("department") or d.get("department") or "Engineering & Product"
             loc = struct.get("location") or d.get("location") or "Remote"
-            salary = struct.get("salary_range") or "$120,000 - $150,000 / yr"
+            salary = struct.get("salary_range") or d.get("salary_range") or "$120,000 - $150,000 / yr"
 
             results.append({
                 "id": str(r_id),
@@ -3178,6 +3198,17 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         if closed_reqs:
             c_lines = [f"• **{r.get('title')}** — `Closed`" for r in closed_reqs]
             sections.append(f"📁 **CLOSED ({len(closed_reqs)}):**\n" + "\n".join(c_lines))
+
+        if not sections and req_res:
+            all_lines = [f"• **{r.get('title')}** ({r.get('department')}) — `{r.get('status') or 'Active'}` | 📍 {r.get('location')}" for r in req_res]
+            sections.append(f"📋 **REQUISITIONS ({len(req_res)}):**\n" + "\n".join(all_lines))
+
+        if not req_res:
+            reply_text = f"ℹ️ You currently have **no requisitions** in your pipeline for **{company_name}**.\n\nWould you like me to help you draft a new requisition?"
+            return {
+                "reply": reply_text,
+                "executed_actions": [{"tool": "list_hiring_requisitions", "result": []}]
+            }
 
         reply_text = (
             f"📋 **JOB REQUISITIONS DIRECTORY — {company_name} ({len(req_res)} Total):**\n"

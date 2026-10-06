@@ -1302,6 +1302,7 @@ export default function HiringManagerDashboard() {
       const response = await request('/api/hiring-manager/agent/chat', {
         method: 'POST',
         token,
+        timeout: 30000,
         body: {
           prompt: text,
           history: messages.slice(-10).map((m) => ({
@@ -1315,9 +1316,13 @@ export default function HiringManagerDashboard() {
             name: user.name,
             role: user.role,
             tenant_id: user.tenant_id,
+            tenant_name: user.tenant_name,
           } : null,
         },
-      }).catch(() => null);
+      }).catch((err) => {
+        console.warn('AI Agent chat API request warning:', err);
+        return null;
+      });
 
       let replyContent = response?.reply || response?.message || '';
       const executedActions = response?.executed_actions || [];
@@ -1360,14 +1365,15 @@ export default function HiringManagerDashboard() {
       }
 
       // If user requested candidates explicitly and backend didn't return cards, fallback to active candidate pool
-      if (
-        !candCards &&
-        (textLower.includes('candidate') ||
-          textLower.includes('suggest 5') ||
-          textLower.includes('shortlist') ||
-          textLower.includes('pool') ||
-          textLower.includes('applicant'))
-      ) {
+      const isCandQuery =
+        textLower.includes('candidate') ||
+        textLower.includes('candiates') ||
+        textLower.includes('suggest 5') ||
+        textLower.includes('shortlist') ||
+        textLower.includes('pool') ||
+        textLower.includes('applicant');
+
+      if (!candCards && isCandQuery) {
         const sources = [...shortlistedCandidates, ...allCandidates, ...acceptedCandidates].filter(Boolean);
         const seen = new Set();
         const fallbackPool = [];
@@ -1451,17 +1457,41 @@ export default function HiringManagerDashboard() {
       const listAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions');
       if (listAction && Array.isArray(listAction.result) && listAction.result.length > 0) {
         reqList = listAction.result;
-      } else if (
-        (textLower.includes('requisition') && (textLower.includes('list') || textLower.includes('show') || textLower.includes('active') || textLower.includes('all'))) ||
-        (textLower === 'show' && replyContent.toLowerCase().includes('requisition')) ||
-        replyContent.toLowerCase().includes('live requisition') ||
-        replyContent.toLowerCase().includes('total requisitions')
+      }
+
+      // Robust typo-tolerant check for requisitions query (e.g. "requsitions", "requisitions", "requsition", "reqs", "jobs", "roles")
+      const isReqQuery =
+        /(requsition|requisition|requstion|requision|recquisition|req|role|job|opening|position)s?/i.test(textLower) &&
+        /(show|list|all|view|display|what|get|see|active|open|draft|have|tell)/i.test(textLower);
+
+      if (
+        !reqList &&
+        (isReqQuery ||
+          replyContent.toLowerCase().includes('job requisitions directory') ||
+          replyContent.toLowerCase().includes('live requisition') ||
+          replyContent.toLowerCase().includes('total requisitions'))
       ) {
         reqList = requisitions.length > 0 ? requisitions : null;
       }
 
+      // If user specifically asked for requisitions and we have cards, ensure reply text is informative
+      if (isReqQuery && reqList && reqList.length > 0 && (!replyContent || replyContent.includes('0 Total') || replyContent.startsWith('I am here to help'))) {
+        replyContent = `Here are the ${reqList.length} requisitions currently in your active pipeline:`;
+      }
+
+      // If user asked for candidates and we have cards, ensure reply text is informative
+      if (isCandQuery && candCards && candCards.length > 0 && (!replyContent || replyContent.startsWith('I am here to help'))) {
+        replyContent = `Here are the ${candCards.length} candidates from your candidate pool:`;
+      }
+
       if (!replyContent) {
-        replyContent = `I am here to help you manage your requisitions, candidates, and hiring pipeline. Would you like me to draft a new requisition, review candidates from your pool, or schedule an interview?`;
+        if (reqList && reqList.length > 0) {
+          replyContent = `Here are your ${reqList.length} active requisitions:`;
+        } else if (candCards && candCards.length > 0) {
+          replyContent = `Here are the candidates from your candidate pool:`;
+        } else {
+          replyContent = `I am here to help you manage your requisitions, candidates, and hiring pipeline. Would you like me to draft a new requisition, review candidates from your pool, or schedule an interview?`;
+        }
       }
 
       const aiMsg = {
