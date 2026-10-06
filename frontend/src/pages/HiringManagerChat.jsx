@@ -287,6 +287,22 @@ export default function HiringManagerChat() {
       const replyContent = res?.reply || res?.message || 'Request executed successfully.';
       const executedActions = res?.executed_actions || [];
 
+      // Direct Open Requisition action from backend
+      const openReqAction = executedActions.find((a) => a.tool === 'open_hiring_requisition');
+      if (openReqAction && openReqAction.result && openReqAction.result.id) {
+        const targetReq = openReqAction.result;
+        const aiMsg = {
+          id: `ai-${Date.now()}`,
+          sender: 'assistant',
+          text: `Opening the **${targetReq.title || 'Job'}** requisition...`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        setMessages((prev) => [...prev, aiMsg]);
+        setIsLoading(false);
+        setTimeout(() => navigate(`/dashboard/requisitions/${targetReq.id}`), 250);
+        return;
+      }
+
       // Determine Widget to display on right panel based on action executed
       const statsAction = executedActions.find((a) => a.tool === 'get_hiring_manager_stats');
       const reqAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions');
