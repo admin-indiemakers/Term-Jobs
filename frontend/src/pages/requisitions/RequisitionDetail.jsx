@@ -42,6 +42,7 @@ const NORMALIZED = {
   Structuring: 'Structuring',
   PendingApproval: 'PendingApproval',
   Pending_Approval: 'PendingApproval',
+  'Pending Approval': 'PendingApproval',
   Published: 'Published',
   Closed: 'Closed',
 };
