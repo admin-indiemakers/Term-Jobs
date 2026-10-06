@@ -43,9 +43,10 @@ _GMAIL_SENDER  = os.getenv("GMAIL_SENDER_EMAIL", "")
 _GMAIL_APP_PW  = os.getenv("GMAIL_APP_PASSWORD", "")
 _FRONTEND_URL  = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 
-def _send_credentials_email(to_email: str, name: str, role: str, plain_password: str) -> None:
+def _send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:
     """Send a welcome / credential email to the newly created user."""
     if not _GMAIL_SENDER or not _GMAIL_APP_PW:
+        print(f"[TermJob] Email skipped — Gmail credentials not configured (to: {to_email})")
         return  # silently skip if not configured
 
     login_url = f"{_FRONTEND_URL}/login"
@@ -2201,6 +2202,138 @@ def update_portal_user(
             "name": target.name,
             "candidate_id": target.candidate_id,
         }
+    }
+
+
+@router.post("/portal-users/{user_id}/resend-credentials")
+def resend_portal_user_credentials(
+    user_id: str,
+    body: dict = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Regenerate or reset credentials and dispatch login welcome email to candidate."""
+    target = db.query(User).filter(User.id == user_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Candidate portal account not found")
+
+    import secrets
+    body = body or {}
+    plain_password = body.get("password") or f"TermJob@{secrets.randbelow(9000) + 1000}"
+    target.password_hash = hash_password(plain_password)
+    target.is_active = True
+    db.commit()
+    db.refresh(target)
+    _cache.invalidate_prefix("users:")
+
+    cid = target.candidate_id or getattr(target, 'workorder_id', '')
+    _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
+
+    send_credentials_email(
+        to_email=target.email,
+        name=target.name,
+        role="Candidate",
+        plain_password=plain_password,
+        candidate_id=cid,
+    )
+
+    return {
+        "ok": True,
+        "message": f"Candidate login credentials successfully dispatched to {target.email}",
+        "email": target.email,
+        "temporary_password": plain_password,
+        "candidate_id": cid,
+    }
+
+
+@router.post("/portal-users/resend-credentials")
+def resend_credentials_by_candidate(
+    body: dict,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Find candidate account by candidate_id, workorder_id, or email, set temporary password, and email credentials."""
+    candidate_id = (body.get("candidate_id") or body.get("workorder_id") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    cid_clean = candidate_id.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
+
+    variants = [candidate_id, cid_clean, f"SDC-{cid_clean}", f"BEAR-{cid_clean}"]
+    variants = [v for v in variants if v]
+
+    target = None
+    if variants:
+        target = db.query(User).filter(
+            User.role == "Candidate",
+            (User.candidate_id.in_(variants) | (User.workorder_id.in_(variants) if hasattr(User, "workorder_id") else False))
+        ).first()
+
+    if not target and email:
+        target = db.query(User).filter(User.email == email).first()
+
+    import secrets
+    plain_password = body.get("password") or f"TermJob@{secrets.randbelow(9000) + 1000}"
+
+    if not target:
+        # Create user if Mongo has candidate details
+        from modules.shared.db import db as mongo_db
+        c_doc = mongo_db["candidate_submissions"].find_one({
+            "$or": [
+                {"id": {"$in": variants}},
+                {"candidate_id": {"$in": variants}},
+                {"email": email} if email else {"id": "__none__"},
+            ]
+        }) or mongo_db["onboarding_checklists"].find_one({
+            "$or": [
+                {"candidate_id": {"$in": variants}},
+                {"workorder_id": {"$in": variants}},
+                {"candidate_email": email} if email else {"candidate_id": "__none__"},
+            ]
+        })
+        if not c_doc:
+            raise HTTPException(status_code=404, detail="Candidate record not found")
+
+        cand_name = c_doc.get("candidate_name") or c_doc.get("name") or "Candidate"
+        cand_email = (c_doc.get("candidate_email") or c_doc.get("email") or email or "").strip().lower()
+        if not cand_email:
+            raise HTTPException(status_code=400, detail="Candidate email is missing on file")
+
+        target = User(
+            tenant_id=current_user.tenant_id,
+            email=cand_email,
+            name=cand_name,
+            password_hash=hash_password(plain_password),
+            role="Candidate",
+            candidate_id=candidate_id or c_doc.get("candidate_id") or cid_clean,
+            workorder_id=candidate_id or c_doc.get("workorder_id") or cid_clean,
+            created_by=current_user.id,
+            is_active=True,
+        )
+        db.add(target)
+        db.commit()
+        db.refresh(target)
+    else:
+        target.password_hash = hash_password(plain_password)
+        target.is_active = True
+        db.commit()
+        db.refresh(target)
+
+    cid = target.candidate_id or candidate_id
+    _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
+
+    send_credentials_email(
+        to_email=target.email,
+        name=target.name,
+        role="Candidate",
+        plain_password=plain_password,
+        candidate_id=cid,
+    )
+
+    return {
+        "ok": True,
+        "message": f"Candidate login credentials successfully dispatched to {target.email}",
+        "email": target.email,
+        "temporary_password": plain_password,
+        "candidate_id": cid,
     }
 
 

@@ -607,6 +607,107 @@ def activate_work_order(candidate_id: str, authorization: str | None = Header(No
     }
 
 
+@router.post("/{candidate_id}/send-credentials")
+def send_candidate_credentials(candidate_id: str, body: dict = None, authorization: str | None = Header(None)):
+    """Dispatch or resend candidate portal login credentials via email."""
+    user = _get_current_user(authorization)
+    if user and user.get("role") and user["role"] not in ("Hiring Manager", "Admin", "Super Admin", "HR", "Recruiter"):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    body = body or {}
+    cid = (candidate_id or "").strip()
+    cid_clean = cid.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("BEAR -", "").strip()
+
+    doc = _get_or_create_onboarding_doc(candidate_id)
+    cand_email = (body.get("email") or doc.get("candidate_email") or "").strip().lower()
+    cand_name = (body.get("name") or doc.get("candidate_name") or "Candidate").strip()
+
+    if not cand_email:
+        # Check candidate_submissions or work_orders
+        sub = db["candidate_submissions"].find_one({"$or": [{"id": cid}, {"candidate_id": cid}, {"id": cid_clean}]})
+        if sub and sub.get("email"):
+            cand_email = sub["email"].strip().lower()
+            if not cand_name or cand_name == "Candidate":
+                cand_name = sub.get("name") or cand_name
+        wo = db["work_orders"].find_one({"$or": [{"candidate_id": cid}, {"workorder_id": cid}, {"candidate_id": cid_clean}]})
+        if wo and wo.get("candidate_email"):
+            cand_email = cand_email or wo["candidate_email"].strip().lower()
+
+    if not cand_email:
+        raise HTTPException(status_code=400, detail="Candidate email is required to send credentials")
+
+    import secrets
+    plain_password = body.get("password") or f"TermJob@{secrets.randbelow(9000) + 1000}"
+
+    from modules.identity.services.auth_service import hash_password
+    from modules.identity.router import send_credentials_email, _sync_candidate_credentials_to_mongo
+
+    variants = [cid, cid_clean, f"SDC-{cid_clean}", f"BEAR-{cid_clean}"]
+    variants = [v for v in variants if v]
+
+    with get_session() as s:
+        db_user = s.query(User).filter(
+            User.role == "Candidate",
+            (User.candidate_id.in_(variants) | (User.workorder_id.in_(variants) if hasattr(User, "workorder_id") else False))
+        ).first()
+
+        if not db_user:
+            db_user = s.query(User).filter(User.email == cand_email).first()
+
+        if db_user:
+            db_user.password_hash = hash_password(plain_password)
+            db_user.is_active = True
+            db_user.name = cand_name
+            db_user.email = cand_email
+            s.commit()
+            s.refresh(db_user)
+        else:
+            db_user = User(
+                tenant_id=user.get("tenant_id") if user else None,
+                email=cand_email,
+                name=cand_name,
+                password_hash=hash_password(plain_password),
+                role="Candidate",
+                candidate_id=cid,
+                workorder_id=cid,
+                is_active=True,
+            )
+            s.add(db_user)
+            s.commit()
+            s.refresh(db_user)
+
+    # Sync to Mongo users and onboarding_checklists
+    _sync_candidate_credentials_to_mongo(cid, cand_email, cand_name)
+    from datetime import datetime, timezone
+    now_iso = datetime.now(timezone.utc).isoformat()
+    if doc and "_id" in doc:
+        _coll().update_one(
+            {"_id": doc["_id"]},
+            {"$set": {
+                "credentials_sent_at": now_iso,
+                "candidate_email": cand_email,
+                "candidate_name": cand_name,
+                "has_credentials": True,
+            }}
+        )
+
+    send_credentials_email(
+        to_email=cand_email,
+        name=cand_name,
+        role="Candidate",
+        plain_password=plain_password,
+        candidate_id=cid,
+    )
+
+    return {
+        "status": "success",
+        "message": f"Login credentials successfully dispatched to {cand_email}",
+        "email": cand_email,
+        "name": cand_name,
+        "temporary_password": plain_password,
+    }
+
+
 @router.post("/{candidate_id}/clear-gate")
 def clear_activation_gate(candidate_id: str, body: dict, authorization: str | None = Header(None)):
     """Clear a single activation gate for a candidate."""

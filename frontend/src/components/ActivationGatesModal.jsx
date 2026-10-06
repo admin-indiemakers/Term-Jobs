@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { request } from '../api/client';
-import { Shield, Check, Lock, CheckCircle2, RefreshCw, X, AlertTriangle, Sparkles } from 'lucide-react';
+import { Shield, Check, Lock, CheckCircle2, RefreshCw, X, AlertTriangle, Sparkles, Mail, Key } from 'lucide-react';
 
 export default function ActivationGatesModal({ candidate, token, onClose, onSuccess }) {
   const candidateId = candidate.candidate_id || candidate.id;
@@ -9,10 +9,12 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [credsSuccess, setCredsSuccess] = useState('');
   const [onboardingData, setOnboardingData] = useState(null);
   const [gates, setGates] = useState([]);
   const [clearingGateId, setClearingGateId] = useState(null);
   const [activating, setActivating] = useState(false);
+  const [sendingCreds, setSendingCreds] = useState(false);
 
   // Fetch onboarding details & activation gates
   const loadGates = async () => {
@@ -119,6 +121,30 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
     }
   };
 
+  // Send / Resend Login Credentials to Candidate
+  const handleSendCredentials = async () => {
+    setSendingCreds(true);
+    setError('');
+    setCredsSuccess('');
+    try {
+      const res = await request(`/api/onboarding/${encodeURIComponent(candidateId)}/send-credentials`, {
+        method: 'POST',
+        token,
+        body: {
+          email: onboardingData?.candidate_email || candidate?.candidate_email || candidate?.email,
+          name: candidateName,
+        },
+      });
+      setCredsSuccess(`Credentials successfully sent to ${res.email || candidateName} via Gmail SMTP.`);
+      await loadGates();
+    } catch (err) {
+      console.error('Failed to send credentials:', err);
+      setError(err.message || 'Failed to dispatch credentials email.');
+    } finally {
+      setSendingCreds(false);
+    }
+  };
+
   // Derived metrics
   const blockingGates = gates.filter((g) => g.type === 'blocking');
   const blockingUncleared = blockingGates.filter((g) => g.status !== 'cleared');
@@ -179,6 +205,13 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
             <div className="p-3.5 bg-[#fef2f2] border border-[#fecaca] rounded-xl text-[0.85rem] text-[#991b1b] font-medium flex items-center gap-2">
               <AlertTriangle size={16} />
               <span>{error}</span>
+            </div>
+          )}
+
+          {credsSuccess && (
+            <div className="p-3.5 bg-[#f0fdf4] border border-[#bbf7d0] rounded-xl text-[0.85rem] text-[#166534] font-medium flex items-center gap-2">
+              <CheckCircle2 size={16} className="text-[#16a34a]" />
+              <span>{credsSuccess}</span>
             </div>
           )}
 
@@ -301,12 +334,34 @@ export default function ActivationGatesModal({ candidate, token, onClose, onSucc
             )}
           </div>
 
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-[0.82rem] font-medium text-[#70706b] hover:text-[#1a1a1a] transition"
-          >
-            Cancel
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSendCredentials}
+              disabled={sendingCreds}
+              className="px-4 py-2 text-[0.82rem] font-bold border border-[#e2e2dc] hover:bg-[#f7f7f5] text-[#1a1a1a] rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-2xs disabled:opacity-50"
+              title="Dispatch or resend candidate login credentials via email"
+            >
+              {sendingCreds ? (
+                <>
+                  <RefreshCw size={13} className="animate-spin text-[#6b7280]" />
+                  <span>Sending credentials...</span>
+                </>
+              ) : (
+                <>
+                  <Mail size={14} className="text-[#4f46e5]" />
+                  <span>{onboardingData?.credentials_sent_at ? 'Resend Credentials' : 'Send Credentials Email'}</span>
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-[0.82rem] font-medium text-[#70706b] hover:text-[#1a1a1a] transition cursor-pointer"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       </div>
     </div>
