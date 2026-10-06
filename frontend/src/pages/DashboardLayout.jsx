@@ -403,8 +403,7 @@ export default function DashboardLayout() {
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
   const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
-  const isAdminChat = location.pathname === '/dashboard/admin/chat' || location.pathname.endsWith('/admin/chat');
-  const isAiChatPage = isSuperAdminChat || isHiringManagerChat || isAdminChat;
+  const isAiChatPage = isSuperAdminChat || isHiringManagerChat;
 
   // ==========================================
   // COMPANY ADMIN DEDICATED LAYOUT (TOP BAR + FULL CANVAS)
@@ -413,7 +412,6 @@ export default function DashboardLayout() {
     const companyName = user?.tenant_name || 'TCS';
     const adminNavLinks = [
       { to: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
-      { to: '/dashboard/admin/chat', label: 'AI Chat', icon: Sparkles, end: true },
       { to: '/dashboard/admin/hiring-managers', label: 'Hiring', icon: Users, end: false },
       { to: '/dashboard/admin/directors', label: 'Directors', icon: UserCheck, end: false },
       { to: '/dashboard/admin/procurement', label: 'Procurement', icon: Building2, end: false },
