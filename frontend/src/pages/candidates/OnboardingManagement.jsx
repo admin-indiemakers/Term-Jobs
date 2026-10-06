@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
   Flag, Check, ArrowRight, AlertCircle, Laptop, BookOpen, CheckCircle2, RefreshCw,
-  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X, LogOut, Clock
+  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X, LogOut, Clock, Mail, Key
 } from 'lucide-react';
 import ActivationGatesModal from '../../components/ActivationGatesModal';
 
@@ -36,6 +36,7 @@ export default function OnboardingManagement() {
   const [error, setError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
   const [creatingWO, setCreatingWO] = useState('');
+  const [sendingCredsId, setSendingCredsId] = useState(null);
 
   // Setup Modal State
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -295,6 +296,32 @@ export default function OnboardingManagement() {
       setError(err.message || 'Failed to save onboarding checklist.');
     } finally {
       setSavingSetup(false);
+    }
+  };
+
+  // Dispatch or Resend Candidate Login Credentials
+  const handleSendCredentials = async (cand) => {
+    const id = cand.candidate_id || cand.id;
+    const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
+    setSendingCredsId(id);
+    setError('');
+    setSuccessInfo('');
+    try {
+      const res = await request(`/api/onboarding/${encodeURIComponent(id)}/send-credentials`, {
+        method: 'POST',
+        token,
+        body: {
+          email: cand.candidate_email || cand.email,
+          name: candName,
+        },
+      });
+      setSuccessInfo(`Login credentials successfully emailed to ${candName} (${res.email || cand.email || 'candidate email'}).`);
+      await loadData();
+    } catch (err) {
+      console.error('Failed to dispatch candidate credentials:', err);
+      setError(err.message || 'Failed to dispatch credentials email.');
+    } finally {
+      setSendingCredsId(null);
     }
   };
 
@@ -852,6 +879,30 @@ export default function OnboardingManagement() {
                             <ArrowRight size={12} />
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleSendCredentials(cand)}
+                          disabled={sendingCredsId === id}
+                          style={{
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: 10,
+                            border: '1px solid #E2E2DC',
+                          }}
+                          className="px-2.5 py-1 text-[11.5px] font-bold text-[#4338CA] hover:bg-[#EEF2FF] hover:border-[#C7D2FE] transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5 disabled:opacity-50"
+                          title="Dispatch or resend portal login credentials to candidate via email"
+                        >
+                          {sendingCredsId === id ? (
+                            <>
+                              <RefreshCw size={11} className="animate-spin text-[#6366F1]" />
+                              <span>Sending...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Mail size={11} className="text-[#6366F1]" />
+                              <span>{obDoc?.credentials_sent_at ? 'Resend Creds' : 'Send Creds'}</span>
+                            </>
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleOpenOffboarding(cand)}
