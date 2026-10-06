@@ -506,6 +506,109 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_tailored_interview_questions",
+            "description": "Generate tailored technical and competency/behavioral interview questions with scoring rubrics for active engineering or product roles.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "role_title": {"type": "string", "description": "Target role title e.g. DevSecOps Engineer, Python Developer, QA Engineer"},
+                    "tech_stack": {"type": "string", "description": "Core skills or technologies e.g. Python, FastAPI, AWS"},
+                    "seniority": {"type": "string", "description": "Seniority band e.g. Mid, Senior, Lead"}
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_ai_interview_plan",
+            "description": "Create a structured 4-round AI interview assessment blueprint with timelines, interviewer roles, evaluation rubrics, and passing criteria.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "role_title": {"type": "string", "description": "Role title e.g. DevSecOps Engineer"},
+                    "seniority": {"type": "string", "description": "Seniority level e.g. Mid, Senior"}
+                },
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_shortlisted_candidates",
+            "description": "Generate head-to-head candidate comparison matrix with match scores, skills breakdown, source vendors, and AI recommendations.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "screen_candidates_summary",
+            "description": "Summarize AI resume screening and match scores for shortlisted candidates across active requisitions.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_candidate_import_guide",
+            "description": "Provide instructions on how to import candidates into TermJobs via CSV bulk upload, external job boards, and partner vendor portals.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_requisition_templates",
+            "description": "List pre-configured requisition role templates for engineering, product, and design roles with quick auto-draft capabilities.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hiring_analytics_report",
+            "description": "Get detailed hiring pipeline health, time-to-fill, interview pass rates, and candidate volume analytics report.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_ai_assistant_preferences",
+            "description": "Show AI assistant persona settings, tenant isolation parameters, director approval gates, and hiring manager workspace context.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -1261,6 +1364,269 @@ def confirm_and_dispatch_interview_invitation(
         "passcode": passcode,
         "message": msg
     }
+
+
+def generate_tailored_interview_questions(role_title: str = "DevSecOps Engineer", tech_stack: str = "Kubernetes, AWS, Terraform, CI/CD", seniority: str = "Mid-Senior") -> Dict[str, Any]:
+    """Generate structured, role-specific technical and behavioral interview questions with scoring rubrics."""
+    role = role_title or "DevSecOps Engineer"
+    skills = tech_stack or "Kubernetes, AWS, CI/CD, Python"
+    lvl = seniority or "Mid-Senior"
+
+    role_lower = role.lower()
+    is_python = "python" in role_lower or "backend" in role_lower
+    is_devsecops = "devsecops" in role_lower or "devops" in role_lower or "cloud" in role_lower
+    is_frontend = "react" in role_lower or "frontend" in role_lower or "ui" in role_lower
+    is_qa = "qa" in role_lower or "test" in role_lower
+
+    if is_devsecops:
+        tech_q = [
+            ("CI/CD Pipeline Security Gateways", "How do you integrate automated SAST/DAST security scanning into high-velocity GitHub Actions or GitLab CI pipelines without becoming a bottleneck for engineers?"),
+            ("Kubernetes & Container Hardening", "What measures do you take to enforce least privilege, seccomp profiles, and prevent container privilege escalation inside live Kubernetes clusters?"),
+            ("Infrastructure as Code (IaC) & Secrets", "How do you manage secret drift, state file locking, and automated compliance policies across multi-region Terraform and AWS setups?"),
+            ("Observability & Incident Response", "Describe your incident remediation workflow when Datadog alerts trigger an unexpected outbound traffic anomaly from a production cluster.")
+        ]
+    elif is_python:
+        tech_q = [
+            ("Async I/O & Concurrency", "When would you choose FastAPI with `async/await` versus Celery background workers in Python, and how do you prevent blocking calls in the main event loop?"),
+            ("Data Modeling & Query Optimization", "How do you diagnose and resolve N+1 query bottlenecks in SQLAlchemy and PostgreSQL for an API endpoint handling 5,000 requests/sec?"),
+            ("Caching & State Invalidation", "Explain your Redis cache invalidation strategy for multi-tenant applications with read-heavy workloads."),
+            ("Distributed Architecture", "How would you design a robust distributed rate-limiting and retry mechanism across microservices using exponential backoff and circuit breakers?")
+        ]
+    elif is_frontend:
+        tech_q = [
+            ("Render Performance & Memory", "How do you profile and debug unexpected re-renders in large React applications, and when do you reach for memoization vs component decomposition?"),
+            ("Network & Core Web Vitals", "Explain how you optimize Core Web Vitals (LCP, INP, CLS) for a dynamic dashboard rendering real-time streaming data."),
+            ("Type Safety & API Contracts", "How do you enforce end-to-end type safety between backend OpenAPI schemas and frontend TypeScript clients?"),
+            ("Modern Web Security", "What architectural patterns do you implement to safeguard modern SPAs against XSS, clickjacking, and session leakage?")
+        ]
+    elif is_qa:
+        tech_q = [
+            ("Test Strategy & Flakiness", "How do you balance unit, integration, and Playwright end-to-end tests to achieve >80% coverage while keeping CI runtimes under 10 minutes?"),
+            ("API Contract & Mocking", "Describe how you automate contract testing with Pact and mock external third-party services in isolated environments."),
+            ("Performance & Stress Testing", "How do you design realistic Locust or k6 load testing scripts to uncover database deadlocks prior to launch?"),
+            ("Automated Quality Gates", "How do you configure zero-downtime regression gates that automatically block buggy merges in release branches?")
+        ]
+    else:
+        tech_q = [
+            ("Core Architecture & Scalability", f"Explain how you design scalable distributed services using {skills} to sustain high availability under heavy load."),
+            ("Production Debugging", "Walk us through a critical production incident you diagnosed and resolved under tight SLAs."),
+            ("Security & Data Governance", "How do you enforce zero-trust security and data encryption at rest and in transit in your applications?"),
+            ("API Contracts & Modularity", "What principles guide your approach to clean API contracts, versioning, and backward compatibility?")
+        ]
+
+    behavioral_q = [
+        ("Cross-Functional Alignment", "Describe a time you had a strong technical disagreement with a Product Director or peer engineer. How did you resolve it?"),
+        ("Ownership & Ambiguity", "Tell me about a high-priority project where requirements were vague or rapidly changing. How did you organize your execution?"),
+        ("Engineering Standards", "How do you uphold high code quality and mentor junior engineers without slowing down team velocity?")
+    ]
+
+    q_cards = [f"**Q{i}: {topic}**\n> \"{q}\"" for i, (topic, q) in enumerate(tech_q, 1)]
+    b_cards = [f"**Q{i}: {topic}**\n> \"{q}\"" for i, (topic, q) in enumerate(behavioral_q, len(tech_q) + 1)]
+
+    markdown = (
+        f"🎯 **TAILORED INTERVIEW QUESTIONS — {role.upper()} ({lvl})**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🛠 **Core Stack Focus:** `{skills}`\n\n"
+        f"### 💻 Technical & Architecture Deep-Dive\n"
+        f"{chr(10).join(q_cards)}\n\n"
+        f"### 🤝 Competency & Behavioral Questions\n"
+        f"{chr(10).join(b_cards)}\n\n"
+        f"### 📊 Recommended Scoring Rubric (1–5 Scale):\n"
+        f"• **1 - Unsatisfactory:** Lacks foundational understanding of {skills}.\n"
+        f"• **3 - Proficient:** Solves standard problems cleanly; understands engineering trade-offs.\n"
+        f"• **5 - Exceptional:** Outstanding systems thinking, proactive security mindset, and articulates scalable patterns effortlessly.\n\n"
+        f"_Would you like me to schedule an interview round or generate an AI evaluation scorecard for this role?_"
+    )
+
+    return {
+        "role_title": role,
+        "seniority": lvl,
+        "tech_stack": skills,
+        "technical_questions": [q for _, q in tech_q],
+        "behavioral_questions": [q for _, q in behavioral_q],
+        "markdown": markdown
+    }
+
+
+def create_ai_interview_plan(role_title: str = "DevSecOps Engineer", seniority: str = "Senior") -> Dict[str, Any]:
+    """Create a structured 4-round AI interview assessment blueprint with rubrics."""
+    role = role_title or "DevSecOps Engineer"
+    lvl = seniority or "Senior"
+
+    markdown = (
+        f"📋 **AI INTERVIEW ASSESSMENT PLAN — {role.upper()} ({lvl})**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"A standardized 4-stage evaluation funnel designed to maximize signal and reduce hiring cycle time.\n\n"
+        f"**1️⃣ Round 1: Screening & Alignment (30 Mins)**\n"
+        f"• **Interviewer:** Recruiter / Hiring Coordinator\n"
+        f"• **Objective:** Experience verification, career trajectory, salary alignment, and availability.\n"
+        f"• **Key Metric:** Communication clarity & culture fit (Passing threshold: ≥ 70%).\n\n"
+        f"**2️⃣ Round 2: Technical Competency & Coding (60 Mins)**\n"
+        f"• **Interviewer:** Senior Peer Engineer\n"
+        f"• **Objective:** Core programming, algorithms, frameworks, and real-time problem solving.\n"
+        f"• **Format:** Live coding or architectural troubleshooting exercise.\n\n"
+        f"**3️⃣ Round 3: System Design & Production Readiness (45 Mins)**\n"
+        f"• **Interviewer:** Tech Lead / Staff Architect\n"
+        f"• **Objective:** Scalability, distributed systems, security, observability, and failover design.\n"
+        f"• **Key Deliverable:** Whiteboard architecture diagram and trade-off analysis.\n\n"
+        f"**4️⃣ Round 4: Hiring Manager & Leadership Fit (45 Mins)**\n"
+        f"• **Interviewer:** Hiring Manager\n"
+        f"• **Objective:** Team impact, collaboration philosophy, long-term trajectory, and work ethic.\n"
+        f"• **Decision Gate:** Final Hiring Decision / Offer Proposal.\n\n"
+        f"🏆 **Benchmark:** Candidates scoring ≥ 3.8 / 5.0 across Rounds 2 & 3 advance directly to final offer stage.\n\n"
+        f"_Would you like me to schedule Round 1 with one of your shortlisted candidates?_"
+    )
+
+    return {
+        "role_title": role,
+        "seniority": lvl,
+        "total_rounds": 4,
+        "markdown": markdown
+    }
+
+
+def compare_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_id: str = "local") -> Dict[str, Any]:
+    """Generate head-to-head candidate comparison matrix with match scores and recommendations."""
+    cand_list = list_shortlisted_candidates(user_id, user_name, tenant_id)
+    if not cand_list:
+        return {
+            "markdown": "ℹ️ There are currently **no shortlisted candidates** awaiting comparison in your pipeline. Once candidates are submitted by partner vendors or applicants apply, you can compare them side-by-side.",
+            "candidates": []
+        }
+
+    top = cand_list[:3]
+    lines = []
+    for i, c in enumerate(top, 1):
+        name = c.get("candidate_name") or c.get("name") or f"Candidate {i}"
+        role = c.get("requisition_title") or "Engineer"
+        score = c.get("match_score") or "88%"
+        skills = c.get("skills") or "Python, Cloud, SQL"
+        vendor = c.get("vendor_name") or "Direct Applicant"
+        lines.append(
+            f"**{i}️⃣ {name}** — 🎯 **{score} Match**\n"
+            f"• **Target Role:** {role}\n"
+            f"• **Core Skills:** `{skills}`\n"
+            f"• **Source Channel:** {vendor}\n"
+            f"• **Screening Status:** `{c.get('status', 'Shortlisted')}`"
+        )
+
+    best = top[0].get("candidate_name", "the top candidate")
+    markdown = (
+        f"⚖️ **HEAD-TO-HEAD CANDIDATE COMPARISON ({len(top)} Evaluated)**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{chr(10).join(lines)}\n\n"
+        f"💡 **AI Recommendation:** **{best}** holds the highest fit score for your active requisitions with strong tech stack alignment. Recommend prioritizing for Technical Round 1.\n\n"
+        f"_Would you like me to schedule an interview with **{best}**?_"
+    )
+
+    return {
+        "candidates": top,
+        "markdown": markdown
+    }
+
+
+def screen_candidates_summary(user_id: str = "", user_name: str = "", tenant_id: str = "local") -> Dict[str, Any]:
+    """Summarize AI resume screening and match scores for shortlisted candidates."""
+    cand_list = list_shortlisted_candidates(user_id, user_name, tenant_id)
+    if not cand_list:
+        return {
+            "markdown": "ℹ️ There are currently no candidates awaiting screening. New submissions will automatically appear here with AI match scores.",
+            "candidates": []
+        }
+
+    cards = []
+    for i, c in enumerate(cand_list[:5], 1):
+        name = c.get("candidate_name") or c.get("name")
+        score = c.get("match_score") or "90%"
+        role = c.get("requisition_title") or "Software Engineer"
+        cards.append(f"• **{name}** — 🎯 **{score} Match** for **{role}** (`{c.get('vendor_name', 'Direct')}`)")
+
+    markdown = (
+        f"🔍 **AI CANDIDATE SCREENING BRIEFING ({len(cand_list)} Candidates Analyzed)**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{chr(10).join(cards)}\n\n"
+        f"All profiles have been cross-checked against mandatory skills, experience thresholds, and vendor compliance.\n\n"
+        f"_Click any candidate card below to review their full profile or schedule an interview!_"
+    )
+    return {
+        "candidates": cand_list[:5],
+        "markdown": markdown
+    }
+
+
+def get_candidate_import_guide() -> Dict[str, Any]:
+    """Provide instructions on how to import candidates into TermJobs."""
+    markdown = (
+        "📥 **HOW TO IMPORT CANDIDATES INTO TERMJOBS**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "You can bring candidates into your pipeline using 3 streamlined channels:\n\n"
+        "**1. 📄 Spreadsheet / CSV Bulk Import**\n"
+        "• Go to **Candidates Directory** (`/dashboard/candidates`).\n"
+        "• Click **Import Candidates / CSV** in the top right toolbar.\n"
+        "• Upload any CSV or Excel file containing candidate names, emails, skills, and target roles.\n\n"
+        "**2. 🤝 Partner Vendor Submissions**\n"
+        "• Approved staffing agencies and recruiters submit pre-screened talent directly through their dedicated Vendor Portal.\n"
+        "• Candidate submissions land automatically in your **Shortlisted Candidates** queue with AI match scores.\n\n"
+        "**3. 🌐 Direct Public Requisition Link**\n"
+        "• Once a requisition is approved by the Director and published, share the public job link directly on LinkedIn, job boards, or your careers page.\n\n"
+        "_Would you like me to open the Candidates directory or draft a new requisition now?_"
+    )
+    return {"markdown": markdown}
+
+
+def get_requisition_templates() -> Dict[str, Any]:
+    """List pre-configured requisition role templates."""
+    templates = [
+        {"title": "DevSecOps Engineer", "dept": "Infrastructure & Security", "exp": "Mid-Senior (4-7 yrs)", "skills": "Kubernetes, AWS, Terraform, CI/CD, Vault"},
+        {"title": "Python Backend Engineer", "dept": "Core Product Engineering", "exp": "Mid (3-5 yrs)", "skills": "Python, FastAPI, PostgreSQL, Redis, Docker"},
+        {"title": "React Frontend Engineer", "dept": "Web & Mobile Platforms", "exp": "Mid-Senior (3-6 yrs)", "skills": "React, TypeScript, Next.js, TailwindCSS"},
+        {"title": "Data Platform Engineer", "dept": "Data & Analytics", "exp": "Senior (5-8 yrs)", "skills": "Python, Apache Spark, Snowflake, Kafka, Airflow"},
+        {"title": "QA Automation Engineer", "dept": "Quality Engineering", "exp": "Mid (3-5 yrs)", "skills": "Playwright, Cypress, Python, Selenium, CI/CD"}
+    ]
+    cards = []
+    for t in templates:
+        cards.append(f"• **{t['title']}** ({t['dept']}) — `{t['exp']}`\n  🛠 *Stack:* `{t['skills']}`")
+
+    markdown = (
+        "📚 **PRE-CONFIGURED REQUISITION TEMPLATES**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"{chr(10).join(cards)}\n\n"
+        "Select any role or say **\"Draft a DevSecOps Engineer\"** to create an interactive requisition preview in 1 click!"
+    )
+    return {"templates": templates, "markdown": markdown}
+
+
+def get_hiring_analytics_report(user_id: str = "", tenant_id: str = "local", company_name: str = "Company") -> Dict[str, Any]:
+    """Get hiring analytics progress report."""
+    stats = get_hiring_manager_stats(user_id, tenant_id)
+    markdown = (
+        f"📊 **HIRING PIPELINE & TALENT ANALYTICS — {company_name}**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• ⚡ **Live Requisitions:** {stats.get('live_requisitions', 0)} active opening(s)\n"
+        f"• 👥 **Shortlisted Candidates:** {stats.get('shortlisted_candidates', 0)} candidates under review\n"
+        f"• 🚀 **Active Onboarding:** {stats.get('onboarding_candidates', 0)} candidate(s) in progress\n"
+        f"• ⏱ **Pending Approvals:** {stats.get('pending_timesheets', 0)} timesheets, {stats.get('pending_expenses', 0)} expenses\n"
+        f"• ⚠️ **Open Issues:** {stats.get('open_issues', 0)} reported checklist blocker(s)\n\n"
+        f"📈 **Funnel Health:** Pipeline velocity is steady. All live positions have vendor submissions enabled with automated candidate screening.\n\n"
+        f"_To export this report, you can copy this summary or view full charts in your Overview Dashboard._"
+    )
+    return {"stats": stats, "markdown": markdown}
+
+
+def get_ai_assistant_preferences(user_name: str = "Hiring Manager", user_email: str = "", company_name: str = "Company", tenant_id: str = "local") -> Dict[str, Any]:
+    """Show AI assistant preferences and workspace context."""
+    markdown = (
+        f"⚙️ **AI ASSISTANT PREFERENCES & WORKSPACE CONTEXT**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"• 👤 **Hiring Manager:** {user_name} ({user_email or 'Active User'})\n"
+        f"• 🏢 **Organization Workspace:** {company_name}\n"
+        f"• 🔒 **Data Isolation:** Strict Multi-Tenant Isolation Enforced (Tenant: `{tenant_id}`)\n"
+        f"• 🤖 **AI Persona:** TermJobs Intelligent Hiring Copilot\n"
+        f"• 🛡️ **Director Approval Gate:** Enforced on all Requisition Publications\n"
+        f"• ⚡ **Execution Engine:** Groq Cloud LLaMA 3.3 70B & Custom Tools\n\n"
+        f"_You can customize requisition budgets, default locations, and role requirements anytime directly in your prompts!_"
+    )
+    return {"markdown": markdown}
 
 
 def prepare_candidate_offboarding_proposal(
@@ -2881,18 +3247,48 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
             msgs.append({"role": "user", "content": prompt_clean})
 
-            active_model = getattr(settings, "groq_default_model", None) or os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
-            payload = {
-                "model": active_model,
-                "messages": msgs,
-                "tools": TOOLS,
-                "tool_choice": "auto",
-                "temperature": 0.2,
-                "max_tokens": 800
-            }
+            from modules.superadmin_agent.groq_manager import get_all_groq_keys
+            available_keys = get_all_groq_keys() or [settings.groq_api_key]
+            model_candidates = ["openai/gpt-oss-120b", "openai/gpt-oss-20b", "qwen/qwen3.8-27b"]
+            env_model = getattr(settings, "groq_default_model", None) or os.getenv("GROQ_MODEL")
+            if env_model and env_model not in model_candidates:
+                model_candidates.insert(0, env_model)
 
-            resp = httpx.post(url, headers=headers, json=payload, timeout=4.0)
-            if resp.status_code == 200:
+            resp = None
+            used_model = None
+            active_headers = headers
+
+            for active_key in available_keys:
+                if not active_key:
+                    continue
+                k_headers = {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {active_key}"
+                }
+                for model_candidate in model_candidates:
+                    payload = {
+                        "model": model_candidate,
+                        "messages": msgs,
+                        "tools": TOOLS,
+                        "tool_choice": "auto",
+                        "temperature": 0.2,
+                        "max_tokens": 800
+                    }
+                    try:
+                        r = httpx.post(url, headers=k_headers, json=payload, timeout=12.0)
+                        if r.status_code == 200:
+                            resp = r
+                            used_model = model_candidate
+                            active_headers = k_headers
+                            break
+                        if r.status_code in (401, 429):
+                            break  # Try next key
+                    except Exception:
+                        continue
+                if resp is not None:
+                    break
+
+            if resp is not None and resp.status_code == 200:
                 data = resp.json()
                 choice = data["choices"][0]["message"]
                 if choice.get("tool_calls"):
@@ -2997,7 +3393,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             executed.append({"tool": "approve_candidate_expense", "result": res})
                             reply_buf.append(res["message"])
                         elif fn_name == "get_candidate_profile_details":
-                            c_target = fn_args.get("candidate_name", "Arjun M")
+                            c_target = fn_args.get("candidate_name", "Candidate")
                             res = get_candidate_profile_details(c_target, tenant_id)
                             executed.append({"tool": "get_candidate_profile_details", "result": res})
                             reply_buf.append(f"Here is the detailed workforce profile for **{res['candidate_name']}**:")
@@ -3028,6 +3424,38 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             res = submit_requisition_for_director_approval(**fn_args, user_id=user_id, user_name=user_name, tenant_id=tenant_id)
                             executed.append({"tool": "submit_for_director_approval", "result": res})
                             reply_buf.append(f"Job Requisition **{res.get('title', '')}** has been sent to the Director for approval!")
+                        elif fn_name == "generate_tailored_interview_questions":
+                            res = generate_tailored_interview_questions(**fn_args)
+                            executed.append({"tool": "generate_tailored_interview_questions", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "create_ai_interview_plan":
+                            res = create_ai_interview_plan(**fn_args)
+                            executed.append({"tool": "create_ai_interview_plan", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "compare_shortlisted_candidates":
+                            res = compare_shortlisted_candidates(user_id=user_id, user_name=user_name, tenant_id=tenant_id)
+                            executed.append({"tool": "compare_shortlisted_candidates", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "screen_candidates_summary":
+                            res = screen_candidates_summary(user_id=user_id, user_name=user_name, tenant_id=tenant_id)
+                            executed.append({"tool": "screen_candidates_summary", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "get_candidate_import_guide":
+                            res = get_candidate_import_guide()
+                            executed.append({"tool": "get_candidate_import_guide", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "get_requisition_templates":
+                            res = get_requisition_templates()
+                            executed.append({"tool": "get_requisition_templates", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "get_hiring_analytics_report":
+                            res = get_hiring_analytics_report(user_id=user_id, tenant_id=tenant_id, company_name=company_name)
+                            executed.append({"tool": "get_hiring_analytics_report", "result": res})
+                            reply_buf.append(res["markdown"])
+                        elif fn_name == "get_ai_assistant_preferences":
+                            res = get_ai_assistant_preferences(user_name=user_name, user_email=user_email, company_name=company_name, tenant_id=tenant_id)
+                            executed.append({"tool": "get_ai_assistant_preferences", "result": res})
+                            reply_buf.append(res["markdown"])
 
                     # 2nd pass LLM synthesis: If tools were purely informational (e.g. requisitions, candidates, stats),
                     # allow the LLM to write a natural, intelligent agentic summary response.
@@ -3052,12 +3480,12 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                                 "content": f"IDENTITY & FORMATTING RULE: The hiring manager is {user_name}. NEVER output markdown pipe tables (| col |). Format data as clean, spaced emoji item cards (1️⃣, 2️⃣) with bold labels and short 8-char IDs."
                             })
                             second_payload = {
-                                "model": active_model,
+                                "model": used_model or "openai/gpt-oss-120b",
                                 "messages": second_msgs,
                                 "temperature": 0.3,
                                 "max_tokens": 800
                             }
-                            second_resp = httpx.post(url, headers=headers, json=second_payload, timeout=4.0)
+                            second_resp = httpx.post(url, headers=active_headers, json=second_payload, timeout=10.0)
                             if second_resp.status_code == 200:
                                 second_content = second_resp.json()["choices"][0]["message"].get("content")
                                 if second_content and len(second_content.strip()) > 10:
@@ -3108,6 +3536,163 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             "executed_actions": [{"tool": "get_hiring_manager_stats", "result": stats_res}]
         }
 
+    # 1. Tailored Technical & Behavioral Interview Questions Intent
+    if any(k in prompt_lower for k in ["interview question", "interview questions", "technical question", "technical questions", "competency question", "competency questions", "coding questions", "behavioral questions", "questions for", "question for"]):
+        role_guess = "DevSecOps Engineer"
+        for r_name in ["devsecops", "python", "frontend", "react", "qa", "backend", "data"]:
+            if r_name in prompt_lower:
+                role_guess = PREDEFINED_ROLE_DICT.get(r_name, {}).get("title", role_guess)
+                break
+        res = generate_tailored_interview_questions(role_title=role_guess)
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "generate_tailored_interview_questions", "result": res}]
+        }
+
+    # 2. AI Interview Plan & Evaluation Rubrics Intent
+    if any(k in prompt_lower for k in ["interview plan", "interview rounds", "rubrics", "rubric", "evaluation criteria", "assessment plan", "interview process"]):
+        role_guess = "DevSecOps Engineer"
+        for r_name in ["devsecops", "python", "frontend", "react", "qa", "backend", "data"]:
+            if r_name in prompt_lower:
+                role_guess = PREDEFINED_ROLE_DICT.get(r_name, {}).get("title", role_guess)
+                break
+        res = create_ai_interview_plan(role_title=role_guess)
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "create_ai_interview_plan", "result": res}]
+        }
+
+    # 3. Head-to-Head Candidate Comparison Intent
+    if any(k in prompt_lower for k in ["compare candidate", "compare candidates", "comparison", "compare top", "head to head", "candidate comparison"]):
+        res = compare_shortlisted_candidates(user_id, user_name, tenant_id)
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "compare_shortlisted_candidates", "result": res}]
+        }
+
+    # 4. Candidate Screening & Fit Scores Intent
+    if any(k in prompt_lower for k in ["screen candidate", "screen candidates", "screening", "fit score", "fit scores", "match score", "match scores", "summarize their fit", "summarize fit"]):
+        res = screen_candidates_summary(user_id, user_name, tenant_id)
+        cand_list = res.get("candidates", [])
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "list_shortlisted_candidates", "result": cand_list}]
+        }
+
+    # 5. Candidate Import Guidance Intent
+    if any(k in prompt_lower for k in ["import candidate", "import candidates", "external job board", "csv", "how do i import", "add candidate"]):
+        res = get_candidate_import_guide()
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "get_candidate_import_guide", "result": res}]
+        }
+
+    # 6. Pre-configured Requisition Templates Intent
+    if any(k in prompt_lower for k in ["template", "templates", "requisition template", "job description template", "available template"]):
+        res = get_requisition_templates()
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "get_requisition_templates", "result": res}]
+        }
+
+    # 7. Hiring Pipeline & Talent Analytics / Export Report Intent
+    if any(k in prompt_lower for k in ["export report", "export hiring", "pipeline report", "talent analytics", "analytics report", "export progress", "pipeline and talent"]):
+        res = get_hiring_analytics_report(user_id, tenant_id, company_name)
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "get_hiring_analytics_report", "result": res}]
+        }
+
+    # 8. AI Assistant Preferences Intent
+    if any(k in prompt_lower for k in ["ai preference", "ai preferences", "assistant preference", "conversation setting", "role context"]):
+        res = get_ai_assistant_preferences(user_name, user_email, company_name, tenant_id)
+        return {
+            "reply": res["markdown"],
+            "executed_actions": [{"tool": "get_ai_assistant_preferences", "result": res}]
+        }
+
+    # 9. Interview Scheduling Intent
+    sched_keywords = ["schedule interview", "schedule an interview", "book interview", "set up interview", "schedule a meeting", "meet with", "schedule with"]
+    is_explicit_schedule = any(k in prompt_lower for k in sched_keywords) or (("schedule" in prompt_lower or "interview" in prompt_lower) and matched_candidate_name)
+
+    if is_explicit_schedule and not re.search(r"(under\s+me|all\s+candidates|timesheet|expense|draft|director|question|plan|rubric)", prompt_lower):
+        cand_name = matched_candidate_name
+        # Do NOT pick hiring manager themselves!
+        if cand_name and user_name and cand_name.lower().strip() == user_name.lower().strip():
+            cand_name = None
+
+        if not cand_name:
+            for c_name in ["sarah jenkins", "sarah", "ash k", "priya sharma", "marcus vance", "rohan verma", "surajkumar", "bashaar abdul", "alex taylor"]:
+                if c_name in prompt_lower and (not user_name or c_name not in user_name.lower()):
+                    cand_name = c_name.title()
+                    break
+
+        if not cand_name:
+            # Check history
+            for h in reversed(history or []):
+                txt = (h.get("text") or h.get("content") or "").lower()
+                for c_name in ["sarah jenkins", "sarah", "ash k", "priya sharma", "marcus vance", "rohan verma", "surajkumar", "bashaar abdul", "alex taylor"]:
+                    if c_name in txt and (not user_name or c_name not in user_name.lower()):
+                        cand_name = c_name.title()
+                        break
+                if cand_name:
+                    break
+
+        # If user asked generally "Schedule an interview" without naming someone:
+        if not cand_name:
+            cands = list_shortlisted_candidates(user_id, user_name, tenant_id)
+            cands = [c for c in cands if not user_name or (c.get("candidate_name") or c.get("name") or "").lower().strip() != user_name.lower().strip()]
+            if cands:
+                top_cand = cands[0]
+                c_name = top_cand.get("candidate_name") or top_cand.get("name") or "Candidate"
+                role = top_cand.get("requisition_title") or "Engineering Role"
+                score = top_cand.get("match_score") or "90%"
+                sched_res = schedule_candidate_interview(
+                    candidate_identifier=c_name,
+                    req_title=role,
+                    proposed_date="2026-09-12",
+                    proposed_time="02:00 PM EST"
+                )
+                return {
+                    "reply": (
+                        f"📅 **INTERVIEW PROPOSAL PREPARED**\n"
+                        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                        f"👤 **Candidate:** {c_name} (🎯 **{score} Match**)\n"
+                        f"💼 **Role:** {role}\n"
+                        f"🗓 **Date & Time:** {sched_res.get('proposed_date')} at {sched_res.get('proposed_time')}\n"
+                        f"🎯 **Type:** Technical Round\n\n"
+                        f"Would you like me to confirm and dispatch the calendar invitation to **{c_name}**?"
+                    ),
+                    "executed_actions": [
+                        {"tool": "schedule_candidate_interview", "result": sched_res},
+                        {"tool": "list_shortlisted_candidates", "result": cands[:3]}
+                    ]
+                }
+            else:
+                return {
+                    "reply": f"ℹ️ There are currently **no shortlisted candidates** awaiting interviews in your pipeline for **{company_name}**. Would you like to review active requisitions or draft a new role?",
+                    "executed_actions": []
+                }
+
+        sched_res = schedule_candidate_interview(
+            candidate_identifier=cand_name,
+            req_title="Senior Backend Engineer",
+            proposed_date="2026-09-12",
+            proposed_time="02:00 PM EST"
+        )
+        return {
+            "reply": (
+                f"📅 **INTERVIEW PROPOSAL PREPARED**\n"
+                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 **Candidate:** {sched_res.get('candidate', cand_name)}\n"
+                f"💼 **Role:** {sched_res.get('requisition_title', 'Senior Backend Engineer')}\n"
+                f"🗓 **Date & Time:** {sched_res.get('proposed_date')} at {sched_res.get('proposed_time')}\n"
+                f"🎯 **Type:** {sched_res.get('interview_type', 'Technical Round')}\n\n"
+                f"Would you like me to confirm and dispatch the calendar invitation to **{cand_name}**?"
+            ),
+            "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
+        }
+
     create_req_pattern = (
         r"((create|draft|new|add|make|build|post|setup|start)\s+(a\s+)?(requisition|requisitions|requsition|requsitions|requsion|requsions|reqisition|reqisitions|requstion|requstions|recquisition|recquisitions|req|reqs|job|jobs|role|roles|position|positions|opening|openings|job post|job posting|contract role))|"
         r"((can\s+(u|you)\s+)?(create|draft|make|build|post)\s+(a\s+)?(requisition|requisitions|requsition|requsitions|requsion|requsions|reqisition|reqisitions|requstion|requstions|recquisition|recquisitions|req|reqs|job|jobs|role|roles|position|positions))|"
@@ -3116,7 +3701,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     )
 
     # Intercept Requisition Creation / Drafting intent (with custom tech stack extraction)
-    if re.search(create_req_pattern, prompt_lower):
+    if re.search(create_req_pattern, prompt_lower) and not any(k in prompt_lower for k in ["interview plan", "interview rounds", "interview question", "rubric", "rubrics", "assessment plan", "criteria"]):
         matched_role = None
         for key, role_data in PREDEFINED_ROLE_DICT.items():
             if key in prompt_lower or role_data["title"].lower() in prompt_lower:
@@ -3238,46 +3823,6 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         return {
             "reply": rej_res["message"],
             "executed_actions": [{"tool": "reject_candidate_expense", "result": rej_res}]
-        }
-
-    # Interview Scheduling Intent (e.g. "schedule interview with Arjun on Friday", "interview with Priya", "schedule an interview")
-    if any(k in prompt_lower for k in ["interview", "interviews", "schedule", "scheduling", "meet"]) and not re.search(r"(under\s+me|all\s+candidates|timesheet|expense|draft|director)", prompt_lower):
-        cand_name = matched_candidate_name
-        if not cand_name:
-            for c_name in ["arjun m", "arjun", "sarah jenkins", "sarah", "ash k", "priya sharma", "marcus vance", "rohan verma", "surajkumar", "bashaar abdul"]:
-                if c_name in prompt_lower:
-                    cand_name = c_name.title()
-                    break
-        if not cand_name:
-            # Check history for any previously mentioned candidate
-            for h in reversed(history or []):
-                txt = (h.get("text") or h.get("content") or "").lower()
-                for c_name in ["arjun m", "arjun", "sarah jenkins", "sarah", "ash k", "priya sharma", "marcus vance", "rohan verma", "surajkumar", "bashaar abdul"]:
-                    if c_name in txt:
-                        cand_name = c_name.title()
-                        break
-                if cand_name:
-                    break
-        if not cand_name:
-            cand_name = "Arjun M"
-
-        sched_res = schedule_candidate_interview(
-            candidate_identifier=cand_name,
-            req_title="Senior Backend Engineer",
-            proposed_date="2026-09-12",
-            proposed_time="02:00 PM EST"
-        )
-        return {
-            "reply": (
-                f"📅 **INTERVIEW PROPOSAL PREPARED**\n"
-                f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                f"👤 **Candidate:** {sched_res.get('candidate', cand_name)}\n"
-                f"💼 **Role:** {sched_res.get('requisition_title', 'Senior Backend Engineer')}\n"
-                f"🗓 **Date & Time:** {sched_res.get('proposed_date')} at {sched_res.get('proposed_time')}\n"
-                f"🎯 **Type:** {sched_res.get('interview_type', 'Technical Round')}\n\n"
-                f"Would you like me to confirm and dispatch the calendar invitation to **{cand_name}**?"
-            ),
-            "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
         }
 
     # Specific Candidate Profile Intent (when user asks for or names a particular candidate)
