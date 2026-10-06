@@ -246,6 +246,21 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token]);
 
+  // Global mobile sidebar drawer listener
+  useEffect(() => {
+    const handleToggle = () => setIsMobileMenuOpen((prev) => !prev);
+    const handleOpen = () => setIsMobileMenuOpen(true);
+    const handleClose = () => setIsMobileMenuOpen(false);
+    window.addEventListener('toggle-mobile-sidebar', handleToggle);
+    window.addEventListener('open-mobile-sidebar', handleOpen);
+    window.addEventListener('close-mobile-sidebar', handleClose);
+    return () => {
+      window.removeEventListener('toggle-mobile-sidebar', handleToggle);
+      window.removeEventListener('open-mobile-sidebar', handleOpen);
+      window.removeEventListener('close-mobile-sidebar', handleClose);
+    };
+  }, []);
+
   // Dynamic live count for Director pending agreements and work orders
   const [directorPendingAgreements, setDirectorPendingAgreements] = useState(0);
   const [directorPendingWorkOrders, setDirectorPendingWorkOrders] = useState(0);
@@ -402,9 +417,9 @@ export default function DashboardLayout() {
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
-  const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
+  const isHiringManagerChat = false;
   const isAdminChat = location.pathname === '/dashboard/admin/chat' || location.pathname.endsWith('/admin/chat');
-  const isAiChatPage = isSuperAdminChat || isHiringManagerChat || isAdminChat;
+  const isAiChatPage = isSuperAdminChat || isAdminChat;
 
   // ==========================================
   // COMPANY ADMIN DEDICATED LAYOUT (TOP BAR + FULL CANVAS)
@@ -687,8 +702,8 @@ export default function DashboardLayout() {
   const navItems =
     userRole === 'Hiring Manager'
       ? [
-        { to: '/dashboard/hiring-manager', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-        { to: '/dashboard/hiring-manager/chat', label: 'Hiring AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+        { to: '/dashboard/hiring-manager', label: 'AI Chat', end: true, section: 'WORKSPACE', icon: Icons.Chat },
+        { to: '/dashboard/hiring-manager/chat', label: 'Dashboard', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
         { to: '/dashboard/requisitions', label: 'Requisitions', end: false, section: 'HIRING', icon: Icons.Requisitions, count: hmCounts.requisitions },
         { to: '/dashboard/requisitions/new', label: 'New Requisition', end: true, section: 'HIRING', icon: Icons.Plus },
         { to: '/dashboard/candidates', label: 'Candidates', end: false, section: 'CANDIDATES', icon: Icons.Diamond, count: hmCounts.candidates },
@@ -765,14 +780,18 @@ export default function DashboardLayout() {
                   width: 36,
                   height: 36,
                   borderRadius: '50%',
-                  backgroundColor: '#1E2330',
+                  backgroundColor: '#000000',
                   color: '#FFFFFF',
                   border: '1px solid rgba(255, 255, 255, 0.15)',
                 }}
-                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs uppercase cursor-pointer hover:border-white/50 hover:scale-105 transition-all"
+                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs uppercase cursor-pointer hover:border-white/50 hover:scale-105 transition-all overflow-hidden p-0.5"
                 title="Click to expand sidebar"
               >
-                {(user?.tenant_name || 'Term Jobs').trim().charAt(0)}
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                  (user?.tenant_name || 'Term Jobs').trim().charAt(0)
+                )}
               </div>
               <div className="absolute left-full ml-3 px-2.5 py-1 bg-[#0A0A0A] text-white text-[11.5px] font-semibold rounded-lg shadow-xl border border-white/10 pointer-events-none whitespace-nowrap opacity-0 group-hover/brand:opacity-100 transition-opacity duration-150 z-50">
                 Expand sidebar
@@ -852,7 +871,7 @@ export default function DashboardLayout() {
                   width: 32,
                   height: 32,
                   borderRadius: '50%',
-                  backgroundColor: '#1E2330',
+                  backgroundColor: '#000000',
                   color: '#FFFFFF',
                   border: '1px solid rgba(255, 255, 255, 0.12)',
                 }}
@@ -919,13 +938,17 @@ export default function DashboardLayout() {
                     width: 42,
                     height: 42,
                     borderRadius: '50%',
-                    backgroundColor: '#1E2330',
+                    backgroundColor: '#000000',
                     color: '#FFFFFF',
                     border: '1px solid rgba(255, 255, 255, 0.12)',
                   }}
-                  className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
+                  className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase overflow-hidden p-1"
                 >
-                  {(user?.tenant_name || 'Term Jobs').trim().charAt(0)}
+                  {user?.logo_url ? (
+                    <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    (user?.tenant_name || 'Term Jobs').trim().charAt(0)
+                  )}
                 </div>
                 <div className="leading-tight text-left min-w-0">
                   <div className="text-[15.5px] font-extrabold text-white tracking-tight truncate">{user?.tenant_name || 'Term Jobs'}</div>
@@ -1069,7 +1092,7 @@ export default function DashboardLayout() {
                 width: 38,
                 height: 38,
                 borderRadius: '50%',
-                backgroundColor: userRole === 'Hiring Manager' ? '#1E2330' : '#0A0A0A',
+                backgroundColor: '#000000',
                 color: '#FFFFFF',
                 border: userRole === 'Hiring Manager' ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
               }}
@@ -1112,7 +1135,7 @@ export default function DashboardLayout() {
   const isHiringManagerDashboard = userRole === 'Hiring Manager' && (location.pathname === '/dashboard/hiring-manager' || location.pathname === '/dashboard/hiring-manager/');
 
   return (
-    <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''}`}>
+    <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''} ${isHiringManagerDashboard ? 'ai-fixed-mode' : ''}`}>
       <style>{`
         .sidebar a,
         .sidebar button,
@@ -1306,9 +1329,29 @@ export default function DashboardLayout() {
         .console-hiringmanager .sidebar .text-\[\#0A0A0A\] {
           color: #FFFFFF !important;
         }
+        .app-shell.ai-fixed-mode {
+          height: 100vh !important;
+          max-height: 100vh !important;
+          overflow: hidden !important;
+        }
+        .app-shell.ai-fixed-mode .main-area {
+          height: 100vh !important;
+          max-height: 100vh !important;
+          overflow: hidden !important;
+        }
+        .app-shell.ai-fixed-mode .content-area {
+          height: 100vh !important;
+          max-height: 100vh !important;
+          overflow: hidden !important;
+          padding: 0 !important;
+        }
         @media (max-width: 1023px) {
           .sidebar {
             display: none !important;
+          }
+          .app-shell.ai-fixed-mode {
+            height: 100dvh !important;
+            max-height: 100dvh !important;
           }
         }
       `}</style>
@@ -1368,10 +1411,35 @@ export default function DashboardLayout() {
           </header>
         )}
 
-        <main className="content-area pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1">
+        <main className={`content-area ${isHiringManagerDashboard ? 'p-0 w-full h-full max-h-full overflow-hidden' : 'pt-1.5 px-3 sm:px-5 pb-4 w-full max-w-none min-w-0 flex-1'}`}>
           <Outlet />
         </main>
       </div>
+
+      {/* Global Mobile Drawer for Hiring Manager, Recruiter, etc. */}
+      {isMobileMenuOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-xs"
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+          <div className="relative w-72 max-w-[85vw] h-full bg-[#0c0f17] text-white p-4 flex flex-col z-60 shadow-2xl overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-2 shrink-0">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-400">Navigation</span>
+              <button
+                type="button"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="p-1.5 text-gray-400 hover:text-white rounded-lg hover:bg-white/10 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 min-h-0">
+              {renderSidebarContent(() => setIsMobileMenuOpen(false))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <AssistantWidget isOpen={isAssistantOpen} setIsOpen={setIsAssistantOpen} />
       {userRole === 'Super Admin' && (

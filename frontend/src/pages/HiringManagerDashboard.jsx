@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import termjobsLogo from '../assets/termjobs-logo.png';
 import {
   Search,
   Bell,
@@ -45,8 +46,13 @@ import {
   Globe,
   CalendarCheck,
   Upload,
-  Shield
+  Shield,
+  UserCheck,
+  Settings,
+  History,
+  Menu
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { marked } from 'marked';
 import { interviewApi } from '../interview/services/interviewApi';
 
@@ -1573,16 +1579,660 @@ export default function HiringManagerDashboard() {
     }
   };
 
+  const userInitials = useMemo(() => {
+    if (!user?.name || user?.name === 'r') return 'HM';
+    const parts = user.name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }, [user]);
+
+  // Right-side tools drawer state
+  const [isToolsDrawerOpen, setIsToolsDrawerOpen] = useState(false);
+  const [toolsSearchQuery, setToolsSearchQuery] = useState('');
+
+  // Right-side Conversations Drawer & History state (Stores all chats)
+  const [isConversationsDrawerOpen, setIsConversationsDrawerOpen] = useState(false);
+  const [conversationsSearchQuery, setConversationsSearchQuery] = useState('');
+  const [activeConversationId, setActiveConversationId] = useState(null);
+
+  const [conversations, setConversations] = useState(() => {
+    try {
+      const storageKey = `termjobs_hm_conversations_${user?.id || 'default'}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved conversations:', e);
+    }
+
+    // Default Seed Conversations matching user's exact reference screenshot
+    const now = Date.now();
+    return [
+      {
+        id: 'conv-seeded-1',
+        title: 'Create requisition for DevSecOps',
+        preview: 'Help me create a new requisition for a DevSecOps Engineer...',
+        categoryIcon: 'requisition',
+        updatedAt: now - 1000 * 60 * 25,
+        createdAt: now - 1000 * 60 * 25,
+        messages: [
+          {
+            id: 'seed-u1',
+            sender: 'user',
+            text: 'Help me create a new requisition for a DevSecOps Engineer',
+            timestamp: '10:24 AM',
+          },
+          {
+            id: 'seed-a1',
+            sender: 'ai',
+            text: 'I have prepared a comprehensive requisition draft for **DevSecOps Engineer**.',
+            requisitionDraft: {
+              id: 'draft-devsecops',
+              title: 'DevSecOps Engineer',
+              department: 'Cloud Security',
+              location: 'Bangalore, India (Hybrid)',
+              experience: 'Senior (5-8 yrs)',
+              employment_type: 'Contract',
+              hiring_model: 'Hybrid',
+              openings: 1,
+              target_start_date: 'Immediate',
+              skills: ['AWS', 'Kubernetes Security', 'CI/CD', 'Terraform', 'Docker'],
+              summary: 'We are seeking an experienced DevSecOps Engineer to lead cloud infrastructure security and automate CI/CD pipeline scans.',
+            },
+            timestamp: '10:25 AM',
+          },
+        ],
+      },
+      {
+        id: 'conv-seeded-2',
+        title: 'Find top candidates',
+        preview: 'Search best candidates for Senior Backend role...',
+        categoryIcon: 'candidates',
+        updatedAt: now - 1000 * 60 * 75,
+        createdAt: now - 1000 * 60 * 75,
+        messages: [
+          {
+            id: 'seed-u2',
+            sender: 'user',
+            text: 'Find top candidates for backend engineer',
+            timestamp: '09:40 AM',
+          },
+          {
+            id: 'seed-a2',
+            sender: 'ai',
+            text: 'Here are the top candidates matching your active requisitions with high match scores.',
+            timestamp: '09:41 AM',
+          },
+        ],
+      },
+      {
+        id: 'conv-seeded-3',
+        title: 'Compare candidates',
+        preview: 'Compare these 3 candidates based on AI interview scores...',
+        categoryIcon: 'candidates',
+        updatedAt: now - 1000 * 60 * 160,
+        createdAt: now - 1000 * 60 * 160,
+        messages: [
+          {
+            id: 'seed-u3',
+            sender: 'user',
+            text: 'Compare top shortlisted candidates and their match scores',
+            timestamp: '08:15 AM',
+          },
+          {
+            id: 'seed-a3',
+            sender: 'ai',
+            text: 'Candidate scorecard comparison complete with spoken fluency and verified skills.',
+            timestamp: '08:16 AM',
+          },
+        ],
+      },
+      {
+        id: 'conv-seeded-4',
+        title: 'Interview questions',
+        preview: 'Generate technical interview questions for cloud architect...',
+        categoryIcon: 'interview',
+        updatedAt: now - 1000 * 60 * 190,
+        createdAt: now - 1000 * 60 * 190,
+        messages: [
+          {
+            id: 'seed-u4',
+            sender: 'user',
+            text: 'Generate technical interview questions for cloud architect',
+            timestamp: '11:20 AM',
+          },
+          {
+            id: 'seed-a4',
+            sender: 'ai',
+            text: 'Here are 5 targeted scenario questions for Cloud Architect evaluation focusing on high-availability architectures and security compliance.',
+            timestamp: '11:21 AM',
+          },
+        ],
+      },
+      {
+        id: 'conv-seeded-5',
+        title: 'Market salary insights',
+        preview: "What's the current market rate for senior contractors...",
+        categoryIcon: 'requisition',
+        updatedAt: now - 1000 * 60 * 60 * 25,
+        createdAt: now - 1000 * 60 * 60 * 25,
+        messages: [
+          {
+            id: 'seed-u5',
+            sender: 'user',
+            text: 'What is the current market rate for senior contractors?',
+            timestamp: 'Sep 29',
+          },
+          {
+            id: 'seed-a5',
+            sender: 'ai',
+            text: 'Standard billing rates for Senior React and Python contractors currently range between ₹1,400 to ₹1,800/hr in Bangalore.',
+            timestamp: 'Sep 29',
+          },
+        ],
+      },
+      {
+        id: 'conv-seeded-6',
+        title: 'Hiring process guidance',
+        preview: 'Explain the approval workflow for new contract positions...',
+        categoryIcon: 'requisition',
+        updatedAt: now - 1000 * 60 * 60 * 28,
+        createdAt: now - 1000 * 60 * 60 * 28,
+        messages: [
+          {
+            id: 'seed-u6',
+            sender: 'user',
+            text: 'Explain the approval workflow for requisitions',
+            timestamp: 'Sep 29',
+          },
+          {
+            id: 'seed-a6',
+            sender: 'ai',
+            text: 'Contract requisitions require HM draft submission followed by Director budget approval before being broadcast to verified vendor partners.',
+            timestamp: 'Sep 29',
+          },
+        ],
+      },
+      {
+        id: 'conv-seeded-7',
+        title: 'Onboarding checklist',
+        preview: 'Create onboarding checklist for incoming contract engineers...',
+        categoryIcon: 'chat',
+        updatedAt: now - 1000 * 60 * 60 * 24 * 5,
+        createdAt: now - 1000 * 60 * 60 * 24 * 5,
+        messages: [
+          {
+            id: 'seed-u7',
+            sender: 'user',
+            text: 'Create onboarding checklist for incoming contract engineers',
+            timestamp: 'Sep 28',
+          },
+          {
+            id: 'seed-a7',
+            sender: 'ai',
+            text: 'Here is the onboarding checklist: NDA execution, Background check clearance, Hardware delivery confirmation, and AWS SSO access grant.',
+            timestamp: 'Sep 28',
+          },
+        ],
+      },
+    ];
+  });
+
+  // Automatically save and sync messages to active conversation in localStorage
+  useEffect(() => {
+    if (messages.length === 0) return;
+
+    setConversations((prev) => {
+      let currentId = activeConversationId;
+      if (!currentId) {
+        currentId = `conv-${Date.now()}`;
+        setActiveConversationId(currentId);
+        const firstUserMsg = messages.find((m) => m.sender === 'user');
+        const rawText = firstUserMsg?.text || messages[0]?.text || 'New conversation';
+        const title = rawText.length > 36 ? rawText.slice(0, 36) + '...' : rawText;
+        const newConv = {
+          id: currentId,
+          title,
+          preview: rawText,
+          categoryIcon: rawText.toLowerCase().includes('candidate')
+            ? 'candidates'
+            : rawText.toLowerCase().includes('interview')
+            ? 'interview'
+            : rawText.toLowerCase().includes('requisition')
+            ? 'requisition'
+            : 'chat',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          messages,
+        };
+        const updated = [newConv, ...prev];
+        try {
+          const storageKey = `termjobs_hm_conversations_${user?.id || 'default'}`;
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Storage save error:', e);
+        }
+        return updated;
+      }
+
+      const existingIndex = prev.findIndex((c) => c.id === currentId);
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        const lastMsg = messages[messages.length - 1];
+        updated[existingIndex] = {
+          ...updated[existingIndex],
+          messages,
+          updatedAt: Date.now(),
+          preview: lastMsg?.text?.slice(0, 60) || updated[existingIndex].preview,
+        };
+        try {
+          const storageKey = `termjobs_hm_conversations_${user?.id || 'default'}`;
+          localStorage.setItem(storageKey, JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Storage save error:', e);
+        }
+        return updated;
+      }
+
+      return prev;
+    });
+  }, [messages, activeConversationId, user?.id]);
+
+  // Open Telegram Bot (deep link or open existing bot username)
+  const handleOpenTelegramBot = useCallback(() => {
+    if (botStatus?.telegram?.bot_username) {
+      window.open(`https://t.me/${botStatus.telegram.bot_username}`, '_blank');
+      return;
+    }
+    handleConnectTelegram();
+  }, [botStatus, handleConnectTelegram]);
+
+  // Start a fresh new chat
+  const handleStartNewChat = useCallback(() => {
+    setMessages([]);
+    setActiveConversationId(null);
+    setPromptInput('');
+    setIsConversationsDrawerOpen(false);
+    setActivePanel({
+      type: 'overview',
+      title: 'Dashboard Overview',
+      data: null,
+    });
+    setTimeout(() => {
+      promptInputRef.current?.focus({ preventScroll: true });
+    }, 50);
+  }, []);
+
+  // Select a previous conversation to view/resume
+  const handleSelectConversation = useCallback((conv) => {
+    setActiveConversationId(conv.id);
+    setMessages(conv.messages || []);
+    setIsConversationsDrawerOpen(false);
+  }, []);
+
+  // Grouped conversations for the Drawer
+  const filteredConversations = useMemo(() => {
+    if (!conversationsSearchQuery.trim()) return conversations;
+    const q = conversationsSearchQuery.toLowerCase();
+    return conversations.filter(
+      (c) =>
+        (c.title || '').toLowerCase().includes(q) ||
+        (c.preview || '').toLowerCase().includes(q)
+    );
+  }, [conversations, conversationsSearchQuery]);
+
+  const groupedConversations = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const yesterdayStart = todayStart - 86400000;
+    const last7DaysStart = todayStart - 6 * 86400000;
+
+    const groups = {
+      today: [],
+      yesterday: [],
+      last7Days: [],
+      older: [],
+    };
+
+    filteredConversations.forEach((c) => {
+      const time = c.updatedAt || c.createdAt || Date.now();
+      if (time >= todayStart) {
+        groups.today.push(c);
+      } else if (time >= yesterdayStart) {
+        groups.yesterday.push(c);
+      } else if (time >= last7DaysStart) {
+        groups.last7Days.push(c);
+      } else {
+        groups.older.push(c);
+      }
+    });
+
+    return groups;
+  }, [filteredConversations]);
+
+  const formatConvTime = (timestamp) => {
+    if (!timestamp) return '';
+    const d = new Date(timestamp);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    if (isToday) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[d.getMonth()]} ${d.getDate()}`;
+  };
+
+  const getConvIcon = (cat) => {
+    switch (cat) {
+      case 'candidates':
+        return <Users size={14} className="text-gray-700" />;
+      case 'interview':
+        return <BarChart2 size={14} className="text-gray-700" />;
+      case 'chat':
+        return <MessageSquare size={14} className="text-gray-700" />;
+      case 'requisition':
+      default:
+        return <FileText size={14} className="text-gray-700" />;
+    }
+  };
+
+  // Close drawers on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isConversationsDrawerOpen) setIsConversationsDrawerOpen(false);
+        if (isToolsDrawerOpen) setIsToolsDrawerOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isConversationsDrawerOpen, isToolsDrawerOpen]);
+
+  // Pending requisitions count for badge
+  const pendingRequisitionsCount = useMemo(() => {
+    if (!Array.isArray(requisitions)) return 0;
+    return requisitions.filter((r) => (r.status || '').toLowerCase().includes('pending')).length;
+  }, [requisitions]);
+
+  // Compact tool groups for the Right-Side Drawer
+  const TOOL_GROUPS = useMemo(() => [
+    {
+      id: 'requisitions',
+      name: 'REQUISITIONS',
+      tools: [
+        {
+          id: 'create_req',
+          name: 'Create Requisition',
+          icon: Plus,
+          description: 'Launch new job requisition workflow',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            navigate('/dashboard/requisitions/new');
+          },
+        },
+        {
+          id: 'view_reqs',
+          name: 'View Requisitions',
+          icon: FileText,
+          description: 'Explore all active and draft requisitions',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            navigate('/dashboard/requisitions');
+          },
+        },
+        {
+          id: 'templates',
+          name: 'Templates',
+          icon: Layers,
+          description: 'Role templates for engineering, product & design',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Show me available requisition templates and job descriptions');
+          },
+        },
+        {
+          id: 'pending_approvals',
+          name: 'Pending Approvals',
+          icon: Clock,
+          description: 'Requisitions awaiting approval',
+          badge: pendingRequisitionsCount > 0 ? pendingRequisitionsCount : null,
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            navigate('/dashboard/requisitions/pending-approval');
+          },
+        },
+      ],
+    },
+    {
+      id: 'candidates',
+      name: 'CANDIDATES',
+      tools: [
+        {
+          id: 'screen_candidates',
+          name: 'Screen Candidates',
+          icon: UserCheck,
+          description: 'AI resume screening against active roles',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Screen top candidates for my open requisitions and summarize their fit scores');
+          },
+        },
+        {
+          id: 'compare_candidates',
+          name: 'Compare Candidates',
+          icon: BarChart2,
+          description: 'Head-to-head comparison and match scores',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Compare top shortlisted candidates and their match scores');
+          },
+        },
+        {
+          id: 'candidate_pool',
+          name: 'Candidate Pool',
+          icon: Users,
+          description: 'Browse candidate pool and talent database',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            navigate('/dashboard/candidates');
+          },
+        },
+        {
+          id: 'import_candidates',
+          name: 'Import Candidates',
+          icon: Upload,
+          description: 'Add external profiles, resumes or ATS candidates',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('How do I import candidates from external job boards or CSV?');
+          },
+        },
+      ],
+    },
+    {
+      id: 'interviews',
+      name: 'INTERVIEWS',
+      tools: [
+        {
+          id: 'schedule_interview',
+          name: 'Schedule Interview',
+          icon: Calendar,
+          description: 'Book interview round with candidate',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Schedule an interview');
+          },
+        },
+        {
+          id: 'interview_questions',
+          name: 'Interview Questions',
+          icon: MessageSquare,
+          description: 'Role-specific behavioral & technical questions',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Generate tailored technical and competency interview questions for our active roles');
+          },
+        },
+        {
+          id: 'ai_interview_plan',
+          name: 'AI Interview Plan',
+          icon: Sparkles,
+          description: 'Structured rounds, rubrics & assessment plans',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Create an AI interview plan with rounds, rubrics, and evaluation criteria');
+          },
+        },
+        {
+          id: 'feedback_scores',
+          name: 'Feedback & Scores',
+          icon: CheckCircle2,
+          description: 'Review interview evaluation rubrics & scores',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            navigate('/dashboard/interviews');
+          },
+        },
+      ],
+    },
+    {
+      id: 'reports',
+      name: 'REPORTS',
+      tools: [
+        {
+          id: 'hiring_analytics',
+          name: 'Hiring Analytics',
+          icon: BarChart2,
+          description: 'Pipeline velocity, pass rates & funnel metrics',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Summarize my hiring pipeline and talent analytics');
+          },
+        },
+        {
+          id: 'export_reports',
+          name: 'Export Reports',
+          icon: FileText,
+          description: 'Export CSV / PDF hiring report',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Export hiring progress and pipeline report for my department');
+          },
+        },
+      ],
+    },
+    {
+      id: 'settings',
+      name: 'SETTINGS',
+      tools: [
+        {
+          id: 'ai_preferences',
+          name: 'AI Preferences',
+          icon: Settings,
+          description: 'Personalize prompt guidance & AI persona',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('Show my AI assistant preferences, role context, and conversation settings');
+          },
+        },
+        {
+          id: 'integrations',
+          name: 'Integrations',
+          icon: Bot,
+          description: 'Telegram, Zoho Cliq & Microsoft Teams bots',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            setShowCliqModal(true);
+          },
+        },
+      ],
+    },
+  ], [navigate, handleSendPrompt, pendingRequisitionsCount]);
+
+  const filteredToolGroups = useMemo(() => {
+    if (!toolsSearchQuery.trim()) return TOOL_GROUPS;
+    const query = toolsSearchQuery.toLowerCase().trim();
+    return TOOL_GROUPS.map((group) => {
+      const matchingTools = group.tools.filter(
+        (t) =>
+          t.name.toLowerCase().includes(query) ||
+          t.description?.toLowerCase().includes(query) ||
+          group.name.toLowerCase().includes(query)
+      );
+      return { ...group, tools: matchingTools };
+    }).filter((group) => group.tools.length > 0);
+  }, [toolsSearchQuery, TOOL_GROUPS]);
+
   return (
     <div
-      className="w-full min-h-screen text-left relative pb-3 sm:pb-4 selection:bg-black selection:text-white bg-transparent"
+      className="w-full h-full max-h-screen lg:h-[calc(100vh-32px)] overflow-hidden flex flex-col justify-between text-left relative selection:bg-black selection:text-white bg-transparent"
       style={{
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
     >
+      {/* Mobile Top Navigation Bar (< lg) */}
+      <div className="lg:hidden shrink-0 flex items-center justify-between px-3 py-2 border-b border-gray-200/80 bg-white/80 backdrop-blur-md z-30">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('toggle-mobile-sidebar'))}
+            className="p-1.5 rounded-xl bg-gray-100 hover:bg-black hover:text-white text-gray-800 transition-colors cursor-pointer"
+            title="Open menu"
+          >
+            <Menu size={18} />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 flex items-center justify-center">
+              <img src={termjobsLogo} alt="Logo" className="w-4.5 h-4.5 object-contain" />
+            </div>
+            <span className="font-bold text-xs text-gray-900 tracking-tight">Hiring Assistant</span>
+          </div>
+        </div>
+
+        {/* Mobile compact tool buttons */}
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={handleStartNewChat}
+            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-black hover:text-white text-gray-800 flex items-center justify-center transition-all cursor-pointer text-xs"
+            title="New Chat"
+          >
+            <Plus size={13} strokeWidth={2.4} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setConversationsSearchQuery('');
+              setIsConversationsDrawerOpen((prev) => !prev);
+            }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              isConversationsDrawerOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+            }`}
+            title="Chat History"
+          >
+            <History size={13} strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setToolsSearchQuery('');
+              setIsToolsDrawerOpen((prev) => !prev);
+            }}
+            className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all cursor-pointer ${
+              isToolsDrawerOpen ? 'bg-black text-white' : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+            }`}
+            title="Tools & Actions"
+          >
+            <MoreHorizontal size={13} strokeWidth={2} />
+          </button>
+        </div>
+      </div>
+
       {/* Live Bot Feedback Banner */}
       {botFeedback.text && (
-        <div className="max-w-4xl mx-auto px-4 pt-3">
+        <div className="max-w-4xl mx-auto px-4 pt-3 shrink-0 w-full">
           <div
             className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-all shadow-xs ${
               botFeedback.type === 'success'
@@ -1613,23 +2263,121 @@ export default function HiringManagerDashboard() {
         </div>
       )}
 
+      {/* Top-Right Icon Toolbar (Desktop only) */}
+      <div className="hidden lg:flex absolute top-1.5 sm:top-2 right-2 sm:right-2.5 z-20 items-center gap-1">
+        {/* + Icon: Opens a New Chat */}
+        <button
+          type="button"
+          onClick={handleStartNewChat}
+          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+          title="New Chat (+)"
+        >
+          <Plus size={12.5} strokeWidth={2.4} />
+        </button>
+
+        {/* History / Previous Chat History Icon */}
+        <button
+          type="button"
+          onClick={() => {
+            setConversationsSearchQuery('');
+            setIsConversationsDrawerOpen((prev) => !prev);
+          }}
+          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+            isConversationsDrawerOpen
+              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
+              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
+          }`}
+          title="Previous Chat History / Conversations"
+        >
+          <History size={12.5} strokeWidth={2} />
+        </button>
+
+        {/* Telegram Bot Icon (Replaced Candidate Icon) */}
+        <button
+          type="button"
+          onClick={handleOpenTelegramBot}
+          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+          title={
+            botStatus?.telegram?.is_linked
+              ? `Open Telegram Bot (@${botStatus.telegram.bot_username || 'TermJobsBot'})`
+              : 'Open Telegram Bot / Connect on Telegram'
+          }
+        >
+          <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 fill-current text-[#111111]" aria-hidden="true">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.37.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z" />
+          </svg>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setToolsSearchQuery('report');
+            setIsToolsDrawerOpen(true);
+          }}
+          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+          title="Analytics & Reports"
+        >
+          <BarChart2 size={12.5} strokeWidth={2} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setToolsSearchQuery('interview');
+            setIsToolsDrawerOpen(true);
+          }}
+          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
+          title="Interviews & Calendar"
+        >
+          <Calendar size={12.5} strokeWidth={2} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setToolsSearchQuery('');
+            setIsToolsDrawerOpen((prev) => !prev);
+          }}
+          className={`w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+            isToolsDrawerOpen
+              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
+              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
+          }`}
+          title="Tools & Actions"
+        >
+          <MoreHorizontal size={12.5} strokeWidth={2} />
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setToolsSearchQuery('settings');
+            setIsToolsDrawerOpen(true);
+          }}
+          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-[#000000] text-white text-[9px] font-bold shadow-2xs hover:bg-[#111111] flex items-center justify-center transition-all cursor-pointer active:scale-95 uppercase tracking-tight"
+          title="Hiring Manager Settings"
+        >
+          {userInitials || 'HM'}
+        </button>
+      </div>
+
       {messages.length === 0 ? (
         /* ========================================================================= */
-        /* PRISTINE CENTERED DASHBOARD (EXACT MATCH TO USER'S SCREENSHOT)            */
+        /* CLEAN CENTERED AI WORKSPACE (FIXED & NON-SCROLLING, MOBILE OPTIMISED)     */
         /* ========================================================================= */
-        <div className="min-h-[calc(100vh-40px)] flex flex-col items-center justify-center px-4 sm:px-6 lg:px-8 py-8 w-full max-w-5xl mx-auto">
-          {/* Centered Sparkles Icon Box */}
-          <div className="w-12 h-12 rounded-2xl bg-white border border-gray-200/90 shadow-xs flex items-center justify-center mx-auto mb-3.5">
-            <Sparkles size={22} className="text-gray-900" />
+        <div className="flex-1 w-full min-h-0 flex flex-col items-center justify-center px-3 sm:px-6 py-2 sm:py-3 max-w-4xl mx-auto overflow-hidden">
+          {/* Centered TermJobs Logo */}
+          <div className="flex items-center justify-center mx-auto mb-1">
+            <img src={termjobsLogo} alt="TermJobs" className="w-11 h-11 sm:w-14 sm:h-14 object-contain" />
           </div>
 
           {/* Heading */}
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight text-center">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight text-center px-2">
             {greetingText}, {userName} <span className="inline-block">👋</span>
           </h1>
 
           {/* Subtitle */}
-          <p className="text-sm font-medium text-gray-500 text-center mt-1.5 mb-6">
+          <p className="text-xs sm:text-sm font-medium text-gray-500 text-center mt-0.5 sm:mt-1 mb-3 sm:mb-5">
             I'm your Hiring Assistant.
           </p>
 
@@ -1639,7 +2387,7 @@ export default function HiringManagerDashboard() {
               e.preventDefault();
               handleSendPrompt();
             }}
-            className="w-full max-w-3xl sm:max-w-4xl bg-white rounded-3xl border border-gray-200/90 shadow-md hover:shadow-lg transition-all focus-within:ring-2 focus-within:ring-black/10 focus-within:border-gray-300 p-4 sm:p-5 flex flex-col justify-between min-h-[125px]"
+            className="w-full max-w-2xl sm:max-w-3xl bg-white rounded-2xl sm:rounded-3xl shadow-lg hover:shadow-xl transition-all p-3 sm:p-4.5 flex flex-col justify-between min-h-[105px] sm:min-h-[120px] border-0 focus-within:shadow-xl"
           >
             <textarea
               ref={promptInputRef}
@@ -1654,20 +2402,11 @@ export default function HiringManagerDashboard() {
               }}
               placeholder="Ask me anything about requisitions, candidates, interviews, or team..."
               disabled={isAiTyping}
-              className="w-full bg-transparent text-sm sm:text-[15px] text-gray-800 placeholder-gray-400 outline-none resize-none font-normal leading-relaxed disabled:opacity-50"
+              className="w-full bg-transparent text-xs sm:text-sm text-gray-800 placeholder-gray-400 outline-none resize-none font-normal leading-relaxed disabled:opacity-50"
             />
 
-            <div className="flex items-center justify-between pt-2">
-              <button
-                type="button"
-                onClick={() => handleSendPrompt('Summarize my hiring pipeline')}
-                className="text-gray-400 hover:text-gray-700 cursor-pointer p-1.5 rounded-xl hover:bg-gray-100 transition-colors"
-                title="Summarize hiring pipeline"
-              >
-                <Paperclip size={18} />
-              </button>
-
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-end pt-1">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={handleToggleVoice}
@@ -1676,31 +2415,30 @@ export default function HiringManagerDashboard() {
                   }`}
                   title={isListening ? 'Listening... click to stop' : 'Voice input (Speech to Text)'}
                 >
-                  {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                  {isListening ? <MicOff size={16} /> : <Mic size={16} />}
                 </button>
 
                 <button
                   type="submit"
                   disabled={!promptInput.trim() || isAiTyping}
-                  className="w-9 h-9 rounded-xl bg-[#18181B] text-white flex items-center justify-center hover:bg-black transition-colors cursor-pointer shadow-xs disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                  className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#18181B] text-white flex items-center justify-center hover:bg-black transition-colors cursor-pointer shadow-xs disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
                   title="Send message"
                 >
-                  <ArrowUp size={16} />
+                  <ArrowUp size={15} />
                 </button>
               </div>
             </div>
           </form>
 
-          {/* Centered Quick Action Pills */}
-          <div className="flex items-center justify-center gap-2 sm:gap-2.5 mt-4 flex-wrap">
+          {/* Centered Suggestion Pills */}
+          <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 flex-wrap w-full max-w-2xl sm:max-w-3xl py-1">
             <button
               type="button"
               disabled={isAiTyping}
               onClick={() => handleSendPrompt('Help me create a new requisition for a DevSecOps Engineer')}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 hover:shadow-xs active:scale-95 disabled:opacity-50"
-              title="Create new job requisition"
+              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
             >
-              <FileText size={13} className="text-gray-600" />
+              <FileText size={12} className="text-gray-600 shrink-0" />
               <span>Create requisition</span>
             </button>
 
@@ -1708,10 +2446,9 @@ export default function HiringManagerDashboard() {
               type="button"
               disabled={isAiTyping}
               onClick={() => handleSendPrompt('Also suggest 5 potential candidates from our candidate pool')}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 hover:shadow-xs active:scale-95 disabled:opacity-50"
-              title="Screen candidates"
+              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
             >
-              <Users size={13} className="text-gray-600" />
+              <Users size={12} className="text-gray-600 shrink-0" />
               <span>Screen candidates</span>
             </button>
 
@@ -1719,10 +2456,9 @@ export default function HiringManagerDashboard() {
               type="button"
               disabled={isAiTyping}
               onClick={() => handleSendPrompt('Compare top shortlisted candidates and their match scores')}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 hover:shadow-xs active:scale-95 disabled:opacity-50"
-              title="Compare candidates"
+              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
             >
-              <BarChart2 size={13} className="text-gray-600" />
+              <BarChart2 size={12} className="text-gray-600 shrink-0" />
               <span>Compare candidates</span>
             </button>
 
@@ -1730,158 +2466,40 @@ export default function HiringManagerDashboard() {
               type="button"
               disabled={isAiTyping}
               onClick={() => handleSendPrompt('Schedule an interview')}
-              className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-700 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5 hover:shadow-xs active:scale-95 disabled:opacity-50"
-              title="Schedule interview"
+              className="hidden sm:flex px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
             >
-              <Calendar size={13} className="text-gray-600" />
+              <Calendar size={12} className="text-gray-600 shrink-0" />
               <span>Schedule interview</span>
             </button>
 
             <button
               type="button"
-              onClick={() => navigate('/dashboard/hiring-manager/chat')}
-              className="px-3 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/90 text-xs font-semibold text-gray-500 shadow-2xs transition-all cursor-pointer hover:shadow-xs active:scale-95"
-              title="More actions in dedicated chat"
+              onClick={() => {
+                setToolsSearchQuery('');
+                setIsToolsDrawerOpen(true);
+              }}
+              className="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-500 shadow-xs hover:shadow-sm transition-all cursor-pointer active:scale-95"
+              title="More actions in tools drawer"
             >
               •••
             </button>
           </div>
-
-          {/* Dynamic Multi-Tenant AI Co-pilot Feature Card */}
-          <div className="w-full max-w-3xl sm:max-w-4xl mt-6 relative overflow-hidden rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-blue-950 p-4 sm:p-5 text-white shadow-xs border border-blue-900/30">
-            <div className="absolute right-0 top-0 -mt-6 -mr-6 w-48 h-48 rounded-full bg-sky-500/10 blur-3xl pointer-events-none" />
-            <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-start sm:items-center gap-3.5">
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center text-white shadow-md shrink-0">
-                  <Send size={20} className="-translate-x-0.5 -translate-y-0.5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-sky-400">
-                      Hiring Manager AI Co-Pilot
-                    </span>
-                    {botStatus?.telegram?.is_linked ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                        ● Connected as @{botStatus.telegram.username || user?.name || 'User'}
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                        ● Multi-Bot Available
-                      </span>
-                    )}
-                  </div>
-                  <h2 className="text-sm sm:text-base font-bold text-white mt-0.5">
-                    {botStatus?.telegram?.is_linked
-                      ? `Active on Telegram (@${botStatus.telegram.bot_username || 'HirMngerbot'})`
-                      : `Connect your Telegram or Zoho Cliq (@${botStatus?.telegram?.bot_username || 'HirMngerbot'})`}
-                  </h2>
-                  <p className="text-xs text-gray-300 font-normal mt-0.5">
-                    {botStatus?.telegram?.is_linked
-                      ? 'Your account is paired. You can draft requisitions, approve timesheets, and review candidate screenings right from Telegram.'
-                      : 'Pair your account in 1 click to manage requisitions, review candidates, and approve timesheets directly from your messaging app.'}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
-                {botStatus?.telegram?.is_linked ? (
-                  <>
-                    <a
-                      href={`https://t.me/${botStatus.telegram.bot_username || 'HirMngerbot'}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Send size={13} />
-                      <span>Open @{botStatus.telegram.bot_username || 'HirMngerbot'}</span>
-                      <ExternalLink size={12} className="opacity-70" />
-                    </a>
-                    <button
-                      type="button"
-                      onClick={handleTestPing}
-                      disabled={pingingBot}
-                      className="px-3.5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                      title="Send instant notification to your Telegram"
-                    >
-                      {pingingBot ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                      <span>Test Ping</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleUnlinkTelegram}
-                      className="px-3 py-2.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs font-semibold border border-red-500/30 transition-colors flex items-center gap-1 cursor-pointer"
-                      title="Disconnect Telegram account"
-                    >
-                      <Trash2 size={13} />
-                      <span className="hidden sm:inline">Unlink</span>
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleConnectTelegram}
-                    disabled={linkingTelegram}
-                    className="px-4 py-2.5 rounded-xl bg-sky-500 hover:bg-sky-400 text-slate-950 text-xs font-extrabold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                  >
-                    {linkingTelegram ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
-                    <span>{linkingTelegram ? 'Waiting for /start...' : 'Connect Telegram'}</span>
-                  </button>
-                )}
-
-                {/* Zoho Cliq Connection Action (Always Visible) */}
-                <button
-                  type="button"
-                  onClick={() => setShowCliqModal(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs font-semibold border border-emerald-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title="Connect or open Zoho Cliq AI Assistant"
-                >
-                  <MessageSquare size={13} />
-                  <span>Zoho Cliq</span>
-                </button>
-
-                {/* Microsoft Teams Connection Action */}
-                <button
-                  type="button"
-                  onClick={() => setShowTeamsModal(true)}
-                  className="px-3.5 py-2.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 text-xs font-semibold border border-indigo-500/30 transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title="Connect or launch Microsoft Teams AI Assistant"
-                >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
-                  </svg>
-                  <span>MS Teams</span>
-                  {botStatus?.ms_teams?.is_linked && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
         </div>
       ) : (
         /* Conversation Mode */
-        <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 pt-2 sm:pt-3 w-full">
-          <div className="w-full flex flex-col h-[calc(100vh-28px)]">
-              {/* TOP HEADER */}
-              <div className="flex items-center justify-between pb-2 mb-1 border-b border-gray-100 shrink-0">
+        <div className="flex-1 w-full min-h-0 flex flex-col max-w-5xl mx-auto px-2 sm:px-6 pt-1 sm:pt-2 overflow-hidden relative z-10">
+          <div className="w-full flex-1 min-h-0 flex flex-col overflow-hidden">
+              {/* TOP HEADER (Desktop only - mobile already has top bar) */}
+              <div className="hidden lg:flex items-center justify-between pb-2 mb-1 border-b border-gray-100 shrink-0">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-white shadow-xs border border-gray-200/70 flex items-center justify-center text-gray-900">
-                    <Sparkles size={16} />
+                  <div className="w-6 h-6 flex items-center justify-center shrink-0">
+                    <img src={termjobsLogo} alt="TermJobs" className="w-5.5 h-5.5 object-contain" />
                   </div>
                   <div>
                     <h2 className="text-xs font-bold text-gray-900 leading-tight">Hiring Assistant</h2>
                     <p className="text-[10px] text-gray-400">Ask anything or select actions</p>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleResetChat}
-                  className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-black text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                  title="New chat / Home"
-                >
-                  <RotateCcw size={12} />
-                  <span>New Chat</span>
-                </button>
               </div>
 
               {/* CHAT MESSAGES STREAM CONTAINER */}
@@ -1908,8 +2526,8 @@ export default function HiringManagerDashboard() {
                     ) : (
                       /* Assistant Message Bubble */
                       <div className="flex items-start gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-white/90 border border-gray-200/80 flex items-center justify-center text-gray-800 shadow-2xs shrink-0 mt-0.5">
-                          <Sparkles size={13} className="text-gray-800" />
+                        <div className="w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
+                          <img src={termjobsLogo} alt="TermJobs" className="w-5 h-5 object-contain" />
                         </div>
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <div className="flex items-center gap-2 px-1 text-[9.5px] text-gray-400 font-medium">
@@ -2409,8 +3027,8 @@ export default function HiringManagerDashboard() {
               {/* AI Thinking / Typing Indicator */}
               {isAiTyping && (
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-white/90 border border-gray-200/80 flex items-center justify-center text-gray-800 shadow-2xs shrink-0 mt-0.5">
-                    <Sparkles size={14} className="animate-spin text-gray-800" />
+                  <div className="w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
+                    <img src={termjobsLogo} alt="TermJobs" className="w-5 h-5 object-contain animate-pulse" />
                   </div>
                   <div className="bg-white/95 backdrop-blur-md rounded-2xl rounded-tl-xs px-4 py-3 border border-gray-100 shadow-xs flex items-center gap-2 text-xs text-gray-500">
                     <div className="flex items-center gap-1">
@@ -2435,25 +3053,7 @@ export default function HiringManagerDashboard() {
                 }}
                 className="bg-white rounded-2xl border border-gray-200/90 shadow-md p-2 pl-4 flex items-center gap-2.5 transition-all focus-within:ring-2 focus-within:ring-black/10 focus-within:border-gray-300"
               >
-                {/* Refresh / New Chat Icon */}
-                <button
-                  type="button"
-                  onClick={handleResetChat}
-                  className={`cursor-pointer p-1.5 shrink-0 rounded-xl hover:bg-gray-100 transition-colors ${messages.length > 1 ? 'text-gray-800 hover:text-black font-bold' : 'text-gray-400 hover:text-gray-600'
-                    }`}
-                  title="New chat / Refresh conversation"
-                >
-                  <RotateCcw size={16} />
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleSendPrompt('Summarize my hiring pipeline')}
-                  className="text-gray-400 hover:text-gray-700 cursor-pointer p-1.5 shrink-0 rounded-xl hover:bg-gray-100 transition-colors"
-                  title="Quick pipeline summary"
-                >
-                  <Paperclip size={16} />
-                </button>
                 <input
                   ref={promptInputRef}
                   type="text"
@@ -2524,7 +3124,7 @@ export default function HiringManagerDashboard() {
                   type="button"
                   onClick={() => navigate('/dashboard/hiring-manager/chat')}
                   className="px-2.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-500 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
-                  title="More actions in dedicated chat"
+                  title="View Dashboard Overview"
                 >
                   •••
                 </button>
@@ -3049,6 +3649,265 @@ export default function HiringManagerDashboard() {
           </div>
         </div>
       )}
+
+
+      {/* Right-Side Tools Drawer (Slide-in Panel) */}
+      <AnimatePresence>
+        {isToolsDrawerOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden text-left">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => setIsToolsDrawerOpen(false)}
+              className="absolute inset-0 bg-black/20 backdrop-blur-2xs cursor-pointer"
+            />
+
+            {/* Sliding Drawer Panel */}
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="absolute top-0 right-0 bottom-0 w-full sm:w-[400px] max-w-[100vw] bg-white border-l border-[#E5E5E5] shadow-2xl flex flex-col z-10 select-none"
+            >
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E5E5] bg-white shrink-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-[#111111] tracking-tight">Tools</h2>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#F7F7F5] text-[#737373] border border-[#E5E5E5]">
+                    Workspace
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsToolsDrawerOpen(false)}
+                  className="w-8 h-8 rounded-lg hover:bg-[#F7F7F5] text-[#737373] hover:text-[#111111] flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Optional Search */}
+              <div className="px-5 pt-3.5 pb-2 shrink-0 border-b border-gray-100 bg-white">
+                <div className="relative flex items-center">
+                  <Search size={14} className="absolute left-3 text-[#737373] pointer-events-none" />
+                  <input
+                    type="text"
+                    value={toolsSearchQuery}
+                    onChange={(e) => setToolsSearchQuery(e.target.value)}
+                    placeholder="Search tools..."
+                    autoFocus
+                    className="w-full pl-8.5 pr-8 py-2 bg-[#F7F7F5] hover:bg-gray-100/70 focus:bg-white rounded-xl border border-[#E5E5E5] text-xs text-[#111111] placeholder-[#737373] focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-[#111111]/30 transition-all"
+                  />
+                  {toolsSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setToolsSearchQuery('')}
+                      className="absolute right-2.5 text-[#737373] hover:text-[#111111] cursor-pointer p-0.5"
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Tool Groups Content */}
+              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 custom-scrollbar">
+                {filteredToolGroups.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-[#737373] space-y-2">
+                    <p>No tools matching "{toolsSearchQuery}"</p>
+                    <button
+                      type="button"
+                      onClick={() => setToolsSearchQuery('')}
+                      className="text-xs font-semibold text-[#111111] underline cursor-pointer"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                ) : (
+                  filteredToolGroups.map((group) => (
+                    <div key={group.id} className="space-y-2">
+                      <div className="text-[10px] font-bold text-[#737373] uppercase tracking-wider px-0.5">
+                        {group.name}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {group.tools.map((tool) => {
+                          const IconComp = tool.icon;
+                          return (
+                            <button
+                              key={tool.id}
+                              type="button"
+                              onClick={tool.action}
+                              className="p-2.5 rounded-xl bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] hover:border-[#111111]/30 text-left transition-all shadow-2xs hover:shadow-xs cursor-pointer flex items-center gap-2 group active:scale-[0.98]"
+                              title={tool.description || tool.name}
+                            >
+                              <div className="w-7 h-7 rounded-lg bg-[#F7F7F5] border border-[#E5E5E5] flex items-center justify-center text-[#111111] group-hover:bg-white group-hover:border-gray-300 shrink-0 transition-colors">
+                                <IconComp size={13.5} strokeWidth={2} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-[11.5px] font-semibold text-[#111111] leading-tight truncate">
+                                  {tool.name}
+                                </div>
+                              </div>
+                              {tool.badge && (
+                                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#111111] text-white font-mono shrink-0">
+                                  {tool.badge}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Right-Side Conversations Drawer (Exact Match to User's Reference Screenshot) */}
+      <AnimatePresence>
+        {isConversationsDrawerOpen && (
+          <div className="fixed inset-0 z-50 overflow-hidden text-left">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => setIsConversationsDrawerOpen(false)}
+              className="absolute inset-0 bg-black/20 backdrop-blur-2xs cursor-pointer"
+            />
+
+            {/* Sliding Drawer Panel */}
+            <motion.aside
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="absolute top-0 right-0 bottom-0 w-full sm:w-[380px] max-w-[100vw] bg-white border-l border-[#E5E5E5] shadow-2xl flex flex-col z-10 select-none"
+            >
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-[#E5E5E5] bg-white shrink-0">
+                <h2 className="text-base font-bold text-[#111111] tracking-tight">Conversations</h2>
+                <button
+                  type="button"
+                  onClick={() => setIsConversationsDrawerOpen(false)}
+                  className="w-8 h-8 rounded-lg hover:bg-[#F7F7F5] text-[#737373] hover:text-[#111111] flex items-center justify-center transition-colors cursor-pointer"
+                  title="Close (Esc)"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Action Bar: + New Chat & Search */}
+              <div className="p-4 pb-2.5 bg-white shrink-0 space-y-3">
+                <button
+                  type="button"
+                  onClick={handleStartNewChat}
+                  className="w-full py-2.5 px-4 rounded-xl bg-[#000000] hover:bg-[#181818] text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-all active:scale-[0.98]"
+                >
+                  <Plus size={14} strokeWidth={2.4} />
+                  <span>New Chat</span>
+                </button>
+
+                <div className="relative flex items-center">
+                  <Search size={14} className="absolute left-3 text-[#737373] pointer-events-none" />
+                  <input
+                    type="text"
+                    value={conversationsSearchQuery}
+                    onChange={(e) => setConversationsSearchQuery(e.target.value)}
+                    placeholder="Search conversations..."
+                    className="w-full pl-8.5 pr-8 py-2 bg-[#F7F7F5] hover:bg-gray-100/70 focus:bg-white rounded-xl border border-[#E5E5E5] text-xs text-[#111111] placeholder-[#737373] focus:outline-none focus:ring-2 focus:ring-black/5 focus:border-[#111111]/30 transition-all"
+                  />
+                  {conversationsSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setConversationsSearchQuery('')}
+                      className="absolute right-2.5 text-[#737373] hover:text-[#111111] cursor-pointer p-0.5"
+                      title="Clear search"
+                    >
+                      <X size={12} />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Grouped Conversations List (Today, Yesterday, Last 7 days, Older) */}
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5 custom-scrollbar">
+                {filteredConversations.length === 0 ? (
+                  <div className="py-12 text-center text-xs text-[#737373] space-y-2">
+                    <p>No conversations found</p>
+                    {conversationsSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setConversationsSearchQuery('')}
+                        className="text-xs font-semibold text-[#111111] underline cursor-pointer"
+                      >
+                        Clear search
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  [
+                    { label: 'Today', items: groupedConversations.today },
+                    { label: 'Yesterday', items: groupedConversations.yesterday },
+                    { label: 'Last 7 days', items: groupedConversations.last7Days },
+                    { label: 'Older', items: groupedConversations.older },
+                  ]
+                    .filter((group) => group.items.length > 0)
+                    .map((group) => (
+                      <div key={group.label} className="space-y-1.5">
+                        <div className="text-xs font-bold text-gray-700 tracking-tight px-1 mb-1.5">
+                          {group.label}
+                        </div>
+                        <div className="space-y-1">
+                          {group.items.map((conv) => {
+                            const isActive = conv.id === activeConversationId;
+                            return (
+                              <button
+                                key={conv.id}
+                                type="button"
+                                onClick={() => handleSelectConversation(conv)}
+                                className={`w-full p-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center gap-3 group active:scale-[0.99] border ${
+                                  isActive
+                                    ? 'bg-gray-100/90 border-gray-200 shadow-2xs'
+                                    : 'bg-white hover:bg-[#F7F7F5] border-transparent hover:border-[#E5E5E5]'
+                                }`}
+                              >
+                                <div className="w-8 h-8 rounded-xl bg-[#F7F7F5] border border-[#E5E5E5] flex items-center justify-center shrink-0 group-hover:bg-white group-hover:shadow-2xs transition-all">
+                                  {getConvIcon(conv.categoryIcon)}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs font-bold text-gray-900 leading-snug truncate">
+                                    {conv.title}
+                                  </div>
+                                  <div className="text-[11px] text-gray-400 truncate mt-0.5 font-normal">
+                                    {conv.preview}
+                                  </div>
+                                </div>
+                                <div className="text-[10px] text-gray-400 font-medium shrink-0 ml-1">
+                                  {formatConvTime(conv.updatedAt || conv.createdAt)}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))
+                )}
+              </div>
+            </motion.aside>
+          </div>
+        )}
+      </AnimatePresence>
 
 </div>
 );
