@@ -116,6 +116,19 @@ def _generate_candidate_passcode() -> str:
     return f"TJ-INT-{digits}"
 
 
+def _resolve_interview_domain(origin: Optional[str] = None, data_origin: Optional[str] = None) -> str:
+    """
+    Resolves the base URL for public interview rooms and candidate access links.
+    Strictly enforces the official TermJobs domain (https://termjobs.in) instead of localhost.
+    Can be configured via INTERVIEW_PUBLIC_DOMAIN env variable.
+    """
+    domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
+    candidate = (origin or data_origin or domain).strip().rstrip("/")
+    if not candidate or "localhost" in candidate or "127.0.0.1" in candidate:
+        return domain
+    return candidate
+
+
 def send_interview_invitation_email(
     candidate_name: str,
     candidate_email: str,
@@ -132,6 +145,13 @@ def send_interview_invitation_email(
 ) -> Dict[str, Any]:
     """Sends an official HTML interview invitation with hosted domain meeting link & passcode."""
     from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
+    import re
+
+    domain = _resolve_interview_domain()
+    if meeting_link:
+        meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, meeting_link)
+    if candidate_portal_link:
+        candidate_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, candidate_portal_link)
     
     subject = f"Interview Invitation: {round_name} for {requisition_title} at {company_name}"
     
@@ -284,11 +304,11 @@ def generate_calendar_links(interview: Dict[str, Any], base_url: Optional[str] =
     req_title = interview.get("requisition_title", "Role")
     
     # Priority: Native TermJobs hosted room on our domain
-    raw_base = (base_url or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    raw_base = _resolve_interview_domain(base_url)
     round_identifier = interview.get("round_id") or interview.get("id") or "active"
     
     meeting_link = interview.get("meeting_link")
-    if not meeting_link or "cal.com" in meeting_link.lower():
+    if not meeting_link or "cal.com" in meeting_link.lower() or "localhost" in meeting_link or "127.0.0.1" in meeting_link:
         meeting_link = f"{raw_base}/interview/room/{round_identifier}"
     
     location = meeting_link
@@ -361,9 +381,9 @@ def generate_ics_content(interview: Dict[str, Any]) -> str:
     end_dt = f"{clean_date}T{end_time.replace(':', '')}00"
     now_stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     
-    raw_base = (os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+    raw_base = _resolve_interview_domain()
     location = interview.get("meeting_link") or f"{raw_base}/interview/room/{interview.get('round_id') or interview.get('id')}"
-    if "cal.com" in location.lower():
+    if "cal.com" in location.lower() or "localhost" in location or "127.0.0.1" in location:
         location = f"{raw_base}/interview/room/{interview.get('round_id') or interview.get('id')}"
     
     summary = f"{interview.get('interview_round', 'Interview')} - {interview.get('candidate_name', 'Candidate')} ({interview.get('requisition_title', 'Role')})"
@@ -407,8 +427,7 @@ def create_interview_proposal(
     origin: Optional[str] = None
 ) -> Dict[str, Any]:
     """Create a new interview proposal from the Hiring Manager, generating hosted domain links and initializing the InterviewRound."""
-    raw_origin = (origin or data.get("origin") or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
-    base_url = raw_origin
+    base_url = _resolve_interview_domain(origin, data.get("origin"))
     
     cand_sub_id = data.get("candidate_submission_id", "")
     round_name = (data.get("interview_round") or "Technical Round 1").strip()
@@ -472,7 +491,7 @@ def create_interview_proposal(
         interviewer_link = f"{base_url}/interview/staff?token={round_obj.interviewer_token}"
 
         req_meeting_link = (data.get("meeting_link") or "").strip()
-        if not req_meeting_link or "cal.com" in req_meeting_link.lower() or data.get("use_hosted_room", True):
+        if not req_meeting_link or "cal.com" in req_meeting_link.lower() or "localhost" in req_meeting_link.lower() or "127.0.0.1" in req_meeting_link or data.get("use_hosted_room", True):
             meeting_link = hosted_meeting_link
         else:
             meeting_link = req_meeting_link
@@ -725,8 +744,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
     Create a new interview round for a candidate under a requisition.
     Prevents duplicate rounds and duplicate assignments, generates hosted links and dispatches candidate invites.
     """
-    raw_origin = (origin or data.get("origin") or os.getenv("FRONTEND_BASE_URL") or os.getenv("API_PUBLIC_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
-    base_url = raw_origin
+    base_url = _resolve_interview_domain(origin, data.get("origin"))
 
     with get_session() as session:
         cand_sub_id = data.get("candidate_submission_id", "")
@@ -1472,18 +1490,30 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
 
         # Lookup tenant requisitions for title mapping and filtering
         req_filters = [Requisition.tenant_id == tenant_id] if tenant_id else []
-        req_rows = session.query(Requisition).filter(*req_filters).all()
+        req_rows = session.query(Requisition).only("id", "title", "tenant_id").filter(*req_filters).all()
         if not req_rows:
             # Fallback to all requisitions for local / multi-tenant demo
-            req_rows = session.query(Requisition).all()
+            req_rows = session.query(Requisition).only("id", "title", "tenant_id").all()
         req_title_map = {r.id: (r.title or "Position") for r in req_rows}
-        tenant_req_ids = set(req_title_map.keys())
 
         # Query scheduled interview rounds from SQLite
         round_filters = [InterviewRound.tenant_id == tenant_id] if tenant_id else []
-        rounds = session.query(InterviewRound).filter(*round_filters).all()
+        # Do not transfer transcripts or recording data for the dashboard list.
+        # They are fetched only when a user opens the relevant interview detail.
+        round_fields = (
+            "id", "tenant_id", "requisition_id", "requisition_title",
+            "candidate_submission_id", "candidate_name", "candidate_email",
+            "round_number", "round_name", "round_type", "scheduled_date",
+            "scheduled_time", "duration_minutes", "interviewer_name",
+            "interviewer_email", "interviewer_role", "instructions",
+            "internal_notes", "candidate_passcode", "candidate_token",
+            "interviewer_token", "room_id", "status", "evaluation",
+            "communication_metrics", "communication_analysis", "recording_url",
+            "recording_metadata", "expires_at", "created_by", "created_at",
+            "updated_at",
+        )
+        rounds = session.query(InterviewRound).only(*round_fields).filter(*round_filters).all()
         by_candidate = {}
-        seen_round_ids = set()
         for r in rounds:
             cid = r.candidate_submission_id or r.candidate_email or r.id
             if cid not in by_candidate:
@@ -1500,42 +1530,20 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                     "rounds": [],
                 }
             by_candidate[cid]["rounds"].append(r.to_doc())
-            seen_round_ids.add(r.id)
 
-        # Also query MongoDB interview_rounds
-        try:
-            m_round_filters = {"tenant_id": tenant_id} if tenant_id else {}
-            mongo_rounds = list(db["interview_rounds"].find(
-                m_round_filters,
-                {"transcript": 0, "recording_blob": 0, "video_blob": 0, "audio_chunks": 0, "raw_turns": 0}
-            ))
-            for mr in mongo_rounds:
-                mr_id = mr.get("id") or str(mr.get("_id"))
-                if mr_id not in seen_round_ids:
-                    cid = mr.get("candidate_submission_id") or mr.get("candidate_email") or mr_id
-                    if cid not in by_candidate:
-                        by_candidate[cid] = {
-                            "candidate_submission_id": mr.get("candidate_submission_id"),
-                            "candidate_id": mr.get("candidate_submission_id"),
-                            "candidate_name": mr.get("candidate_name"),
-                            "candidate_email": mr.get("candidate_email"),
-                            "requisition_id": mr.get("requisition_id"),
-                            "requisition_title": mr.get("requisition_title") or req_title_map.get(mr.get("requisition_id"), "Position"),
-                            "match_score": None,
-                            "vendor_name": None,
-                            "submission_status": "Interviewing",
-                            "rounds": [],
-                        }
-                    m_clean = dict(mr)
-                    m_clean["id"] = mr_id
-                    m_clean.pop("_id", None)
-                    by_candidate[cid]["rounds"].append(m_clean)
-                    seen_round_ids.add(mr_id)
-        except Exception as m_err:
-            logger.warning(f"Error querying mongo interview_rounds in summary: {m_err}")
-
-        # Match candidate submission info from SQLite with O(1) hash maps
-        submissions = session.query(CandidateSubmission).all()
+        # InterviewRound and CandidateSubmission are both Mongo-backed models.
+        # Query the submissions only for requisitions represented in this result,
+        # and project the small set of fields rendered by the dashboard.
+        relevant_req_ids = {item.get("requisition_id") for item in by_candidate.values() if item.get("requisition_id")}
+        submissions_query = session.query(CandidateSubmission).only(
+            "id", "requisition_id", "candidate_name", "candidate_email",
+            "vendor_name", "match_score", "status", "candidate_id",
+        )
+        if relevant_req_ids:
+            submissions_query = submissions_query.filter(CandidateSubmission.requisition_id.in_(relevant_req_ids))
+        else:
+            submissions_query = submissions_query.filter(CandidateSubmission.id.in_([]))
+        submissions = submissions_query.all()
         sub_by_id = {s.id: s for s in submissions if s.id}
         sub_by_email_req = {((s.candidate_email or "").strip().lower(), str(s.requisition_id or "")): s for s in submissions if s.candidate_email}
         sub_by_name_req = {((s.candidate_name or "").strip().lower(), str(s.requisition_id or "")): s for s in submissions if s.candidate_name}
@@ -1551,45 +1559,10 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
                 v["match_score"] = matched_sub.match_score
                 v["vendor_name"] = matched_sub.vendor_name
                 v["submission_status"] = matched_sub.status
+                v["candidate_id"] = matched_sub.candidate_id or matched_sub.id
                 if not v.get("candidate_submission_id"):
                     v["candidate_submission_id"] = matched_sub.id
 
-        # Also enrich candidate submission info from MongoDB candidate_submissions
-        try:
-            sub_query = {"requisition_id": {"$in": list(tenant_req_ids)}} if tenant_req_ids else {}
-            mongo_subs = list(db["candidate_submissions"].find(
-                sub_query,
-                {"candidate_email": 1, "id": 1, "_id": 1, "requisition_id": 1, "status": 1, "match_score": 1, "vendor_name": 1, "candidate_id": 1}
-            ))
-            subs_by_id = {}
-            subs_by_email_req = {}
-            for ms in mongo_subs:
-                ms_id = ms.get("id") or str(ms.get("_id"))
-                subs_by_id[ms_id] = ms
-                ms_email = (ms.get("candidate_email") or "").strip().lower()
-                ms_req = str(ms.get("requisition_id") or "")
-                if ms_email and ms_req:
-                    subs_by_email_req[(ms_email, ms_req)] = ms
-
-            for k, v in by_candidate.items():
-                cid = v.get("candidate_submission_id")
-                v_email = (v.get("candidate_email") or "").strip().lower()
-                v_req = str(v.get("requisition_id") or "")
-                ms = subs_by_id.get(cid) or subs_by_email_req.get((v_email, v_req))
-                if ms:
-                    if ms.get("status"):
-                        v["submission_status"] = ms["status"]
-                    if ms.get("match_score") is not None:
-                        v["match_score"] = ms["match_score"]
-                    if ms.get("vendor_name"):
-                        v["vendor_name"] = ms["vendor_name"]
-                    cand_assigned_id = ms.get("candidate_id") or ms.get("id") or str(ms.get("_id"))
-                    v["candidate_id"] = cand_assigned_id
-                    if not v.get("candidate_submission_id"):
-                        v["candidate_submission_id"] = ms.get("id") or str(ms.get("_id"))
-        except Exception:
-            pass
-            
         summary = []
         for cid, item in by_candidate.items():
             r_list = item["rounds"]
@@ -2120,5 +2093,3 @@ def process_candidate_hiring_decision(
                 "submission_status": "Rejected",
                 "message": f"Candidate {candidate_name} has been marked as Rejected. Admin notified.",
             }
-
-

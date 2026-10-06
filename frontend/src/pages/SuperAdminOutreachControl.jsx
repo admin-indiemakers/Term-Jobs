@@ -51,6 +51,7 @@ export default function SuperAdminOutreachControl() {
   const [selectedReqId, setSelectedReqId] = useState('');
   const [reqDetails, setReqDetails] = useState(null);
   const [activityFeed, setActivityFeed] = useState([]);
+  const [activityLoaded, setActivityLoaded] = useState(false);
   
   // Settings & Toggles
   const [autoEnabled, setAutoEnabled] = useState(true);
@@ -78,11 +79,10 @@ export default function SuperAdminOutreachControl() {
   const fetchGlobalData = async () => {
     setLoadingStats(true);
     try {
-      const [statsRes, reqsRes, settingsRes, actRes] = await Promise.all([
+      const [statsRes, reqsRes, settingsRes] = await Promise.all([
         request('/api/superadmin/outreach/stats', { token }).catch(() => null),
         request('/api/superadmin/outreach/requisitions', { token }).catch(() => []),
-        request('/api/superadmin/outreach/settings', { token }).catch(() => null),
-        request('/api/superadmin/outreach/activity', { token }).catch(() => [])
+        request('/api/superadmin/outreach/settings', { token }).catch(() => null)
       ]);
 
       if (statsRes) {
@@ -97,13 +97,23 @@ export default function SuperAdminOutreachControl() {
       if (settingsRes && settingsRes.auto_outreach_enabled !== undefined) {
         setAutoEnabled(settingsRes.auto_outreach_enabled);
       }
-      if (Array.isArray(actRes)) {
-        setActivityFeed(actRes);
-      }
     } catch (err) {
       showToast(err.message || 'Error loading outreach data', 'error');
     } finally {
       setLoadingStats(false);
+    }
+  };
+
+  // The audit log is only needed when its tab is opened. Its payload can contain
+  // dozens of records, so keep it off the critical dashboard render path.
+  const fetchActivityFeed = async (forceRefresh = false) => {
+    if (activityLoaded && !forceRefresh) return;
+    try {
+      const res = await request('/api/superadmin/outreach/activity', { token, forceRefresh });
+      if (Array.isArray(res)) setActivityFeed(res);
+      setActivityLoaded(true);
+    } catch (err) {
+      showToast(err.message || 'Error loading outreach activity', 'error');
     }
   };
 
@@ -129,7 +139,11 @@ export default function SuperAdminOutreachControl() {
     if (selectedReqId) {
       fetchRequisitionDetails(selectedReqId);
     }
-  }, [selectedReqId]);
+  }, [selectedReqId, token]);
+
+  useEffect(() => {
+    if (activeTab === 'activity') fetchActivityFeed();
+  }, [activeTab, token]);
 
   // Toggle Auto Outreach Setting
   const handleToggleAutoOutreach = async () => {
@@ -321,6 +335,7 @@ export default function SuperAdminOutreachControl() {
             onClick={() => {
               fetchGlobalData();
               if (selectedReqId) fetchRequisitionDetails(selectedReqId);
+              if (activeTab === 'activity') fetchActivityFeed(true);
             }}
             className="p-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 transition-colors shadow-xs cursor-pointer"
             title="Refresh All Data"

@@ -2,8 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-backend_dir = Path(__file__).resolve().parent.parent
-root_dir = backend_dir.parent
+root_dir = Path(__file__).resolve().parent.parent
+backend_dir = root_dir / "backend"
 
 for path_str in (str(backend_dir), str(root_dir)):
     if path_str not in sys.path:

@@ -578,7 +578,10 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
 
         # 4. Construct links using hosted domain
         import urllib.parse
-        base_url = (origin or os.getenv("FRONTEND_BASE_URL") or "https://termjobs.in").strip().rstrip("/")
+        termjobs_domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
+        base_url = (origin or termjobs_domain).strip().rstrip("/")
+        if "localhost" in base_url or "127.0.0.1" in base_url:
+            base_url = termjobs_domain
         
         if round_doc:
             round_id = round_doc.get("id")

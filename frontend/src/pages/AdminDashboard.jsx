@@ -98,11 +98,32 @@ export default function AdminDashboard() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [users, setUsers] = useState([]);
-  const [requisitions, setRequisitions] = useState([]);
-  const [notifications, setNotifications] = useState([]);
+  const [users, setUsers] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_admin_users');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [requisitions, setRequisitions] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_admin_reqs');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+  const [notifications, setNotifications] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_admin_notifs');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [calConfig, setCalConfig] = useState({ provider: null, status: 'disconnected', connected_email: null });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => users.length === 0 && requisitions.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -136,36 +157,52 @@ export default function AdminDashboard() {
   const [savingCal, setSavingCal] = useState(false);
 
   const load = () => {
-    setLoading(true);
+    if (users.length === 0 && requisitions.length === 0) {
+      setLoading(true);
+    }
     setError('');
 
-    const fetchUsers = request('/api/auth/users', { token })
+    const fetchUsers = request('/api/auth/users?compact=true', { token })
       .then((usersRes) => {
         if (Array.isArray(usersRes)) {
           setUsers(usersRes);
+          try {
+            sessionStorage.setItem('tj_cached_admin_users', JSON.stringify(usersRes));
+          } catch (e) {}
         }
       })
       .catch((err) => {
         console.warn('Failed to load users:', err);
       });
 
-    const fetchReqs = request('/requisitions', { token })
+    // The console only renders a small requisition summary. Request the compact
+    // representation instead of full JD/intake documents for every role.
+    const fetchReqs = request('/requisitions?dashboard=true', { token })
       .then((reqsRes) => {
         if (Array.isArray(reqsRes)) {
           setRequisitions(reqsRes);
+          try {
+            sessionStorage.setItem('tj_cached_admin_reqs', JSON.stringify(reqsRes));
+          } catch (e) {}
         }
       })
       .catch((err) => {
         console.warn('Failed to load requisitions:', err);
       });
 
-    const fetchNotifs = request('/api/notifications', { token })
+    // Activity is supplemental; keep it small and do not make the primary
+    // requisitions/team view wait for it.
+    const fetchNotifs = request('/api/notifications?compact=true&limit=12', { token })
       .then((notifsRes) => {
-        setNotifications(Array.isArray(notifsRes) ? notifsRes : (notifsRes?.notifications || []));
+        const notifList = Array.isArray(notifsRes) ? notifsRes : (notifsRes?.notifications || []);
+        setNotifications(notifList);
+        try {
+          sessionStorage.setItem('tj_cached_admin_notifs', JSON.stringify(notifList));
+        } catch (e) {}
       })
       .catch(() => {});
 
-    Promise.allSettled([fetchUsers, fetchReqs, fetchNotifs]).finally(() => {
+    Promise.allSettled([fetchUsers, fetchReqs]).finally(() => {
       setLoading(false);
     });
   };

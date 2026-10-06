@@ -45,10 +45,12 @@ def _get_client() -> "MongoClient":
             "retryWrites": True,
             "retryReads": True,
         }
-        # In serverless environment like Vercel, use minPoolSize=0
+        # In serverless environments like Vercel, maintain 1 connection warm with idle timeout
+        # to avoid repeating expensive TLS handshakes on every invocation
         if os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"):
             kwargs["maxPoolSize"] = 10
-            kwargs["minPoolSize"] = 0
+            kwargs["minPoolSize"] = 1
+            kwargs["maxIdleTimeMS"] = 60000
         else:
             kwargs["maxPoolSize"] = 50
             kwargs["minPoolSize"] = 10
@@ -229,9 +231,19 @@ class Query(Generic[T]):
         self._filters: dict = {}
         self._sorts: list = []
         self._limit: int | None = None
+        self._projection: dict | None = None
 
     def _coll(self):
         return self._session._db[self._model.__tablename__]
+
+    def only(self, *fields: str) -> "Query[T]":
+        """Project only the specified fields from MongoDB, skipping unnecessary columns."""
+        if fields:
+            self._projection = {f: 1 for f in fields}
+            self._projection["_id"] = 0
+            if "id" not in self._projection:
+                self._projection["id"] = 1
+        return self
 
     def filter(self, *criteria, **kwargs) -> "Query[T]":
         for c in criteria:
@@ -271,22 +283,30 @@ class Query(Generic[T]):
         return self
 
     def first(self) -> Optional[T]:
-        doc = self._coll().find_one(self._filters, sort=self._sorts or None)
+        if self._projection is not None:
+            doc = self._coll().find_one(self._filters, self._projection, sort=self._sorts or None)
+        else:
+            doc = self._coll().find_one(self._filters, sort=self._sorts or None)
         if doc is None:
             return None
         obj = self._model.from_doc(doc)
-        self._session._track(obj)
+        if self._projection is None:
+            self._session._track(obj)
         return obj
 
     def all(self) -> list[T]:
-        cursor = self._coll().find(self._filters)
+        if self._projection is not None:
+            cursor = self._coll().find(self._filters, self._projection)
+        else:
+            cursor = self._coll().find(self._filters)
         if self._sorts:
             cursor = cursor.sort(self._sorts)
         if self._limit:
             cursor = cursor.limit(self._limit)
         rows = [self._model.from_doc(d) for d in cursor]
-        for row in rows:
-            self._session._track(row)
+        if self._projection is None:
+            for row in rows:
+                self._session._track(row)
         return rows
 
     def count(self) -> int:
@@ -370,6 +390,13 @@ class Session:
     def delete(self, obj: Model) -> None:
         self._deleted.append(obj)
 
+    def close(self) -> None:
+        """No-op close method for compatibility with session context managers."""
+        self._pending = []
+        self._tracked = []
+        self._snapshots = {}
+        self._deleted = []
+
 
 def get_session() -> Session:
     return Session()
@@ -377,10 +404,34 @@ def get_session() -> Session:
 
 def init_db() -> None:
     """Create indexes. Idempotent — safe to call on every start."""
-    db["users"].create_index("email", unique=True)
-    db["users"].create_index("tenant_id")
-    db["tenants"].create_index("name")
-    db["company_profiles"].create_index("tenant_id")
+    try:
+        db["users"].create_index("id", unique=True)
+    except Exception:
+        pass
+    try:
+        db["users"].create_index("email", unique=True)
+    except Exception:
+        pass
+    try:
+        db["users"].create_index("tenant_id")
+        db["users"].create_index("role")
+        db["users"].create_index([("tenant_id", 1), ("role", 1)])
+        db["users"].create_index([("created_by", 1), ("role", 1)])
+    except Exception:
+        pass
+    try:
+        db["tenants"].create_index("id", unique=True)
+    except Exception:
+        pass
+    try:
+        db["tenants"].create_index("name")
+    except Exception:
+        pass
+    try:
+        db["company_profiles"].create_index("tenant_id")
+        db["company_profiles"].create_index("id", unique=True)
+    except Exception:
+        pass
     db["requisitions"].create_index("tenant_id")
     db["requisitions"].create_index("company_profile_id")
     db["requisitions"].create_index("status")

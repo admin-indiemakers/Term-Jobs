@@ -62,6 +62,7 @@ from modules.billing.router import router as vendor_billing_router
 from modules.superadmin_agent.voice_router import router as voice_router
 from modules.onboarding.offboarding_router import router as offboarding_router
 from modules.candidate_profile.router import router as candidate_profile_router
+from modules.hm_zoho_cliq import zoho_cliq_router
 
 
 from contextlib import asynccontextmanager
@@ -69,50 +70,54 @@ from contextlib import asynccontextmanager
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Modern lifespan context manager for startup & shutdown tasks."""
-    try:
-        from modules.candidate.telegram_service import start_telegram_polling
-        start_telegram_polling()
-        print("[APP STARTUP] Candidate Telegram Bot long-polling initialized successfully.")
-    except Exception as exc:
-        print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
-
-    try:
-        from modules.hm_telegram_bot.bot import start_hm_bot_polling
-        start_hm_bot_polling()
-        print("[APP STARTUP] Hiring Manager Telegram Bot initialized successfully.")
-    except Exception as exc:
-        print(f"[APP STARTUP HM TELEGRAM ERROR] {exc}")
-
-    # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
+    is_serverless = bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME"))
     worker_task = None
-    async def _background_worker():
-        while True:
-            try:
-                await asyncio.sleep(60)
-                _auto_close_expired()
-                from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
-                auto_check_and_dispatch_48h_shortlists()
-            except asyncio.CancelledError:
-                break
-            except Exception:
-                pass
-    worker_task = asyncio.create_task(_background_worker())
+
+    if not is_serverless:
+        try:
+            from modules.candidate.telegram_service import start_telegram_polling
+            start_telegram_polling()
+            print("[APP STARTUP] Candidate Telegram Bot long-polling initialized successfully.")
+        except Exception as exc:
+            print(f"[APP STARTUP TELEGRAM ERROR] {exc}")
+
+        try:
+            from modules.hm_telegram_bot.bot import start_hm_bot_polling
+            start_hm_bot_polling()
+            print("[APP STARTUP] Hiring Manager Telegram Bot initialized successfully.")
+        except Exception as exc:
+            print(f"[APP STARTUP HM TELEGRAM ERROR] {exc}")
+
+        # Launch background worker for periodic maintenance (auto-close expired & 48h shortlists)
+        async def _background_worker():
+            while True:
+                try:
+                    await asyncio.sleep(60)
+                    _auto_close_expired()
+                    from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
+                    auto_check_and_dispatch_48h_shortlists()
+                except asyncio.CancelledError:
+                    break
+                except Exception:
+                    pass
+        worker_task = asyncio.create_task(_background_worker())
 
     yield
 
     # Shutdown
     if worker_task:
         worker_task.cancel()
-    try:
-        from modules.candidate.telegram_service import stop_telegram_polling
-        stop_telegram_polling()
-    except Exception:
-        pass
-    try:
-        from modules.hm_telegram_bot.bot import stop_hm_bot_polling
-        stop_hm_bot_polling()
-    except Exception:
-        pass
+    if not is_serverless:
+        try:
+            from modules.candidate.telegram_service import stop_telegram_polling
+            stop_telegram_polling()
+        except Exception:
+            pass
+        try:
+            from modules.hm_telegram_bot.bot import stop_hm_bot_polling
+            stop_hm_bot_polling()
+        except Exception:
+            pass
 
 
 app = FastAPI(
@@ -284,6 +289,7 @@ app.include_router(vendor_billing_router)
 app.include_router(voice_router)
 app.include_router(offboarding_router, tags=["Offboarding"])
 app.include_router(candidate_profile_router)
+app.include_router(zoho_cliq_router)
 
 # Reload trigger for interview module updates
 
@@ -304,23 +310,22 @@ def _build_service():
 
 
 service = _build_service()
-try:
-    init_db()
+if not bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")):
     try:
-        from scripts.seed_super_admin import seed_super_admin
-        seed_super_admin()
-    except Exception as s_exc:
+        init_db()
+        try:
+            from scripts.seed_super_admin import seed_super_admin
+            seed_super_admin()
+        except Exception as s_exc:
+            import logging
+            logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
+    except Exception as exc:  # noqa: BLE001
         import logging
-        logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
-except Exception as exc:  # noqa: BLE001
-    # Do not hard-crash at startup if MongoDB is unreachable (e.g. Atlas
-    # paused / IP allowlist changed). The server boots and reports degraded
-    # status via /health so callers can diagnose instead of a blank port.
-    import logging
 
-    logging.getLogger("uvicorn.error").warning(
-        "init_db failed (MongoDB unreachable?): %s", exc
-    )
+        logging.getLogger("uvicorn.error").warning(
+            "init_db failed (MongoDB unreachable?): %s", exc
+        )
+
 
 
 # --- request/response models ------------------------------------------------
@@ -1025,11 +1030,14 @@ def create_requisition(
 
 @app.get("/requisitions")
 @app.get("/api/requisitions")
-def list_requisitions(current_user: User = Depends(get_current_user)) -> list[dict]:
+def list_requisitions(
+    dashboard: bool = False,
+    current_user: User = Depends(get_current_user),
+) -> list[dict]:
     from modules.identity.domain.models import VendorEngagement
 
     # Cache requisitions per user for 30s to avoid repeated DB scans
-    _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}"
+    _cache_key = f"reqs:{current_user.id}:{current_user.role}:{current_user.tenant_id}:{'dashboard' if dashboard else 'full'}"
     _cached = _cache.get(_cache_key)
     if _cached is not None:
         return _cached
@@ -1062,6 +1070,24 @@ def list_requisitions(current_user: User = Depends(get_current_user)) -> list[di
         else:
             # Admin, HR, Director, etc. see all requisitions in their tenant
             query = query.filter(models.Requisition.tenant_id == current_user.tenant_id)
+
+        # The Admin Console needs only these list-card fields. Avoid loading the
+        # large generated JD, intake, coverage and refinement documents.
+        if dashboard:
+            rows = query.only("id", "status", "title", "created_at", "updated_at").all()
+            result = [
+                {
+                    "id": r.id,
+                    "status": r.status,
+                    "title": r.title,
+                    "created_at": _format_datetime(r.created_at),
+                    "updated_at": _format_datetime(r.updated_at),
+                }
+                for r in rows
+            ]
+            _cache.set(_cache_key, result, ttl=30)
+            return result
+
         rows = query.all()
         # Only fetch company profiles referenced by the returned requisitions (not ALL profiles)
         needed_cp_ids = {r.company_profile_id for r in rows if r.company_profile_id}
@@ -3765,6 +3791,9 @@ def index(request: Request) -> Any:
 
 @app.get("/health")
 @app.get("/api/health")
+@app.get("/api/index.py", include_in_schema=False)
+@app.get("/api/ping", include_in_schema=False)
+@app.get("/ping", include_in_schema=False)
 def health() -> dict:
     from modules.shared.db import db
 

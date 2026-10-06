@@ -2,19 +2,23 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/backend/api/index.py?__vercel_path=/api/$1"
+      "destination": "/api/index.py?__vercel_path=/api/$1"
     },
     {
       "source": "/api",
-      "destination": "/backend/api/index.py?__vercel_path=/api"
+      "destination": "/api/index.py?__vercel_path=/api"
     },
     {
       "source": "/health",
-      "destination": "/backend/api/index.py?__vercel_path=/health"
+      "destination": "/api/index.py?__vercel_path=/health"
+    },
+    {
+      "source": "/ping",
+      "destination": "/api/index.py?__vercel_path=/ping"
     },
     {
       "source": "/(.*)",
-      "destination": "/backend/api/index.py?__vercel_path=/$1"
+      "destination": "/api/index.py?__vercel_path=/$1"
     }
   ]
 }

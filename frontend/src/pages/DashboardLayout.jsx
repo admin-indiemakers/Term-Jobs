@@ -302,7 +302,9 @@ export default function DashboardLayout() {
     }
   }, [user?.role, token]);
 
-  // Dynamic live count for Super Admin candidate pool & management (deferred so primary pages load instantly)
+  // Load Super Admin sidebar counts only on the pages that display the corresponding
+  // data. Fetching both large lists on every Super Admin route was competing with the
+  // page's own API calls (notably the outreach dashboard).
   const [superAdminCandidateCount, setSuperAdminCandidateCount] = useState(0);
   const [superAdminSelectedCount, setSuperAdminSelectedCount] = useState(0);
 
@@ -310,20 +312,27 @@ export default function DashboardLayout() {
     const isSuperAdmin = user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin';
     if (!isSuperAdmin || !token) return;
 
-    const isOnCandidateRoute = location.pathname.includes('/superadmin/candidate');
-    const timer = setTimeout(() => {
-      request('/api/superadmin/candidate-pool', { token })
-        .then((res) => {
-          setSuperAdminCandidateCount(res?.total_count || 0);
-        })
-        .catch(() => { });
+    const isCandidatePoolRoute = location.pathname.includes('/candidate-pool');
+    const isCandidateManagementRoute = location.pathname.includes('/candidate-management');
+    if (!isCandidatePoolRoute && !isCandidateManagementRoute) return;
 
-      request('/api/superadmin/candidate-management', { token })
-        .then((res) => {
-          setSuperAdminSelectedCount(res?.total_count || 0);
-        })
-        .catch(() => { });
-    }, isOnCandidateRoute ? 0 : 4000);
+    const timer = setTimeout(() => {
+      if (isCandidatePoolRoute) {
+        request('/api/superadmin/candidate-pool', { token })
+          .then((res) => {
+            setSuperAdminCandidateCount(res?.total_count || 0);
+          })
+          .catch(() => { });
+      }
+
+      if (isCandidateManagementRoute) {
+        request('/api/superadmin/candidate-management', { token })
+          .then((res) => {
+            setSuperAdminSelectedCount(res?.total_count || 0);
+          })
+          .catch(() => { });
+      }
+    }, 0);
 
     return () => clearTimeout(timer);
   }, [user?.role, token, location.pathname]);
@@ -331,10 +340,15 @@ export default function DashboardLayout() {
   // Listen to refresh-superadmin-data to refresh Super Admin sidebar badges dynamically
   useEffect(() => {
     const handleRefreshSuperAdminBadges = () => {
-      if ((user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') && token) {
+      const isSuperAdmin = user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin';
+      const isCandidatePoolRoute = location.pathname.includes('/candidate-pool');
+      const isCandidateManagementRoute = location.pathname.includes('/candidate-management');
+      if (isSuperAdmin && token && isCandidatePoolRoute) {
         request('/api/superadmin/candidate-pool', { token, forceRefresh: true })
           .then((res) => setSuperAdminCandidateCount(res?.total_count || 0))
           .catch(() => { });
+      }
+      if (isSuperAdmin && token && isCandidateManagementRoute) {
         request('/api/superadmin/candidate-management', { token, forceRefresh: true })
           .then((res) => setSuperAdminSelectedCount(res?.total_count || 0))
           .catch(() => { });
@@ -342,7 +356,7 @@ export default function DashboardLayout() {
     };
     window.addEventListener('refresh-superadmin-data', handleRefreshSuperAdminBadges);
     return () => window.removeEventListener('refresh-superadmin-data', handleRefreshSuperAdminBadges);
-  }, [user?.role, token]);
+  }, [user?.role, token, location.pathname]);
 
   // Close mobile drawer on route change
   useEffect(() => {

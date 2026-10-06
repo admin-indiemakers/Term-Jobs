@@ -1,6 +1,22 @@
 {
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "/api/index.py?__vercel_path=/api/$1"
+    },
+    {
+      "source": "/api",
+      "destination": "/api/index.py?__vercel_path=/api"
+    },
+    {
+      "source": "/health",
+      "destination": "/api/index.py?__vercel_path=/health"
+    },
+    {
+      "source": "/ping",
+      "destination": "/api/index.py?__vercel_path=/ping"
+    },
+    {
       "source": "/(.*)",
       "destination": "/api/index.py?__vercel_path=/$1"
     }

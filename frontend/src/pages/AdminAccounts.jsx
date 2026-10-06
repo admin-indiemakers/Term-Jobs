@@ -90,7 +90,7 @@ export default function AdminAccounts() {
         let adminList = Array.isArray(superAdminData) ? superAdminData : null;
         if (!adminList) {
           try {
-            const fallbackUsers = await request('/api/auth/users', { token });
+            const fallbackUsers = await request('/api/auth/users?role=Super+Admin', { token });
             adminList = (Array.isArray(fallbackUsers) ? fallbackUsers : []).filter((u) => u.role === 'Super Admin');
           } catch {
             adminList = [];

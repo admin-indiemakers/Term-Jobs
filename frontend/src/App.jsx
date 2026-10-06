@@ -84,8 +84,8 @@ function RequireAuth({ children }) {
 }
 
 function HomeRedirect() {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
+  const { user, token } = useAuth();
+  if (!token || !user) return <Navigate to="/login" replace />;
   if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
@@ -98,8 +98,8 @@ function HomeRedirect() {
 }
 
 function DashboardIndex() {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
+  const { user, token } = useAuth();
+  if (!token || !user) return <Navigate to="/login" replace />;
   if (user.role === 'Super Admin') return <Navigate to="/dashboard/superadmin" replace />;
   if (user.role === 'Recruiter') return <Navigate to="/dashboard/recruiter" replace />;
   if (user.role === 'Admin') return <Navigate to="/dashboard/admin" replace />;
@@ -179,20 +179,25 @@ function HorizontalTransitionLayout() {
         {/* Left Slot: Sign In / Auth Page (at -100vw, slides in from the left) */}
         <div
           ref={authScrollRef}
-          className="absolute inset-0 -left-[100vw] w-screen h-dvh overflow-y-auto overflow-x-hidden"
+          className="absolute inset-0 w-screen h-dvh overflow-y-auto overflow-x-hidden"
+          style={{ left: '-100vw' }}
         >
           {hasVisitedLogin && <AuthPage />}
         </div>
 
         {/* Center Slot: Landing Page (at 0vw) */}
-        <div className="absolute inset-0 w-screen h-dvh overflow-hidden">
+        <div
+          className="absolute inset-0 w-screen h-dvh overflow-hidden"
+          style={{ left: '0vw' }}
+        >
           <LandingPage enabled={isLanding} />
         </div>
 
         {/* Right Slot: Open Roles Page (at +100vw, slides in from the right) */}
         <div
           ref={rolesScrollRef}
-          className="absolute inset-0 left-[100vw] w-screen h-dvh overflow-y-auto overflow-x-hidden"
+          className="absolute inset-0 w-screen h-dvh overflow-y-auto overflow-x-hidden"
+          style={{ left: '100vw' }}
         >
           {hasVisitedRoles && <OpenRolesPage enabled={isRoles} />}
         </div>

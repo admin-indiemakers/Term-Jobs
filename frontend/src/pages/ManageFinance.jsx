@@ -37,8 +37,17 @@ const EMPTY_FORM = {
 export default function ManageFinance() {
   const { user, token } = useAuth();
 
-  const [financeUsers, setFinanceUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [financeUsers, setFinanceUsers] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_finance');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => financeUsers.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -53,12 +62,18 @@ export default function ManageFinance() {
   const [editing, setEditing] = useState(false);
   const [emailError, setEmailError] = useState('');
 
-  const load = () => {
-    setLoading(true);
-    request('/api/auth/users', { token })
+  const load = (forceRefresh = false) => {
+    if (financeUsers.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
+    request('/api/auth/users?role=Finance+Team,Finance&compact=true', { token, forceRefresh })
       .then((data) => {
-        const all = Array.isArray(data) ? data : [];
-        setFinanceUsers(all.filter((u) => u.role === 'Finance Team' || u.role === 'Finance'));
+        const list = Array.isArray(data) ? data : [];
+        const filtered = list.filter((u) => u.role === 'Finance Team' || u.role === 'Finance');
+        setFinanceUsers(filtered);
+        try {
+          sessionStorage.setItem('tj_cached_finance', JSON.stringify(filtered));
+        } catch (e) {}
         setError('');
       })
       .catch((err) => setError(err.message))

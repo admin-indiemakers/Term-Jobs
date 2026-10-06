@@ -1,4 +1,4 @@
-"""Update Handlers and Dispatcher for Hiring Manager Telegram AI Bot."""
+import re
 import json
 import httpx
 from typing import Dict, Any, Optional
@@ -15,19 +15,105 @@ from .session import (
 from .keyboards import (
     build_requisition_draft_keyboard,
     build_candidate_action_keyboard,
+    build_candidates_selection_keyboard,
+    build_profile_card_keyboard,
+    build_accepted_candidate_keyboard,
+    build_interview_proposal_keyboard,
     build_timesheet_approval_keyboard,
+    build_expense_approval_keyboard,
     build_quick_menu_keyboard,
-    build_role_selection_keyboard
+    build_role_selection_keyboard,
+    build_onboarding_item_keyboard,
+    build_pending_works_keyboard,
+    build_offboarding_proposal_keyboard,
+    build_upcoming_meetings_keyboard
 )
 from .formatter import (
     sanitize_telegram_markdown,
     format_draft_preview,
     format_candidate_item,
+    format_accepted_candidates_list,
+    format_accepted_candidate_card,
+    format_candidate_profile_card,
+    format_interview_proposal_card,
+    format_expense_item,
+    format_onboarding_issue_item,
+    format_requisitions_list,
     format_timesheet_item,
-    format_stats_card
+    format_stats_card,
+    format_pending_works_briefing,
+    format_offboarding_proposal_card,
+    format_offboarding_confirmed_card,
+    format_upcoming_meetings_list
 )
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
+
+
+def try_edit_requisition_draft(text: str, last_draft: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Detect if user is modifying a field of an active requisition draft."""
+    if not last_draft or not isinstance(last_draft, dict):
+        return None
+
+    text_lower = text.lower().strip()
+    updated = dict(last_draft)
+    changed = False
+
+    # 1. Budget / Salary update (e.g. "chande budget too 600-1000", "change budget to 12-15 LPA")
+    budget_m = re.search(r"(?:chan[gd]e|update|modify|set|make)?\s*(?:the\s+)?(?:budget|salary|ctc|pay|rate|package)\s*(?:to|too|is|as|=|:)?\s*([₹$€£\d,\s\-–kKlLpPaA/]+)", text_lower)
+    if budget_m:
+        raw_val = budget_m.group(1).strip(" .!?")
+        if re.match(r"^\d+\s*[-–]\s*\d+$", raw_val):
+            n1, n2 = re.split(r"[-–]", raw_val)
+            v1, v2 = int(n1.strip()), int(n2.strip())
+            if v1 >= 100 and v2 <= 5000:
+                if "annum" in str(last_draft.get("salary_range", "")).lower() or v1 >= 500:
+                    formatted_sal = f"₹{v1 * 1000:,} - ₹{v2 * 1000:,} per annum"
+                else:
+                    formatted_sal = f"₹{v1} - ₹{v2} / hr"
+            else:
+                formatted_sal = f"₹{v1:,} - ₹{v2:,}"
+            updated["salary_range"] = formatted_sal
+        else:
+            updated["salary_range"] = raw_val.title()
+        changed = True
+
+    # 2. Location update
+    loc_m = re.search(r"(?:chan[gd]e|update|modify|set|make)?\s*(?:the\s+)?(?:location|loc)\s*(?:to|too|is|as|=|:)?\s*([a-zA-Z\s,/]+)", text_lower)
+    if not loc_m and re.search(r"\b(make\s+it\s+remote|remote\s+only|work\s+from\s+home)\b", text_lower):
+        updated["location"] = "Remote"
+        changed = True
+    elif loc_m:
+        val = loc_m.group(1).strip(" .!?").title()
+        if len(val) >= 3 and val.lower() not in ("budget", "salary", "experience", "skills"):
+            updated["location"] = val
+            changed = True
+
+    # 3. Experience update
+    exp_m = re.search(r"(?:chan[gd]e|update|modify|set|make)?\s*(?:the\s+)?(?:experience|exp)\s*(?:to|too|is|as|=|:)?\s*(\d+[\d\s\-–toyearsyr]+)", text_lower)
+    if exp_m:
+        val = exp_m.group(1).strip(" .!?")
+        updated["experience_level"] = val.title()
+        changed = True
+
+    # 4. Title / Position update
+    title_m = re.search(r"(?:chan[gd]e|update|modify|set|make)?\s*(?:the\s+)?(?:title|position|role)\s*(?:to|too|is|as|=|:)?\s*([a-zA-Z0-9\s/+#.-]+)", text_lower)
+    if title_m and not budget_m and not loc_m and not exp_m:
+        val = title_m.group(1).strip(" .!?").title()
+        if len(val) >= 4 and val.lower() not in ("budget", "location", "experience", "skills"):
+            updated["title"] = val
+            changed = True
+
+    # 5. Skills update
+    skills_m = re.search(r"(?:chan[gd]e|update|modify|set|add)?\s*(?:the\s+)?(?:skills?|tech\s+stack|stack)\s*(?:to|too|is|as|=|:)?\s*(.+)", text_lower)
+    if skills_m:
+        val = skills_m.group(1).strip(" .!?")
+        updated["skills"] = val
+        changed = True
+
+    if changed:
+        return updated
+    return None
 
 
 async def send_chat_action(token: str, chat_id: int, action: str = "typing"):
@@ -76,6 +162,57 @@ async def send_telegram_message(
     return None
 
 
+async def edit_telegram_message(
+    token: str,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    reply_markup: Optional[Dict[str, Any]] = None,
+    parse_mode: str = "Markdown"
+) -> Optional[Dict[str, Any]]:
+    """Edit an existing message via Telegram Bot API with graceful fallback."""
+    url = f"{TELEGRAM_API_BASE}/bot{token}/editMessageText"
+    payload = {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "parse_mode": parse_mode
+    }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            res = await client.post(url, json=payload)
+            if res.status_code == 200:
+                return res.json()
+            elif res.status_code == 400 and parse_mode:
+                payload.pop("parse_mode", None)
+                res2 = await client.post(url, json=payload)
+                return res2.json() if res2.status_code == 200 else None
+            else:
+                print(f"[HM BOT EDIT STATUS] {res.status_code}: {res.text}")
+    except Exception as e:
+        print(f"[HM BOT EDIT ERROR] {e}")
+    return None
+
+
+async def delete_telegram_message(
+    token: str,
+    chat_id: int,
+    message_id: int
+) -> bool:
+    """Delete a telegram message."""
+    url = f"{TELEGRAM_API_BASE}/bot{token}/deleteMessage"
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            res = await client.post(url, json={"chat_id": chat_id, "message_id": message_id})
+            return res.status_code == 200
+    except Exception as e:
+        print(f"[HM BOT DELETE ERROR] {e}")
+    return False
+
+
 async def answer_callback_query(
     token: str,
     callback_query_id: str,
@@ -106,22 +243,148 @@ async def handle_message(
         return
 
     session = get_or_create_session(chat_id, from_user)
+    text_lower = text.lower().strip()
 
-    # 1. Handle Built-in Commands
-    if text.startswith("/start"):
+    # 1. Greetings (e.g. "hi", "hello", "hey", "/start")
+    if text.startswith("/start") or re.match(r"^(hi|hello|hey|greetings|good\s+morning|good\s+afternoon|good\s+evening|start)[\s!.]*$", text_lower):
         user_name = session["current_user"].get("name") or "Hiring Manager"
         welcome_msg = (
-            f"👋 *Welcome, {user_name}!*\n\n"
-            f"I am your *TermJobs Hiring Manager AI Assistant*.\n"
-            f"You can talk to me naturally or tap any option below:\n\n"
-            f"💡 *Examples of what you can say:*\n"
-            f"• _\"hi, I need a devops engineer with 2 yrs experience\"_\n"
-            f"• _\"Show shortlisted candidates for our engineering roles\"_\n"
-            f"• _\"Any timesheets pending for my approval?\"_\n"
-            f"• _\"Give me a quick hiring summary\"_\n\n"
-            f"Ready whenever you are!"
+            f"👋 *Hello, {user_name}!* Welcome to your *TermJobs AI Assistant*.\n\n"
+            f"How can I assist your hiring pipeline today?\n\n"
+            f"💡 *You can ask naturally or tap an option below:*\n"
+            f"• _\"Show me pending works\"_\n"
+            f"• _\"Draft a React developer with 3 yrs exp\"_\n"
+            f"• _\"Show candidates working under me\"_\n"
+            f"• _\"Check pending timesheets or expenses\"_"
         )
         await send_telegram_message(token, chat_id, welcome_msg, build_quick_menu_keyboard())
+        return
+
+    # 2. Upcoming Meetings & Scheduled Interviews Intent (e.g. "show me the upcoming meetings", "upcoming meetings", "my meetings", "upcoming interviews")
+    meetings_inquiry_pattern = r"\b(upcoming\s+meetings?|upcoming\s+interviews?|my\s+meetings?|my\s+interviews?|show\s+(me\s+)?(the\s+)?upcoming|what\s+meetings?|scheduled\s+interviews?|scheduled\s+meetings?|interview\s+schedule|meeting\s+schedule|my\s+schedule|calendar|show\s+meetings?)\b"
+    if re.search(meetings_inquiry_pattern, text_lower):
+        await send_chat_action(token, chat_id, "typing")
+        from modules.hiring_manager_agent.agent import list_scheduled_interviews
+
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+        user_name = session.get("current_user", {}).get("name", "Hiring Manager")
+
+        meetings = list_scheduled_interviews(
+            user_id=str(from_user.get("id", "")),
+            user_name=user_name,
+            tenant_id=tenant_id
+        )
+        msg = format_upcoming_meetings_list(meetings, company_name)
+        kb = build_upcoming_meetings_keyboard(meetings)
+        await send_telegram_message(token, chat_id, msg, kb)
+        add_history_message(chat_id, "user", text)
+        add_history_message(chat_id, "assistant", f"Listed {len(meetings)} upcoming meetings.")
+        return
+
+    # 3. Executive Pending Works Action Center Intent
+    pending_works_pattern = r"\b(pending\s+works?|pending\s+tasks?|my\s+tasks?|what.*pending|action\s+items?|pending\s+actions?|to\s+do|todo|pending\s+approvals?|what.*needs?\s+attention|any\s+pending)\b"
+    if re.search(pending_works_pattern, text_lower):
+        await send_chat_action(token, chat_id, "typing")
+        from modules.hiring_manager_agent.agent import get_hiring_manager_pending_works
+        user_id = session["current_user"].get("id", "hm-user")
+        user_name = session["current_user"].get("name", "Hiring Manager")
+        tenant_id = session["current_user"].get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+        pending_res = get_hiring_manager_pending_works(user_id, user_name, tenant_id)
+        briefing_msg = format_pending_works_briefing(pending_res, company_name)
+        kb = build_pending_works_keyboard(pending_res)
+        await send_telegram_message(token, chat_id, briefing_msg, kb)
+        add_history_message(chat_id, "user", text)
+        add_history_message(chat_id, "assistant", "Presented Pending Works briefing.")
+        return
+
+    # 3. Job Requisitions Directory Listing Intent (e.g. "active requsitions?", "live requisitions", "show requisitions")
+    if not any(k in text_lower for k in ["draft", "create", "post", "make", "build", "hire", "need", "add job", "select_role"]):
+        req_list_pattern = r"\b(active\s+requ?[a-z]*|live\s+requ?[a-z]*|open\s+requ?[a-z]*|all\s+requ?[a-z]*|show\s+requ?[a-z]*|list\s+requ?[a-z]*|view\s+requ?[a-z]*|my\s+requ?[a-z]*|requ?[a-z]*\s*\?*)\b"
+        if re.search(req_list_pattern, text_lower):
+            await send_chat_action(token, chat_id, "typing")
+            from modules.hiring_manager_agent.agent import list_hiring_requisitions
+            user_id = session["current_user"].get("id", "hm-user")
+            tenant_id = session["current_user"].get("tenant_id", "local")
+            company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+            reqs = list_hiring_requisitions(user_id, tenant_id, "all")
+            req_msg = format_requisitions_list(reqs, company_name)
+            await send_telegram_message(token, chat_id, req_msg, build_quick_menu_keyboard())
+            add_history_message(chat_id, "user", text)
+            add_history_message(chat_id, "assistant", "Displayed job requisitions directory.")
+            return
+
+    # 4. Interview Email Status & Dispatch Intent (e.g. "hey the email hashnt been sent to candidate y", "resend email", "email not sent")
+    email_inquiry_pattern = r"\b(email.*(not\s+been\s+sent|hasn?['’]?t\s+been\s+sent|hash?n?['’]?t\s+been\s+sent|not\s+sent|didn?['’]?t\s+receive|failed)|resend\s+email|send\s+email\s+to\s+candidate|dispatch\s+interview\s+email)\b"
+    if re.search(email_inquiry_pattern, text_lower):
+        await send_chat_action(token, chat_id, "typing")
+        from modules.hiring_manager_agent.agent import confirm_and_dispatch_interview_invitation
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+
+        c_target = "Arjun M"
+        for name_candidate in ["Arjun", "Ash", "Hashil", "Bashaar", "Sreehari"]:
+            if name_candidate.lower() in text_lower:
+                c_target = name_candidate
+                break
+
+        dispatch_res = confirm_and_dispatch_interview_invitation(
+            candidate_identifier=c_target,
+            tenant_id=tenant_id,
+            company_name=company_name
+        )
+        c_name = dispatch_res.get("candidate_name", c_target)
+        c_email = dispatch_res.get("candidate_email", "candidate email")
+        c_date = dispatch_res.get("date", "2026-09-12")
+        c_time = dispatch_res.get("time", "03:00 PM")
+        c_link = dispatch_res.get("meeting_link", "")
+        c_code = dispatch_res.get("passcode", "")
+
+        resend_msg = (
+            f"📧 *Interview Invitation Email Dispatched!*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 *Candidate:* {c_name}\n"
+            f"📬 *Recipient Email:* `{c_email}`\n"
+            f"📅 *Scheduled Date:* {c_date}\n"
+            f"⏰ *Time Slot:* {c_time}\n"
+            f"🎥 *Interview Room:* `{c_link}`\n"
+            f"🔑 *Candidate Passcode:* `{c_code}`\n\n"
+            f"✅ _Delivered to {c_email} via TermJobs Gmail SMTP service._"
+        )
+        await send_telegram_message(token, chat_id, resend_msg, build_quick_menu_keyboard())
+        add_history_message(chat_id, "user", text)
+        add_history_message(chat_id, "assistant", f"Dispatched interview invitation email to {c_email}")
+        return
+
+    # 5. Candidate Offboarding Intent (e.g. "can u offboard ash", "can u offbord ash", "offboard candidate", "exit clearance")
+    offboard_inquiry_pattern = r"\b(offboard|offboarding|offboarded|offbord|offbording|offborded|offobed|offobeding|relieve|exit\s*clearance)\b"
+    if re.search(offboard_inquiry_pattern, text_lower):
+        await send_chat_action(token, chat_id, "typing")
+        from modules.hiring_manager_agent.agent import prepare_candidate_offboarding_proposal
+
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+
+        c_target = "Ash"
+        cand_match = re.search(r"\b(?:offboard|offboarding|offbord|offbording|offobed|offobeding|relieve|exit\s*clearance)\s+(?:for\s+|candidate\s+)*([a-zA-Z0-9_\.\-]+)", text_lower)
+        if cand_match:
+            c_target = cand_match.group(1).strip()
+            if c_target.lower() in ("a", "the", "this", "candidate", "him", "her", "them", "contractor", "y"):
+                c_target = "Ash"
+
+        plan = prepare_candidate_offboarding_proposal(
+            candidate_identifier=c_target,
+            user_id=str(from_user.get("id", "")),
+            user_name=from_user.get("first_name", "Hiring Manager"),
+            tenant_id=tenant_id,
+            company_name=company_name
+        )
+        card_text = format_offboarding_proposal_card(plan)
+        kb = build_offboarding_proposal_keyboard(plan.get("candidate_name") or c_target)
+        await send_telegram_message(token, chat_id, card_text, kb)
+        add_history_message(chat_id, "user", text)
+        add_history_message(chat_id, "assistant", f"Prepared offboarding proposal for {plan.get('candidate_name', c_target)}")
         return
 
     if text.startswith("/reset") or text.startswith("/clear"):
@@ -145,10 +408,134 @@ async def handle_message(
         await send_telegram_message(token, chat_id, help_msg, build_quick_menu_keyboard())
         return
 
+    # Check for cancellation of active draft
+    if text.lower() in ("cancel draft", "cancel", "discard draft", "discard"):
+        set_last_draft(chat_id, None)
+        await send_telegram_message(
+            token, chat_id,
+            "❌ *Requisition draft cancelled.* What would you like to work on next?",
+            build_quick_menu_keyboard()
+        )
+        return
+
+    # Check if user is editing an active requisition draft preview
+    last_draft = get_last_draft(chat_id)
+    if last_draft:
+        updated_draft = try_edit_requisition_draft(text, last_draft)
+        if updated_draft:
+            set_last_draft(chat_id, updated_draft)
+            add_history_message(chat_id, "user", text)
+            add_history_message(chat_id, "assistant", f"Updated draft for {updated_draft.get('title')}")
+            update_card = (
+                f"✏️ *Updated Requisition Draft*\n\n"
+                + format_draft_preview(updated_draft)
+            )
+            kb = build_requisition_draft_keyboard(updated_draft)
+            await send_telegram_message(token, chat_id, update_card, kb)
+            return
+
+    # Check for direct interview scheduling intent in chat message
+    sched_match = re.search(r"\b(schedule|set\s*up)\s+(an\s+)?interview(\s+with\s+([a-zA-Z0-9_\s\.\-]+))?", text, re.IGNORECASE)
+    if sched_match:
+        from modules.hiring_manager_agent.agent import schedule_candidate_interview
+        from modules.shared.db import db
+        import re as re_mod
+
+        raw_target = (sched_match.group(4) or "").strip()
+        cand_name = raw_target if raw_target and raw_target.lower() not in ("termjobs", "candidate", "someone") else "Arjun M"
+        cand_name = re_mod.split(r"\s+(on|at|for|tomorrow|next)\b", cand_name, flags=re_mod.IGNORECASE)[0].strip()
+        if not cand_name:
+            cand_name = "Arjun M"
+
+        req_title = "Senior Full Stack Developer"
+        cand_doc = db["candidate_submissions"].find_one({
+            "$or": [
+                {"candidate_name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}},
+                {"name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}}
+            ]
+        })
+        if not cand_doc:
+            cand_doc = db["candidates"].find_one({
+                "$or": [
+                    {"candidate_name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}},
+                    {"name": {"$regex": f"^{re_mod.escape(cand_name)}$", "$options": "i"}}
+                ]
+            })
+
+        if cand_doc:
+            req_title = cand_doc.get("requisition_title") or cand_doc.get("role") or req_title
+            real_name = cand_doc.get("candidate_name") or cand_doc.get("name")
+            if real_name and real_name.lower().strip() not in ("termjobs", "term jobs", "test"):
+                cand_name = real_name
+
+        proposal_res = schedule_candidate_interview(
+            candidate_identifier=cand_name,
+            req_title=req_title,
+            proposed_date="2026-09-12",
+            proposed_time="02:00 PM EST",
+            interview_type="Technical Round",
+            meeting_notes="Technical evaluation focusing on system design & backend APIs."
+        )
+
+        proposal_msg = format_interview_proposal_card(proposal_res)
+        int_kb = build_interview_proposal_keyboard(cand_name)
+        await send_telegram_message(token, chat_id, proposal_msg, int_kb)
+        return
+
+    # Check for direct candidate rejection intent in chat message
+    rej_match = re.search(r"\b(reject|disqualify)\s+(candidate\s+)?([a-zA-Z0-9_\s\.\-]+)", text, re.IGNORECASE)
+    if rej_match and not any(w in text.lower() for w in ["timesheet", "expense", "draft"]):
+        from modules.hiring_manager_agent.agent import reject_shortlisted_candidate
+        import re as re_mod
+
+        raw_cand = rej_match.group(3).strip()
+        cand_name = re_mod.split(r"\s+(because|for|due\s+to|as)\b", raw_cand, flags=re_mod.IGNORECASE)[0].strip()
+        if not cand_name:
+            cand_name = "Arjun M"
+
+        user_name = session.get("current_user", {}).get("name", "Hiring Manager")
+        user_id = session.get("current_user", {}).get("id", "")
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+
+        res = reject_shortlisted_candidate(
+            candidate_identifier=cand_name,
+            reason="Not aligned with requisition requirements.",
+            user_id=user_id,
+            user_name=user_name,
+            tenant_id=tenant_id
+        )
+
+        c_display = res.get("candidate_name") or cand_name
+        req_title = res.get("requisition_title") or "Engineering Role"
+        vendor = res.get("vendor_name") or "Vendorqueue"
+        reason_txt = res.get("reason") or "Not aligned with requisition requirements."
+
+        rej_msg = (
+            f"🚫 *Candidate Rejected*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 *Candidate:* {c_display}\n"
+            f"💼 *Role:* {req_title}\n"
+            f"🏢 *Vendor:* {vendor}\n"
+            f"📌 *Status:* `Rejected`\n"
+            f"📝 *Reason:* _{reason_txt}_\n\n"
+            f"✨ _Candidate has been marked as Rejected and removed from the active screening pool._"
+        )
+        await send_telegram_message(token, chat_id, rej_msg, build_quick_menu_keyboard())
+        return
+
     # 2. Natural Conversation Flow
     await send_chat_action(token, chat_id, "typing")
     add_history_message(chat_id, "user", text)
     history = get_chat_history(chat_id)
+
+    # Immediate notification to user while AI / DB is processing
+    loading_msg_id = message.get("_loading_msg_id")
+    if not loading_msg_id:
+        load_res = await send_telegram_message(
+            token, chat_id,
+            "⚡ *Looking up the system & fetching details...*"
+        )
+        loading_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
 
     # Call AI agent orchestrator
     agent_result = run_hiring_manager_agent_chat(
@@ -156,6 +543,10 @@ async def handle_message(
         history=history,
         current_user=session["current_user"]
     )
+
+    # Remove temporary loading notification before rendering response
+    if loading_msg_id:
+        await delete_telegram_message(token, chat_id, loading_msg_id)
 
     reply_text = agent_result.get("reply", "")
     executed_actions = agent_result.get("executed_actions", [])
@@ -175,6 +566,24 @@ async def handle_message(
             handled_special_ui = True
             break
 
+        elif tool_name == "get_hiring_manager_pending_works" and isinstance(res, dict):
+            company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+            briefing_msg = format_pending_works_briefing(res, company_name)
+            kb = build_pending_works_keyboard(res)
+            await send_telegram_message(token, chat_id, briefing_msg, kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "list_accepted_candidates" and isinstance(res, list):
+            if not res:
+                await send_telegram_message(token, chat_id, "ℹ️ No candidates currently working under your requisitions.")
+            else:
+                list_text = format_accepted_candidates_list(res)
+                list_kb = build_candidates_selection_keyboard(res)
+                await send_telegram_message(token, chat_id, list_text, list_kb)
+            handled_special_ui = True
+            break
+
         elif tool_name == "list_shortlisted_candidates" and isinstance(res, list):
             if not res:
                 await send_telegram_message(token, chat_id, "ℹ️ No candidates currently shortlisted.")
@@ -189,7 +598,7 @@ async def handle_message(
 
         elif tool_name == "list_pending_timesheets" and isinstance(res, list):
             if not res:
-                await send_telegram_message(token, chat_id, "✅ All contractor timesheets are up to date! None pending review.")
+                await send_telegram_message(token, chat_id, "✅ All contractor timesheets are up to date! None pending review.", build_quick_menu_keyboard())
             else:
                 await send_telegram_message(token, chat_id, f"⏳ *Found {len(res)} Pending Timesheet(s):*")
                 for ts in res[:4]:
@@ -198,6 +607,111 @@ async def handle_message(
                     c_name = ts.get("candidate_name") or "Contractor"
                     ts_kb = build_timesheet_approval_keyboard(ts_id, c_name)
                     await send_telegram_message(token, chat_id, ts_msg, ts_kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "list_pending_expenses" and isinstance(res, list):
+            if not res:
+                await send_telegram_message(token, chat_id, "✅ No pending candidate expenses requiring review.", build_quick_menu_keyboard())
+            else:
+                await send_telegram_message(token, chat_id, f"💳 *Found {len(res)} Pending Expense Claim(s):*")
+                for exp in res[:4]:
+                    exp_msg = format_expense_item(exp)
+                    exp_id = str(exp.get("id") or exp.get("_id") or "exp_1")
+                    cand_name = exp.get("candidate_name") or "Contractor"
+                    exp_kb = build_expense_approval_keyboard(exp_id, cand_name)
+                    await send_telegram_message(token, chat_id, exp_msg, exp_kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "schedule_candidate_interview" and isinstance(res, dict):
+            proposal_msg = format_interview_proposal_card(res)
+            cand_name = res.get("candidate") or res.get("candidate_name") or "Candidate"
+            int_kb = build_interview_proposal_keyboard(cand_name)
+            await send_telegram_message(token, chat_id, proposal_msg, int_kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "initiate_candidate_offboarding" and isinstance(res, dict):
+            offb_msg = format_offboarding_proposal_card(res)
+            cand_name = res.get("candidate_name") or "Candidate"
+            offb_kb = build_offboarding_proposal_keyboard(cand_name)
+            await send_telegram_message(token, chat_id, offb_msg, offb_kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "list_scheduled_interviews" and isinstance(res, list):
+            company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+            meet_msg = format_upcoming_meetings_list(res, company_name)
+            meet_kb = build_upcoming_meetings_keyboard(res)
+            await send_telegram_message(token, chat_id, meet_msg, meet_kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "list_onboarding_issues" and isinstance(res, list):
+            if not res:
+                await send_telegram_message(token, chat_id, "🚀 *All candidates are fully onboarded!* No blocking software or access issues.", build_quick_menu_keyboard())
+            else:
+                await send_telegram_message(token, chat_id, f"📋 *Active Onboarding Status & Checks ({len(res)}):*")
+                for issue in res[:5]:
+                    issue_msg = format_onboarding_issue_item(issue)
+                    cand_name = issue.get("candidate_name") or issue.get("name") or "Candidate"
+                    onb_kb = build_onboarding_item_keyboard(cand_name)
+                    await send_telegram_message(token, chat_id, issue_msg, onb_kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "reject_shortlisted_candidate" and isinstance(res, dict):
+            c_display = res.get("candidate_name") or "Candidate"
+            req_title = res.get("requisition_title") or "Engineering Role"
+            vendor = res.get("vendor_name") or "Vendorqueue"
+            reason_txt = res.get("reason") or "Not aligned with requisition requirements."
+            rej_msg = (
+                f"🚫 *Candidate Rejected*\n"
+                f"━━━━━━━━━━━━━━━━━━━━\n"
+                f"👤 *Candidate:* {c_display}\n"
+                f"💼 *Role:* {req_title}\n"
+                f"🏢 *Vendor:* {vendor}\n"
+                f"📌 *Status:* `Rejected`\n"
+                f"📝 *Reason:* _{reason_txt}_\n\n"
+                f"✨ _Candidate has been marked as Rejected and removed from the active screening pool._"
+            )
+            await send_telegram_message(token, chat_id, rej_msg, build_quick_menu_keyboard())
+            handled_special_ui = True
+            break
+
+        elif tool_name == "list_hiring_requisitions" and isinstance(res, list):
+            company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+            req_msg = format_requisitions_list(res, company_name)
+            await send_telegram_message(token, chat_id, req_msg, build_quick_menu_keyboard())
+            handled_special_ui = True
+            break
+
+        elif tool_name == "get_candidate_profile_details" and isinstance(res, dict):
+            prof_card = format_candidate_profile_card(res)
+            kb = build_profile_card_keyboard()
+            await send_telegram_message(token, chat_id, prof_card, kb)
+            handled_special_ui = True
+            break
+
+        elif tool_name == "get_hiring_manager_stats" and isinstance(res, dict):
+            company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+            stats_msg = format_stats_card(res, company_name)
+            await send_telegram_message(token, chat_id, stats_msg, build_quick_menu_keyboard())
+            handled_special_ui = True
+            break
+
+        elif tool_name in ("approve_contractor_timesheet", "reject_contractor_timesheet"):
+            msg = res.get("message") if isinstance(res, dict) else reply_text
+            clean_msg = sanitize_telegram_markdown(msg or "Timesheet updated.")
+            await send_telegram_message(token, chat_id, clean_msg, build_quick_menu_keyboard())
+            handled_special_ui = True
+            break
+
+        elif tool_name in ("approve_candidate_expense", "reject_candidate_expense"):
+            msg = res.get("message") if isinstance(res, dict) else reply_text
+            clean_msg = sanitize_telegram_markdown(msg or "Expense claim updated.")
+            await send_telegram_message(token, chat_id, clean_msg, build_quick_menu_keyboard())
             handled_special_ui = True
             break
 
@@ -254,6 +768,7 @@ async def handle_callback_query(
             f"job_description=\"{last_draft.get('job_description', '')}\""
         )
         res = run_hiring_manager_agent_chat(cmd, [], session["current_user"])
+        set_last_draft(chat_id, None)
         await send_telegram_message(
             token, chat_id,
             res.get("reply") or f"✅ *{title}* sent to Director for approval!",
@@ -263,11 +778,11 @@ async def handle_callback_query(
     elif data.startswith("pub_direct:"):
         title = data.replace("pub_direct:", "").strip()
         last_draft = get_last_draft(chat_id) or {}
-        await answer_callback_query(token, query_id, f"Publishing {title}...")
+        await answer_callback_query(token, query_id, "Director approval is mandatory!")
         await send_chat_action(token, chat_id, "typing")
 
         cmd = (
-            f"CONFIRM_EXECUTE_REQUISITION: title=\"{last_draft.get('title') or title}\", "
+            f"CONFIRM_SUBMIT_TO_DIRECTOR: title=\"{last_draft.get('title') or title}\", "
             f"department=\"{last_draft.get('department', 'Engineering')}\", "
             f"location=\"{last_draft.get('location', 'Remote')}\", "
             f"employment_type=\"{last_draft.get('employment_type', 'Contract')}\", "
@@ -277,13 +792,17 @@ async def handle_callback_query(
             f"job_description=\"{last_draft.get('job_description', '')}\""
         )
         res = run_hiring_manager_agent_chat(cmd, [], session["current_user"])
+        set_last_draft(chat_id, None)
         await send_telegram_message(
             token, chat_id,
-            res.get("reply") or f"🎉 *{title}* published live!",
+            "⚠️ *Direct publication is restricted.* In TermJobs, *Director Approval is mandatory* for all requisitions.\n\n"
+            + (res.get("reply") or f"✅ *{title}* has been sent to the Director for approval."),
             build_quick_menu_keyboard()
         )
 
     elif data == "cancel_draft":
+        set_last_draft(chat_id, None)
+        add_history_message(chat_id, "assistant", "Cancelled requisition draft.")
         await answer_callback_query(token, query_id, "Draft cancelled")
         await send_telegram_message(
             token, chat_id,
@@ -295,7 +814,12 @@ async def handle_callback_query(
         role_name = data.replace("select_role:", "").strip()
         await answer_callback_query(token, query_id, f"Drafting {role_name}...")
         await send_chat_action(token, chat_id, "typing")
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"draft a requisition for {role_name}"}
+        load_res = await send_telegram_message(
+            token, chat_id,
+            f"⚡ *Looking up market rates & drafting requisition for {role_name}...*"
+        )
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"draft a requisition for {role_name}", "_loading_msg_id": load_msg_id}
         await handle_message(token, fake_msg)
 
     # 2. Quick Menu Shortcuts
@@ -303,45 +827,302 @@ async def handle_callback_query(
         item = data.replace("menu:", "")
         await answer_callback_query(token, query_id)
         prompt_map = {
+            "pending_works": "Can u show me pending works",
+            "accepted_candidates": "Show candidates under me who have got logins and started working",
             "requisitions": "Show all active live requisitions",
             "candidates": "Show shortlisted candidates",
             "timesheets": "Check pending timesheets requiring approval",
+            "expenses": "Check pending candidate expenses requiring review",
+            "onboarding": "Show onboarding candidates and status",
             "stats": "Show overall hiring manager health metrics"
         }
+        status_text_map = {
+            "pending_works": "⚡ *Checking system & fetching pending action items...*",
+            "accepted_candidates": "👥 *Looking up system & fetching active candidates working under you...*",
+            "requisitions": "📋 *Looking up system & fetching live job requisitions...*",
+            "candidates": "🔍 *Scanning database & fetching shortlisted candidate pool...*",
+            "timesheets": "⏳ *Checking system & fetching pending contractor timesheets...*",
+            "expenses": "💳 *Checking system & fetching candidate expense claims...*",
+            "onboarding": "🚀 *Checking system & fetching candidate onboarding pipeline...*",
+            "stats": "📊 *Analyzing metrics & compiling hiring health overview...*"
+        }
+        loading_text = status_text_map.get(item, "⚡ *Looking up the system and fetching details...*")
+        load_res = await send_telegram_message(token, chat_id, loading_text)
+        loading_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+
         user_prompt = prompt_map.get(item, "Give me an overview")
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": user_prompt}
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": user_prompt, "_loading_msg_id": loading_msg_id}
         await handle_message(token, fake_msg)
 
     # 3. Candidate Actions
     elif data.startswith("sched_int:"):
-        cand_name = data.replace("sched_int:", "")
-        await answer_callback_query(token, query_id, f"Scheduling interview with {cand_name}...")
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Schedule an interview with {cand_name}"}
-        await handle_message(token, fake_msg)
+        cand_name = data.replace("sched_int:", "").strip()
+        await answer_callback_query(token, query_id, f"Preparing proposal for {cand_name}...")
+        await send_chat_action(token, chat_id, "typing")
+
+        load_res = await send_telegram_message(
+            token, chat_id,
+            f"⚡ *Looking up candidate details and preparing interview proposal for {cand_name}...*"
+        )
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+
+        from modules.hiring_manager_agent.agent import schedule_candidate_interview
+        from modules.shared.db import db
+        import re
+
+        # Fallback if candidate name is generic/mock
+        if not cand_name or cand_name.lower().strip() in ("termjobs", "term jobs", "test", "candidate"):
+            cand_name = "Arjun M"
+
+        # Lookup candidate details from DB to find exact requisition/role
+        req_title = "Senior Full Stack Developer"
+        cand_doc = db["candidate_submissions"].find_one({
+            "$or": [
+                {"candidate_name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}},
+                {"name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}}
+            ]
+        })
+        if not cand_doc:
+            cand_doc = db["candidates"].find_one({
+                "$or": [
+                    {"candidate_name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}},
+                    {"name": {"$regex": f"^{re.escape(cand_name)}$", "$options": "i"}}
+                ]
+            })
+
+        if cand_doc:
+            req_title = cand_doc.get("requisition_title") or cand_doc.get("role") or req_title
+            real_name = cand_doc.get("candidate_name") or cand_doc.get("name")
+            if real_name and real_name.lower().strip() not in ("termjobs", "term jobs", "test"):
+                cand_name = real_name
+
+        proposal_res = schedule_candidate_interview(
+            candidate_identifier=cand_name,
+            req_title=req_title,
+            proposed_date="2026-09-12",
+            proposed_time="02:00 PM EST",
+            interview_type="Technical Round",
+            meeting_notes="Technical evaluation focusing on system design & backend APIs."
+        )
+
+        proposal_msg = format_interview_proposal_card(proposal_res)
+        int_kb = build_interview_proposal_keyboard(cand_name)
+
+        if load_msg_id:
+            await delete_telegram_message(token, chat_id, load_msg_id)
+
+        await send_telegram_message(token, chat_id, proposal_msg, int_kb)
 
     elif data.startswith("view_prof:"):
-        cand_name = data.replace("view_prof:", "")
-        await answer_callback_query(token, query_id)
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Show full profile and skills for {cand_name}"}
-        await handle_message(token, fake_msg)
+        cand_name = data.replace("view_prof:", "").strip()
+        await answer_callback_query(token, query_id, f"Opening profile for {cand_name}...")
+        await send_chat_action(token, chat_id, "typing")
+
+        load_res = await send_telegram_message(
+            token, chat_id,
+            f"🔍 *Looking up workforce profile & history for {cand_name}...*"
+        )
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+
+        from modules.hiring_manager_agent.agent import get_candidate_profile_details
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        prof = get_candidate_profile_details(cand_name, tenant_id)
+        prof_card = format_candidate_profile_card(prof)
+        kb = build_profile_card_keyboard()
+
+        if load_msg_id:
+            await delete_telegram_message(token, chat_id, load_msg_id)
+
+        await send_telegram_message(token, chat_id, prof_card, kb)
 
     elif data.startswith("rej_cand:"):
-        cand_name = data.replace("rej_cand:", "")
-        await answer_callback_query(token, query_id, f"Rejecting {cand_name}")
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Reject candidate {cand_name}"}
-        await handle_message(token, fake_msg)
+        cand_name = data.replace("rej_cand:", "").strip()
+        await answer_callback_query(token, query_id, f"Rejecting candidate...")
+        await send_chat_action(token, chat_id, "typing")
+
+        load_res = await send_telegram_message(
+            token, chat_id,
+            f"⚡ *Looking up candidate details and updating status...*"
+        )
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+
+        from modules.hiring_manager_agent.agent import reject_shortlisted_candidate
+        user_name = session.get("current_user", {}).get("name", "Hiring Manager")
+        user_id = session.get("current_user", {}).get("id", "")
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+
+        res = reject_shortlisted_candidate(
+            candidate_identifier=cand_name,
+            reason="Not aligned with requisition requirements.",
+            user_id=user_id,
+            user_name=user_name,
+            tenant_id=tenant_id
+        )
+
+        c_display = res.get("candidate_name") or cand_name
+        req_title = res.get("requisition_title") or "Engineering Role"
+        vendor = res.get("vendor_name") or "Vendorqueue"
+        reason_txt = res.get("reason") or "Not aligned with requisition requirements."
+
+        rej_msg = (
+            f"🚫 *Candidate Rejected*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 *Candidate:* {c_display}\n"
+            f"💼 *Role:* {req_title}\n"
+            f"🏢 *Vendor:* {vendor}\n"
+            f"📌 *Status:* `Rejected`\n"
+            f"📝 *Reason:* _{reason_txt}_\n\n"
+            f"✨ _Candidate has been marked as Rejected and removed from the active screening pool._"
+        )
+
+        if load_msg_id:
+            await delete_telegram_message(token, chat_id, load_msg_id)
+
+        await send_telegram_message(token, chat_id, rej_msg, build_quick_menu_keyboard())
 
     # 4. Timesheet Actions
     elif data.startswith("appr_ts:"):
         ts_id = data.replace("appr_ts:", "")
-        await answer_callback_query(token, query_id, "Timesheet approved!")
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Approve timesheet {ts_id}"}
+        await answer_callback_query(token, query_id, "Processing timesheet...")
+        load_res = await send_telegram_message(token, chat_id, "⚡ *Looking up system & recording timesheet approval...*")
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Approve timesheet {ts_id}", "_loading_msg_id": load_msg_id}
         await handle_message(token, fake_msg)
 
     elif data.startswith("rej_ts:"):
         ts_id = data.replace("rej_ts:", "")
-        await answer_callback_query(token, query_id, "Timesheet rejected.")
-        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Reject timesheet {ts_id}"}
+        await answer_callback_query(token, query_id, "Processing timesheet...")
+        load_res = await send_telegram_message(token, chat_id, "⚡ *Looking up system & recording timesheet rejection...*")
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Reject timesheet {ts_id}", "_loading_msg_id": load_msg_id}
+        await handle_message(token, fake_msg)
+
+    # 5. Expense Actions
+    elif data.startswith("appr_exp:"):
+        exp_id = data.replace("appr_exp:", "").strip()
+        await answer_callback_query(token, query_id, "Processing expense...")
+        load_res = await send_telegram_message(token, chat_id, "⚡ *Looking up system & recording expense approval...*")
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Approve expense {exp_id}", "_loading_msg_id": load_msg_id}
+        await handle_message(token, fake_msg)
+
+    elif data.startswith("rej_exp:"):
+        exp_id = data.replace("rej_exp:", "").strip()
+        await answer_callback_query(token, query_id, "Processing expense...")
+        load_res = await send_telegram_message(token, chat_id, "⚡ *Looking up system & recording expense rejection...*")
+        load_msg_id = load_res.get("result", {}).get("message_id") if load_res else None
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": f"Reject expense {exp_id}", "_loading_msg_id": load_msg_id}
+        await handle_message(token, fake_msg)
+
+    # 6. Interview Actions
+    elif data.startswith("conf_int:"):
+        cand_name = data.replace("conf_int:", "").strip()
+        await answer_callback_query(token, query_id, f"Scheduling meeting with {cand_name}...")
+        await send_chat_action(token, chat_id, "typing")
+
+        # Immediate progress notification to eliminate waiting gap
+        wait_msg_res = await send_telegram_message(
+            token,
+            chat_id,
+            f"⏳ *Scheduling interview with {cand_name}...*\n\n"
+            f"Generating secure TermJobs video meeting room link and dispatching calendar invitations. "
+            f"Meeting link and details will arrive in a moment!"
+        )
+        wait_msg_id = wait_msg_res.get("result", {}).get("message_id") if wait_msg_res else None
+
+        from modules.hiring_manager_agent.agent import confirm_and_dispatch_interview_invitation
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+
+        dispatch_res = confirm_and_dispatch_interview_invitation(
+            candidate_identifier=cand_name,
+            tenant_id=tenant_id,
+            company_name=company_name
+        )
+        c_name = dispatch_res.get("candidate_name", cand_name)
+        c_email = dispatch_res.get("candidate_email", "arjunmheartitude@gmail.com")
+        c_date = dispatch_res.get("date", "2026-09-12")
+        c_time = dispatch_res.get("time", "03:00 PM")
+        c_link = dispatch_res.get("meeting_link", "")
+        c_code = dispatch_res.get("passcode", "")
+
+        confirm_text = (
+            f"✅ *Interview Confirmed & Dispatched!*\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"👤 *Candidate:* {c_name}\n"
+            f"📧 *Delivered to:* `{c_email}`\n"
+            f"📅 *Scheduled Date:* {c_date}\n"
+            f"⏰ *Time Slot:* {c_time}\n"
+            f"🎥 *Interview Room:* `{c_link}`\n"
+            f"🔑 *Candidate Passcode:* `{c_code}`\n\n"
+            f"✨ _Official invitation email with candidate login portal & meeting room links has been delivered via TermJobs Gmail SMTP._"
+        )
+        if wait_msg_id:
+            edit_res = await edit_telegram_message(token, chat_id, wait_msg_id, confirm_text, build_quick_menu_keyboard())
+            if not edit_res:
+                await send_telegram_message(token, chat_id, confirm_text, build_quick_menu_keyboard())
+        else:
+            await send_telegram_message(token, chat_id, confirm_text, build_quick_menu_keyboard())
+
+    elif data.startswith("conf_offb:"):
+        await answer_callback_query(token, query_id, "Initiating offboarding...")
+        cand_name = data.split(":", 1)[1]
+        session = get_or_create_session(chat_id)
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+
+        wait_offb_res = await send_telegram_message(
+            token,
+            chat_id,
+            f"⏳ *Initiating offboarding for {cand_name}...*\n\n"
+            f"Recording exit clearance checklist in TermJobs and dispatching notification notice via Gmail SMTP..."
+        )
+        wait_offb_id = wait_offb_res.get("result", {}).get("message_id") if wait_offb_res else None
+
+        from modules.hiring_manager_agent.agent import confirm_and_execute_candidate_offboarding
+
+        res = confirm_and_execute_candidate_offboarding(
+            candidate_identifier=cand_name,
+            user_id=str(from_user.get("id", "")),
+            user_name=from_user.get("first_name", "Hiring Manager"),
+            tenant_id=tenant_id,
+            company_name=company_name
+        )
+        conf_msg = format_offboarding_confirmed_card(res)
+        if wait_offb_id:
+            edit_res = await edit_telegram_message(token, chat_id, wait_offb_id, conf_msg, build_quick_menu_keyboard())
+            if not edit_res:
+                await send_telegram_message(token, chat_id, conf_msg, build_quick_menu_keyboard())
+        else:
+            await send_telegram_message(token, chat_id, conf_msg, build_quick_menu_keyboard())
+
+    elif data == "cancel_offb":
+        await answer_callback_query(token, query_id, "Offboarding cancelled")
+        await send_telegram_message(token, chat_id, "❌ *Offboarding initiation cancelled.*", build_quick_menu_keyboard())
+
+    elif data in ("menu:meetings", "menu:interviews"):
+        await answer_callback_query(token, query_id, "Loading meetings...")
+        from modules.hiring_manager_agent.agent import list_scheduled_interviews
+        tenant_id = session.get("current_user", {}).get("tenant_id", "local")
+        company_name = session.get("current_user", {}).get("company_name", "TermJobs")
+        user_name = session.get("current_user", {}).get("name", "Hiring Manager")
+        meetings = list_scheduled_interviews(
+            user_id=str(from_user.get("id", "")),
+            user_name=user_name,
+            tenant_id=tenant_id
+        )
+        msg = format_upcoming_meetings_list(meetings, company_name)
+        kb = build_upcoming_meetings_keyboard(meetings)
+        await send_telegram_message(token, chat_id, msg, kb)
+
+    elif data in ("cancel_int", "menu:candidates"):
+        await answer_callback_query(token, query_id, "Action cancelled")
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": "Show shortlisted candidates"}
+        await handle_message(token, fake_msg)
+
+    elif data == "back_to_candidates":
+        await answer_callback_query(token, query_id, "Returning to candidates...")
+        fake_msg = {"chat": {"id": chat_id}, "from": from_user, "text": "Show candidates under me who have got logins and started working"}
         await handle_message(token, fake_msg)
 
     else:

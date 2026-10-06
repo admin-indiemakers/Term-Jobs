@@ -36,8 +36,17 @@ export default function ManageProcurement() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
 
-  const [procurementUsers, setProcurementUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [procurementUsers, setProcurementUsers] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_procurement');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        return Array.isArray(parsed) ? parsed : [];
+      }
+    } catch (e) {}
+    return [];
+  });
+  const [loading, setLoading] = useState(() => procurementUsers.length === 0);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState(EMPTY_FORM);
@@ -54,12 +63,18 @@ export default function ManageProcurement() {
   const [editing, setEditing] = useState(false);
   const [emailError, setEmailError] = useState('');
 
-  const load = () => {
-    setLoading(true);
-    request('/api/auth/users', { token })
+  const load = (forceRefresh = false) => {
+    if (procurementUsers.length === 0 || forceRefresh) {
+      setLoading(true);
+    }
+    request('/api/auth/users?role=Procurement+Team,Procurement&compact=true', { token, forceRefresh })
       .then((data) => {
-        const all = Array.isArray(data) ? data : [];
-        setProcurementUsers(all.filter((u) => u.role === 'Procurement Team' || u.role === 'Procurement'));
+        const list = Array.isArray(data) ? data : [];
+        const filtered = list.filter((u) => u.role === 'Procurement Team' || u.role === 'Procurement');
+        setProcurementUsers(filtered);
+        try {
+          sessionStorage.setItem('tj_cached_procurement', JSON.stringify(filtered));
+        } catch (e) {}
         setError('');
       })
       .catch((err) => setError(err.message))
@@ -98,7 +113,7 @@ export default function ManageProcurement() {
         token,
       });
       setSuccess(`Procurement Team member "${procUser.name || procUser.email}" approved and activated successfully.`);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to approve procurement account');
     } finally {
@@ -137,7 +152,7 @@ export default function ManageProcurement() {
       setForm(EMPTY_FORM);
       setEmailError('');
       setShowCreateModal(false);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to create procurement account');
     } finally {
@@ -154,7 +169,7 @@ export default function ManageProcurement() {
       await request(`/api/auth/users/${confirmDelete.id}`, { method: 'DELETE', token });
       setSuccess(`Procurement account "${confirmDelete.name || confirmDelete.email}" removed.`);
       setConfirmDelete(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to remove account');
     } finally {
@@ -177,7 +192,7 @@ export default function ManageProcurement() {
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess(`Procurement member "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to update procurement account');
     } finally {
@@ -581,4 +596,4 @@ export default function ManageProcurement() {
       )}
     </div>
   );
-}
+}
