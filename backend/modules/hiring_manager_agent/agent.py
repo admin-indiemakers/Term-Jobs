@@ -172,6 +172,27 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "open_hiring_requisition",
+            "description": "Open, inspect, and navigate directly to a specific job requisition detail view or page by role title or ID (e.g. 'open python developer requisition', 'open devsecops requisition').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "role_title": {
+                        "type": "string",
+                        "description": "The title or keyword of the requisition to open, e.g. 'Python Developer', 'QA Automation Engineer', 'DevSecOps Engineer'"
+                    },
+                    "requisition_id": {
+                        "type": "string",
+                        "description": "Optional requisition ID if already known"
+                    }
+                },
+                "required": ["role_title"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "draft_hiring_requisition",
             "description": "Create an interactive draft form preview card for a new Job Requisition before final confirmation & publication.",
             "parameters": {
@@ -1327,7 +1348,36 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
                         fn_name = tc["function"]["name"]
                         fn_args = json.loads(tc["function"]["body"] if "body" in tc["function"] else tc["function"].get("arguments", "{}"))
                         
-                        if fn_name == "list_hiring_requisitions":
+                        if fn_name == "open_hiring_requisition":
+                            all_reqs = list_hiring_requisitions(user_id, tenant_id, "all")
+                            role_kw = (fn_args.get("role_title") or "").lower()
+                            req_id = fn_args.get("requisition_id")
+                            target_req = None
+                            if req_id:
+                                target_req = next((r for r in all_reqs if str(r.get("id")) == str(req_id)), None)
+                            if not target_req and role_kw:
+                                target_req = next((r for r in all_reqs if role_kw in (r.get("title") or "").lower() or (r.get("title") or "").lower() in role_kw), None)
+                            if not target_req:
+                                for r in all_reqs:
+                                    t = (r.get("title") or "").lower()
+                                    if "python" in role_kw and "python" in t:
+                                        target_req = r
+                                        break
+                                    if "qa" in role_kw and "qa" in t:
+                                        target_req = r
+                                        break
+                                    if "devsecops" in role_kw and "devsecops" in t:
+                                        target_req = r
+                                        break
+                            if not target_req and all_reqs:
+                                target_req = all_reqs[0]
+
+                            if target_req:
+                                executed.append({"tool": "open_hiring_requisition", "result": target_req})
+                                reply_buf.append(f"Opening the **{target_req.get('title')}** requisition...")
+                            else:
+                                reply_buf.append(f"I couldn't find an existing requisition matching '{fn_args.get('role_title')}'. Would you like me to draft one?")
+                        elif fn_name == "list_hiring_requisitions":
                             res = list_hiring_requisitions(user_id, tenant_id, fn_args.get("status", "all"))
                             executed.append({"tool": "list_hiring_requisitions", "result": res})
                             live_cnt = len([r for r in res if r.get("status") in ("Published", "Open", "Active")])
@@ -1538,6 +1588,41 @@ def run_hiring_manager_agent_chat(prompt: str, history: list = None, current_use
             "reply": f"Here is the interview proposal for **{cand_name}**. Review the details and click **Confirm Proposal** to send it out.",
             "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
         }
+
+    # Open Requisition Intent (Directly opens specific requisition view/page)
+    is_open_req = any(k in prompt_lower for k in ["open", "view", "show details", "inspect"]) and not any(k in prompt_lower for k in ["candidate", "shortlist", "pool", "applicant", "overview", "timesheet", "expense"])
+    if is_open_req and is_req_query:
+        req_res = list_hiring_requisitions(user_id, tenant_id, "all")
+        matched = None
+        clean_target = prompt_lower
+        for w in ["open", "view", "show", "inspect", "the", "requisition", "requsisition", "requsisiton", "requsition", "req", "role", "position", "details", "of"]:
+            clean_target = re.sub(r'\b' + w + r'\b', '', clean_target)
+        clean_target = clean_target.strip()
+        if clean_target:
+            matched = next((r for r in req_res if clean_target in (r.get("title") or "").lower() or (r.get("title") or "").lower() in clean_target), None)
+        if not matched:
+            for r in req_res:
+                t = (r.get("title") or "").lower()
+                if "python" in prompt_lower and "python" in t:
+                    matched = r; break
+                elif "qa" in prompt_lower and "qa" in t:
+                    matched = r; break
+                elif "devsecops" in prompt_lower and "devsecops" in t:
+                    matched = r; break
+                elif "devops" in prompt_lower and "devops" in t:
+                    matched = r; break
+                elif "backend" in prompt_lower and "backend" in t:
+                    matched = r; break
+                elif "frontend" in prompt_lower and "frontend" in t:
+                    matched = r; break
+        if not matched and req_res:
+            matched = req_res[0]
+
+        if matched:
+            return {
+                "reply": f"Opening the **{matched.get('title')}** requisition...",
+                "executed_actions": [{"tool": "open_hiring_requisition", "result": matched}]
+            }
 
     # Requisition Count or List Intent
     if is_req_query or is_count_query:

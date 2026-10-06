@@ -25,7 +25,8 @@ import {
   Clock,
   Shield,
   CreditCard,
-  MoreHorizontal
+  MoreHorizontal,
+  Settings
 } from 'lucide-react';
 import { request } from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -190,6 +191,23 @@ export default function DashboardLayout() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isSidebarMinimized, setIsSidebarMinimized] = useState(() => {
+    try {
+      return localStorage.getItem('hm_sidebar_minimized') === 'true';
+    } catch (e) {
+      return false;
+    }
+  });
+
+  const toggleSidebar = () => {
+    setIsSidebarMinimized((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('hm_sidebar_minimized', String(next));
+      } catch (e) {}
+      return next;
+    });
+  };
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
@@ -718,49 +736,203 @@ export default function DashboardLayout() {
                   { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
                 ];
 
-  const renderSidebarContent = (onLinkClick) => (
-    <div className="flex flex-col h-full min-h-0 select-none">
-      {/* Brand Header */}
-      <div className="sidebar-brand shrink-0 pb-3.5 border-b border-[#EAEAE6] mb-3">
-        {userRole === 'Recruiter' ? (
-          <div className="flex items-center gap-3">
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: '50%',
-                backgroundColor: '#0A0A0A',
-                color: '#FFFFFF',
-              }}
-              className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
-            >
-              TJ
-            </div>
-            <div className="leading-tight">
-              <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
-              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
-            </div>
-          </div>
-        ) : userRole === 'Hiring Manager' ? (
-          <div className="flex items-center gap-3">
-            <div
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: '50%',
-                backgroundColor: '#0A0A0A',
-                color: '#FFFFFF',
-              }}
-              className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
-            >
-              {(user?.tenant_name || 'Bearitt').trim().charAt(0)}
-            </div>
-            <div className="leading-tight">
-              <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">{user?.tenant_name || 'Bearitt'}</div>
-              <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Hiring Manager</div>
+  const renderSidebarContent = (onLinkClick) => {
+    const isMinimized = userRole === 'Hiring Manager' && isSidebarMinimized;
+
+    if (isMinimized) {
+      return (
+        <div className="flex flex-col h-full min-h-0 select-none items-center relative overflow-visible w-full">
+          {/* Brand Header */}
+          <div className="sidebar-brand shrink-0 pb-2.5 border-b border-white/10 mb-2 flex flex-col items-center relative w-full">
+            <div className="relative group/brand flex items-center justify-center">
+              <div
+                onClick={toggleSidebar}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: '50%',
+                  backgroundColor: '#1E2330',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(255, 255, 255, 0.15)',
+                }}
+                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs uppercase cursor-pointer hover:border-white/50 hover:scale-105 transition-all"
+                title="Click to expand sidebar"
+              >
+                {(user?.tenant_name || 'Term Jobs').trim().charAt(0)}
+              </div>
+              <div className="absolute left-full ml-3 px-2.5 py-1 bg-[#0A0A0A] text-white text-[11.5px] font-semibold rounded-lg shadow-xl border border-white/10 pointer-events-none whitespace-nowrap opacity-0 group-hover/brand:opacity-100 transition-opacity duration-150 z-50">
+                Expand sidebar
+              </div>
             </div>
           </div>
-        ) : userRole === 'Super Admin' ? (
+
+          {/* Navigation list in Minimized mode - Clean, streamlined, no dividers */}
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-visible custom-scrollbar py-1 flex flex-col items-center w-full">
+            <nav className="flex flex-col items-center gap-1.5 pb-2 w-full">
+              {navItems.map((item) => {
+                const IconComp = item.icon;
+                const isItemActive = item.to === '/dashboard/requisitions'
+                  ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                  : item.end
+                    ? location.pathname === item.to
+                    : item.to ? location.pathname.startsWith(item.to) : false;
+
+                return (
+                  <div key={item.label} className="relative group/item flex items-center justify-center w-full">
+                    {item.action ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          item.action();
+                          if (onLinkClick) onLinkClick();
+                        }}
+                        className="w-8.5 h-8.5 rounded-xl flex items-center justify-center text-[#94A3B8] hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                        title={item.label}
+                      >
+                        {IconComp && <IconComp size={15} />}
+                      </button>
+                    ) : (
+                      <NavLink
+                        to={item.to}
+                        end={item.end}
+                        onClick={onLinkClick}
+                        title={item.label}
+                        className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center transition-all relative ${
+                          isItemActive
+                            ? 'bg-white text-black shadow-xs'
+                            : 'text-[#94A3B8] hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {IconComp && <IconComp size={15} className={isItemActive ? 'text-black' : ''} />}
+                        {item.badge > 0 && (
+                          <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-red-500 ring-2 ring-[#0c0f17]" />
+                        )}
+                      </NavLink>
+                    )}
+
+                    {/* Sleek Dark Tooltip matching Image 2 */}
+                    <div className="absolute left-full ml-3 px-2.5 py-1 bg-[#0A0A0A] text-white text-[11.5px] font-semibold rounded-lg shadow-xl border border-white/10 pointer-events-none whitespace-nowrap opacity-0 group-hover/item:opacity-100 transition-opacity duration-150 z-50 flex items-center gap-1.5">
+                      <span>{item.label}</span>
+                      {item.count !== undefined && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-white/20 text-[9.5px] text-gray-200 font-mono">
+                          {item.count}
+                        </span>
+                      )}
+                      {item.badge > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-[9.5px] text-white font-mono">
+                          {item.badge}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </nav>
+          </div>
+
+          {/* Sidebar Footer in Minimized mode - Cleanly separated, never overlapping */}
+          <div className="sidebar-footer shrink-0 pt-2.5 mt-auto border-t border-white/10 flex flex-col items-center gap-1.5 w-full bg-transparent z-10">
+            <div className="relative group/user flex items-center justify-center">
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  backgroundColor: '#1E2330',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                }}
+                className="flex items-center justify-center font-bold text-[12px] shrink-0 shadow-2xs overflow-hidden p-0.5 uppercase cursor-pointer"
+              >
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                  initials(user?.name)
+                )}
+              </div>
+              <div className="absolute left-full ml-3 px-2.5 py-1.5 bg-[#0A0A0A] text-white text-[11.5px] font-semibold rounded-lg shadow-xl border border-white/10 pointer-events-none whitespace-nowrap opacity-0 group-hover/user:opacity-100 transition-opacity duration-150 z-50">
+                <div className="font-bold">{user?.name || userRole}</div>
+                <div className="text-[10px] text-gray-400 font-normal">{userRole}</div>
+              </div>
+            </div>
+
+            <div className="relative group/logout flex items-center justify-center">
+              <button
+                onClick={handleLogout}
+                type="button"
+                title="Sign out"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#94A3B8] hover:text-red-400 hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <Icons.Logout width={15} height={15} />
+              </button>
+              <div className="absolute left-full ml-3 px-2.5 py-1 bg-[#0A0A0A] text-white text-[11.5px] font-semibold rounded-lg shadow-xl border border-white/10 pointer-events-none whitespace-nowrap opacity-0 group-hover/logout:opacity-100 transition-opacity duration-150 z-50">
+                Sign out
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col h-full min-h-0 select-none">
+        {/* Brand Header */}
+        <div className="sidebar-brand shrink-0 pb-3.5 border-b border-[#EAEAE6] mb-3">
+          {userRole === 'Recruiter' ? (
+            <div className="flex items-center gap-3">
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  backgroundColor: '#0A0A0A',
+                  color: '#FFFFFF',
+                }}
+                className="flex items-center justify-center font-extrabold text-[14px] shrink-0 shadow-xs"
+              >
+                TJ
+              </div>
+              <div className="leading-tight">
+                <div className="text-[15.5px] font-extrabold text-[#0A0A0A] tracking-tight">Term Jobs</div>
+                <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
+              </div>
+            </div>
+          ) : userRole === 'Hiring Manager' ? (
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3 min-w-0">
+                <div
+                  style={{
+                    width: 42,
+                    height: 42,
+                    borderRadius: '50%',
+                    backgroundColor: '#1E2330',
+                    color: '#FFFFFF',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                  }}
+                  className="flex items-center justify-center font-extrabold text-[16px] shrink-0 shadow-xs uppercase"
+                >
+                  {(user?.tenant_name || 'Term Jobs').trim().charAt(0)}
+                </div>
+                <div className="leading-tight text-left min-w-0">
+                  <div className="text-[15.5px] font-extrabold text-white tracking-tight truncate">{user?.tenant_name || 'Term Jobs'}</div>
+                  <div className="text-[11.5px] text-[#94A3B8] font-medium mt-0.5 truncate">Hiring Manager</div>
+                </div>
+              </div>
+              {/* Minimize toggle button matching Image 2 left side */}
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                title="Minimize sidebar"
+                className="w-7 h-7 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0 shadow-2xs group"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:scale-95 transition-transform">
+                  <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                  <line x1="9" y1="3" x2="9" y2="21" />
+                  <path d="m15 10-2 2 2 2" />
+                </svg>
+              </button>
+            </div>
+          ) : userRole === 'Super Admin' ? (
           <div className="flex items-center gap-3">
             <div
               style={{
@@ -883,10 +1055,11 @@ export default function DashboardLayout() {
                 width: 38,
                 height: 38,
                 borderRadius: '50%',
-                backgroundColor: '#0A0A0A',
+                backgroundColor: userRole === 'Hiring Manager' ? '#1E2330' : '#0A0A0A',
                 color: '#FFFFFF',
+                border: userRole === 'Hiring Manager' ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
               }}
-              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden p-1"
+              className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden p-1 uppercase"
             >
               {user?.logo_url ? (
                 <img src={user.logo_url} alt="Logo" className="w-full h-full object-contain" />
@@ -894,11 +1067,11 @@ export default function DashboardLayout() {
                 initials(user?.name)
               )}
             </div>
-            <div className="leading-tight min-w-0">
-              <div className="text-[13.5px] font-extrabold text-[#0A0A0A] tracking-tight truncate">
+            <div className="leading-tight min-w-0 text-left">
+              <div className={`text-[13.5px] font-extrabold tracking-tight truncate ${userRole === 'Hiring Manager' ? 'text-white' : 'text-[#0A0A0A]'}`}>
                 {user?.name || userRole}
               </div>
-              <div className="text-[11px] text-[#8A8A85] font-medium mt-0.5 truncate">
+              <div className={`text-[11px] font-medium mt-0.5 truncate ${userRole === 'Hiring Manager' ? 'text-[#94A3B8]' : 'text-[#8A8A85]'}`}>
                 {userRole}
               </div>
             </div>
@@ -908,7 +1081,11 @@ export default function DashboardLayout() {
             onClick={handleLogout}
             type="button"
             title="Sign out"
-            className="p-1.5 text-[#8A8A85] hover:text-[#DC2626] hover:bg-[#FEE2E2] rounded-lg transition-colors cursor-pointer shrink-0"
+            className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
+              userRole === 'Hiring Manager'
+                ? 'text-[#94A3B8] hover:text-[#DC2626] hover:bg-white/5'
+                : 'text-[#8A8A85] hover:text-[#DC2626] hover:bg-[#FEE2E2]'
+            }`}
           >
             <Icons.Logout />
           </button>
@@ -916,6 +1093,9 @@ export default function DashboardLayout() {
       </div>
     </div>
   );
+};
+
+  const isHiringManagerDashboard = userRole === 'Hiring Manager' && (location.pathname === '/dashboard/hiring-manager' || location.pathname === '/dashboard/hiring-manager/');
 
   return (
     <div className={`app-shell ${consoleClass} ${isAiChatPage ? 'ai-chat-mode' : ''}`}>
@@ -988,6 +1168,130 @@ export default function DashboardLayout() {
           flex-direction: column !important;
           justify-content: space-between !important;
         }
+        /* Hiring Manager Dark Sidebar & Clean Proportional Layout */
+        .console-hiringmanager.app-shell {
+          background-color: transparent !important;
+          width: 100% !important;
+          max-width: 100vw !important;
+          min-height: 100vh !important;
+          overflow-x: hidden !important;
+          position: relative !important;
+        }
+        .console-hiringmanager .sidebar {
+          width: 240px !important;
+          min-width: 240px !important;
+          max-width: 240px !important;
+          background: 
+            radial-gradient(130% 90% at 15% 5%, rgba(30, 41, 59, 0.85) 0%, transparent 60%),
+            radial-gradient(110% 80% at 90% 95%, rgba(15, 23, 42, 0.95) 0%, transparent 65%),
+            radial-gradient(circle at 45% 20%, rgba(56, 189, 248, 0.08), transparent 50%),
+            linear-gradient(175deg, #131722 0%, #0c0f17 40%, #06080d 100%) !important;
+          border: 1px solid rgba(255, 255, 255, 0.1) !important;
+          box-shadow: 
+            0 20px 50px -10px rgba(0, 0, 0, 0.65),
+            inset 0 1px 1px 0 rgba(255, 255, 255, 0.22),
+            inset 0 0 24px rgba(255, 255, 255, 0.02) !important;
+          position: sticky !important;
+          top: 14px !important;
+          margin: 14px 0 14px 14px !important;
+          overflow: visible !important;
+          padding: 16px 12px 14px 12px !important;
+          height: calc(100vh - 28px) !important;
+          border-radius: 24px !important;
+          transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding 0.2s ease !important;
+        }
+        .console-hiringmanager .sidebar.minimized {
+          width: 68px !important;
+          min-width: 68px !important;
+          max-width: 68px !important;
+          padding: 14px 6px 12px 6px !important;
+          align-items: center !important;
+        }
+        .console-hiringmanager .sidebar.minimized *::-webkit-scrollbar {
+          display: none !important;
+        }
+        .console-hiringmanager .sidebar.minimized * {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+        .console-hiringmanager .sidebar.minimized::after {
+          display: none !important;
+        }
+        .console-hiringmanager .sidebar::before {
+          content: '' !important;
+          position: absolute !important;
+          inset: 0 !important;
+          background-image: 
+            linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px) !important;
+          background-size: 32px 32px !important;
+          pointer-events: none !important;
+          opacity: 0.6 !important;
+          border-radius: 24px !important;
+          mask-image: radial-gradient(ellipse 90% 70% at 50% 25%, black 40%, transparent 100%) !important;
+          -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 25%, black 40%, transparent 100%) !important;
+          z-index: 0 !important;
+        }
+        .console-hiringmanager .sidebar::after {
+          content: '' !important;
+          position: absolute !important;
+          top: -40px !important;
+          left: -30px !important;
+          width: 160px !important;
+          height: 160px !important;
+          background: radial-gradient(circle, rgba(56, 189, 248, 0.14) 0%, rgba(139, 92, 246, 0.08) 50%, transparent 70%) !important;
+          filter: blur(24px) !important;
+          pointer-events: none !important;
+          z-index: 0 !important;
+        }
+        .console-hiringmanager .sidebar > * {
+          position: relative !important;
+          z-index: 1 !important;
+        }
+        .console-hiringmanager .sidebar .custom-scrollbar {
+          scrollbar-width: none !important;
+          -ms-overflow-style: none !important;
+        }
+        .console-hiringmanager .sidebar .custom-scrollbar::-webkit-scrollbar {
+          display: none !important;
+        }
+        .console-hiringmanager .sidebar-brand {
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+          padding-bottom: 12px !important;
+          margin-bottom: 6px !important;
+        }
+        .console-hiringmanager .sidebar-nav-btn {
+          color: #94A3B8 !important;
+          padding: 7px 11px !important;
+          font-size: 12.5px !important;
+          border-radius: 10px !important;
+        }
+        .console-hiringmanager .sidebar-nav-btn:hover {
+          background-color: rgba(255, 255, 255, 0.08) !important;
+          color: #FFFFFF !important;
+        }
+        .console-hiringmanager .active-nav-tab {
+          background-color: #FFFFFF !important;
+          color: #0A0A0A !important;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
+          padding: 8px 12px !important;
+          font-size: 12.5px !important;
+          border-radius: 12px !important;
+        }
+        .console-hiringmanager .active-nav-tab * {
+          color: #0A0A0A !important;
+        }
+        .console-hiringmanager .sidebar-footer {
+          border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+          padding-top: 10px !important;
+          margin-top: auto !important;
+        }
+        .console-hiringmanager .sidebar .text-\[\#8A8A85\] {
+          color: #64748B !important;
+        }
+        .console-hiringmanager .sidebar .text-\[\#0A0A0A\] {
+          color: #FFFFFF !important;
+        }
         @media (max-width: 1023px) {
           .sidebar {
             display: none !important;
@@ -995,16 +1299,19 @@ export default function DashboardLayout() {
         }
       `}</style>
 
+      {/* Landing Page Background System for Hiring Manager */}
+      {userRole === 'Hiring Manager' && <Backdrop tone="light" fixed />}
+
       {/* Desktop Floating Sidebar */}
       {!isHiringManagerChat && (
-        <aside className="sidebar hidden lg:flex">
+        <aside className={`sidebar hidden lg:flex ${isSidebarMinimized && userRole === 'Hiring Manager' ? 'minimized' : ''}`}>
           {renderSidebarContent()}
         </aside>
       )}
 
       {/* Main Area */}
-      <div className="main-area min-w-0 flex-1 flex flex-col">
-        {!isAiChatPage && (
+      <div className="main-area min-w-0 flex-1 flex flex-col relative z-10">
+        {!isAiChatPage && !isHiringManagerDashboard && (
           <header className="topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
             <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
               <button
