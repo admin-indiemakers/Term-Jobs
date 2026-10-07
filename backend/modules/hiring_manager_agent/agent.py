@@ -662,6 +662,16 @@ def get_hiring_manager_stats(user_id: str, tenant_id: str, user_name: str = ""):
         except Exception:
             pass
 
+        # Count actual scheduled interviews from database
+        scheduled_int_count = 0
+        try:
+            int_query = {"status": {"$nin": ["Cancelled", "CANCELLED"]}}
+            if is_scoped_tenant:
+                int_query["$or"] = [{"tenant_id": tenant_id}, {"company_id": tenant_id}]
+            scheduled_int_count = db["interview_schedules"].count_documents(int_query)
+        except Exception:
+            scheduled_int_count = 0
+
         return {
             "tenant_id": tenant_id,
             "total_requisitions": len(req_docs),
@@ -670,7 +680,7 @@ def get_hiring_manager_stats(user_id: str, tenant_id: str, user_name: str = ""):
             "shortlisted_candidates": len(shortlisted),
             "accepted_candidates": len(onboarding),
             "onboarding_candidates": len(onboarding),
-            "scheduled_interviews": 2 if is_scoped_tenant else 0,
+            "scheduled_interviews": scheduled_int_count,
             "pending_timesheets": pending_ts,
             "pending_expenses": pending_exp,
             "system_status": "Operational"
@@ -1994,7 +2004,10 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
 
     # 1. Pull from MongoDB interview_schedules
     try:
-        mongo_invs = list(db["interview_schedules"].find({"status": {"$ne": "Cancelled"}}).sort("created_at", -1))
+        mongo_query = {"status": {"$nin": ["Cancelled", "CANCELLED"]}}
+        if tenant_id and tenant_id not in ("local", "all", ""):
+            mongo_query["$or"] = [{"tenant_id": tenant_id}, {"company_id": tenant_id}]
+        mongo_invs = list(db["interview_schedules"].find(mongo_query).sort("created_at", -1))
         for doc in mongo_invs:
             cid = str(doc.get("id") or doc.get("_id") or "")
             if cid in seen_ids:
@@ -2007,8 +2020,8 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
             
             slots = doc.get("proposed_slots") or []
             confirmed = doc.get("confirmed_slot") or (slots[0] if slots else {})
-            dt = confirmed.get("date") or doc.get("scheduled_date") or "2026-09-12"
-            tm = confirmed.get("start_time") or doc.get("scheduled_time") or "03:00 PM"
+            dt = confirmed.get("date") or doc.get("scheduled_date") or ""
+            tm = confirmed.get("start_time") or doc.get("scheduled_time") or ""
             
             m_link = doc.get("meeting_link") or ""
             if not m_link or "localhost" in m_link:
@@ -2024,8 +2037,8 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
                 "candidate_email": doc.get("candidate_email", ""),
                 "requisition_title": r_title,
                 "round_name": round_name,
-                "date": dt,
-                "time": tm,
+                "date": dt or "Pending",
+                "time": tm or "Pending",
                 "meeting_link": m_link,
                 "passcode": code,
                 "status": doc.get("status") or "Scheduled",
@@ -2037,7 +2050,13 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
     # 2. Pull from SQL InterviewSchedule & InterviewRound
     try:
         with get_session() as session:
-            sql_invs = session.query(InterviewSchedule).filter(InterviewSchedule.status != "Cancelled").all()
+            sql_q = session.query(InterviewSchedule).filter(
+                InterviewSchedule.status != "Cancelled",
+                InterviewSchedule.status != "CANCELLED"
+            )
+            if tenant_id and tenant_id not in ("local", "all", ""):
+                sql_q = sql_q.filter(InterviewSchedule.tenant_id == tenant_id)
+            sql_invs = sql_q.all()
             for inv in sql_invs:
                 doc = inv.to_doc()
                 cid = str(doc.get("id") or "")
@@ -2051,8 +2070,8 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
                 
                 slots = doc.get("proposed_slots") or []
                 confirmed = doc.get("confirmed_slot") or (slots[0] if slots else {})
-                dt = confirmed.get("date") or "2026-09-12"
-                tm = confirmed.get("start_time") or "03:00 PM"
+                dt = confirmed.get("date") or ""
+                tm = confirmed.get("start_time") or ""
                 
                 m_link = doc.get("meeting_link") or ""
                 if not m_link or "localhost" in m_link:
@@ -2068,8 +2087,8 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
                     "candidate_email": doc.get("candidate_email", ""),
                     "requisition_title": r_title,
                     "round_name": round_name,
-                    "date": dt,
-                    "time": tm,
+                    "date": dt or "Pending",
+                    "time": tm or "Pending",
                     "meeting_link": m_link,
                     "passcode": code,
                     "status": doc.get("status") or "Scheduled",
@@ -2077,37 +2096,6 @@ def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id:
                 })
     except Exception as e:
         print("[HM AGENT] Error querying SQL InterviewSchedule:", e)
-
-    # If none found in DB yet, provide the active scheduled interviews known in system
-    if not results:
-        results = [
-            {
-                "id": "int-arjun-1",
-                "candidate_name": "Arjun M",
-                "candidate_email": "arjunmheartitude@gmail.com",
-                "requisition_title": "Senior Full Stack Developer",
-                "round_name": "Technical Round",
-                "date": "2026-09-12",
-                "time": "03:00 PM",
-                "meeting_link": f"{domain}/interview/room/76cbab9d-e76d-4df6-bd4c-c1a26f0416f1",
-                "passcode": "TJ-INT-9444",
-                "status": "Scheduled",
-                "interviewer": "Hiring Manager"
-            },
-            {
-                "id": "int-ash-1",
-                "candidate_name": "Ash K",
-                "candidate_email": "ash.k@termjobs.in",
-                "requisition_title": "DevSecOps Engineer",
-                "round_name": "System Architecture & Security Screen",
-                "date": "2026-09-14",
-                "time": "11:30 AM",
-                "meeting_link": f"{domain}/interview/room/int-sec-8842",
-                "passcode": "TJ-INT-3190",
-                "status": "Scheduled",
-                "interviewer": "Hiring Manager"
-            }
-        ]
 
     return results
 
@@ -3880,10 +3868,15 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             "executed_actions": [{"tool": "list_pending_expenses", "result": exp_res}]
         }
 
-    # -1. Upcoming Meetings & Scheduled Interviews Intent (e.g. "show me the upcoming meetings", "upcoming meetings", "my meetings", "upcoming interviews")
-    meetings_match_pattern = r"\b(upcoming\s+meetings?|upcoming\s+interviews?|my\s+meetings?|my\s+interviews?|show\s+(me\s+)?(the\s+)?upcoming|what\s+meetings?|scheduled\s+interviews?|scheduled\s+meetings?|interview\s+schedule|meeting\s+schedule|my\s+schedule|calendar|show\s+meetings?)\b"
+    # -1. Upcoming Meetings & Scheduled Interviews Intent (e.g. "what all are the sceduled interview", "upcoming meetings", "my meetings", "upcoming interviews")
+    meetings_match_pattern = r"\b(upcoming\s+meetings?|upcoming\s+interviews?|my\s+meetings?|my\s+interviews?|show\s+(me\s+)?(the\s+)?upcoming|what\s+meetings?|scheduled\s+interviews?|scheduled\s+meetings?|sceduled\s+interviews?|schedualed\s+interviews?|sceduled\s+interview|scheduled\s+interview|interview\s+schedule|meeting\s+schedule|my\s+schedule|calendar|show\s+meetings?)\b"
     if re.search(meetings_match_pattern, prompt_lower):
         meet_res = list_scheduled_interviews(user_id, user_name, tenant_id)
+        if not meet_res:
+            return {
+                "reply": f"You currently have no scheduled interviews or upcoming meetings for **{company_name}**.",
+                "executed_actions": [{"tool": "list_scheduled_interviews", "result": []}]
+            }
         return {
             "reply": f"Here are your upcoming scheduled interviews and meetings for **{company_name}**:",
             "executed_actions": [{"tool": "list_scheduled_interviews", "result": meet_res}]
