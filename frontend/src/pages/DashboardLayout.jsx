@@ -414,9 +414,9 @@ export default function DashboardLayout() {
   }
 
   const userRole = (user?.role || '').trim();
-  const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isHiringManager = userRole === 'Hiring Manager' || userRole.toLowerCase() === 'hiring manager' || userRole === 'HR';
+  const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
   const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
   const isAdminChat = location.pathname === '/dashboard/admin/chat' || location.pathname.endsWith('/admin/chat');
   const isAiChatPage = isSuperAdminChat || isHiringManagerChat || isAdminChat;
