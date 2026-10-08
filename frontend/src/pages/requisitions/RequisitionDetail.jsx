@@ -267,6 +267,8 @@ export default function RequisitionDetail() {
     setBusy('deleting');
     try {
       await request(`/requisitions/${id}`, { method: 'DELETE', token });
+      window.dispatchEvent(new CustomEvent('refresh-hm-data'));
+      window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
       navigate('/dashboard/requisitions');
     } catch (err) {
       setError(err.message || 'Failed to delete requisition.');
@@ -282,6 +284,8 @@ export default function RequisitionDetail() {
     setInfo('');
     try {
       await request(`/requisitions/${id}/publish`, { method: 'POST', token });
+      window.dispatchEvent(new CustomEvent('refresh-hm-data'));
+      window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
       setInfo('Requisition published successfully!');
       load();
     } catch (err) {

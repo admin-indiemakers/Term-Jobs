@@ -636,6 +636,7 @@ export default function HiringManagerDashboard() {
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
       setRequisitions(reqList);
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: reqList.length } }));
 
       const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
       setShortlistedCandidates(sList);
@@ -986,6 +987,8 @@ export default function HiringManagerDashboard() {
             });
           } catch (e) {}
         }
+        window.dispatchEvent(new CustomEvent('refresh-hm-data'));
+        window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
 
         // Mark as submitted for Director approval on card
         setMessages((prev) =>

@@ -129,6 +129,7 @@ export default function HiringManagerChat() {
 
       const reqList = Array.isArray(reqsData) ? reqsData : reqsData?.requisitions || [];
       setRequisitions(reqList);
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: reqList.length } }));
 
       const sList = Array.isArray(shortlistedData) ? shortlistedData : shortlistedData?.shortlisted_candidates || [];
       setShortlistedCandidates(sList);

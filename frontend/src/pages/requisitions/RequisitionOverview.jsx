@@ -188,6 +188,9 @@ export default function RequisitionOverview({ section }) {
       hasLoadedRef.current = true;
       prevTokenRef.current = token;
 
+      // Broadcast live count to navbar badge immediately
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: reqList.length } }));
+
       // 2. Fetch profiles non-blocking in background to enrich company names if needed
       request('/api/company-profiles', { token }).then((profiles) => {
         if (Array.isArray(profiles) && profiles.length > 0) {
@@ -220,6 +223,13 @@ export default function RequisitionOverview({ section }) {
     }
   }, [token, loadData]);
 
+  // Keep navbar in sync whenever requisitions count changes in state
+  useEffect(() => {
+    if (hasLoadedRef.current) {
+      window.dispatchEvent(new CustomEvent('tj-requisition-count-updated', { detail: { count: requisitions.length } }));
+    }
+  }, [requisitions.length]);
+
   const handleDeleteRequisition = async () => {
     if (!confirmDelete) return;
     setDeleting(true);
@@ -229,6 +239,7 @@ export default function RequisitionOverview({ section }) {
       await request(`/requisitions/${confirmDelete.id}`, { method: 'DELETE', token });
       setInfo(`Requisition "${confirmDelete.title || 'Untitled'}" deleted successfully.`);
       setConfirmDelete(null);
+      window.dispatchEvent(new CustomEvent('refresh-hm-data'));
       loadData(true);
     } catch (err) {
       setError(err.message || 'Failed to delete requisition.');
