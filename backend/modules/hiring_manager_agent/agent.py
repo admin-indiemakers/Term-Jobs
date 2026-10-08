@@ -3434,6 +3434,188 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             "executed_actions": [{"tool": "list_hiring_requisitions", "result": req_res}]
         }
 
+    # ── PRIORITY INTERCEPT: Active Draft Field Modification & Requisition Creation ──
+    # Intercept Draft Field Modification intent (e.g. "change number of opening to 2", "i want key skill as python and react only", "change skills to...", "role summary: ...")
+    is_skill_change = bool(re.search(r"\b(skill|skills|tech\s*stack)\b", prompt_lower))
+    is_summary_change = bool(re.search(r"\b(role\s*summary|summary|job\s*description|description|jd)\b", prompt_lower))
+    is_opening_change = bool(re.search(r"\b(openings?|headcount|vacanc|positions?|seats?)\b", prompt_lower))
+    is_field_change = is_skill_change or is_summary_change or is_opening_change or bool(re.search(r"\b(change|update|set|modify|make|want)\b", prompt_lower) and any(f in prompt_lower for f in ["location", "experience", "department", "opening", "openings", "skills", "summary"]))
+
+    if is_field_change and not any(k in prompt_lower for k in ["interview plan", "schedule interview", "timesheet", "pending"]):
+        last_role_title = "Python Backend Developer"
+        last_role_dept = "Engineering"
+        last_role_loc = "Kozhikode"
+        last_role_exp = "Mid (2-5 yrs)"
+        last_role_skills = "React, Python"
+        last_role_summary = ""
+        last_role_openings = 1
+
+        # Scan history for previous role context
+        for h in reversed(history or []):
+            h_txt = (h.get("text") or h.get("content") or "").lower()
+            for key, role_data in PREDEFINED_ROLE_DICT.items():
+                if key in h_txt or role_data["title"].lower() in h_txt:
+                    last_role_title = role_data["title"]
+                    last_role_dept = role_data["department"]
+                    last_role_loc = role_data["location"]
+                    last_role_exp = role_data["experience_level"]
+                    last_role_skills = role_data["skills"]
+                    last_role_summary = role_data["job_description"]
+                    break
+            if "forward deployment" in h_txt:
+                last_role_title = "Forward Deployment Engineer"
+                last_role_dept = "Engineering"
+                last_role_loc = "Kozhikode"
+                last_role_exp = "Mid (2-5 yrs)"
+                last_role_summary = "Design, develop, and maintain forward deployment pipelines and automation tools."
+                break
+
+        if is_opening_change:
+            m = (
+                re.search(r"(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)", prompt_clean, re.IGNORECASE) or
+                re.search(r"(?:to|as|is|be)\s+(\d+)\s*(?:openings?|headcount|positions?|seats?)", prompt_clean, re.IGNORECASE) or
+                re.search(r"(?:change|set|update|make)\s+(?:the\s+)?(?:number\s+of\s+)?openings?\s+(?:to|as|is|be)?\s*(\d+)", prompt_clean, re.IGNORECASE) or
+                re.search(r"\b(\d+)\b", prompt_clean)
+            )
+            if m and m.group(1):
+                try:
+                    last_role_openings = int(m.group(1))
+                except ValueError:
+                    last_role_openings = 1
+
+        if is_skill_change:
+            skill_text = prompt_clean
+            m = re.search(r"(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)", prompt_clean, re.IGNORECASE)
+            if not m:
+                m = re.search(r"want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)", prompt_clean, re.IGNORECASE)
+            if m:
+                skill_text = m.group(1)
+            skill_text = re.sub(r"\bonly\b", "", skill_text, flags=re.IGNORECASE).strip()
+            parsed = [s.strip().title() for s in re.split(r",|\band\b|&", skill_text) if s.strip()]
+            if parsed:
+                last_role_skills = ", ".join(parsed)
+
+        if is_summary_change:
+            m = re.search(r"(?:role\s*summary|summary|job\s*description|description|jd)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)", prompt_clean, re.IGNORECASE)
+            if m and m.group(1).strip():
+                last_role_summary = m.group(1).strip()
+
+        draft_res = draft_requisition_preview(
+            title=last_role_title,
+            department=last_role_dept,
+            location=last_role_loc,
+            experience_level=last_role_exp,
+            skills=last_role_skills,
+            job_description=last_role_summary or f"Design, develop, and maintain {last_role_title} solutions and pipelines with hands-on expertise in {last_role_skills}.",
+            openings=last_role_openings
+        )
+
+        reply_parts = []
+        if is_opening_change:
+            reply_parts.append(f"to **{last_role_openings} opening(s)**")
+        if is_skill_change:
+            reply_parts.append(f"with key skills: **{last_role_skills}**")
+        if is_summary_change:
+            reply_parts.append("with the updated role summary")
+        change_desc = " ".join(reply_parts) if reply_parts else "with your requested updates"
+
+        return {
+            "reply": f"Got it! I've updated the draft for **{last_role_title}** {change_desc}.\n\nPlease review the updated draft card below — would you like to send this to the Director for approval?",
+            "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
+        }
+
+    # Intercept Requisition Creation / Drafting intent (handles "create a new requsition", "create a req", role templates, etc.)
+    create_req_pattern = (
+        r"\b(create|draft|new|add|make|build|post|setup|start)\s+(?:a\s+)?(?:new\s+)?(requisitions?|requsitions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|opening|openings|job\s*posts?|job\s*postings?|contract\s*roles?)\b|"
+        r"\b(?:can\s+(?:u|you)\s+)?(?:could\s+you\s+)?(create|draft|make|build|post)\s+(?:a\s+)?(?:new\s+)?(requisitions?|requsitions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|openings?)\b|"
+        r"\b(?:i\s+)?(?:need|nned|want|looking\s+for|require)\s+(?:to\s+)?(?:hire|create|draft|post|add)\b|"
+        r"\b(?:hire|hiring)\s+(?:a\s+|an\s+)?([a-z0-9\s/]+)\b"
+    )
+
+    if re.search(create_req_pattern, prompt_lower) and not any(k in prompt_lower for k in ["interview plan", "interview rounds", "interview question", "rubric", "rubrics", "assessment plan", "criteria"]):
+        matched_role = None
+        for key, role_data in PREDEFINED_ROLE_DICT.items():
+            if key in prompt_lower or role_data["title"].lower() in prompt_lower:
+                matched_role = role_data
+                break
+
+        if matched_role:
+            exp_match = re.search(r"(\d+)\s*(?:-|to)?\s*(\d+)?\s*(?:yr|yrs|year|years)\b", prompt_lower)
+            exp_val = matched_role["experience_level"]
+            if exp_match:
+                if exp_match.group(2):
+                    exp_val = f"{exp_match.group(1)}-{exp_match.group(2)} Years"
+                else:
+                    exp_val = f"{exp_match.group(1)} Years"
+
+            detected_skills = []
+            known_techs = [
+                ("python", "Python"), ("golang", "Go / Golang"), ("go", "Go"), ("rust", "Rust"), ("java", "Java"),
+                ("c++", "C++"), ("c#", "C#"), (".net", ".NET"), ("php", "PHP"), ("ruby", "Ruby on Rails"),
+                ("react", "React"), ("next.js", "Next.js"), ("vue", "Vue.js"), ("angular", "Angular"),
+                ("svelte", "Svelte"), ("typescript", "TypeScript"), ("javascript", "JavaScript"), ("node", "Node.js"),
+                ("fastapi", "FastAPI"), ("django", "Django"), ("flask", "Flask"), ("spring", "Spring Boot"),
+                ("aws", "AWS"), ("gcp", "GCP"), ("azure", "Azure"), ("docker", "Docker"), ("kubernetes", "Kubernetes"),
+                ("terraform", "Terraform"), ("ansible", "Ansible"), ("ci/cd", "CI/CD"), ("jenkins", "Jenkins"),
+                ("linux", "Linux"), ("postgresql", "PostgreSQL"), ("mysql", "MySQL"), ("mongodb", "MongoDB"),
+                ("redis", "Redis"), ("snowflake", "Snowflake"), ("spark", "Apache Spark"), ("kafka", "Kafka"),
+                ("figma", "Figma"), ("selenium", "Selenium"), ("playwright", "Playwright")
+            ]
+            for kw, proper in known_techs:
+                if re.search(r"\b" + re.escape(kw) + r"\b", prompt_lower):
+                    detected_skills.append(proper)
+
+            enriched_skills = generate_role_skills(
+                title=matched_role["title"],
+                detected_skills=detected_skills,
+                prompt=prompt_lower
+            )
+            skills_val = ", ".join(enriched_skills)
+            jd_val = f"We are seeking a talented {matched_role['title']} with {exp_val} of experience and hands-on expertise in {skills_val}. You will design, automate, and maintain core services and pipelines in a collaborative engineering culture."
+
+            init_openings = 1
+            op_m = (
+                re.search(r"(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)", prompt_clean, re.IGNORECASE) or
+                re.search(r"(?:to|as|is|be)\s+(\d+)\s*(?:openings?|headcount|positions?|seats?)", prompt_clean, re.IGNORECASE) or
+                re.search(r"\b(\d+)\s+(?:openings?|headcount|positions?|seats?)\b", prompt_clean, re.IGNORECASE)
+            )
+            if op_m and op_m.group(1):
+                try:
+                    init_openings = int(op_m.group(1))
+                except ValueError:
+                    init_openings = 1
+
+            draft_res = draft_requisition_preview(
+                title=matched_role["title"],
+                department=matched_role["department"],
+                location=matched_role["location"],
+                employment_type=matched_role["employment_type"],
+                experience_level=exp_val,
+                salary_range=matched_role["salary_range"],
+                skills=skills_val,
+                job_description=jd_val,
+                openings=init_openings
+            )
+            return {
+                "reply": f"Sure! I've drafted the requisition for **{matched_role['title']}** ({exp_val}) with tech stack: **{skills_val}**.\n\nReview the draft details below — would you like me to send this to the Director for approval?",
+                "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
+            }
+        else:
+            unique_roles = get_unique_predefined_roles()
+            role_lines = []
+            for idx, r in enumerate(unique_roles[:8], 1):
+                role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
+            roles_text = "\n\n".join(role_lines)
+            reply_text = (
+                f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details, or tell me a custom role:\n\n"
+                f"{roles_text}\n\n"
+                f"_Click any role option below or reply with a role title to instantly draft it!_"
+            )
+            return {
+                "reply": reply_text,
+                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": unique_roles}}]
+            }
+
     # 1. First Attempt Groq Cloud LLM Completion (Full Natural Language & Dynamic Tech Stacks)
     if getattr(settings, "groq_api_key", None):
         try:
@@ -3997,174 +4179,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
         }
 
-    # Intercept Draft Field Modification intent (e.g. "change number of opening to 2", "i want key skill as python and react only", "change skills to...", "role summary: ...")
-    is_skill_change = bool(re.search(r"\b(skill|skills|tech\s*stack)\b", prompt_lower))
-    is_summary_change = bool(re.search(r"\b(role\s*summary|summary|job\s*description|description|jd)\b", prompt_lower))
-    is_opening_change = bool(re.search(r"\b(openings?|headcount|vacanc|positions?|seats?)\b", prompt_lower))
-    is_field_change = is_skill_change or is_summary_change or is_opening_change or bool(re.search(r"\b(change|update|set|modify|make|want)\b", prompt_lower) and any(f in prompt_lower for f in ["location", "experience", "department", "opening", "openings", "skills", "summary"]))
 
-    if is_field_change and not any(k in prompt_lower for k in ["interview plan", "schedule interview", "timesheet", "pending"]):
-        last_role_title = "Python Backend Developer"
-        last_role_dept = "Engineering"
-        last_role_loc = "Kozhikode"
-        last_role_exp = "Mid (2-5 yrs)"
-        last_role_skills = "React, Python"
-        last_role_summary = ""
-        last_role_openings = 1
-
-        # Scan history for previous role context
-        for h in reversed(history or []):
-            h_txt = (h.get("text") or h.get("content") or "").lower()
-            for key, role_data in PREDEFINED_ROLE_DICT.items():
-                if key in h_txt or role_data["title"].lower() in h_txt:
-                    last_role_title = role_data["title"]
-                    last_role_dept = role_data["department"]
-                    last_role_loc = role_data["location"]
-                    last_role_exp = role_data["experience_level"]
-                    last_role_skills = role_data["skills"]
-                    last_role_summary = role_data["job_description"]
-                    break
-            if "forward deployment" in h_txt:
-                last_role_title = "Forward Deployment Engineer"
-                last_role_dept = "Engineering"
-                last_role_loc = "Kozhikode"
-                last_role_exp = "Mid (2-5 yrs)"
-                last_role_summary = "Design, develop, and maintain forward deployment pipelines and automation tools."
-                break
-
-        if is_opening_change:
-            m = re.search(r"(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)", prompt_clean, re.IGNORECASE)
-            if not m:
-                m = re.search(r"(?:to|as|is|be)\s+(\d+)", prompt_clean, re.IGNORECASE)
-            if not m:
-                m = re.search(r"\b(\d+)\b", prompt_clean)
-            if m and m.group(1):
-                try:
-                    last_role_openings = int(m.group(1))
-                except ValueError:
-                    last_role_openings = 1
-
-        if is_skill_change:
-            skill_text = prompt_clean
-            m = re.search(r"(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)", prompt_clean, re.IGNORECASE)
-            if not m:
-                m = re.search(r"want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)", prompt_clean, re.IGNORECASE)
-            if m:
-                skill_text = m.group(1)
-            skill_text = re.sub(r"\bonly\b", "", skill_text, flags=re.IGNORECASE).strip()
-            parsed = [s.strip().title() for s in re.split(r",|\band\b|&", skill_text) if s.strip()]
-            if parsed:
-                last_role_skills = ", ".join(parsed)
-
-        if is_summary_change:
-            m = re.search(r"(?:role\s*summary|summary|job\s*description|description|jd)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)", prompt_clean, re.IGNORECASE)
-            if m and m.group(1).strip():
-                last_role_summary = m.group(1).strip()
-
-        draft_res = draft_requisition_preview(
-            title=last_role_title,
-            department=last_role_dept,
-            location=last_role_loc,
-            experience_level=last_role_exp,
-            skills=last_role_skills,
-            job_description=last_role_summary or f"Design, develop, and maintain {last_role_title} solutions and pipelines with hands-on expertise in {last_role_skills}.",
-            openings=last_role_openings
-        )
-
-        reply_parts = []
-        if is_opening_change:
-            reply_parts.append(f"to **{last_role_openings} opening(s)**")
-        if is_skill_change:
-            reply_parts.append(f"with key skills: **{last_role_skills}**")
-        if is_summary_change:
-            reply_parts.append("with the updated role summary")
-        change_desc = " ".join(reply_parts) if reply_parts else "with your requested updates"
-
-        return {
-            "reply": f"Got it! I've updated the draft for **{last_role_title}** {change_desc}.\n\nPlease review the updated draft card below — would you like to send this to the Director for approval?",
-            "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
-        }
-
-    create_req_pattern = (
-        r"((create|draft|new|add|make|build|post|setup|start)\s+(a\s+)?(requisition|requisitions|requsition|requsitions|requsion|requsions|reqisition|reqisitions|requstion|requstions|recquisition|recquisitions|req|reqs|job|jobs|role|roles|position|positions|opening|openings|job post|job posting|contract role))|"
-        r"((can\s+(u|you)\s+)?(create|draft|make|build|post)\s+(a\s+)?(requisition|requisitions|requsition|requsitions|requsion|requsions|reqisition|reqisitions|requstion|requstions|recquisition|recquisitions|req|reqs|job|jobs|role|roles|position|positions))|"
-        r"((i\s+)?(need|nned|want|looking\s+for|require)\s+(a\s+|an\s+)?([a-z0-9\s/]+))|"
-        r"(hire\s+(a\s+|an\s+)?([a-z0-9\s/]+))"
-    )
-
-    # Intercept Requisition Creation / Drafting intent (with custom tech stack extraction)
-    if re.search(create_req_pattern, prompt_lower) and not any(k in prompt_lower for k in ["interview plan", "interview rounds", "interview question", "rubric", "rubrics", "assessment plan", "criteria"]):
-        matched_role = None
-        for key, role_data in PREDEFINED_ROLE_DICT.items():
-            if key in prompt_lower or role_data["title"].lower() in prompt_lower:
-                matched_role = role_data
-                break
-
-        if matched_role:
-            # Extract experience if mentioned (e.g. '2 yr', '3-5 years', '5 yrs')
-            exp_match = re.search(r"(\d+)\s*(?:-|to)?\s*(\d+)?\s*(?:yr|yrs|year|years)\b", prompt_lower)
-            exp_val = matched_role["experience_level"]
-            if exp_match:
-                if exp_match.group(2):
-                    exp_val = f"{exp_match.group(1)}-{exp_match.group(2)} Years"
-                else:
-                    exp_val = f"{exp_match.group(1)} Years"
-
-            # Extract any custom tech stacks mentioned
-            detected_skills = []
-            known_techs = [
-                ("python", "Python"), ("golang", "Go / Golang"), ("go", "Go"), ("rust", "Rust"), ("java", "Java"),
-                ("c++", "C++"), ("c#", "C#"), (".net", ".NET"), ("php", "PHP"), ("ruby", "Ruby on Rails"),
-                ("react", "React"), ("next.js", "Next.js"), ("vue", "Vue.js"), ("angular", "Angular"),
-                ("svelte", "Svelte"), ("typescript", "TypeScript"), ("javascript", "JavaScript"), ("node", "Node.js"),
-                ("fastapi", "FastAPI"), ("django", "Django"), ("flask", "Flask"), ("spring", "Spring Boot"),
-                ("aws", "AWS"), ("gcp", "GCP"), ("azure", "Azure"), ("docker", "Docker"), ("kubernetes", "Kubernetes"),
-                ("terraform", "Terraform"), ("ansible", "Ansible"), ("ci/cd", "CI/CD"), ("jenkins", "Jenkins"),
-                ("linux", "Linux"), ("postgresql", "PostgreSQL"), ("mysql", "MySQL"), ("mongodb", "MongoDB"),
-                ("redis", "Redis"), ("snowflake", "Snowflake"), ("spark", "Apache Spark"), ("kafka", "Kafka"),
-                ("figma", "Figma"), ("selenium", "Selenium"), ("playwright", "Playwright")
-            ]
-            for kw, proper in known_techs:
-                if re.search(r"\b" + re.escape(kw) + r"\b", prompt_lower):
-                    detected_skills.append(proper)
-
-            enriched_skills = generate_role_skills(
-                title=matched_role["title"],
-                detected_skills=detected_skills,
-                prompt=prompt_lower
-            )
-            skills_val = ", ".join(enriched_skills)
-            jd_val = f"We are seeking a talented {matched_role['title']} with {exp_val} of experience and hands-on expertise in {skills_val}. You will design, automate, and maintain core services and pipelines in a collaborative engineering culture."
-
-            draft_res = draft_requisition_preview(
-                title=matched_role["title"],
-                department=matched_role["department"],
-                location=matched_role["location"],
-                employment_type=matched_role["employment_type"],
-                experience_level=exp_val,
-                salary_range=matched_role["salary_range"],
-                skills=skills_val,
-                job_description=jd_val
-            )
-            return {
-                "reply": f"Sure! I've drafted the requisition for **{matched_role['title']}** ({exp_val}) with tech stack: **{skills_val}**.\n\nReview the draft details below — would you like me to send this to the Director for approval?",
-                "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
-            }
-        else:
-            unique_roles = get_unique_predefined_roles()
-            role_lines = []
-            for idx, r in enumerate(unique_roles[:8], 1):
-                role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
-            roles_text = "\n\n".join(role_lines)
-            reply_text = (
-                f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details, or tell me a custom role:\n\n"
-                f"{roles_text}\n\n"
-                f"_Click any role option below or reply with a role title to instantly draft it!_"
-            )
-            return {
-                "reply": reply_text,
-                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": unique_roles}}]
-            }
 
     # 2. Smart Resilient Fuzzy Matcher (Typo & Synonyms Tolerant)
     req_pattern = r"(req|requ|requisition|requsition|requstion|requsitions|requisitions|role|roles|job|jobs|posting|postings|livce|live)"

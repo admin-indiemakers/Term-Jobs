@@ -2791,7 +2791,7 @@ export default function HiringManagerDashboard() {
                           {msg.text}
                         </div>
                       </div>
-                    ) : parseHiringPipelineData(msg.text, msg.executedActions) ? (
+                    ) : (!msg.roleOptions && !msg.requisitionDraft && !msg.candidatesList && parseHiringPipelineData(msg.text, msg.executedActions)) ? (
                       <div className="w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
                         <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
                           <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />

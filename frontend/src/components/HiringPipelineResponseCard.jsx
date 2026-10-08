@@ -58,6 +58,11 @@ export function parseHiringPipelineData(text, executedActions = []) {
   const interviewsMatch = raw.match(/Scheduled\s+Interviews[:\s*]*(\d+)/i);
   const interviewNoteMatch = raw.match(/Scheduled\s+Interviews[:\s*]*\d+\s*\(([^)]+)\)/i);
 
+  // Strict check: if no backend stats tool ran and no explicit metrics were found in text, do not hijack normal chat
+  if (!actionRes && !totalReqsMatch && !liveReqsMatch && !draftReqsMatch && !shortlistedMatch && !interviewsMatch) {
+    return null;
+  }
+
   // Extract Pending Items
   const timesheetsMatch = raw.match(/(?:Pending\s+)?Timesheets[:\s*]*(\d+)/i);
   const expensesMatch = raw.match(/(?:Pending\s+)?Expenses[:\s*]*(\d+)/i);
