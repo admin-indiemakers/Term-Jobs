@@ -1024,37 +1024,81 @@ export default function HiringManagerDashboard() {
   );
 
   const handleOpenEditModal = useCallback((draft, messageId) => {
+    const rawSkills = Array.isArray(draft.skills)
+      ? draft.skills
+      : typeof draft.skills === 'string'
+      ? draft.skills.split(',').map((s) => s.trim()).filter(Boolean)
+      : [];
+    const initialSummary = draft.summary || draft.job_description || draft.role_summary || draft.description || '';
+
     setEditingDraftData({
       ...draft,
       messageId,
-      skills: Array.isArray(draft.skills) ? draft.skills : draft.skills ? [draft.skills] : [],
+      skills: rawSkills,
+      skillsText: rawSkills.join(', '),
+      summary: initialSummary,
+      job_description: initialSummary,
     });
   }, []);
 
   const handleSaveEditedDraft = useCallback((updatedDraft) => {
+    const parsedSkills = typeof updatedDraft.skillsText === 'string'
+      ? updatedDraft.skillsText.split(',').map((s) => s.trim()).filter(Boolean)
+      : Array.isArray(updatedDraft.skills)
+      ? updatedDraft.skills
+      : [];
+
+    const finalSummary = updatedDraft.summary || updatedDraft.job_description || '';
+
+    const mergedDraft = {
+      ...updatedDraft,
+      skills: parsedSkills,
+      summary: finalSummary,
+      job_description: finalSummary,
+    };
+
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === updatedDraft.messageId
+        m.id === updatedDraft.messageId || m.requisitionDraft
           ? {
               ...m,
-              requisitionDraft: {
-                ...m.requisitionDraft,
-                ...updatedDraft,
-              },
+              requisitionDraft: m.requisitionDraft
+                ? {
+                    ...m.requisitionDraft,
+                    ...mergedDraft,
+                  }
+                : m.requisitionDraft,
             }
           : m
       )
     );
     setEditingDraftData(null);
 
+    // If persistent requisition ID exists, update backend non-blocking
+    if (updatedDraft.id && !updatedDraft.id.startsWith('draft-')) {
+      request(`/requisitions/${updatedDraft.id}`, {
+        method: 'PATCH',
+        token,
+        body: {
+          title: updatedDraft.title,
+          department: updatedDraft.department,
+          location: updatedDraft.location,
+          employment_type: updatedDraft.employment_type,
+          experience_level: updatedDraft.experience,
+          must_have_skills: parsedSkills,
+          job_description: finalSummary,
+        },
+      }).catch(() => {});
+    }
+
     const updateNote = {
       id: `ai-update-${Date.now()}`,
       sender: 'ai',
-      text: `Updated parameters for **${updatedDraft.title}**. You can review the revised draft card above or publish whenever you're ready.`,
+      text: `Updated parameters for **${updatedDraft.title}**. Key skills set to: **${parsedSkills.join(', ')}**. The draft card above has been updated.`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
     setMessages((prev) => [...prev, updateNote]);
-  }, []);
+  }, [token]);
 
   const handleAddRequirements = useCallback(
     (draft, messageId) => {
@@ -1577,16 +1621,68 @@ export default function HiringManagerDashboard() {
             : ['Python', 'FastAPI', 'PostgreSQL', 'Docker'],
           summary: r.job_description || `We are seeking a talented ${r.title || 'professional'} to join our engineering team.`,
         };
-      } else if (
-        textLower.includes('draft') ||
-        textLower.includes('create req') ||
-        replyContent.toLowerCase().includes('drafted the requisition') ||
-        replyContent.toLowerCase().includes('draft details below')
-      ) {
+      } else {
         const prevDraft = [...messages].reverse().find((m) => m.requisitionDraft)?.requisitionDraft;
-        if (prevDraft) {
-          reqDraft = prevDraft;
-        } else {
+        const isSkillUpdate = textLower.includes('skill') || textLower.includes('tech stack');
+        const isSummaryUpdate = textLower.includes('role summary') || textLower.includes('summary') || textLower.includes('job description') || textLower.includes('description');
+        const isDraftIntent = textLower.includes('draft') || textLower.includes('create req') || replyContent.toLowerCase().includes('drafted the requisition') || replyContent.toLowerCase().includes('draft details below');
+
+        if (prevDraft && (isSkillUpdate || isSummaryUpdate || isDraftIntent)) {
+          let updatedSkills = prevDraft.skills;
+          let updatedSummary = prevDraft.summary || prevDraft.job_description;
+
+          if (isSkillUpdate) {
+            let skillText = '';
+            const m =
+              prompt.match(/(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
+              prompt.match(/(?:key\s*skills?)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
+              prompt.match(/want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)/i);
+            if (m && m[1]) {
+              skillText = m[1].replace(/\bonly\b/gi, '').trim();
+            } else if (textLower.includes('python') || textLower.includes('react')) {
+              skillText = prompt;
+            }
+
+            if (skillText) {
+              const parsed = skillText
+                .split(/,|\band\b|&/i)
+                .map((s) => s.replace(/[^a-zA-Z0-9\.\+#\-]/g, '').trim())
+                .filter((s) => s && !['i', 'want', 'key', 'skill', 'skills', 'as', 'only', 'to', 'the', 'for'].includes(s.toLowerCase()))
+                .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+              if (parsed.length > 0) {
+                updatedSkills = parsed;
+              }
+            }
+          }
+
+          if (isSummaryUpdate) {
+            const m = prompt.match(/(?:role\s*summary|summary|job\s*description|description)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)/i);
+            if (m && m[1] && m[1].trim()) {
+              updatedSummary = m[1].trim();
+            }
+          }
+
+          const updatedDraftObj = {
+            ...prevDraft,
+            skills: updatedSkills,
+            summary: updatedSummary,
+            job_description: updatedSummary,
+          };
+
+          reqDraft = updatedDraftObj;
+
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.requisitionDraft
+                ? { ...m, requisitionDraft: { ...m.requisitionDraft, ...updatedDraftObj } }
+                : m
+            )
+          );
+
+          if (replyContent.toLowerCase().includes('requires the skill list') || replyContent.toLowerCase().includes('3-5') || replyContent.toLowerCase().includes('3 to 5')) {
+            replyContent = `Got it! I've updated the draft for **${updatedDraftObj.title}** with key skills: **${Array.isArray(updatedSkills) ? updatedSkills.join(', ') : updatedSkills}**. The draft card above has been updated.`;
+          }
+        } else if (isDraftIntent) {
           let roleTitle = 'Python Backend Engineer';
           const match = replyContent.match(/for\s+\*\*?([A-Za-z0-9\s\/\+\#\-]+?)\*\*?(?:\s*\(|\.|\?|$|,)/i) ||
                         replyContent.match(/requisition for\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s*\(|\.|\?|$|,)/i);
@@ -2796,7 +2892,12 @@ export default function HiringManagerDashboard() {
                                       <span>Key Skills</span>
                                     </div>
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      {msg.requisitionDraft.skills?.slice(0, 5).map((skill, si) => (
+                                      {(Array.isArray(msg.requisitionDraft.skills)
+                                        ? msg.requisitionDraft.skills
+                                        : typeof msg.requisitionDraft.skills === 'string'
+                                        ? msg.requisitionDraft.skills.split(',').map((s) => s.trim()).filter(Boolean)
+                                        : []
+                                      ).map((skill, si) => (
                                         <span
                                           key={si}
                                           className="px-2.5 py-1 rounded-md bg-gray-100 text-gray-800 text-[11px] font-medium border border-gray-200/50"
@@ -2804,11 +2905,6 @@ export default function HiringManagerDashboard() {
                                           {skill}
                                         </span>
                                       ))}
-                                      {msg.requisitionDraft.skills?.length > 5 && (
-                                        <span className="px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-[11px] font-semibold">
-                                          +{msg.requisitionDraft.skills.length - 5}
-                                        </span>
-                                      )}
                                     </div>
                                   </div>
 
@@ -2818,7 +2914,7 @@ export default function HiringManagerDashboard() {
                                       <span>Role Summary</span>
                                     </div>
                                     <p className="text-xs text-gray-600 leading-relaxed font-normal">
-                                      {msg.requisitionDraft.summary}
+                                      {msg.requisitionDraft.summary || msg.requisitionDraft.job_description}
                                     </p>
                                   </div>
                                 </div>
@@ -3429,13 +3525,14 @@ export default function HiringManagerDashboard() {
                 <label className="block font-semibold text-gray-700 mb-1">Key Skills (comma separated)</label>
                 <input
                   type="text"
-                  value={Array.isArray(editingDraftData.skills) ? editingDraftData.skills.join(', ') : editingDraftData.skills || ''}
+                  value={editingDraftData.skillsText !== undefined ? editingDraftData.skillsText : (Array.isArray(editingDraftData.skills) ? editingDraftData.skills.join(', ') : editingDraftData.skills || '')}
                   onChange={(e) =>
                     setEditingDraftData((prev) => ({
                       ...prev,
-                      skills: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
+                      skillsText: e.target.value,
                     }))
                   }
+                  placeholder="e.g. Python, React"
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none"
                 />
               </div>
@@ -3444,8 +3541,9 @@ export default function HiringManagerDashboard() {
                 <label className="block font-semibold text-gray-700 mb-1">Role Summary</label>
                 <textarea
                   rows={4}
-                  value={editingDraftData.summary || ''}
-                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, summary: e.target.value }))}
+                  value={editingDraftData.summary !== undefined ? editingDraftData.summary : (editingDraftData.job_description || '')}
+                  onChange={(e) => setEditingDraftData((prev) => ({ ...prev, summary: e.target.value, job_description: e.target.value }))}
+                  placeholder="Brief summary of the role responsibilities..."
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs focus:ring-2 focus:ring-black/10 outline-none resize-none leading-relaxed"
                 />
               </div>

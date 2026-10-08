@@ -898,10 +898,10 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
     exp = experience_level or "Mid (3-5 years)"
     salary = salary_range or "₹1,500 - ₹2,200 / hr"
 
-    # Enforce minimum 3 and maximum 5 AI generated / validated skills
+    # Allow user-specified skills of any length; only fallback to auto-generation if empty
     raw_skills = [s.strip() for s in (skills or "").split(",") if s.strip()] if isinstance(skills, str) else list(skills or [])
-    if len(raw_skills) < 3 or len(raw_skills) > 5:
-        raw_skills = generate_role_skills(title=title, detected_skills=raw_skills, prompt=f"{title} {skills}")
+    if not raw_skills:
+        raw_skills = generate_role_skills(title=title, detected_skills=[], prompt=f"{title}")
     tech_skills = ", ".join(raw_skills)
 
     jd = job_description or f"We are seeking a talented {title} with {exp} of experience and expertise in {tech_skills} to lead component architecture, collaborate with cross-functional product teams, and build robust digital experiences."
@@ -3373,9 +3373,9 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     "You help Hiring Managers inspect live requisitions, draft new job postings with flexible custom tech stacks, review shortlisted candidates, schedule candidate interviews, track timesheets/expenses, and submit requisitions for Director approval.\n"
                     "CRITICAL REQUISITION WORKFLOW RULES:\n"
                     "- DIRECT PUBLICATION IS STRICTLY FORBIDDEN. In TermJobs, Hiring Managers CANNOT publish requisitions directly. ALL requisitions require mandatory Director Approval.\n"
-                    "- When the user asks to create, draft, or make a job requisition, or provides role requirements/tech stacks, ALWAYS call the `draft_hiring_requisition` tool to generate an interactive draft preview card. Always ensure the `skills` parameter includes between 3 and 5 relevant, cohesive technical skills (never just 1 or 2 skills).\n"
+                    "- When the user asks to create, draft, or make a job requisition, provides role requirements, or specifies key skills, ALWAYS call the `draft_hiring_requisition` tool to generate an interactive draft preview card. ALWAYS honor whatever exact skills the user specifies (e.g. 'i want key skill as python and react only', 'skills: python, react'). Never refuse or demand a 3-5 skill minimum when the user specifies skills.\n"
                     "- If the user asks generally to create a requisition without specifying a role (e.g. 'can u create a requisition', 'create a req', 'new job', 'can u create a requsion'), ALWAYS call `show_role_selection_dropdown`.\n"
-                    "- If the user wants to change or edit any field of an active draft (e.g. 'change budget to 600-1000', 'make it remote', 'change experience'), call `draft_hiring_requisition` with the updated field and previous draft values.\n"
+                    "- If the user wants to change, set, or edit any field of an active draft (e.g. key skills, role summary, budget, location, experience), ALWAYS call `draft_hiring_requisition` with the updated field and previous draft values.\n"
                     "- When the user asks about 'requisitions', 'active requisitions', 'live requisitions', 'open requisitions', or 'job directory', ALWAYS call the `list_hiring_requisitions` tool.\n"
                     "- Only call `submit_for_director_approval` when the user explicitly asks to send or submit the requisition to the Director for approval.\n"
                     "CRITICAL FOR CANDIDATE INQUIRIES:\n"
@@ -3841,6 +3841,70 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 f"Would you like me to confirm and dispatch the calendar invitation to **{cand_name}**?"
             ),
             "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
+        }
+
+    # Intercept Draft Field Modification intent (e.g. "i want key skill as python and react only", "change skills to...", "role summary: ...")
+    is_skill_change = bool(re.search(r"\b(skill|skills|tech\s*stack)\b", prompt_lower))
+    is_summary_change = bool(re.search(r"\b(role\s*summary|summary|job\s*description|description|jd)\b", prompt_lower))
+    is_field_change = is_skill_change or is_summary_change or bool(re.search(r"\b(change|update|set|modify|make|want)\b", prompt_lower) and any(f in prompt_lower for f in ["location", "experience", "department", "openings", "skills", "summary"]))
+
+    if is_field_change and not any(k in prompt_lower for k in ["interview plan", "schedule interview", "timesheet", "pending"]):
+        last_role_title = "Forward Deployment Engineer"
+        last_role_dept = "Engineering"
+        last_role_loc = "Kozhikode"
+        last_role_exp = "Mid (2-5 yrs)"
+        last_role_skills = "Python, React"
+        last_role_summary = ""
+
+        # Scan history for previous role context
+        for h in reversed(history or []):
+            h_txt = (h.get("text") or h.get("content") or "").lower()
+            for key, role_data in PREDEFINED_ROLE_DICT.items():
+                if key in h_txt or role_data["title"].lower() in h_txt:
+                    last_role_title = role_data["title"]
+                    last_role_dept = role_data["department"]
+                    last_role_loc = role_data["location"]
+                    last_role_exp = role_data["experience_level"]
+                    last_role_skills = role_data["skills"]
+                    last_role_summary = role_data["job_description"]
+                    break
+            if "forward deployment" in h_txt:
+                last_role_title = "Forward Deployment Engineer"
+                last_role_dept = "Engineering"
+                last_role_loc = "Kozhikode"
+                last_role_exp = "Mid (2-5 yrs)"
+                last_role_summary = "Design, develop, and maintain forward deployment pipelines and automation tools."
+                break
+
+        if is_skill_change:
+            skill_text = prompt_clean
+            m = re.search(r"(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)", prompt_clean, re.IGNORECASE)
+            if not m:
+                m = re.search(r"want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)", prompt_clean, re.IGNORECASE)
+            if m:
+                skill_text = m.group(1)
+            skill_text = re.sub(r"\bonly\b", "", skill_text, flags=re.IGNORECASE).strip()
+            parsed = [s.strip().title() for s in re.split(r",|\band\b|&", skill_text) if s.strip()]
+            if parsed:
+                last_role_skills = ", ".join(parsed)
+
+        if is_summary_change:
+            m = re.search(r"(?:role\s*summary|summary|job\s*description|description|jd)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)", prompt_clean, re.IGNORECASE)
+            if m and m.group(1).strip():
+                last_role_summary = m.group(1).strip()
+
+        draft_res = draft_requisition_preview(
+            title=last_role_title,
+            department=last_role_dept,
+            location=last_role_loc,
+            experience_level=last_role_exp,
+            skills=last_role_skills,
+            job_description=last_role_summary or f"Design, develop, and maintain {last_role_title} solutions and pipelines with hands-on expertise in {last_role_skills}."
+        )
+
+        return {
+            "reply": f"Got it! I've updated the draft for **{last_role_title}** with key skills: **{last_role_skills}**.\n\nPlease review the updated draft card below — would you like to send this to the Director for approval?",
+            "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
         }
 
     create_req_pattern = (
