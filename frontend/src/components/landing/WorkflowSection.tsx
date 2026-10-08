@@ -17,7 +17,7 @@ export function WorkflowSection({ active }: { active: boolean }) {
   return (
     <section
       aria-label="How it works"
-      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper-dim text-ink"
+      className="relative flex h-dvh w-screen max-w-full shrink-0 items-center overflow-y-auto overflow-x-hidden overscroll-contain md:overflow-hidden bg-paper-dim text-ink"
     >
       <Backdrop active={active} />
       <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 min-h-dvh md:min-h-0">

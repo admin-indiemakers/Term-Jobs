@@ -26,7 +26,7 @@ export function FeaturesSection({ active }: { active: boolean }) {
   return (
     <section
       aria-label="For teams"
-      className="relative flex h-dvh w-screen shrink-0 items-start md:items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
+      className="relative flex h-dvh w-screen max-w-full shrink-0 items-start md:items-center overflow-y-auto overflow-x-hidden overscroll-contain md:overflow-hidden bg-paper text-ink"
     >
       <Backdrop active={active} />
       <div className="relative z-10 mx-auto flex flex-col justify-start md:justify-center w-full max-w-7xl px-6 pt-24 pb-24 sm:pt-20 md:px-12 lg:pt-0 lg:pb-0 min-h-dvh md:min-h-0">

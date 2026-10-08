@@ -10,18 +10,18 @@ export function FinalCTA({ active }: { active: boolean }) {
   return (
     <section
       aria-label="Get started"
-      className="relative flex h-dvh w-screen shrink-0 items-center justify-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
+      className="relative flex h-dvh w-screen max-w-full shrink-0 items-center justify-center overflow-y-auto overflow-x-hidden overscroll-contain md:overflow-hidden bg-ink text-paper"
     >
       <Backdrop tone="dark" active={active} />
       <motion.div
         aria-hidden="true"
-        className="pointer-events-none absolute top-1/2 left-1/2 h-[42rem] w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
+        className="pointer-events-none absolute top-1/2 left-1/2 h-[28rem] sm:h-[42rem] w-[28rem] sm:w-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full blur-3xl"
         style={{ background: "radial-gradient(circle, oklch(0.6 0.004 260 / 0.28), transparent 68%)" }}
         animate={active && !reduced ? { scale: [1, 1.12, 1], opacity: [0.7, 1, 0.7] } : {}}
         transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
       />
-      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-4xl px-6 pt-20 pb-24 text-center md:px-12 min-h-dvh md:min-h-0">
-        <h2 className="font-display text-[clamp(2.2rem,6.4vw,5rem)] leading-[0.98] font-extrabold tracking-[-0.03em]">
+      <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-4xl px-5 sm:px-6 pt-20 pb-24 text-center md:px-12 min-h-dvh md:min-h-0 overflow-x-hidden">
+        <h2 className="font-display text-[clamp(1.75rem,5.6vw,4.5rem)] leading-[0.98] font-extrabold tracking-[-0.03em]">
           {["BUILD YOUR TEAM.", "MOVE FASTER."].map((line, i) => (
             <span key={line} className="block overflow-hidden">
               <motion.span

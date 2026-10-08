@@ -31,7 +31,7 @@ export function LandingPage({ enabled = true }: { enabled?: boolean }) {
   const isLast = index === TOTAL - 1;
 
   return (
-    <main className="relative h-dvh w-screen overflow-hidden bg-paper">
+    <main className="relative h-dvh w-screen max-w-full overflow-hidden bg-paper">
       <HorizontalScroller index={index}>
         <HeroSection active={index === 0} onNext={() => step(1)} />
         <StatementSection active={index === 1} />

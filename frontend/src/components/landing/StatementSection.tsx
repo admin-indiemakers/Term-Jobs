@@ -8,7 +8,7 @@ export function StatementSection({ active }: { active: boolean }) {
   return (
     <section
       aria-label="Why TermJobs"
-      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-ink text-paper"
+      className="relative flex h-dvh w-screen max-w-full shrink-0 items-center overflow-y-auto overflow-x-hidden overscroll-contain md:overflow-hidden bg-ink text-paper"
     >
       <Backdrop tone="dark" active={active} />
 

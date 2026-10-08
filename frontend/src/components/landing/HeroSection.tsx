@@ -38,7 +38,7 @@ export function HeroSection({ active, onNext }: { active: boolean; onNext: () =>
   return (
     <section
       aria-label="Hero"
-      className="relative flex h-dvh w-screen shrink-0 items-center overflow-y-auto overscroll-contain md:overflow-hidden bg-paper text-ink"
+      className="relative flex h-dvh w-screen max-w-full shrink-0 items-center overflow-y-auto overflow-x-hidden overscroll-contain md:overflow-hidden bg-paper text-ink"
     >
       <Backdrop active={active} />
       <div className="relative z-10 mx-auto flex flex-col justify-center w-full max-w-7xl px-6 pt-20 pb-24 md:px-12 lg:grid lg:grid-cols-[1.05fr_1fr] lg:items-center lg:gap-16 lg:pt-0 lg:pb-0">

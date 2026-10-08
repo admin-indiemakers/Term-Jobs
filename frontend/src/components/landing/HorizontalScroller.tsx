@@ -18,7 +18,10 @@ export function useHorizontalPanels(total: number, enabled: boolean = true) {
     (delta: number) => {
       if (locked.current) return;
       locked.current = true;
-      setIndex((current) => Math.max(0, Math.min(total - 1, current + delta)));
+      setIndex((current) => {
+        if (current === total - 1 && delta > 0) return 0;
+        return Math.max(0, Math.min(total - 1, current + delta));
+      });
       const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
       window.setTimeout(() => {
         locked.current = false;
@@ -70,6 +73,17 @@ export function useHorizontalPanels(total: number, enabled: boolean = true) {
       startTime = Date.now();
     };
 
+    const onMove = (e: TouchEvent) => {
+      if (!e.cancelable) return;
+      const curX = e.touches[0]!.clientX;
+      const curY = e.touches[0]!.clientY;
+      const dx = Math.abs(curX - startX);
+      const dy = Math.abs(curY - startY);
+      if (dx > dy && dx > 8) {
+        e.preventDefault();
+      }
+    };
+
     const onEnd = (e: TouchEvent) => {
       const dx = e.changedTouches[0]!.clientX - startX;
       const dy = e.changedTouches[0]!.clientY - startY;
@@ -92,9 +106,11 @@ export function useHorizontalPanels(total: number, enabled: boolean = true) {
     };
 
     window.addEventListener("touchstart", onStart, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: false });
     window.addEventListener("touchend", onEnd, { passive: true });
     return () => {
       window.removeEventListener("touchstart", onStart);
+      window.removeEventListener("touchmove", onMove);
       window.removeEventListener("touchend", onEnd);
     };
   }, [step, enabled]);
@@ -122,7 +138,7 @@ export function HorizontalScroller({
   return (
     <div className="absolute inset-0 overflow-hidden">
       <div
-        className="flex h-dvh w-max"
+        className="flex h-dvh w-max overflow-x-hidden"
         style={{
           transform: `translateX(calc(-${index} * 100vw))`,
           transition: `transform ${duration} ${easing}`,
