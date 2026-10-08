@@ -296,7 +296,11 @@ export default function RequisitionDetail() {
     setError('');
     setInfo('');
     try {
-      await request(`/requisitions/${id}/submit-for-approval`, { method: 'POST', token });
+      try {
+        await request(`/requisitions/${id}/submit-for-approval`, { method: 'POST', token });
+      } catch (e) {
+        await request(`/requisitions/${id}/approve`, { method: 'POST', token });
+      }
       setInfo('Requisition submitted to Director for approval!');
       load();
     } catch (err) {
