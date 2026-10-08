@@ -3808,7 +3808,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             salary_range="$120,000 - $150,000 / yr"
         )
         return {
-            "reply": f"I have drafted the job requisition for **{title_guess}**. Please review the details below and click **Confirm & Publish Requisition** to publish it to market.",
+            "reply": f"I have drafted the job requisition for **{title_guess}**. Please review the details below and click **Send to Director for Approval** to submit it for Director review and sign-off.",
             "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
         }
 

@@ -345,7 +345,7 @@ class CompanyProfileIn(BaseModel):
 
 
 class RequisitionIn(BaseModel):
-    company_profile_id: str
+    company_profile_id: str | None = None
     title: str = ""
     description: str = ""
     tech_stack_hint: list[str] = Field(default_factory=list)
@@ -968,9 +968,23 @@ def create_requisition(
 
     # The company profile must belong to the requester's tenant.
     with get_session() as session:
-        prof = session.get(models.CompanyProfile, body.company_profile_id)
-    if prof is None:
-        raise HTTPException(status_code=404, detail="company profile not found")
+        prof = None
+        if body.company_profile_id and body.company_profile_id != "default":
+            prof = session.get(models.CompanyProfile, body.company_profile_id)
+        if prof is None:
+            query = session.query(models.CompanyProfile).order_by(models.CompanyProfile.created_at.desc())
+            if current_user.role != "Super Admin":
+                query = query.filter(models.CompanyProfile.tenant_id == current_user.tenant_id)
+            prof = query.first()
+            if prof is None:
+                prof = models.CompanyProfile(
+                    name=getattr(current_user, "tenant_name", "") or getattr(current_user, "company_name", "") or "Default Company",
+                    tenant_id=current_user.tenant_id or "default",
+                )
+                session.add(prof)
+                session.commit()
+                session.refresh(prof)
+
     if current_user.role != "Super Admin" and prof.tenant_id != current_user.tenant_id:
         raise HTTPException(
             status_code=403,
@@ -985,7 +999,7 @@ def create_requisition(
         prompt=body.prompt,
     )
     req = service.create(
-        company_profile_id=body.company_profile_id,
+        company_profile_id=prof.id,
         intent=intent,
         created_by=str(body.created_by or current_user.id or ""),
         tenant_id=str(current_user.tenant_id or ""),
@@ -1007,12 +1021,26 @@ def create_requisition(
         req_skills = []
         if isinstance(structured, dict):
             req_skills = structured.get("skills") or structured.get("must_have_skills") or []
+
+        # Hiring Managers CANNOT publish directly; enforce Pending Approval
+        final_status = req.status
+        is_hm = current_user.role == "Hiring Manager" or body.intake_mode == "chat_inline"
+        if is_hm:
+            final_status = "Pending Approval"
+            with get_session() as session:
+                s_req = session.get(models.Requisition, req.id)
+                if s_req:
+                    s_req.status = "Pending Approval"
+                    s_req.director_approved = False
+                    session.commit()
+
         db["requisitions"].update_one(
             {"id": req.id},
             {"$set": {
                 "id": req.id,
                 "title": req.title,
-                "status": req.status,
+                "status": final_status,
+                "director_approved": False if is_hm else getattr(req, "director_approved", False),
                 "tenant_id": req.tenant_id,
                 "company_profile_id": req.company_profile_id,
                 "company_name": comp_name,
@@ -1026,11 +1054,26 @@ def create_requisition(
             }},
             upsert=True
         )
+
+        # Notify Director if submitted by Hiring Manager
+        if is_hm:
+            db["notifications"].insert_one({
+                "id": str(uuid.uuid4()),
+                "tenant_id": str(current_user.tenant_id or "local"),
+                "type": "requisition_approval_request",
+                "title": f"New Requisition Approval Request: {req.title}",
+                "message": f"{current_user.name or 'Hiring Manager'} submitted a new requisition '{req.title}' for Director approval.",
+                "requisition_id": str(req.id),
+                "target_role": "Director",
+                "status": "unread",
+                "created_at": now_iso
+            })
     except Exception as db_sync_err:
         logger.warning(f"Failed to sync created requisition to MongoDB: {db_sync_err}")
 
     _cache.clear()
-    background_tasks.add_task(_async_trigger_top_candidate_outreach, str(req.id))
+    if not is_hm and final_status == schemas.RequisitionStatus.PUBLISHED.value:
+        background_tasks.add_task(_async_trigger_top_candidate_outreach, str(req.id))
     return _requisition_dict(str(req.id))
 
 
@@ -3006,6 +3049,57 @@ def reject_requisition(requisition_id: str, body: RejectIn | None = None, curren
         )
     except Exception:
         pass
+
+    _cache.clear()
+    return _requisition_dict(requisition_id)
+
+
+@app.post("/requisitions/{requisition_id}/submit-for-approval")
+@app.post("/api/requisitions/{requisition_id}/submit-for-approval")
+def submit_requisition_for_director_approval_route(
+    requisition_id: str,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    current_user: User = Depends(get_current_user)
+) -> dict:
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+
+    now_iso = _utcnow().isoformat()
+    with get_session() as session:
+        db_req = session.get(models.Requisition, requisition_id)
+        if db_req:
+            db_req.status = "Pending Approval"
+            db_req.director_approved = False
+            session.commit()
+
+    try:
+        from modules.shared.db import db
+        db["requisitions"].update_one(
+            {"id": requisition_id},
+            {"$set": {
+                "status": "Pending Approval",
+                "director_approved": False,
+                "updated_at": now_iso
+            }}
+        )
+    except Exception as e:
+        logger.warning(f"Failed to update requisition in Mongo: {e}")
+
+    try:
+        from modules.shared.db import db
+        db["notifications"].insert_one({
+            "id": str(uuid.uuid4()),
+            "tenant_id": str(current_user.tenant_id or "local"),
+            "type": "requisition_approval_request",
+            "title": f"New Requisition Approval Request: {req.title}",
+            "message": f"{current_user.name or 'Hiring Manager'} submitted requisition '{req.title}' for Director approval.",
+            "requisition_id": requisition_id,
+            "target_role": "Director",
+            "status": "unread",
+            "created_at": now_iso
+        })
+    except Exception as e:
+        logger.warning(f"Failed to dispatch Director notification: {e}")
 
     _cache.clear()
     return _requisition_dict(requisition_id)

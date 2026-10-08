@@ -740,7 +740,18 @@ export default function HiringManagerDashboard() {
     }
     setIsSubmittingDraft(true);
     try {
+      let profileId = draftForm.company_profile_id;
+      if (!profileId) {
+        try {
+          const profList = await request("/company-profiles", { token });
+          if (Array.isArray(profList) && profList.length > 0) {
+            profileId = profList[0].id;
+          }
+        } catch (e) {}
+      }
+
       const payload = {
+        company_profile_id: profileId,
         title: draftForm.title.trim(),
         description: draftForm.job_description || `${draftForm.title.trim()} requirement`,
         tech_stack_hint: draftForm.must_have_skills || [],
@@ -805,16 +816,27 @@ export default function HiringManagerDashboard() {
     draftForm.target_start_date,
   ]);
 
-  // Inline Requisition Action Handlers (Image 2 Match)
-  const handlePublishFromCard = useCallback(
+  // Inline Requisition Action Handlers (Director Approval Enforced)
+  const handleSubmitForApprovalFromCard = useCallback(
     async (draft, messageId) => {
       try {
+        let profileId = draft.company_profile_id;
+        if (!profileId) {
+          try {
+            const profList = await request("/company-profiles", { token });
+            if (Array.isArray(profList) && profList.length > 0) {
+              profileId = profList[0].id;
+            }
+          } catch (e) {}
+        }
+
         const payload = {
+          company_profile_id: profileId,
           title: draft.title,
           description: draft.summary || `${draft.title} requirement`,
           tech_stack_hint: draft.skills || [],
           intake_mode: 'chat_inline',
-          status: 'Published',
+          status: 'Pending Approval',
           openings: draft.openings || 1,
           prefill: {
             title: draft.title,
@@ -827,35 +849,52 @@ export default function HiringManagerDashboard() {
           },
         };
 
-        await request('/requisitions', {
+        const res = await request('/requisitions', {
           method: 'POST',
           body: payload,
           token,
         });
 
-        // Mark as published on card
+        const newReqId = res?.id || res?.requisition_id;
+
+        // If requisition already existed, also ensure status is updated to Pending Approval
+        if (draft.id && !draft.id.startsWith('draft-')) {
+          try {
+            await request(`/requisitions/${draft.id}/submit-for-approval`, {
+              method: 'POST',
+              token,
+            });
+          } catch (e) {}
+        }
+
+        // Mark as submitted for Director approval on card
         setMessages((prev) =>
           prev.map((m) =>
             m.id === messageId
               ? {
                   ...m,
-                  requisitionDraft: { ...m.requisitionDraft, isPublished: true },
+                  requisitionDraft: {
+                    ...m.requisitionDraft,
+                    id: newReqId || m.requisitionDraft.id,
+                    isSubmittedForApproval: true,
+                    status: 'Pending Approval',
+                  },
                 }
               : m
           )
         );
 
         const confirmMsg = {
-          id: `ai-publish-${Date.now()}`,
+          id: `ai-approval-${Date.now()}`,
           sender: 'ai',
-          text: `🎉 **${draft.title}** requisition has been successfully published! It is now active and live in your hiring pipeline.`,
+          text: `🚀 **${draft.title}** requisition has been successfully sent to the Director for approval!\n\nDirector sign-off is mandatory before the role can be published to vendors. The Director has been notified to review and sign off.`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
         setMessages((prev) => [...prev, confirmMsg]);
         await loadDashboardData(true);
       } catch (err) {
-        console.error('Failed to publish requisition:', err);
-        alert(err.message || 'Failed to publish requisition.');
+        console.error('Failed to submit requisition for approval:', err);
+        alert(err.message || 'Failed to submit requisition for approval.');
       }
     },
     [token, loadDashboardData]
@@ -2503,8 +2542,14 @@ export default function HiringManagerDashboard() {
                                     {msg.requisitionDraft.title}
                                   </h3>
                                   {msg.requisitionDraft.status && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                      {msg.requisitionDraft.status}
+                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                      msg.requisitionDraft.status === 'Published'
+                                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                        : msg.requisitionDraft.status === 'Pending Approval' || msg.requisitionDraft.isSubmittedForApproval
+                                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                        : 'bg-blue-50 text-blue-700 border border-blue-200'
+                                    }`}>
+                                      {msg.requisitionDraft.isSubmittedForApproval ? 'Pending Approval' : msg.requisitionDraft.status}
                                     </span>
                                   )}
                                 </div>
@@ -2679,14 +2724,21 @@ export default function HiringManagerDashboard() {
                                     </>
                                   ) : (
                                     <>
-                                      <button
-                                        type="button"
-                                        onClick={() => handlePublishFromCard(msg.requisitionDraft, msg.id)}
-                                        className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                                      >
-                                        <Upload size={13} />
-                                        <span>Publish Requisition</span>
-                                      </button>
+                                      {msg.requisitionDraft.isSubmittedForApproval || msg.requisitionDraft.status === 'Pending Approval' ? (
+                                        <div className="px-3.5 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-1.5 shadow-2xs">
+                                          <Clock size={13} className="text-amber-600" />
+                                          <span>Awaiting Director Approval</span>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleSubmitForApprovalFromCard(msg.requisitionDraft, msg.id)}
+                                          className="px-3.5 py-2 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                                        >
+                                          <ShieldCheck size={13} />
+                                          <span>Send to Director for Approval</span>
+                                        </button>
+                                      )}
 
                                       <button
                                         type="button"
