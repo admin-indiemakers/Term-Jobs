@@ -14,7 +14,10 @@ import {
   UserCheck,
   FileText,
   Mail,
-  Sparkles
+  Sparkles,
+  Database,
+  Download,
+  Loader2
 } from 'lucide-react';
 
 export default function SuperAdminDashboard() {
@@ -54,6 +57,47 @@ export default function SuperAdminDashboard() {
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
+  };
+
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
+
+  const handleDownloadBackup = async () => {
+    setDownloadingBackup(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = await fetch('/api/backup/sql', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || 'Failed to download database backup');
+      }
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get('content-disposition');
+      let filename = `termjob_db_backup_${new Date().toISOString().slice(0, 10)}.sql`;
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      setSuccess(`Database backup successfully downloaded as ${filename}`);
+    } catch (err) {
+      console.error('Database backup error:', err);
+      setError(err.message || 'Failed to download database backup.');
+    } finally {
+      setDownloadingBackup(false);
+    }
   };
 
   useEffect(() => {
@@ -179,6 +223,26 @@ export default function SuperAdminDashboard() {
             className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             + Onboard Buyer Company
+          </button>
+          <button
+            type="button"
+            onClick={handleDownloadBackup}
+            disabled={downloadingBackup}
+            className="px-4 py-2.5 rounded-xl border border-indigo-200 bg-indigo-50/90 hover:bg-indigo-100 text-indigo-900 text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+            title="Export and download complete database backup (.sql) covering all collections and records"
+          >
+            {downloadingBackup ? (
+              <>
+                <Loader2 size={13} className="animate-spin text-indigo-600" />
+                <span>Exporting Entire DB...</span>
+              </>
+            ) : (
+              <>
+                <Database size={13} className="text-indigo-600" />
+                <span>Backup Entire DB (.sql)</span>
+                <Download size={12} className="text-indigo-500" />
+              </>
+            )}
           </button>
         </div>
       </div>

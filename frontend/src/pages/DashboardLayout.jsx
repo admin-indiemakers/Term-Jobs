@@ -417,12 +417,286 @@ export default function DashboardLayout() {
   const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isHiringManager = userRole === 'Hiring Manager' || userRole.toLowerCase() === 'hiring manager' || userRole === 'HR';
-  const isSuperAdminChat = location.pathname === '/dashboard/superadmin/chat' || location.pathname.endsWith('/superadmin/chat');
-  const isHiringManagerChat = false;
+  const isHiringManagerChat = location.pathname === '/dashboard/hiring-manager/chat' || location.pathname.endsWith('/hiring-manager/chat');
   const isAdminChat = location.pathname === '/dashboard/admin/chat' || location.pathname.endsWith('/admin/chat');
-  const isAiChatPage = isSuperAdminChat || isAdminChat;
+  const isAiChatPage = isSuperAdminChat || isHiringManagerChat || isAdminChat;
 
-  const isModernLayout = isCompanyAdmin || userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
+  // ==========================================
+  // COMPANY ADMIN DEDICATED LAYOUT (TOP BAR + FULL CANVAS)
+  // ==========================================
+  if (isCompanyAdmin) {
+    const companyName = user?.tenant_name || 'TCS';
+    const adminNavLinks = [
+      { to: '/dashboard/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
+      { to: '/dashboard/admin/hiring-managers', label: 'Hiring', icon: Users, end: false },
+      { to: '/dashboard/admin/directors', label: 'Directors', icon: UserCheck, end: false },
+      { to: '/dashboard/admin/procurement', label: 'Procurement', icon: Building2, end: false },
+      { to: '/dashboard/admin/finance', label: 'Finance', icon: CreditCard, end: false },
+      { to: '/dashboard/admin/profile', label: 'Profile', icon: User, end: false },
+    ];
+
+    return (
+      <div className={`w-full bg-paper text-ink flex flex-col antialiased relative selection:bg-black selection:text-white font-sans ${isAiChatPage ? 'h-screen max-h-screen overflow-hidden' : 'min-h-screen overflow-x-hidden'}`}>
+        {/* Landing Page Background System (radial light, 96px grid layer, blurred radial light orbs, animated bezier ribbons & grain layer) */}
+        <Backdrop tone="light" fixed />
+
+        {/* Top Navigation Bar - Completely Transparent with Floating Glassmorphic Elements */}
+        <header className="sticky top-0 z-40 w-full bg-transparent border-b border-transparent px-4 sm:px-8 py-2 sm:py-2.5 flex items-center justify-between gap-4">
+          {/* Left: Logo & Company Name */}
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((prev) => !prev)}
+              className="lg:hidden p-1.5 text-gray-500 hover:text-black rounded-lg hover:bg-white/60 cursor-pointer"
+            >
+              <Menu size={18} />
+            </button>
+
+            <div
+              onClick={() => navigate('/dashboard/admin')}
+              className="flex items-center gap-2.5 cursor-pointer group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-black text-white font-black text-sm flex items-center justify-center shadow-xs group-hover:scale-105 transition-transform overflow-hidden p-1">
+                {user?.logo_url ? (
+                  <img src={user.logo_url} alt={companyName} className="w-full h-full object-contain" />
+                ) : (
+                  companyName.charAt(0).toUpperCase()
+                )}
+              </div>
+              <div className="leading-tight text-left">
+                <div className="text-[14px] font-extrabold text-gray-900 tracking-tight flex items-center gap-1">
+                  {companyName}
+                </div>
+                <div className="text-[11px] text-gray-400 font-medium">
+                  Admin Console
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Center: Horizontal Navigation Items (Glassmorphic Floating Pill) */}
+          <nav className="hidden lg:flex items-center gap-1 bg-white/40 hover:bg-white/50 backdrop-blur-2xl p-1 rounded-full border border-white/70 shadow-[0_4px_24px_rgba(0,0,0,0.02),inset_0_1px_1px_rgba(255,255,255,0.8)] transition-all">
+            {adminNavLinks.map((item) => {
+              const IconComp = item.icon;
+              const isActive = item.end
+                ? location.pathname === item.to
+                : location.pathname.startsWith(item.to);
+
+              return (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  end={item.end}
+                  className={`relative flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-colors duration-200 cursor-pointer select-none ${
+                    isActive
+                      ? 'text-gray-900 shadow-xs'
+                      : 'text-gray-600 hover:text-gray-900 hover:bg-white/40'
+                  }`}
+                  title={item.label}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="adminNavActivePill"
+                      className="absolute inset-0 bg-white/90 backdrop-blur-md rounded-full border border-white/90 shadow-xs"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                    />
+                  )}
+                  <IconComp
+                    size={14}
+                    className={`relative z-10 shrink-0 transition-colors duration-200 ${
+                      isActive ? 'text-gray-900' : 'text-gray-500'
+                    }`}
+                  />
+                  <span className="relative z-10 whitespace-nowrap">
+                    {item.label}
+                  </span>
+                </NavLink>
+              );
+            })}
+          </nav>
+
+          {/* Right: Notifications & User Profile */}
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
+            {/* Notification Bell */}
+            <div className="relative">
+              <button
+                type="button"
+                className="w-8 h-8 rounded-full border border-white/60 bg-white/35 hover:bg-white/60 backdrop-blur-xl flex items-center justify-center text-gray-600 hover:text-black transition-all shadow-2xs shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)] cursor-pointer relative"
+                title="Notifications"
+              >
+                <Bell size={14} />
+                <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-red-500 rounded-full ring-2 ring-white" />
+              </button>
+            </div>
+
+            {/* User Profile Pill (Profile Icon Button, smoothly expands on active/open) */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowUserMenu((prev) => !prev)}
+                className={`relative flex items-center rounded-full text-xs font-bold transition-all duration-200 cursor-pointer select-none ${
+                  showUserMenu
+                    ? 'bg-white/90 backdrop-blur-md text-gray-900 shadow-xs border border-white/90 pl-1 pr-2.5 py-1 gap-2'
+                    : 'border border-white/60 bg-white/35 hover:bg-white/60 backdrop-blur-xl p-0.5 shadow-2xs shadow-[inset_0_1px_1px_rgba(255,255,255,0.8)]'
+                }`}
+                title={user?.name || 'Admin Profile'}
+              >
+                <div className="w-7 h-7 rounded-full bg-black text-white flex items-center justify-center shadow-2xs shrink-0">
+                  <User size={13} className="text-white" />
+                </div>
+                <AnimatePresence initial={false}>
+                  {showUserMenu && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.92, width: 0 }}
+                      animate={{ opacity: 1, scale: 1, width: 'auto' }}
+                      exit={{ opacity: 0, scale: 0.92, width: 0 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap"
+                    >
+                      <div className="text-left hidden sm:block leading-tight pr-0.5">
+                        <div className="text-xs font-bold text-gray-900 truncate">{user?.name || 'Arjun M'}</div>
+                        <div className="text-[10px] text-gray-400 font-medium">Admin</div>
+                      </div>
+                      <ChevronDown size={12} className="text-gray-400 shrink-0" />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </button>
+
+              {/* User Dropdown Menu */}
+              <AnimatePresence>
+                {showUserMenu && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                    transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+                    className="absolute right-0 mt-2 w-52 bg-white/85 backdrop-blur-2xl rounded-2xl shadow-xl border border-white/80 py-2 z-50 text-left"
+                    onClick={() => setShowUserMenu(false)}
+                  >
+                    <div className="px-4 py-2 border-b border-gray-100/80 flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shrink-0 shadow-2xs">
+                        <User size={15} className="text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-gray-900 truncate">{user?.name || 'Arjun M'}</div>
+                        <div className="text-[11px] text-gray-400 truncate">{user?.email || 'admin@tcs.com'}</div>
+                      </div>
+                    </div>
+
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => navigate('/dashboard/admin/profile')}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-white/60 hover:text-black text-left cursor-pointer"
+                      >
+                        <User size={14} className="text-gray-400" />
+                        <span>Company Profile</span>
+                      </button>
+                    </div>
+
+                    <div className="pt-1 border-t border-gray-100/80">
+                      <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50/80 text-left cursor-pointer"
+                      >
+                        <LogOut size={14} className="text-red-500" />
+                        <span>Sign out</span>
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </header>
+
+        {/* Mobile Navigation Drawer for Admin */}
+        {isMobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden flex animate-in fade-in duration-200">
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+              onClick={() => setIsMobileMenuOpen(false)}
+            />
+            <div className="relative w-64 max-w-[80vw] h-full bg-white border-r border-gray-200 p-5 flex flex-col z-60 shadow-2xl">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-black text-white font-bold text-xs flex items-center justify-center overflow-hidden p-1">
+                    {user?.logo_url ? (
+                      <img src={user.logo_url} alt={companyName} className="w-full h-full object-contain" />
+                    ) : (
+                      companyName.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <span className="font-bold text-sm text-gray-900">{companyName} Admin</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="p-1 text-gray-400 hover:text-black rounded-lg hover:bg-gray-100"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <nav className="flex flex-col gap-1.5 py-4 flex-1 overflow-y-auto">
+                {adminNavLinks.map((link) => {
+                  const LIcon = link.icon;
+                  const isActive = location.pathname === link.to;
+                  return (
+                    <NavLink
+                      key={link.label}
+                      to={link.to}
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                        isActive ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-100'
+                      }`}
+                    >
+                      <LIcon size={16} />
+                      <span>{link.label}</span>
+                    </NavLink>
+                  );
+                })}
+              </nav>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-red-50 text-red-600 text-xs font-bold hover:bg-red-100 transition-colors"
+              >
+                <LogOut size={14} />
+                <span>Sign out</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Main Workspace Area for Company Admin */}
+        <main className={`flex-1 w-full min-h-0 ${isAiChatPage ? 'h-[calc(100vh-62px)] max-h-[calc(100vh-62px)] px-3 sm:px-6 pt-1 pb-3 max-w-[1760px]' : 'max-w-[1580px] px-4 sm:px-8 pt-4 sm:pt-6 pb-4 justify-start'} mx-auto z-10 flex flex-col overflow-hidden`}>
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              style={{ height: '100%' }}
+              className="w-full h-full flex-1 flex flex-col min-h-0"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // OTHER ROLES (SUPER ADMIN, RECRUITER, HM, DIRECTOR, ETC.)
+  // (PRESERVED EXACTLY AS BEFORE)
+  // ==========================================
+  const isModernLayout = userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
 
   const navItems =
     isCompanyAdmin

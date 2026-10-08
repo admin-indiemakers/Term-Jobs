@@ -67,6 +67,7 @@ from modules.integrations import integrations_router
 from modules.hm_telegram_bot import telegram_bot_router
 from modules.hm_teams_bot import teams_bot_router
 from modules.team_chat.router import router as team_chat_router
+from modules.backup.router import router as backup_router
 
 
 from contextlib import asynccontextmanager
@@ -298,6 +299,9 @@ app.include_router(integrations_router)
 app.include_router(telegram_bot_router)
 app.include_router(teams_bot_router)
 app.include_router(team_chat_router)
+app.include_router(backup_router)
+app.include_router(backup_router, prefix="/api/admin")
+app.include_router(backup_router, prefix="/api/auth")
 
 # Reload trigger for interview module updates
 
