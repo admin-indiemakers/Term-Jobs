@@ -734,6 +734,18 @@ TOOLS = [
                 "required": []
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_hiring_manager_guide",
+            "description": "Provide a comprehensive onboarding and usage guide for Hiring Managers explaining how to draft requisitions, screen candidates, schedule interviews, and approve timesheets/expenses.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
     }
 ]
 
@@ -1733,6 +1745,53 @@ def get_candidate_import_guide() -> Dict[str, Any]:
         "_Would you like me to open the Candidates directory or draft a new requisition now?_"
     )
     return {"markdown": markdown}
+
+
+def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: str = "your organization", director_name: str = "Director") -> Dict[str, Any]:
+    """Provide a comprehensive onboarding and usage guide for Hiring Managers explaining workflows, governance, and capabilities."""
+    display_user = user_name if user_name and user_name.lower() not in ("hm", "user", "local", "none", "r") else "Hiring Manager"
+    display_company = company_name if company_name and company_name.lower() not in ("local", "all", "none") else "your organization"
+    display_director = director_name if director_name and director_name.lower() not in ("none", "") else "the Director"
+
+    markdown = (
+        f"👋 **Welcome to TermJobs, {display_user}!**\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"As the **Hiring Manager** for **{display_company}**, you have full control over role requirements, candidate evaluation, interview orchestration, and workforce operations—with approval oversight from **{display_director}**.\n\n"
+        "Here is your end-to-end playbook on how to use TermJobs:\n\n"
+        "**1️⃣ Job Requisitions & Role Drafting**\n"
+        "• **AI-Powered Drafting:** Request any role directly in chat (e.g. *\"Draft a Python Backend Engineer with 4 years experience\"*) or pick from pre-configured engineering & product templates.\n"
+        "• **Custom Tech Stacks & Edits:** Tailor key skills, role summary, budget, or experience dynamically (e.g. *\"Set key skills to React and TypeScript only\"*).\n"
+        f"• **Mandatory Director Approval:** In TermJobs, Hiring Managers cannot publish jobs directly. When your draft is finalized, click **Send to Director for Approval** (or tell me) to submit it for sign-off by **{display_director}**.\n\n"
+        "**2️⃣ Candidate Screening & Shortlists**\n"
+        "• **Vetted Vendor Submissions:** Review candidates submitted by approved recruitment agencies and staffing partners in your **Shortlisted Candidates** queue.\n"
+        "• **AI Match Scoring:** Inspect deep resume match analysis, skills breakdown, and suitability scores.\n"
+        "• **Head-to-Head Comparison:** Compare shortlisted candidates side-by-side (e.g. *\"Compare top shortlisted candidates\"*).\n\n"
+        "**3️⃣ Interviews & Evaluation Rubrics**\n"
+        "• **1-Click Interview Scheduling:** Schedule technical, coding, or cultural rounds directly in chat (e.g. *\"Schedule interview with Arjun for tomorrow at 3 PM\"*). Video meeting links are generated and dispatched automatically.\n"
+        "• **Tailored Interview Questions:** Ask me to generate role-specific technical questions and structured evaluation rubrics (e.g. *\"Generate interview questions for DevSecOps\"*).\n\n"
+        "**4️⃣ Workforce Operations & Approvals**\n"
+        "• **Active Team Visibility:** See accepted talent and contractors actively working on your team (e.g. *\"Who is working under me?\"*).\n"
+        "• **Timesheet Approvals:** Review weekly logged hours and approve contractor timesheets with 1 click (e.g. *\"Show pending timesheets\"* or *\"Approve timesheets\"*).\n"
+        "• **Expense Reimbursements:** Audit and sign off on contractor expense claims and receipts.\n"
+        "• **Onboarding Tracking:** Monitor equipment provisioning, background verification (BGV), and compliance status.\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "💡 **QUICK PROMPTS TO TRY:**\n"
+        "• *\"Draft a new requisition for [Role Name]\"*\n"
+        "• *\"Show my shortlisted candidates\"*\n"
+        "• *\"Schedule interview with [Candidate Name]\"*\n"
+        "• *\"Show pending timesheets\"*\n"
+        "• *\"What are my pending tasks?\"*\n\n"
+        "_What would you like to work on first?_"
+    )
+    return {
+        "markdown": markdown,
+        "guide": {
+            "user_name": display_user,
+            "company_name": display_company,
+            "director_name": display_director,
+            "role": "Hiring Manager"
+        }
+    }
 
 
 def get_requisition_templates() -> Dict[str, Any]:
@@ -3385,6 +3444,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     "- When the user asks about a specific candidate by name, call `get_candidate_profile_details`.\n"
                     "- When the user asks 'pending works', 'my tasks', 'what needs attention', call `get_hiring_manager_pending_works`.\n"
                     "- When the user asks to schedule an interview with a candidate (e.g. 'schedule interview with Arjun'), ALWAYS call the `schedule_candidate_interview` tool directly with candidate_identifier, default date '2026-09-12', time '02:00 PM EST', and round 'Technical Round'. DO NOT ask the user questions or request details before proposing.\n"
+                    "- When the user asks 'how do i use this', 'how to use this as hiring manager', 'how do i use this as a hiring manager', 'what can i do', 'what are my permissions', 'what do i do here', 'guide me', 'explain my role', or asks for help/instructions, ALWAYS call the `get_hiring_manager_guide` tool to provide the complete hiring manager onboarding and feature playbook.\n"
                     "- CRITICAL FORMATTING GUIDELINE FOR CHAT CLIENTS: NEVER output markdown pipe tables (| col | col |). Telegram and Zoho Cliq CANNOT render pipe tables and they display as broken text. Always format data as clean, beautifully spaced numbered or bulleted item cards using emojis (e.g. 1️⃣, 2️⃣, •) and shortened 8-char IDs in backticks (e.g. `23548610`).\n"
                 )
             }
@@ -3606,6 +3666,10 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             res = get_ai_assistant_preferences(user_name=user_name, user_email=user_email, company_name=company_name, tenant_id=tenant_id)
                             executed.append({"tool": "get_ai_assistant_preferences", "result": res})
                             reply_buf.append(res["markdown"])
+                        elif fn_name == "get_hiring_manager_guide":
+                            res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
+                            executed.append({"tool": "get_hiring_manager_guide", "result": res})
+                            reply_buf.append(res["markdown"])
 
                     # 2nd pass LLM synthesis: If tools were purely informational (e.g. requisitions, candidates, stats),
                     # allow the LLM to write a natural, intelligent agentic summary response.
@@ -3668,6 +3732,34 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     shortlist_pattern = r"(shortlist|shortlisted|shotlist|shotlisted|shrtlist|shrtlisted|sortlist|sortlisted|shorted|list shortlisted|show shortlisted|short candidates)"
     onboard_pattern = r"(onboard|onbord|obord|ombord|omboard|hired|accepted|joining|joined|onb|obor|onbording|onbordd|obordd)"
     expense_pattern = r"(expense|expenses|expence|expences|claim|claims|reimbursement|reimbursements)"
+
+    # Hiring Manager Onboarding & Playbook Intent (e.g. "how do i use this as hiring manager", "guide me", "what can you do")
+    help_guide_pattern = (
+        r"\b("
+        r"how\s+(do\s+i|can\s+i|to|should\s+i)\s+(use|navigate|operate|work\s+with|start\s+with)\s*(this|termjobs|the\s+platform|the\s+system|the\s+portal)?|"
+        r"how\s+do\s+i\s+use\s+this(\s+as\s+(a\s+)?(hiring\s+manager|hm))?|"
+        r"how\s+to\s+use\s*(this\s*)?(as\s+(a\s+)?(hiring\s+manager|hm))?|"
+        r"how\s+can\s+i\s+use\s*(this|it)(\s+as\s+(a\s+)?(hiring\s+manager|hm))?|"
+        r"how\s+does\s+(this|it)\s+work|"
+        r"what\s+can\s+(i|you)\s+do(\s+here)?|"
+        r"what\s+(can|should)\s+i\s+do\s+as\s+(a\s+)?(hiring\s+manager|hm)|"
+        r"what\s+do\s+i\s+do\s+as\s+(a\s+)?(hiring\s+manager|hm)|"
+        r"what\s+are\s+my\s+(roles?|permissions?|capabilities|features|tasks|powers|responsibilities)|"
+        r"guide\s+me|help\s+me(\s+get\s+started)?|user\s+guide|hiring\s+manager\s+guide|quick\s+start(\s+guide)?|"
+        r"explain\s+(this|my\s+role|how\s+to\s+use|the\s+features)|"
+        r"walk\s+me\s+through(\s+this)?|"
+        r"how\s+should\s+i\s+proceed|"
+        r"how\s+(do\s+i|to)\s+start|"
+        r"where\s+do\s+i\s+start|"
+        r"what\s+is\s+my\s+role(\s+as\s+(a\s+)?(hiring\s+manager|hm))?"
+        r")\b"
+    )
+    if re.search(help_guide_pattern, prompt_lower):
+        guide_res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
+        return {
+            "reply": guide_res["markdown"],
+            "executed_actions": [{"tool": "get_hiring_manager_guide", "result": guide_res}]
+        }
 
     # Pending Works / Action Center Intent (e.g. "show me pending works", "pending works", "my tasks", "what needs attention", "pending work")
     pending_works_pattern = r"\b(pending\s+works?|pending\s+tasks?|my\s+tasks?|what.*pending|action\s+items?|pending\s+actions?|to\s+do|todo|pending\s+approvals?|what.*needs?\s+attention|any\s+pending)\b"

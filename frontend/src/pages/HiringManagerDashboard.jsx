@@ -55,7 +55,8 @@ import {
   User,
   Lock,
   LogOut,
-  KeyRound
+  KeyRound,
+  HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { marked } from 'marked';
@@ -1749,9 +1750,11 @@ export default function HiringManagerDashboard() {
         }
       }
 
+      const guideAction = executedActions.find((a) => a.tool === 'get_hiring_manager_guide');
       const aiMsg = {
         id: `ai-${Date.now()}`,
         sender: 'ai',
+        heading: guideAction ? 'HIRING MANAGER WORKSPACE & PLAYBOOK' : undefined,
         text: replyContent,
         executedActions,
         candidatesList: candCards,
@@ -2172,6 +2175,16 @@ export default function HiringManagerDashboard() {
           action: () => {
             setIsToolsDrawerOpen(false);
             navigate('/dashboard/requisitions/new');
+          },
+        },
+        {
+          id: 'hm_guide',
+          name: 'How to Use (Guide)',
+          icon: HelpCircle,
+          description: 'End-to-end playbook: drafting, approvals, interviews & timesheets',
+          action: () => {
+            setIsToolsDrawerOpen(false);
+            handleSendPrompt('How do I use this as Hiring Manager?');
           },
         },
         {
@@ -2638,6 +2651,16 @@ export default function HiringManagerDashboard() {
 
           {/* Centered Suggestion Pills */}
           <div className="flex items-center justify-center gap-1.5 sm:gap-2 mt-3 sm:mt-4 flex-wrap w-full max-w-2xl sm:max-w-3xl py-1">
+            <button
+              type="button"
+              disabled={isAiTyping}
+              onClick={() => handleSendPrompt('How do I use this as Hiring Manager?')}
+              className="px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-white hover:bg-gray-50 border-0 text-[10.5px] sm:text-xs font-semibold text-gray-700 shadow-xs hover:shadow-sm transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 active:scale-95 disabled:opacity-50 whitespace-nowrap"
+            >
+              <HelpCircle size={12} className="text-gray-600 shrink-0" />
+              <span>How to use</span>
+            </button>
+
             <button
               type="button"
               disabled={isAiTyping}
@@ -3390,6 +3413,16 @@ export default function HiringManagerDashboard() {
 
               {/* Prompt Suggestion Chips */}
               <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                <button
+                  type="button"
+                  disabled={isAiTyping}
+                  onClick={() => handleSendPrompt('How do I use this as Hiring Manager?')}
+                  className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 border border-gray-200/80 text-[11px] font-medium text-gray-700 shadow-2xs transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap flex items-center gap-1"
+                  title="How do I use this as Hiring Manager?"
+                >
+                  <HelpCircle size={12} className="text-gray-500 shrink-0" />
+                  <span>How to use</span>
+                </button>
                 <button
                   type="button"
                   disabled={isAiTyping}
