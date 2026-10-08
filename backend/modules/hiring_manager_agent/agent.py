@@ -238,6 +238,18 @@ PREDEFINED_ROLE_DICT = {
 }
 
 
+def get_unique_predefined_roles() -> List[Dict[str, Any]]:
+    """Return deduplicated list of predefined roles with full specifications."""
+    seen = set()
+    result = []
+    for r in PREDEFINED_ROLE_DICT.values():
+        t = r.get("title")
+        if t and t not in seen:
+            seen.add(t)
+            result.append(r)
+    return result
+
+
 # ── AI SKILLS INFERENCE & ENRICHMENT (MIN 5, MAX 7 SKILLS) ───────────────────
 
 TECH_COMPLEMENT_MAP = {
@@ -3618,9 +3630,18 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             executed.append({"tool": "draft_hiring_requisition", "result": res})
                             reply_buf.append(f"Sure! I've drafted the requisition for **{res['title']}** ({res.get('experience_level', 'Mid-Level')}).\n\nReview the draft details below — would you like me to send this to the Director for approval?")
                         elif fn_name == "show_role_selection_dropdown":
-                            res = {"roles": [r["title"] for r in PREDEFINED_ROLE_DICT.values()]}
+                            unique_roles = get_unique_predefined_roles()
+                            res = {"roles": unique_roles}
                             executed.append({"tool": "show_role_selection_dropdown", "result": res})
-                            reply_buf.append(f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details:")
+                            role_lines = []
+                            for idx, r in enumerate(unique_roles[:8], 1):
+                                role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
+                            roles_text = "\n\n".join(role_lines)
+                            reply_buf.append(
+                                f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details, or tell me a custom role:\n\n"
+                                f"{roles_text}\n\n"
+                                f"_Click any role option below or reply with a role title to instantly draft it!_"
+                            )
                         elif fn_name == "initiate_candidate_offboarding":
                             c_target = fn_args.get("candidate_identifier", "")
                             res = prepare_candidate_offboarding_proposal(c_target, user_id=user_id, user_name=user_name, tenant_id=tenant_id, company_name=company_name)
@@ -3759,6 +3780,24 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         return {
             "reply": guide_res["markdown"],
             "executed_actions": [{"tool": "get_hiring_manager_guide", "result": guide_res}]
+        }
+
+    # Available Predefined Roles Intent (e.g. "where are the roles", "show roles", "available roles", "which roles", "list roles")
+    roles_inquiry_pattern = r"\b(where\s+(are\s+)?(the\s+)?roles?|show\s+(available\s+)?roles?|what\s+roles?(\s+are\s+there)?|which\s+roles?|available\s+roles?|list\s+roles?|role\s+options?|select\s+role)\b"
+    if re.search(roles_inquiry_pattern, prompt_lower):
+        unique_roles = get_unique_predefined_roles()
+        role_lines = []
+        for idx, r in enumerate(unique_roles[:8], 1):
+            role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
+        roles_text = "\n\n".join(role_lines)
+        reply_text = (
+            f"Here are the available role templates for **{company_name}**:\n\n"
+            f"{roles_text}\n\n"
+            f"_Click any role card below or reply with a role title to instantly draft it!_"
+        )
+        return {
+            "reply": reply_text,
+            "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": unique_roles}}]
         }
 
     # Pending Works / Action Center Intent (e.g. "show me pending works", "pending works", "my tasks", "what needs attention", "pending work")
@@ -4065,9 +4104,19 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
             }
         else:
+            unique_roles = get_unique_predefined_roles()
+            role_lines = []
+            for idx, r in enumerate(unique_roles[:8], 1):
+                role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
+            roles_text = "\n\n".join(role_lines)
+            reply_text = (
+                f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details, or tell me a custom role:\n\n"
+                f"{roles_text}\n\n"
+                f"_Click any role option below or reply with a role title to instantly draft it!_"
+            )
             return {
-                "reply": f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details:",
-                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": [r["title"] for r in PREDEFINED_ROLE_DICT.values()]}}]
+                "reply": reply_text,
+                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": unique_roles}}]
             }
 
     # 2. Smart Resilient Fuzzy Matcher (Typo & Synonyms Tolerant)

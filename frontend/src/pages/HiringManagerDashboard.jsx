@@ -1751,16 +1751,22 @@ export default function HiringManagerDashboard() {
       }
 
       const guideAction = executedActions.find((a) => a.tool === 'get_hiring_manager_guide');
+      const roleSelectAction = executedActions.find((a) => a.tool === 'show_role_selection_dropdown');
+      const roleOptions = roleSelectAction?.result?.roles || null;
+
       const aiMsg = {
         id: `ai-${Date.now()}`,
         sender: 'ai',
-        heading: guideAction ? 'HIRING MANAGER WORKSPACE & PLAYBOOK' : undefined,
+        heading: guideAction
+          ? 'HIRING MANAGER WORKSPACE & PLAYBOOK'
+          : (roleOptions ? 'SELECT A ROLE TO DRAFT' : undefined),
         text: replyContent,
         executedActions,
         candidatesList: candCards,
         requisitionDraft: reqDraft,
         requisitionsList: reqList,
         interviewProposal,
+        roleOptions,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, aiMsg]);
@@ -2787,6 +2793,74 @@ export default function HiringManagerDashboard() {
                               }}
                             />
                           )}
+
+                          {/* Predefined Role Selection Options */}
+                          {(() => {
+                            const activeRoleOptions = msg.roleOptions || msg.executedActions?.find((a) => a.tool === 'show_role_selection_dropdown')?.result?.roles;
+                            if (!activeRoleOptions || !Array.isArray(activeRoleOptions) || activeRoleOptions.length === 0) return null;
+
+                            return (
+                              <div className="w-full mt-3 pt-3 border-t border-gray-100 space-y-2.5">
+                                <div className="flex items-center justify-between text-[11px] font-semibold text-gray-500 uppercase tracking-wider px-0.5">
+                                  <span className="flex items-center gap-1.5 text-gray-700">
+                                    <Briefcase size={13} className="text-gray-500" />
+                                    Available Role Templates ({activeRoleOptions.length})
+                                  </span>
+                                  <span className="text-[10.5px] text-gray-400 font-normal">Click any card to draft</span>
+                                </div>
+
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                  {activeRoleOptions.map((role, rIdx) => {
+                                    const title = typeof role === 'string' ? role : role.title;
+                                    const dept = typeof role === 'object' ? (role.department || 'Engineering') : 'Engineering';
+                                    const exp = typeof role === 'object' ? (role.experience_level || 'Mid-Level') : 'Mid-Level';
+                                    const skills = typeof role === 'object' ? (role.skills || '') : '';
+                                    const salary = typeof role === 'object' ? (role.salary_range || '') : '';
+
+                                    return (
+                                      <button
+                                        key={rIdx}
+                                        type="button"
+                                        disabled={isAiTyping}
+                                        onClick={() => handleSendPrompt(`Draft a new requisition for ${title}`)}
+                                        className="group relative flex flex-col items-start p-3 bg-gray-50/70 hover:bg-white hover:border-gray-900/30 hover:shadow-xs border border-gray-200/80 rounded-xl transition-all text-left cursor-pointer shadow-2xs disabled:opacity-50"
+                                      >
+                                        <div className="flex items-start justify-between w-full gap-2">
+                                          <div className="font-bold text-gray-950 text-xs sm:text-[12.5px] group-hover:text-black line-clamp-1">
+                                            {title}
+                                          </div>
+                                          <span className="shrink-0 px-2 py-0.5 rounded-md bg-white border border-gray-200 text-[10px] font-semibold text-gray-600 shadow-2xs">
+                                            {exp}
+                                          </span>
+                                        </div>
+
+                                        <div className="text-[11px] text-gray-500 mt-1 font-medium flex items-center gap-1.5 flex-wrap">
+                                          <span>{dept}</span>
+                                          {salary && (
+                                            <>
+                                              <span className="text-gray-300">•</span>
+                                              <span className="text-emerald-700 font-semibold">{salary}</span>
+                                            </>
+                                          )}
+                                        </div>
+
+                                        {skills && (
+                                          <div className="text-[10px] text-gray-600 mt-2 line-clamp-1 font-mono bg-white px-2 py-0.5 rounded border border-gray-100 w-full">
+                                            {skills}
+                                          </div>
+                                        )}
+
+                                        <div className="mt-2.5 flex items-center gap-1 text-[11px] font-semibold text-gray-900 group-hover:translate-x-0.5 transition-transform">
+                                          <span>Autofill & Draft</span>
+                                          <ArrowRight size={12} className="text-gray-700" />
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
 
                           {/* Inline Requisition Card (Exact Image 2 Match) */}
                           {msg.requisitionDraft && (
