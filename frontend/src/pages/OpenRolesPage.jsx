@@ -91,6 +91,18 @@ export default function OpenRolesPage({ enabled = true }) {
   });
   const [loading, setLoading] = useState(() => requisitions.length === 0);
   const [error, setError] = useState(null);
+  const [platformStats, setPlatformStats] = useState(() => {
+    try {
+      const cached = sessionStorage.getItem('tj_cached_platform_stats');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed.partners_count === 'number') {
+          return parsed;
+        }
+      }
+    } catch (e) {}
+    return null;
+  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
   const [selectedFamily, setSelectedFamily] = useState('ALL');
@@ -703,6 +715,44 @@ export default function OpenRolesPage({ enabled = true }) {
     };
   }, [enabled]);
 
+  // Load real-time platform metrics (open roles, partner companies, review time)
+  useEffect(() => {
+    let cancelled = false;
+
+    // Check early prefetched promise from <head>
+    if (typeof window !== 'undefined' && window.__PREFETCHED_STATS__) {
+      const earlyStats = window.__PREFETCHED_STATS__;
+      window.__PREFETCHED_STATS__ = null;
+      earlyStats
+        .then((stats) => {
+          if (!cancelled && stats && typeof stats.partners_count === 'number') {
+            setPlatformStats(stats);
+            try {
+              sessionStorage.setItem('tj_cached_platform_stats', JSON.stringify(stats));
+            } catch (e) {}
+          }
+        })
+        .catch(() => {});
+    }
+
+    request('/api/public/stats')
+      .then((stats) => {
+        if (!cancelled && stats) {
+          setPlatformStats(stats);
+          try {
+            sessionStorage.setItem('tj_cached_platform_stats', JSON.stringify(stats));
+          } catch (e) {}
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load public stats:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Filtered job list
   const filteredJobs = useMemo(() => {
     return requisitions.filter((job) => {
@@ -1128,7 +1178,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Briefcase size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {requisitions.length > 0 ? requisitions.length : '24'}
+                  {platformStats?.open_roles !== undefined ? platformStats.open_roles : requisitions.length}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Open Roles
@@ -1139,7 +1189,9 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Building2 size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  {new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || '36'}
+                  {platformStats?.partners_count !== undefined
+                    ? platformStats.partners_count
+                    : (new Set(requisitions.map((r) => r.company_name).filter(Boolean)).size || 2)}
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Partners
@@ -1150,7 +1202,7 @@ export default function OpenRolesPage({ enabled = true }) {
               <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 rounded-xl bg-black/[0.02] hover:bg-black/[0.04] border border-neutral-900/15 hover:border-neutral-900/30 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.7)] transition-all group cursor-default">
                 <Zap size={13} className="text-neutral-500 group-hover:text-neutral-900 transition-colors shrink-0" />
                 <div className="text-sm sm:text-base font-extrabold text-neutral-900 tracking-tight leading-none my-1">
-                  &lt; 24h
+                  &lt; 48h
                 </div>
                 <div className="text-[8.5px] sm:text-[9.5px] font-bold text-neutral-500 uppercase tracking-wider leading-tight text-center">
                   Review Time
@@ -2360,14 +2412,14 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* MODAL 2: MY APPLICATIONS DRAWER                              */}
       {/* ============================================================ */}
       {showMyAppsModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl animate-in fade-in duration-200">
-          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
-              <h3 className="text-base font-bold text-white">Your Submitted Applications</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl animate-in fade-in duration-200">
+          <div className="bg-white border border-neutral-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl text-neutral-900">
+            <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
+              <h3 className="text-base font-bold text-neutral-900">Your Submitted Applications</h3>
               <button
                 type="button"
                 onClick={() => setShowMyAppsModal(false)}
-                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+                className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900 transition cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -2375,17 +2427,17 @@ export default function OpenRolesPage({ enabled = true }) {
 
             <div className="mt-4 space-y-3 max-h-80 overflow-y-auto">
               {applications.length === 0 ? (
-                <div className="py-8 text-center text-xs text-white/50">
+                <div className="py-8 text-center text-xs text-neutral-500">
                   You haven't submitted any applications yet.
                 </div>
               ) : (
                 applications.map((app, i) => (
-                  <div key={i} className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                  <div key={i} className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-bold text-white">{app.requisition_title || 'Contract Position'}</div>
-                      <div className="text-[11px] text-white/50">{app.company_name || 'Enterprise Client'}</div>
+                      <div className="text-xs font-bold text-neutral-900">{app.requisition_title || 'Contract Position'}</div>
+                      <div className="text-[11px] text-neutral-500">{app.company_name || 'Enterprise Client'}</div>
                     </div>
-                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-white/10 text-white/90 border border-white/20">
+                    <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-800 border border-neutral-300">
                       {app.status || 'Under Review'}
                     </span>
                   </div>
@@ -2401,12 +2453,12 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
       {/* ============================================================ */}
       {showSetupModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-2xl overflow-y-auto">
-          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl overflow-y-auto">
+          <div className="bg-white border border-neutral-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto text-neutral-900">
+            <div className="flex items-center justify-between pb-4 border-b border-neutral-100">
               <div>
-                <h3 className="text-base font-bold text-white">Candidate Profile & Resume</h3>
-                <p className="text-xs text-white/50">Keep your details up to date for instant 1-click applications.</p>
+                <h3 className="text-base font-bold text-neutral-900">Candidate Profile & Resume</h3>
+                <p className="text-xs text-neutral-500">Keep your details up to date for instant 1-click applications.</p>
               </div>
               <button
                 type="button"
@@ -2414,7 +2466,7 @@ export default function OpenRolesPage({ enabled = true }) {
                   setShowSetupModal(false);
                   setActiveNavTab('home');
                 }}
-                className="p-1.5 rounded-full bg-white/[0.06] hover:bg-white/[0.12] text-white/60 hover:text-white transition cursor-pointer"
+                className="p-1.5 rounded-full bg-neutral-100 hover:bg-neutral-200 text-neutral-500 hover:text-neutral-900 transition cursor-pointer"
               >
                 <X size={16} />
               </button>
@@ -2422,70 +2474,70 @@ export default function OpenRolesPage({ enabled = true }) {
 
             {setupSuccess ? (
               <div className="py-8 text-center space-y-2">
-                <CheckCircle2 size={32} className="text-white mx-auto" />
-                <h4 className="text-sm font-bold text-white">Profile Updated Successfully</h4>
+                <CheckCircle2 size={32} className="text-emerald-600 mx-auto" />
+                <h4 className="text-sm font-bold text-neutral-900">Profile Updated Successfully</h4>
               </div>
             ) : (
               <form onSubmit={handleSetupSubmit} className="mt-4 space-y-3.5 text-xs">
                 {setupError && (
-                  <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs">
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">
                     {setupError}
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Full Name *</label>
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Full Name *</label>
                   <input
                     type="text"
                     required
                     value={setupForm.name}
                     onChange={(e) => setSetupForm({ ...setupForm, name: e.target.value })}
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-white/35"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-white/60 uppercase mb-1">Phone Number *</label>
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Phone Number *</label>
                   <input
                     type="tel"
                     required
                     value={setupForm.phone}
                     onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Professional Title</label>
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Professional Title</label>
                   <input
                     type="text"
                     value={setupForm.title}
                     onChange={(e) => setSetupForm({ ...setupForm, title: e.target.value })}
                     placeholder="e.g. Senior Frontend Engineer"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-zinc-400 uppercase mb-1">Skills (comma separated)</label>
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Skills (comma separated)</label>
                   <input
                     type="text"
                     value={setupForm.skills}
                     onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
                     placeholder="React, TypeScript, Node.js, Next.js"
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white text-xs focus:outline-none focus:border-emerald-500/50"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[11px] font-semibold text-white/70 uppercase">Master Resume (On File)</label>
+                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase">Master Resume (On File)</label>
                     {hasResume ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                         <Check size={11} /> Verified Active
                       </span>
                     ) : (
-                      <span className="text-[10px] text-amber-400 font-medium bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+                      <span className="text-[10px] text-amber-700 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
                         Upload Required
                       </span>
                     )}
@@ -2493,14 +2545,14 @@ export default function OpenRolesPage({ enabled = true }) {
 
                   {hasResume ? (
                     <div className="space-y-2">
-                      <div className="p-3.5 rounded-2xl bg-white/[0.04] border border-white/15 flex items-center justify-between gap-3">
+                      <div className="p-3.5 rounded-2xl bg-neutral-50 border border-neutral-200 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-white/[0.08] border border-white/15 text-white flex items-center justify-center shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-neutral-200/80 border border-neutral-300 text-neutral-700 flex items-center justify-center shrink-0">
                             <FileText size={18} />
                           </div>
                           <div className="min-w-0 text-left">
-                            <div className="text-xs font-bold text-white truncate">{currentResumeName || 'candidate_resume.pdf'}</div>
-                            <div className="text-[10.5px] text-white/50">Ready for instant 1-click applications</div>
+                            <div className="text-xs font-bold text-neutral-900 truncate">{currentResumeName || 'candidate_resume.pdf'}</div>
+                            <div className="text-[10.5px] text-neutral-500">Ready for instant 1-click applications</div>
                           </div>
                         </div>
                         {candidateAuth?.candidateToken && (
@@ -2508,7 +2560,7 @@ export default function OpenRolesPage({ enabled = true }) {
                             href={`${API_BASE_URL}/api/candidate-profile/resume?token=${candidateAuth.candidateToken}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.15] border border-white/15 text-[11px] font-semibold text-white transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 border border-neutral-300 text-[11px] font-semibold text-neutral-800 transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
                             title="View or download your master resume"
                           >
                             <Download size={12} />
@@ -2518,17 +2570,17 @@ export default function OpenRolesPage({ enabled = true }) {
                       </div>
 
                       <div className="pt-1">
-                        <label className="block text-[10.5px] font-semibold text-white/50 uppercase mb-1">
+                        <label className="block text-[10.5px] font-semibold text-neutral-600 uppercase mb-1">
                           Update / Replace Resume File (Optional)
                         </label>
                         <input
                           type="file"
                           accept=".pdf,.docx,.doc"
                           onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
-                          className="w-full text-xs text-white/70 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 transition cursor-pointer"
+                          className="w-full text-xs text-neutral-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-neutral-200 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200 transition cursor-pointer"
                         />
                         {setupResumeFile && (
-                          <div className="mt-1 text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                          <div className="mt-1 text-[11px] text-emerald-600 font-semibold flex items-center gap-1.5">
                             <Check size={12} /> Selected for update: {setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)
                           </div>
                         )}
@@ -2538,7 +2590,7 @@ export default function OpenRolesPage({ enabled = true }) {
                     <div>
                       <div
                         onClick={() => setupFileInputRef.current?.click()}
-                        className="p-5 border-2 border-dashed border-white/20 hover:border-white/40 bg-white/[0.02] hover:bg-white/[0.05] rounded-2xl text-center cursor-pointer transition"
+                        className="p-5 border-2 border-dashed border-neutral-300 hover:border-neutral-400 bg-neutral-50/60 hover:bg-neutral-50 rounded-2xl text-center cursor-pointer transition"
                       >
                         <input
                           type="file"
@@ -2547,20 +2599,20 @@ export default function OpenRolesPage({ enabled = true }) {
                           onChange={(e) => setSetupResumeFile(e.target.files?.[0] || null)}
                           className="hidden"
                         />
-                        <Upload size={22} className="text-white/40 mx-auto mb-1.5" />
+                        <Upload size={22} className="text-neutral-400 mx-auto mb-1.5" />
                         {setupResumeFile ? (
-                          <div className="text-xs font-bold text-white flex items-center justify-center gap-1.5">
-                            <Check size={14} className="text-emerald-400" />
+                          <div className="text-xs font-bold text-neutral-900 flex items-center justify-center gap-1.5">
+                            <Check size={14} className="text-emerald-600" />
                             <span>{setupResumeFile.name} ({(setupResumeFile.size / 1024 / 1024).toFixed(2)} MB)</span>
                           </div>
                         ) : (
                           <>
-                            <div className="text-xs font-semibold text-white">Click or drag resume here to upload</div>
-                            <div className="text-[10px] text-white/40 mt-0.5">PDF or DOCX (up to 10MB)</div>
+                            <div className="text-xs font-semibold text-neutral-800">Click or drag resume here to upload</div>
+                            <div className="text-[10px] text-neutral-500 mt-0.5">PDF or DOCX (up to 10MB)</div>
                           </>
                         )}
                       </div>
-                      <div className="text-[10.5px] text-white/40 mt-1.5">
+                      <div className="text-[10.5px] text-neutral-500 mt-1.5">
                         Uploading a resume enables 1-click applications across all enterprise partner roles.
                       </div>
                     </div>
@@ -2570,7 +2622,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <button
                   type="submit"
                   disabled={setupSubmitting}
-                  className="w-full py-2.5 rounded-xl bg-white hover:bg-neutral-200 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-sm"
+                  className="w-full py-2.5 rounded-xl bg-neutral-900 hover:bg-black text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer mt-2 shadow-sm"
                 >
                   {setupSubmitting ? 'Saving Profile...' : 'Save Profile Details'}
                 </button>
@@ -2582,27 +2634,27 @@ export default function OpenRolesPage({ enabled = true }) {
       )}
 
       {/* ============================================================ */}
-      {/* MODAL 4: GENERAL TALENT POOL                                 */}
+      {/* MODAL 4: GENERAL TALENT POOL (PREMIUM WHITE MODAL)            */}
       {/* ============================================================ */}
       {showGeneralPoolModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200">
-          <div className="rounded-3xl bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all">
-            <div className="flex items-start justify-between pb-4 border-b border-white/10">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xl overflow-y-auto animate-in fade-in duration-200">
+          <div className="rounded-3xl bg-white border border-neutral-200 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.06)] max-w-xl w-full p-6 sm:p-7 my-auto transition-all text-neutral-900">
+            <div className="flex items-start justify-between pb-4 border-b border-neutral-100">
               <div>
-                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/50 mb-1">
+                <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-neutral-400 mb-1">
                   Candidate Talent Network
                 </div>
-                <h3 className="text-xl sm:text-2xl font-display font-extrabold text-white tracking-tight">
+                <h3 className="text-xl sm:text-2xl font-display font-extrabold text-neutral-900 tracking-tight">
                   Join General Talent Pool
                 </h3>
-                <p className="text-xs text-white/50 mt-1">
+                <p className="text-xs text-neutral-500 mt-1">
                   Get auto-matched with upcoming enterprise contract roles and verified hiring partners.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGeneralPoolModal(false)}
-                className="p-2 rounded-full bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-white/60 hover:text-white transition cursor-pointer shrink-0"
+                className="p-2 rounded-full bg-neutral-100 hover:bg-neutral-200 border border-neutral-200/80 text-neutral-500 hover:text-neutral-900 transition cursor-pointer shrink-0"
               >
                 <X size={16} />
               </button>
@@ -2610,21 +2662,21 @@ export default function OpenRolesPage({ enabled = true }) {
 
             {poolSuccess ? (
               <div className="py-8 text-center space-y-3">
-                <div className="w-14 h-14 rounded-full bg-white/10 text-white flex items-center justify-center mx-auto border border-white/20">
+                <div className="w-14 h-14 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto border border-emerald-200">
                   <CheckCircle2 size={30} />
                 </div>
-                <h4 className="text-base font-bold text-white">Profile Submitted to Talent Pool</h4>
-                <p className="text-xs text-white/60 max-w-xs mx-auto">
+                <h4 className="text-base font-bold text-neutral-900">Profile Submitted to Talent Pool</h4>
+                <p className="text-xs text-neutral-500 max-w-xs mx-auto">
                   We will notify you via email as soon as an enterprise requisition matching your skillset is published.
                 </p>
 
                 {/* Start Telegram Bot Callout */}
-                <div className="p-4 bg-sky-950/40 border border-sky-400/30 rounded-2xl text-left max-w-sm mx-auto shadow mt-4">
-                  <div className="flex items-center gap-2 text-sky-300 font-bold text-xs mb-1">
-                    <Send size={14} className="text-[#229ED9]" />
+                <div className="p-4 bg-sky-50 border border-sky-200 rounded-2xl text-left max-w-sm mx-auto shadow-sm mt-4">
+                  <div className="flex items-center gap-2 text-[#0284c7] font-bold text-xs mb-1">
+                    <Send size={14} className="text-[#0284c7]" />
                     <span>Start Bot for 1-Tap Matching Alerts</span>
                   </div>
-                  <p className="text-[11px] text-zinc-300 leading-relaxed mb-3">
+                  <p className="text-[11px] text-neutral-600 leading-relaxed mb-3">
                     Connect <strong>@{TELEGRAM_BOT_USERNAME}</strong> to receive notifications directly in Telegram with 1-tap RSVP buttons.
                   </p>
                   <a
@@ -2644,7 +2696,7 @@ export default function OpenRolesPage({ enabled = true }) {
                     setShowGeneralPoolModal(false);
                     setPoolSuccess(null);
                   }}
-                  className="mt-4 px-6 py-2.5 rounded-full bg-white text-black font-bold text-xs hover:bg-neutral-200 transition shadow-sm cursor-pointer"
+                  className="mt-4 px-6 py-2.5 rounded-full bg-neutral-900 text-white font-bold text-xs hover:bg-neutral-800 transition shadow-sm cursor-pointer"
                 >
                   Done
                 </button>
@@ -2652,20 +2704,20 @@ export default function OpenRolesPage({ enabled = true }) {
             ) : (
               <form onSubmit={handlePoolSubmit} className="mt-5 space-y-4 text-xs">
                 {candidateUser && (
-                  <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                  <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-white/10 text-white flex items-center justify-center text-[11px] font-bold border border-white/20">
+                      <div className="w-7 h-7 rounded-full bg-neutral-900 text-white flex items-center justify-center text-[11px] font-bold">
                         {(candidateUser.candidate_name || candidateUser.candidate_email || 'C')[0].toUpperCase()}
                       </div>
                       <div>
-                        <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                        <div className="text-xs font-semibold text-neutral-900 flex items-center gap-1.5">
                           <span>Joining as</span>
-                          <span className="font-bold text-white">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
-                          <span className="text-[10px] font-bold bg-white/10 text-white/90 border border-white/20 px-1.5 py-0.2 rounded-full">
+                          <span className="font-bold text-neutral-900">{candidateUser.candidate_name || candidateUser.candidate_email}</span>
+                          <span className="text-[10px] font-bold bg-neutral-200 text-neutral-800 px-1.5 py-0.5 rounded-full">
                             Verified
                           </span>
                         </div>
-                        <div className="text-[10px] text-white/50 mt-0.5">
+                        <div className="text-[10px] text-neutral-500 mt-0.5">
                           {hasResume ? '✓ Master resume on profile ready' : 'Upload your resume below to complete'}
                         </div>
                       </div>
@@ -2674,92 +2726,92 @@ export default function OpenRolesPage({ enabled = true }) {
                 )}
 
                 {poolError && (
-                  <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2">
-                    <AlertCircle size={15} className="shrink-0" />
+                  <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                    <AlertCircle size={15} className="shrink-0 text-rose-500" />
                     <span>{typeof poolError === 'string' ? poolError : formatApiErrorMessage(poolError)}</span>
                   </div>
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
+                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
                       value={poolForm.name}
                       onChange={(e) => setPoolForm({ ...poolForm, name: e.target.value })}
                       placeholder="e.g. Alex Johnson"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email Address *</label>
+                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Email Address *</label>
                     <input
                       type="email"
                       required
                       value={poolForm.email}
                       onChange={(e) => setPoolForm({ ...poolForm, email: e.target.value })}
                       placeholder="alex@example.com"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone Number *</label>
+                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Phone Number *</label>
                     <input
                       type="tel"
                       required
                       value={poolForm.phone}
                       onChange={(e) => setPoolForm({ ...poolForm, phone: e.target.value })}
                       placeholder="+1 (555) 000-0000"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Target Title / Role *</label>
+                    <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Target Title / Role *</label>
                     <input
                       type="text"
                       required
                       value={poolForm.title}
                       onChange={(e) => setPoolForm({ ...poolForm, title: e.target.value })}
                       placeholder="e.g. Senior Frontend Lead"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">Core Skills (Optional)</label>
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Core Skills (Optional)</label>
                   <input
                     type="text"
                     value={poolForm.skills}
                     onChange={(e) => setPoolForm({ ...poolForm, skills: e.target.value })}
                     placeholder="e.g. React, TypeScript, Node.js, AWS"
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 {/* Resume Dropzone */}
                 <div>
-                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1.5">
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1.5">
                     Resume Document *
                   </label>
 
                   {hasResume && !poolUseCustomResume ? (
-                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
+                    <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
-                        <FileText size={18} className="text-white/70" />
+                        <FileText size={18} className="text-neutral-600" />
                         <div>
-                          <div className="text-xs font-semibold text-white">{currentResumeName}</div>
-                          <div className="text-[10px] text-white/40">Verified resume from candidate profile</div>
+                          <div className="text-xs font-semibold text-neutral-900">{currentResumeName}</div>
+                          <div className="text-[10px] text-neutral-500">Verified resume from candidate profile</div>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setPoolUseCustomResume(true)}
-                        className="text-[11px] font-medium text-white/70 hover:text-white underline cursor-pointer"
+                        className="text-[11px] font-medium text-neutral-600 hover:text-neutral-900 underline cursor-pointer"
                       >
                         Upload different file
                       </button>
@@ -2782,8 +2834,8 @@ export default function OpenRolesPage({ enabled = true }) {
                       }}
                       onClick={() => poolFileInputRef.current?.click()}
                       className={`p-6 border-2 border-dashed rounded-2xl text-center cursor-pointer transition ${poolIsDragging
-                        ? 'border-white bg-white/[0.08]'
-                        : 'border-white/15 bg-white/[0.02] hover:border-white/30'
+                        ? 'border-neutral-900 bg-neutral-100'
+                        : 'border-neutral-300 bg-neutral-50/70 hover:border-neutral-400 hover:bg-neutral-50'
                         }`}
                     >
                       <input
@@ -2799,18 +2851,18 @@ export default function OpenRolesPage({ enabled = true }) {
                         accept=".pdf,.docx,.doc"
                         className="hidden"
                       />
-                      <Upload size={22} className="text-white/40 mx-auto mb-2" />
+                      <Upload size={22} className="text-neutral-400 mx-auto mb-2" />
                       {poolResume ? (
-                        <div className="text-xs font-semibold text-white flex items-center justify-center gap-1.5">
-                          <Check size={14} className="text-white" />
+                        <div className="text-xs font-semibold text-neutral-900 flex items-center justify-center gap-1.5">
+                          <Check size={14} className="text-emerald-600" />
                           <span>{poolResume.name} ({(poolResume.size / 1024 / 1024).toFixed(2)} MB)</span>
                         </div>
                       ) : (
                         <>
-                          <div className="text-xs font-semibold text-white/90">
+                          <div className="text-xs font-semibold text-neutral-800">
                             Drop resume here or click to browse
                           </div>
-                          <div className="text-[10px] text-white/40 mt-1">PDF, DOCX up to 10MB</div>
+                          <div className="text-[10px] text-neutral-400 mt-1">PDF, DOCX up to 10MB</div>
                         </>
                       )}
                     </div>
@@ -2823,7 +2875,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         setPoolUseCustomResume(false);
                         setPoolResume(null);
                       }}
-                      className="mt-2 text-[11px] text-white/50 hover:text-white underline cursor-pointer"
+                      className="mt-2 text-[11px] text-neutral-500 hover:text-neutral-900 underline cursor-pointer"
                     >
                       ← Use saved profile resume instead
                     </button>
@@ -2833,7 +2885,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <button
                   type="submit"
                   disabled={poolSubmitting}
-                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3"
+                  className="w-full py-3 rounded-xl bg-neutral-900 hover:bg-black active:scale-[0.99] text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-md hover:shadow-lg mt-3"
                 >
                   {poolSubmitting ? 'Submitting Profile...' : 'Join Talent Network'}
                 </button>
@@ -3315,9 +3367,12 @@ export default function OpenRolesPage({ enabled = true }) {
       )}
 
       {/* Candidate Auth Modal (Google OAuth & Email/Password) */}
+      {/* ============================================================ */}
+      {/* MODAL 6: AUTHENTICATION MODAL (PREMIUM WHITE MODAL)           */}
+      {/* ============================================================ */}
       {showAuthModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-2xl font-sans animate-in fade-in duration-200">
-          <div className="bg-[#0a0b10]/95 backdrop-blur-3xl border border-white/15 rounded-3xl max-w-md w-full shadow-[0_24px_80px_rgba(0,0,0,0.85),inset_0_1px_1px_rgba(255,255,255,0.15)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-xl font-sans animate-in fade-in duration-200">
+          <div className="bg-white border border-neutral-200 rounded-3xl max-w-md w-full shadow-[0_25px_60px_-15px_rgba(0,0,0,0.35),0_0_0_1px_rgba(0,0,0,0.06)] p-6 sm:p-7 relative max-h-[90vh] overflow-y-auto text-neutral-900">
             {/* Close button */}
             <button
               type="button"
@@ -3327,21 +3382,21 @@ export default function OpenRolesPage({ enabled = true }) {
                 setAuthSuccessMsg('');
                 setActiveNavTab('home');
               }}
-              className="absolute top-5 right-5 p-2 rounded-full text-white/50 hover:text-white bg-white/[0.05] hover:bg-white/[0.12] border border-white/10 transition cursor-pointer"
+              className="absolute top-5 right-5 p-2 rounded-full text-neutral-500 hover:text-neutral-900 bg-neutral-100 hover:bg-neutral-200 border border-neutral-200/80 transition cursor-pointer"
             >
               <X size={16} />
             </button>
 
             {/* Brand Header */}
             <div className="text-center mb-6">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.06] border border-white/10 text-[0.65rem] font-bold tracking-[0.2em] text-white/70 uppercase mb-3">
-                <span className="w-1.5 h-1.5 rounded-full bg-white/80 animate-pulse" />
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-100 border border-neutral-200 text-[0.65rem] font-bold tracking-[0.2em] text-neutral-600 uppercase mb-3">
+                <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 animate-pulse" />
                 <span>Candidate Talent Portal</span>
               </div>
-              <h3 className="font-display text-xl font-extrabold text-white tracking-tight">
+              <h3 className="font-display text-xl font-extrabold text-neutral-900 tracking-tight">
                 {authModalTab === 'login' ? 'Sign In to Open Roles' : 'Create Talent Profile'}
               </h3>
-              <p className="text-xs text-white/60 mt-1">
+              <p className="text-xs text-neutral-500 mt-1">
                 {authModalTab === 'login'
                   ? 'Access verified partner requisitions and 1-click apply.'
                   : 'Join the verified talent network to browse and apply for roles.'}
@@ -3353,7 +3408,7 @@ export default function OpenRolesPage({ enabled = true }) {
               type="button"
               onClick={() => handleGoogleSignIn()}
               disabled={authLoading}
-              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-200 text-neutral-900 font-bold text-xs tracking-wide shadow-md active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-xl bg-white hover:bg-neutral-50 border border-neutral-300 text-neutral-800 font-bold text-xs tracking-wide shadow-xs active:scale-[0.99] transition cursor-pointer disabled:opacity-50 mb-5"
             >
               <GoogleIcon className="w-4 h-4" />
               <span>{authLoading ? 'Connecting Google Account…' : 'Continue with Google'}</span>
@@ -3361,14 +3416,14 @@ export default function OpenRolesPage({ enabled = true }) {
 
             {/* Divider */}
             <div className="relative flex items-center justify-center mb-5">
-              <div className="border-t border-white/10 w-full" />
-              <span className="bg-[#0a0b10] px-3 text-[10px] font-bold uppercase tracking-wider text-white/40 absolute">
+              <div className="border-t border-neutral-200 w-full" />
+              <span className="bg-white px-3 text-[10px] font-bold uppercase tracking-wider text-neutral-400 absolute">
                 or use candidate credentials
               </span>
             </div>
 
             {/* Tab Switcher */}
-            <div className="flex p-1 bg-white/[0.04] border border-white/10 rounded-xl mb-4">
+            <div className="flex p-1 bg-neutral-100 border border-neutral-200 rounded-xl mb-4">
               <button
                 type="button"
                 onClick={() => {
@@ -3376,8 +3431,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthError(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'login'
-                  ? 'bg-white text-black shadow-xs'
-                  : 'text-white/60 hover:text-white'
+                  ? 'bg-white text-neutral-900 shadow-xs'
+                  : 'text-neutral-500 hover:text-neutral-900'
                   }`}
               >
                 Sign In
@@ -3389,8 +3444,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   setAuthError(null);
                 }}
                 className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${authModalTab === 'register'
-                  ? 'bg-white text-black shadow-xs'
-                  : 'text-white/60 hover:text-white'
+                  ? 'bg-white text-neutral-900 shadow-xs'
+                  : 'text-neutral-500 hover:text-neutral-900'
                   }`}
               >
                 Create Profile
@@ -3399,15 +3454,15 @@ export default function OpenRolesPage({ enabled = true }) {
 
             {/* Alerts */}
             {authError && (
-              <div className="p-3 mb-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-start gap-2">
-                <AlertCircle size={15} className="shrink-0 mt-0.5" />
+              <div className="p-3 mb-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-start gap-2">
+                <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-500" />
                 <span className="flex-1">{authError}</span>
               </div>
             )}
 
             {authSuccessMsg && (
-              <div className="p-3 mb-4 rounded-xl bg-white/[0.06] border border-white/15 text-white text-xs flex items-center gap-2">
-                <CheckCircle2 size={15} className="shrink-0 text-white" />
+              <div className="p-3 mb-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2">
+                <CheckCircle2 size={15} className="shrink-0 text-emerald-600" />
                 <span>{authSuccessMsg}</span>
               </div>
             )}
@@ -3416,40 +3471,40 @@ export default function OpenRolesPage({ enabled = true }) {
             {authModalTab === 'login' && (
               <form onSubmit={handleEmailLogin} className="space-y-3.5">
                 <div>
-                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">
                     Email Address
                   </label>
                   <div className="relative">
-                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+                    <Mail size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
                     <input
                       type="email"
                       required
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
                       placeholder="you@domain.com"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl pl-10 pr-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">
                     Password
                   </label>
                   <div className="relative">
-                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
+                    <Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-400" />
                     <input
                       type={showAuthPassword ? 'text' : 'password'}
                       required
                       value={authPassword}
                       onChange={(e) => setAuthPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl pl-10 pr-10 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                     <button
                       type="button"
                       onClick={() => setShowAuthPassword(!showAuthPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white cursor-pointer"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 cursor-pointer"
                     >
                       {showAuthPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                     </button>
@@ -3459,7 +3514,7 @@ export default function OpenRolesPage({ enabled = true }) {
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
+                  className="w-full py-3 rounded-xl bg-neutral-900 hover:bg-black active:scale-[0.99] text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-md hover:shadow-lg mt-3 disabled:opacity-50"
                 >
                   {authLoading ? 'Signing In…' : 'Sign In to Candidate Profile'}
                 </button>
@@ -3471,32 +3526,32 @@ export default function OpenRolesPage({ enabled = true }) {
               <form onSubmit={handleRegisterSubmit} className="space-y-3">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Full Name *</label>
+                    <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Full Name *</label>
                     <input
                       type="text"
                       required
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
                       placeholder="Alex Johnson"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Email *</label>
+                    <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Email *</label>
                     <input
                       type="email"
                       required
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="alex@example.com"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
-                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Password *</label>
+                    <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Password *</label>
                     <input
                       type="password"
                       required
@@ -3504,57 +3559,57 @@ export default function OpenRolesPage({ enabled = true }) {
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
                       placeholder="Min 6 characters"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Phone</label>
+                    <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Phone</label>
                     <input
                       type="tel"
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
                       placeholder="+1 (555) 000-0000"
-                      className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Professional Title</label>
+                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Professional Title</label>
                   <input
                     type="text"
                     value={regTitle}
                     onChange={(e) => setRegTitle(e.target.value)}
                     placeholder="e.g. Senior Fullstack Engineer"
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
+                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Key Skills (comma-separated)</label>
                   <input
                     type="text"
                     value={regSkills}
                     onChange={(e) => setRegSkills(e.target.value)}
                     placeholder="React, TypeScript, Python, Node.js"
-                    className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-semibold text-white/60 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
+                  <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Resume File (PDF/DOCX)</label>
                   <input
                     type="file"
                     accept=".pdf,.docx,.doc"
                     onChange={(e) => setRegResume(e.target.files?.[0] || null)}
-                    className="w-full text-xs text-white/60 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-white/15 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 file:transition cursor-pointer"
+                    className="w-full text-xs text-neutral-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-xl file:border file:border-neutral-200 file:text-xs file:font-semibold file:bg-neutral-100 file:text-neutral-800 hover:file:bg-neutral-200 file:transition cursor-pointer"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-3 rounded-xl bg-white hover:bg-neutral-200 active:scale-98 text-black font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-lg shadow-black/40 mt-3 disabled:opacity-50"
+                  className="w-full py-3 rounded-xl bg-neutral-900 hover:bg-black active:scale-[0.99] text-white font-bold text-xs uppercase tracking-[0.14em] transition cursor-pointer shadow-md hover:shadow-lg mt-3 disabled:opacity-50"
                 >
                   {authLoading ? 'Creating Profile…' : 'Create Profile & Access Roles'}
                 </button>
@@ -3562,8 +3617,8 @@ export default function OpenRolesPage({ enabled = true }) {
             )}
 
             {/* Footer Security Note */}
-            <div className="mt-4 pt-3 border-t border-paper/10 flex items-center justify-center gap-1.5 text-[11px] text-paper/40">
-              <ShieldCheck size={13} className="text-emerald-400" />
+            <div className="mt-4 pt-3 border-t border-neutral-100 flex items-center justify-center gap-1.5 text-[11px] text-neutral-400">
+              <ShieldCheck size={13} className="text-emerald-500" />
               <span>Verified candidate session · Encrypted data</span>
             </div>
           </div>

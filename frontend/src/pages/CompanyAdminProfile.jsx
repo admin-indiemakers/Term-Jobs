@@ -30,8 +30,13 @@ import {
   Send,
   MessageSquare,
   ExternalLink,
-  RefreshCw
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
+  ShieldCheck,
+  Search
 } from 'lucide-react';
+import TeamChatDrawer from '../components/TeamChatDrawer';
 
 const INDUSTRY_OPTIONS = [
   'Information Technology',
@@ -91,6 +96,19 @@ export default function CompanyAdminProfile() {
   const [editingTechStack, setEditingTechStack] = useState(false);
   const [editingAdminInfo, setEditingAdminInfo] = useState(false);
 
+  // Team Chat governance state
+  const [chatSettings, setChatSettings] = useState({
+    enabled: true,
+    policy: 'all',
+    restricted_user_ids: [],
+    members: []
+  });
+  const [loadingChat, setLoadingChat] = useState(false);
+  const [savingChat, setSavingChat] = useState(false);
+  const [chatMemberFilter, setChatMemberFilter] = useState('');
+  const [chatMessage, setChatMessage] = useState({ type: '', text: '' });
+  const [isProfileChatOpen, setIsProfileChatOpen] = useState(false);
+
   // Profile form state
   const [companyForm, setCompanyForm] = useState({
     name: '',
@@ -144,6 +162,9 @@ export default function CompanyAdminProfile() {
   const [copiedTgWebhook, setCopiedTgWebhook] = useState(false);
   const [copiedCliqWebhook, setCopiedCliqWebhook] = useState(false);
   const [copiedTeamsEndpoint, setCopiedTeamsEndpoint] = useState(false);
+  const [openTgGuide, setOpenTgGuide] = useState(false);
+  const [openCliqGuide, setOpenCliqGuide] = useState(false);
+  const [openTeamsGuide, setOpenTeamsGuide] = useState(false);
 
   const loadBotConfig = async () => {
     try {
@@ -355,9 +376,69 @@ export default function CompanyAdminProfile() {
     }
   };
 
+  const loadChatSettings = async () => {
+    if (!token) return;
+    setLoadingChat(true);
+    try {
+      const res = await request('/api/team-chat/permissions', { token });
+      if (res) {
+        setChatSettings({
+          enabled: res.enabled ?? true,
+          policy: res.policy || 'all',
+          restricted_user_ids: res.restricted_user_ids || [],
+          members: res.members || []
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to load chat governance settings:', err);
+    } finally {
+      setLoadingChat(false);
+    }
+  };
+
+  const handleSaveChatSettings = async () => {
+    if (!token) return;
+    setSavingChat(true);
+    setChatMessage({ type: '', text: '' });
+    try {
+      await request('/api/team-chat/permissions', {
+        method: 'PUT',
+        token,
+        body: {
+          enabled: chatSettings.enabled,
+          policy: chatSettings.policy,
+          restricted_user_ids: chatSettings.restricted_user_ids,
+        }
+      });
+      setChatMessage({ type: 'success', text: 'Chat governance settings updated successfully!' });
+      await loadChatSettings();
+    } catch (err) {
+      setChatMessage({ type: 'error', text: err.message || 'Failed to update chat permissions' });
+    } finally {
+      setSavingChat(false);
+    }
+  };
+
+  const handleToggleMemberChat = (memberId) => {
+    setChatSettings((prev) => {
+      const isRestricted = prev.restricted_user_ids.includes(memberId);
+      const updatedRestricted = isRestricted
+        ? prev.restricted_user_ids.filter((id) => id !== memberId)
+        : [...prev.restricted_user_ids, memberId];
+      return {
+        ...prev,
+        restricted_user_ids: updatedRestricted,
+        members: prev.members.map((m) =>
+          m.id === memberId ? { ...m, can_chat: isRestricted } : m
+        )
+      };
+    });
+  };
+
   useEffect(() => {
     loadProfile();
     loadBotConfig();
+    loadChatSettings();
   }, [token]);
 
   // Auto-dismiss notifications
@@ -614,88 +695,181 @@ export default function CompanyAdminProfile() {
         </div>
       )}
 
-      {/* Breadcrumb Navigation */}
-      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/admin')}
-          className="hover:text-black font-medium transition-colors cursor-pointer"
-        >
-          Workspace
-        </button>
-        <span className="text-gray-300 font-normal">›</span>
-        <span className="text-gray-400 font-medium">Organization Profile</span>
-      </div>
+      {/* Top Header Area */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1 pb-1 shrink-0">
+        <div>
+          <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-400 mb-1">
+            <span className="hover:text-gray-700 cursor-pointer transition-colors" onClick={() => navigate('/dashboard')}>Workspace</span>
+            <span className="text-gray-300">›</span>
+            <span className="text-gray-600 font-semibold">Organization Profile</span>
+          </div>
+          <h1 className="text-2xl sm:text-[28px] font-extrabold text-gray-900 tracking-tight leading-tight">
+            Company & Admin Settings
+          </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Manage your enterprise details, brand identity, admin credentials, and multi-channel bots.
+          </p>
+        </div>
 
-      {/* Page Title & Subtitle */}
-      <div className="mb-5">
-        <h1 className="text-2xl sm:text-[1.85rem] font-extrabold text-gray-900 tracking-tight leading-tight">
-          Company & Admin Settings
-        </h1>
-        <p className="text-xs sm:text-sm text-gray-500 font-normal mt-1">
-          Manage your enterprise details, brand identity, admin contact, and security settings.
-        </p>
+        {/* Tenant Organization Pill Badge */}
+        <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-white/70 backdrop-blur-md border border-white/80 shadow-3xs shrink-0 self-start sm:self-auto">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs font-bold text-gray-900 tracking-tight">
+            {companyForm.name || user?.tenant_name || 'TCS'}
+          </span>
+          <span className="text-[11px] font-medium text-gray-400">• Admin Console</span>
+        </div>
       </div>
 
       {/* Main Two-Column Layout (Sidebar + Content) */}
-      <div className="flex flex-col md:flex-row gap-5 items-start">
-        {/* Left Sidebar Navigation Card (Glassmorphic) */}
-        <div className="w-full md:w-56 lg:w-60 bg-white/40 hover:bg-white/50 backdrop-blur-2xl border border-white/70 rounded-2xl p-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] shrink-0 flex flex-col gap-1.5 transition-all">
+      <div className="flex flex-col md:flex-row gap-4 sm:gap-5 items-start pt-1 sm:pt-2">
+        {/* Left Sidebar Navigation Card (Glassmorphic, Sticky) */}
+        <div className="w-full md:w-60 lg:w-64 md:sticky md:top-4 self-start z-10 bg-white/40 hover:bg-white/50 backdrop-blur-2xl border border-white/70 rounded-2xl p-2.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] shrink-0 flex flex-col gap-1.5 transition-all">
           <button
             type="button"
             onClick={() => setActiveTab('company')}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between ${
               activeTab === 'company'
-                ? 'bg-black text-white shadow-2xs font-semibold'
-                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
+                ? 'bg-black text-white shadow-2xs'
+                : 'text-gray-700 hover:text-black hover:bg-white/60 hover:backdrop-blur-md'
             }`}
           >
-            <Building2 size={15} />
-            <span>Company Profile</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0 ${
+                activeTab === 'company' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-600'
+              }`}>
+                <Building2 size={15} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-xs font-bold leading-tight truncate ${activeTab === 'company' ? 'text-white' : 'text-gray-900'}`}>
+                  Company Profile
+                </div>
+                <div className={`text-[10px] leading-tight mt-0.5 truncate ${activeTab === 'company' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Brand identity & details
+                </div>
+              </div>
+            </div>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('admin')}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between ${
               activeTab === 'admin'
-                ? 'bg-black text-white shadow-2xs font-semibold'
-                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
+                ? 'bg-black text-white shadow-2xs'
+                : 'text-gray-700 hover:text-black hover:bg-white/60 hover:backdrop-blur-md'
             }`}
           >
-            <User size={15} />
-            <span>Admin Contact</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0 ${
+                activeTab === 'admin' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-600'
+              }`}>
+                <User size={15} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-xs font-bold leading-tight truncate ${activeTab === 'admin' ? 'text-white' : 'text-gray-900'}`}>
+                  Admin Contact
+                </div>
+                <div className={`text-[10px] leading-tight mt-0.5 truncate ${activeTab === 'admin' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Credentials & owner info
+                </div>
+              </div>
+            </div>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between ${
               activeTab === 'security'
-                ? 'bg-black text-white shadow-2xs font-semibold'
-                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
+                ? 'bg-black text-white shadow-2xs'
+                : 'text-gray-700 hover:text-black hover:bg-white/60 hover:backdrop-blur-md'
             }`}
           >
-            <Lock size={15} />
-            <span>Password & Security</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0 ${
+                activeTab === 'security' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-600'
+              }`}>
+                <Lock size={15} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-xs font-bold leading-tight truncate ${activeTab === 'security' ? 'text-white' : 'text-gray-900'}`}>
+                  Password & Security
+                </div>
+                <div className={`text-[10px] leading-tight mt-0.5 truncate ${activeTab === 'security' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Credentials & protection
+                </div>
+              </div>
+            </div>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('bots')}
-            className={`w-full px-3.5 py-2.5 rounded-xl text-xs sm:text-[13px] font-semibold flex items-center gap-2.5 transition-all cursor-pointer ${
+            className={`w-full px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between ${
               activeTab === 'bots'
-                ? 'bg-black text-white shadow-2xs font-semibold'
-                : 'text-gray-600 hover:text-black hover:bg-white/60 hover:backdrop-blur-md font-medium'
+                ? 'bg-black text-white shadow-2xs'
+                : 'text-gray-700 hover:text-black hover:bg-white/60 hover:backdrop-blur-md'
             }`}
           >
-            <Bot size={15} />
-            <span>Bot Integrations</span>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0 ${
+                activeTab === 'bots' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-600'
+              }`}>
+                <Bot size={15} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-xs font-bold leading-tight truncate ${activeTab === 'bots' ? 'text-white' : 'text-gray-900'}`}>
+                  Bot Integrations
+                </div>
+                <div className={`text-[10px] leading-tight mt-0.5 truncate ${activeTab === 'bots' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Telegram, Cliq & Teams
+                </div>
+              </div>
+            </div>
+            {(botConfig.telegram.is_verified || botConfig.zoho_cliq.is_verified || botConfig.ms_teams.app_id) && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shrink-0" title="Active bot integration" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('chat')}
+            className={`w-full px-3 py-2.5 rounded-xl text-left transition-all cursor-pointer flex items-center justify-between ${
+              activeTab === 'chat'
+                ? 'bg-black text-white shadow-2xs'
+                : 'text-gray-700 hover:text-black hover:bg-white/60 hover:backdrop-blur-md'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className={`w-7.5 h-7.5 rounded-lg flex items-center justify-center shrink-0 ${
+                activeTab === 'chat' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-600'
+              }`}>
+                <MessageSquare size={15} />
+              </div>
+              <div className="min-w-0">
+                <div className={`text-xs font-bold leading-tight truncate ${activeTab === 'chat' ? 'text-white' : 'text-gray-900'}`}>
+                  Team Chat & Messaging
+                </div>
+                <div className={`text-[10px] leading-tight mt-0.5 truncate ${activeTab === 'chat' ? 'text-gray-300' : 'text-gray-400'}`}>
+                  Control who can message
+                </div>
+              </div>
+            </div>
+            {chatSettings.enabled && (
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-xs shrink-0" title="Team chat active" />
+            )}
           </button>
         </div>
 
-        {/* Right Main Content Area */}
-        <div className="flex-1 min-w-0 w-full space-y-3.5">
+        {/* Right Main Content Area (Scrollable Portion) */}
+        <div
+          className="flex-1 min-w-0 w-full space-y-3.5 max-h-[calc(100vh-190px)] sm:max-h-[calc(100vh-175px)] overflow-y-auto pr-1.5 sm:pr-2.5 pb-16 sm:pb-12 scroll-smooth [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-black/15 hover:[&::-webkit-scrollbar-thumb]:bg-black/30 [&::-webkit-scrollbar-thumb]:rounded-full"
+          style={{
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(0, 0, 0, 0.15) transparent',
+          }}
+        >
           {loading ? (
             <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-10 text-center text-xs text-gray-400 flex flex-col items-center justify-center gap-2 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
               <Loader2 size={20} className="animate-spin text-gray-600" />
@@ -813,24 +987,24 @@ export default function CompanyAdminProfile() {
                       {/* 2x2 Info Grid */}
                       <div className="flex-1 w-full">
                         {editingBasicInfo ? (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                             <div>
-                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Company Name</label>
+                              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">Company Name</label>
                               <input
                                 type="text"
                                 value={companyForm.name}
                                 onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
                                 placeholder="Company name"
-                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                                className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                               />
                             </div>
 
                             <div>
-                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Industry Sector</label>
+                              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">Industry Sector</label>
                               <select
                                 value={companyForm.industry}
                                 onChange={(e) => setCompanyForm({ ...companyForm, industry: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                                className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all cursor-pointer"
                               >
                                 {INDUSTRY_OPTIONS.map((ind) => (
                                   <option key={ind} value={ind}>
@@ -841,11 +1015,11 @@ export default function CompanyAdminProfile() {
                             </div>
 
                             <div>
-                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Company Size</label>
+                              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">Company Size</label>
                               <select
                                 value={companyForm.size}
                                 onChange={(e) => setCompanyForm({ ...companyForm, size: e.target.value })}
-                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                                className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all cursor-pointer"
                               >
                                 {COMPANY_SIZES.map((s) => (
                                   <option key={s} value={s}>
@@ -856,13 +1030,13 @@ export default function CompanyAdminProfile() {
                             </div>
 
                             <div>
-                              <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">Headquarters</label>
+                              <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">Headquarters</label>
                               <input
                                 type="text"
                                 value={companyForm.location}
                                 onChange={(e) => setCompanyForm({ ...companyForm, location: e.target.value })}
                                 placeholder="City, Country"
-                                className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                                className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                               />
                             </div>
                           </div>
@@ -964,7 +1138,7 @@ export default function CompanyAdminProfile() {
                           value={companyForm.notes}
                           onChange={(e) => setCompanyForm({ ...companyForm, notes: e.target.value })}
                           placeholder="Describe your organization mission, vision, and engineering culture..."
-                          className="w-full p-2.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black leading-relaxed shadow-3xs transition-all resize-none"
+                          className="w-full p-3 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black leading-relaxed shadow-3xs transition-all resize-none"
                         />
                       ) : (
                         <p className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal py-0.5">
@@ -1026,7 +1200,7 @@ export default function CompanyAdminProfile() {
                     <div className="pt-3">
                       {editingTechStack ? (
                         <div className="space-y-2.5">
-                          <div className="flex flex-wrap items-center gap-2 p-2 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus-within:bg-white focus-within:ring-1 focus-within:ring-black shadow-3xs transition-all">
+                          <div className="flex flex-wrap items-center gap-2 p-2.5 bg-white/70 hover:bg-white focus-within:bg-white backdrop-blur-md border border-gray-200/80 focus-within:border-black rounded-xl focus-within:ring-1 focus-within:ring-black shadow-3xs transition-all">
                             {companyForm.tech_stack.map((tech) => (
                               <span
                                 key={tech}
@@ -1145,7 +1319,7 @@ export default function CompanyAdminProfile() {
                       {editingAdminInfo ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div className="sm:col-span-2">
-                            <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">
+                            <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                               Admin Full Name *
                             </label>
                             <input
@@ -1153,12 +1327,12 @@ export default function CompanyAdminProfile() {
                               value={adminForm.admin_name}
                               onChange={(e) => setAdminForm({ ...adminForm, admin_name: e.target.value })}
                               placeholder="Full name"
-                              className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">
+                            <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                               Login Email Address *
                             </label>
                             <input
@@ -1166,12 +1340,12 @@ export default function CompanyAdminProfile() {
                               value={adminForm.admin_email}
                               onChange={(e) => setAdminForm({ ...adminForm, admin_email: e.target.value })}
                               placeholder="admin@company.com"
-                              className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                             />
                           </div>
 
                           <div>
-                            <label className="block text-[10.5px] font-semibold text-gray-500 mb-1">
+                            <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                               Direct Phone Number
                             </label>
                             <input
@@ -1179,7 +1353,7 @@ export default function CompanyAdminProfile() {
                               value={adminForm.admin_phone}
                               onChange={(e) => setAdminForm({ ...adminForm, admin_phone: e.target.value })}
                               placeholder="+91 98765 43210"
-                              className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                             />
                           </div>
                         </div>
@@ -1294,9 +1468,9 @@ export default function CompanyAdminProfile() {
                     )}
 
                     {/* Password Form */}
-                    <form onSubmit={handleChangePassword} className="pt-3.5 space-y-3 max-w-md">
+                    <form onSubmit={handleChangePassword} className="pt-3.5 space-y-3.5 max-w-md">
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-gray-600 mb-1">
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                           Current Password *
                         </label>
                         <div className="relative">
@@ -1306,12 +1480,12 @@ export default function CompanyAdminProfile() {
                             value={passwordForm.current_password}
                             onChange={(e) => setPasswordForm({ ...passwordForm, current_password: e.target.value })}
                             placeholder="Enter current password"
-                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black pr-9 shadow-3xs transition-all"
+                            className="w-full pl-3 pr-10 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                           />
                           <button
                             type="button"
                             onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer p-0.5"
                             tabIndex={-1}
                           >
                             {showCurrentPassword ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -1320,8 +1494,8 @@ export default function CompanyAdminProfile() {
                       </div>
 
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-gray-600 mb-1">
-                          New Password * <span className="text-gray-400 font-normal">(min 8 characters)</span>
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                          New Password * <span className="text-gray-400 font-normal lowercase">(min 8 characters)</span>
                         </label>
                         <div className="relative">
                           <input
@@ -1331,12 +1505,12 @@ export default function CompanyAdminProfile() {
                             value={passwordForm.new_password}
                             onChange={(e) => setPasswordForm({ ...passwordForm, new_password: e.target.value })}
                             placeholder="Enter new secure password"
-                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black pr-9 shadow-3xs transition-all"
+                            className="w-full pl-3 pr-10 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                           />
                           <button
                             type="button"
                             onClick={() => setShowNewPassword(!showNewPassword)}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer p-0.5"
                             tabIndex={-1}
                           >
                             {showNewPassword ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -1345,7 +1519,7 @@ export default function CompanyAdminProfile() {
                       </div>
 
                       <div>
-                        <label className="block text-[10.5px] font-semibold text-gray-600 mb-1">
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                           Confirm New Password *
                         </label>
                         <div className="relative">
@@ -1356,12 +1530,12 @@ export default function CompanyAdminProfile() {
                             value={passwordForm.confirm_password}
                             onChange={(e) => setPasswordForm({ ...passwordForm, confirm_password: e.target.value })}
                             placeholder="Confirm new password"
-                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black pr-9 shadow-3xs transition-all"
+                            className="w-full pl-3 pr-10 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                           />
                           <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer p-0.5"
                             tabIndex={-1}
                           >
                             {showConfirmPassword ? <EyeOff size={13} /> : <Eye size={13} />}
@@ -1399,55 +1573,60 @@ export default function CompanyAdminProfile() {
                   {/* Status Banner / Feedback */}
                   {botMessage.text && (
                     <div
-                      className={`p-3.5 rounded-xl text-xs flex items-center justify-between gap-2.5 transition-all ${
+                      className={`p-3.5 rounded-2xl text-xs sm:text-[13px] flex items-center justify-between gap-3 shadow-2xs transition-all ${
                         botMessage.type === 'success'
-                          ? 'bg-emerald-50/90 text-emerald-800 border border-emerald-200'
-                          : 'bg-red-50/90 text-red-800 border border-red-200'
+                          ? 'bg-emerald-50/90 text-emerald-800 border border-emerald-200/80'
+                          : 'bg-red-50/90 text-red-800 border border-red-200/80'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2.5 font-medium">
                         {botMessage.type === 'success' ? (
-                          <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                          <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
                         ) : (
-                          <AlertCircle size={15} className="text-red-600 shrink-0" />
+                          <AlertCircle size={16} className="text-red-600 shrink-0" />
                         )}
                         <span>{botMessage.text}</span>
                       </div>
                       <button
                         type="button"
                         onClick={() => setBotMessage({ type: '', text: '' })}
-                        className="text-gray-400 hover:text-black cursor-pointer"
+                        className="p-1 rounded-lg hover:bg-black/5 text-gray-500 hover:text-black transition-colors cursor-pointer"
                       >
-                        <X size={13} />
+                        <X size={14} />
                       </button>
                     </div>
                   )}
 
                   {/* Card 1: Telegram Bot Integration */}
-                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
-                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-600 flex items-center justify-center">
+                  <div className="bg-white/40 hover:bg-white/50 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-600 border border-sky-500/20 flex items-center justify-center shrink-0 shadow-3xs">
                           <Send size={16} className="-translate-x-0.5 -translate-y-0.5" />
                         </div>
                         <div>
-                          <h3 className="text-xs sm:text-[13px] font-bold text-gray-900">
-                            Telegram Hiring Assistant Bot
-                          </h3>
-                          <p className="text-[11px] text-gray-500">
-                            Configure your company's dedicated Telegram bot for Hiring Managers.
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">
+                              Telegram Hiring Assistant Bot
+                            </h3>
+                            <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200/80 hidden sm:inline">
+                              Hiring Channel
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            Configure your company's dedicated Telegram bot for Hiring Managers to review talent alerts.
                           </p>
                         </div>
                       </div>
 
-                      <div>
+                      <div className="shrink-0 self-start sm:self-auto">
                         {botConfig.telegram.is_verified ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-3xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             Connected {botConfig.telegram.bot_username ? `@${botConfig.telegram.bot_username}` : ''}
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-semibold bg-gray-100/90 text-gray-500 border border-gray-200/60 shadow-3xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
                             Not Configured
                           </span>
@@ -1458,11 +1637,11 @@ export default function CompanyAdminProfile() {
                     <div className="pt-4 space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                             Bot Username
                           </label>
                           <div className="relative">
-                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-bold">@</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-bold select-none">@</span>
                             <input
                               type="text"
                               value={botConfig.telegram.bot_username}
@@ -1473,13 +1652,13 @@ export default function CompanyAdminProfile() {
                                 })
                               }
                               placeholder="AcmeHiringBot"
-                              className="w-full pl-7 pr-3 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                              className="w-full pl-7.5 pr-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                             Telegram Bot Token
                           </label>
                           <div className="relative">
@@ -1493,12 +1672,12 @@ export default function CompanyAdminProfile() {
                                 })
                               }
                               placeholder="7123456789:AAH..."
-                              className="w-full pl-2.5 pr-8 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                              className="w-full pl-3 pr-9 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                             />
                             <button
                               type="button"
                               onClick={() => setShowTelegramToken(!showTelegramToken)}
-                              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer p-0.5"
                             >
                               {showTelegramToken ? <EyeOff size={13} /> : <Eye size={13} />}
                             </button>
@@ -1508,11 +1687,16 @@ export default function CompanyAdminProfile() {
 
                       {/* Dynamic Webhook URL */}
                       {botConfig.telegram.webhook_url && (
-                        <div className="bg-sky-50/50 border border-sky-200/60 rounded-xl p-3 text-xs space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-sky-800 uppercase tracking-wider">
-                              Dynamic Telegram Webhook Endpoint
-                            </span>
+                        <div className="bg-black/[0.02] border border-black/[0.06] rounded-xl p-3.5 text-xs space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10.5px] font-bold text-gray-700 uppercase tracking-wider">
+                                Dynamic Telegram Webhook Endpoint
+                              </span>
+                              <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-200/60">
+                                POST Webhook
+                              </span>
+                            </div>
                             <button
                               type="button"
                               onClick={() => {
@@ -1520,23 +1704,26 @@ export default function CompanyAdminProfile() {
                                 setCopiedTgWebhook(true);
                                 setTimeout(() => setCopiedTgWebhook(false), 2000);
                               }}
-                              className="text-[11px] font-semibold text-sky-700 hover:text-sky-900 flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-white/90 hover:bg-white border border-gray-200/90 text-[11px] font-semibold text-gray-700 hover:text-black flex items-center gap-1.5 shadow-3xs cursor-pointer transition-all active:scale-98"
                             >
                               {copiedTgWebhook ? (
                                 <>
-                                  <Check size={12} className="text-emerald-600" />
-                                  <span className="text-emerald-600">Copied!</span>
+                                  <Check size={11} className="text-emerald-600" />
+                                  <span className="text-emerald-600 font-bold">Copied URL!</span>
                                 </>
                               ) : (
                                 <>
-                                  <Copy size={12} />
+                                  <Copy size={11} className="text-gray-500" />
                                   <span>Copy URL</span>
                                 </>
                               )}
                             </button>
                           </div>
-                          <div className="font-mono text-[11px] text-gray-700 break-all select-all">
+                          <div className="font-mono text-[11px] text-gray-800 break-all select-all bg-white/90 p-2.5 rounded-lg border border-black/[0.04] shadow-3xs">
                             {botConfig.telegram.webhook_url}
+                          </div>
+                          <div className="text-[10.5px] text-gray-400">
+                            Automatically registered with Telegram when you click Verify & Register Webhook.
                           </div>
                         </div>
                       )}
@@ -1547,7 +1734,7 @@ export default function CompanyAdminProfile() {
                           type="button"
                           onClick={handleSaveTelegram}
                           disabled={savingBots}
-                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 active:scale-98"
                         >
                           {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                           <span>Verify & Register Webhook</span>
@@ -1557,7 +1744,7 @@ export default function CompanyAdminProfile() {
                           type="button"
                           onClick={handleTestTelegram}
                           disabled={testingTelegram}
-                          className="px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-800 border border-gray-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          className="px-3.5 py-2 rounded-xl bg-white/80 hover:bg-white text-gray-800 border border-gray-200/90 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 active:scale-98"
                         >
                           {testingTelegram ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
                           <span>Test Token</span>
@@ -1567,7 +1754,7 @@ export default function CompanyAdminProfile() {
                           <button
                             type="button"
                             onClick={() => handleDisconnectBot('telegram')}
-                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/70 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
                           >
                             <Trash2 size={13} />
                             <span>Disconnect</span>
@@ -1575,44 +1762,76 @@ export default function CompanyAdminProfile() {
                         )}
                       </div>
 
-                      {/* Setup Instructions */}
-                      <div className="bg-gray-50/80 rounded-xl p-3 text-[11px] text-gray-600 space-y-1 border border-gray-200/50">
-                        <div className="font-bold text-gray-800">Quick Setup Instructions:</div>
-                        <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
-                          <li>Open Telegram and search for <b>@BotFather</b>.</li>
-                          <li>Send <code>/newbot</code> and follow instructions to name your bot.</li>
-                          <li>Copy the provided <b>HTTP API Token</b> and paste it in the field above.</li>
-                          <li>Click <b>Verify & Register Webhook</b>. TermJobs will automatically configure the endpoint.</li>
-                        </ol>
+                      {/* Setup Instructions (Collapsible Accordion) */}
+                      <div className="border border-black/[0.06] rounded-xl bg-white/40 overflow-hidden transition-all">
+                        <button
+                          type="button"
+                          onClick={() => setOpenTgGuide(!openTgGuide)}
+                          className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-white/60 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-800">Telegram Bot Setup Guide</span>
+                            <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">(4 steps to configure @BotFather)</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+                            <span>{openTgGuide ? 'Hide Instructions' : 'Show Instructions'}</span>
+                            {openTgGuide ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </div>
+                        </button>
+                        {openTgGuide && (
+                          <div className="p-3.5 pt-1 border-t border-black/[0.04] grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-600 animate-in fade-in duration-200">
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                              <span>Open Telegram and search for <b className="font-mono text-gray-900">@BotFather</b>.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                              <span>Send <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-900 font-bold font-mono">/newbot</code> and follow instructions to name your bot.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                              <span>Copy the provided <b>HTTP API Token</b> and paste it into the token field above.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+                              <span>Click <b>Verify & Register Webhook</b>. TermJobs will automatically configure the endpoint.</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
 
                   {/* Card 2: Zoho Cliq Bot Integration */}
-                  <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
-                    <div className="flex items-center justify-between pb-3 border-b border-black/[0.04] gap-3">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+                  <div className="bg-white/40 hover:bg-white/50 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 flex items-center justify-center shrink-0 shadow-3xs">
                           <MessageSquare size={16} />
                         </div>
                         <div>
-                          <h3 className="text-xs sm:text-[13px] font-bold text-gray-900">
-                            Zoho Cliq Bot Integration
-                          </h3>
-                          <p className="text-[11px] text-gray-500">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">
+                              Zoho Cliq Bot Integration
+                            </h3>
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/80 hidden sm:inline">
+                              Workplace Chat
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
                             Connect your workspace's Zoho Cliq channel to receive proactive notifications and manage candidates.
                           </p>
                         </div>
                       </div>
 
-                      <div>
+                      <div className="shrink-0 self-start sm:self-auto">
                         {botConfig.zoho_cliq.is_verified ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-3xs">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                             Connected
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 border border-gray-200">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10.5px] font-semibold bg-gray-100/90 text-gray-500 border border-gray-200/60 shadow-3xs">
                             <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
                             Not Configured
                           </span>
@@ -1623,7 +1842,7 @@ export default function CompanyAdminProfile() {
                     <div className="pt-4 space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                         <div>
-                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                             Bot Name in Zoho Cliq
                           </label>
                           <input
@@ -1636,12 +1855,12 @@ export default function CompanyAdminProfile() {
                               })
                             }
                             placeholder="TermJobs Assistant"
-                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                            className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                             Incoming Webhook URL
                           </label>
                           <input
@@ -1654,14 +1873,14 @@ export default function CompanyAdminProfile() {
                               })
                             }
                             placeholder="https://cliq.zoho.in/api/v2/bots/your_bot/incoming"
-                            className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                            className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                           />
                         </div>
                       </div>
 
                       {/* Direct Bot Chat URL or Marketplace Link */}
                       <div>
-                        <label className="block text-[11px] font-semibold text-gray-600 uppercase tracking-wider mb-1">
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
                           Direct Bot Chat URL / Invite Link (Optional)
                         </label>
                         <input
@@ -1674,7 +1893,7 @@ export default function CompanyAdminProfile() {
                             })
                           }
                           placeholder="https://cliq.zoho.in/#chat:bot:hiringmanagerterm or Marketplace URL"
-                          className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                          className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                         />
                         <p className="text-[10px] text-gray-400 mt-1">
                           If left blank, defaults to <code>https://cliq.zoho.in/#chat:bot:{'{bot_name}'}</code>.
@@ -1683,11 +1902,11 @@ export default function CompanyAdminProfile() {
 
                       {/* Universal Extension Installation URL (For External Organizations) */}
                       <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
                             Universal Extension Install Link (For Cross-Organization Access)
                           </label>
-                          <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                             Recommended for External Users
                           </span>
                         </div>
@@ -1701,20 +1920,26 @@ export default function CompanyAdminProfile() {
                             })
                           }
                           placeholder="https://cliq.zoho.in/install/extension?key=... or Marketplace URL"
-                          className="w-full px-2.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs"
+                          className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                         />
-                        <p className="text-[10px] text-gray-500 mt-1">
-                          Zoho Cliq bots are organization-private by default. If you package your bot as an <b>Extension</b> in Zoho Developer Console (Extensions &gt; New Extension &gt; Share Link), paste the generated installation link here. Any external company can then install the bot in 1 click!
+                        <p className="text-[10.5px] text-gray-500 mt-1">
+                          Zoho Cliq bots are organization-private by default. If you package your bot as an <b>Extension</b> in Zoho Developer Console, paste the generated installation link here so external hiring partners can install it in 1 click.
                         </p>
                       </div>
 
                       {/* Zoho Cliq Message Handler URL to configure in Zoho Developer Console */}
+                      {/* Zoho Cliq Message Handler URL */}
                       {botConfig.zoho_cliq.webhook_url && (
-                        <div className="bg-emerald-50/50 border border-emerald-200/60 rounded-xl p-3 text-xs space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
-                              Zoho Cliq Bot Message Handler URL
-                            </span>
+                        <div className="bg-black/[0.02] border border-black/[0.06] rounded-xl p-3.5 text-xs space-y-2">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10.5px] font-bold text-gray-700 uppercase tracking-wider">
+                                Zoho Cliq Bot Message Handler URL
+                              </span>
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                                Handler Endpoint
+                              </span>
+                            </div>
                             <button
                               type="button"
                               onClick={() => {
@@ -1722,23 +1947,26 @@ export default function CompanyAdminProfile() {
                                 setCopiedCliqWebhook(true);
                                 setTimeout(() => setCopiedCliqWebhook(false), 2000);
                               }}
-                              className="text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg bg-white/90 hover:bg-white border border-gray-200/90 text-[11px] font-semibold text-gray-700 hover:text-black flex items-center gap-1.5 shadow-3xs cursor-pointer transition-all active:scale-98"
                             >
                               {copiedCliqWebhook ? (
                                 <>
-                                  <Check size={12} className="text-emerald-600" />
-                                  <span className="text-emerald-600">Copied!</span>
+                                  <Check size={11} className="text-emerald-600" />
+                                  <span className="text-emerald-600 font-bold">Copied URL!</span>
                                 </>
                               ) : (
                                 <>
-                                  <Copy size={12} />
+                                  <Copy size={11} className="text-gray-500" />
                                   <span>Copy URL</span>
                                 </>
                               )}
                             </button>
                           </div>
-                          <div className="font-mono text-[11px] text-gray-700 break-all select-all">
+                          <div className="font-mono text-[11px] text-gray-800 break-all select-all bg-white/90 p-2.5 rounded-lg border border-black/[0.04] shadow-3xs">
                             {botConfig.zoho_cliq.webhook_url}
+                          </div>
+                          <div className="text-[10.5px] text-gray-400">
+                            Paste this URL under Message Handler in Zoho Developer Console.
                           </div>
                         </div>
                       )}
@@ -1749,7 +1977,7 @@ export default function CompanyAdminProfile() {
                           type="button"
                           onClick={handleSaveCliq}
                           disabled={savingBots}
-                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 active:scale-98"
                         >
                           {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
                           <span>Save Zoho Cliq Config</span>
@@ -1759,7 +1987,7 @@ export default function CompanyAdminProfile() {
                           type="button"
                           onClick={handleTestCliq}
                           disabled={testingCliq || !botConfig.zoho_cliq.incoming_webhook_url}
-                          className="px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white text-gray-800 border border-gray-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
+                          className="px-3.5 py-2 rounded-xl bg-white/80 hover:bg-white text-gray-800 border border-gray-200/90 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 active:scale-98"
                         >
                           {testingCliq ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
                           <span>Send Test Message</span>
@@ -1769,7 +1997,7 @@ export default function CompanyAdminProfile() {
                           <button
                             type="button"
                             onClick={() => handleDisconnectBot('zoho_cliq')}
-                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/70 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
                           >
                             <Trash2 size={13} />
                             <span>Disconnect</span>
@@ -1777,212 +2005,534 @@ export default function CompanyAdminProfile() {
                         )}
                       </div>
 
-                      {/* Setup Instructions */}
-                      <div className="bg-gray-50/80 rounded-xl p-3 text-[11px] text-gray-600 space-y-1 border border-gray-200/50">
-                        <div className="font-bold text-gray-800">Zoho Developer Console Setup:</div>
-                        <ol className="list-decimal list-inside space-y-0.5 text-gray-600">
-                          <li>Go to <b>Zoho Cliq Developer Console</b> &gt; <b>Bots</b> &gt; Create Bot.</li>
-                          <li>In Bot Details, copy the <b>Incoming Webhook URL</b> into the field above.</li>
-                          <li>Under <b>Bot Handlers</b>, select <i>Message Handler</i> and paste the <b>Message Handler URL</b> shown above.</li>
-                          <li>Click Save in both Zoho Cliq Console and on this page.</li>
-                        </ol>
+                      {/* Setup Instructions (Collapsible Accordion) */}
+                      <div className="border border-black/[0.06] rounded-xl bg-white/40 overflow-hidden transition-all">
+                        <button
+                          type="button"
+                          onClick={() => setOpenCliqGuide(!openCliqGuide)}
+                          className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-white/60 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-800">Zoho Developer Console Setup Guide</span>
+                            <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">(Bot creation & message handler)</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+                            <span>{openCliqGuide ? 'Hide Instructions' : 'Show Instructions'}</span>
+                            {openCliqGuide ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </div>
+                        </button>
+                        {openCliqGuide && (
+                          <div className="p-3.5 pt-1 border-t border-black/[0.04] grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-600 animate-in fade-in duration-200">
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                              <span>Go to <b>Zoho Cliq Developer Console</b> &gt; <b>Bots</b> &gt; Create Bot.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                              <span>In Bot Details, copy the <b>Incoming Webhook URL</b> into the field above.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                              <span>Under <b>Bot Handlers</b>, select <i>Message Handler</i> and paste the handler URL shown above.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+                              <span>Click Save in both Zoho Cliq Console and on this page.</span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                {/* 3. Microsoft Teams Bot Card */}
-                <div className="bg-white rounded-2xl p-5 sm:p-6 border border-gray-200/80 shadow-xs space-y-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 shadow-2xs">
-                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
-                        </svg>
+                  {/* Card 3: Microsoft Teams Bot Card */}
+                  <div className="bg-white/40 hover:bg-white/50 backdrop-blur-2xl border border-white/70 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-black/[0.04] gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-600 border border-indigo-500/20 flex items-center justify-center shrink-0 shadow-3xs">
+                          <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M19.5 7.5a2.5 2.5 0 1 0-2.45-3h-1.55a3.5 3.5 0 0 1 3.5 3.5v.5h.5zm-3.5 1h-8A2.5 2.5 0 0 0 5.5 11v6a2.5 2.5 0 0 0 2.5 2.5h8a2.5 2.5 0 0 0 2.5-2.5v-6a2.5 2.5 0 0 0-2.5-2.5zm-5 5.5a1.5 1.5 0 1 1 3 0 1.5 1.5 0 0 1-3 0z"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs sm:text-sm font-bold text-gray-900 leading-tight">Microsoft Teams Hiring Assistant</h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 hidden sm:inline">
+                              Teams Bot & Adaptive Cards
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-0.5">
+                            Enable Hiring Managers to approve requisitions and review candidate match cards right inside Microsoft Teams.
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-sm font-bold text-gray-900">Microsoft Teams Hiring Assistant</h4>
-                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700">
-                            Teams Bot & Adaptive Cards
+
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0 self-start sm:self-auto">
+                        <input
+                          type="checkbox"
+                          checked={botConfig.ms_teams.enabled}
+                          onChange={(e) => setBotConfig({
+                            ...botConfig,
+                            ms_teams: { ...botConfig.ms_teams, enabled: e.target.checked }
+                          })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+                      </label>
+                    </div>
+
+                    <div className="space-y-4 pt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {/* Microsoft App ID */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                            Microsoft App ID (Bot Client ID)
+                          </label>
+                          <input
+                            type="text"
+                            value={botConfig.ms_teams.app_id}
+                            onChange={(e) => setBotConfig({
+                              ...botConfig,
+                              ms_teams: { ...botConfig.ms_teams, app_id: e.target.value }
+                            })}
+                            placeholder="e.g. 7b3f9c6d-5a82-4f2c-b173-e38db0fa4b12"
+                            className="w-full px-3 py-2 text-xs font-mono text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                          />
+                          <span className="text-[10px] text-gray-400 mt-1 block">
+                            From Azure Bot Service or Microsoft Teams Developer Portal.
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Enable your Hiring Managers to approve requisitions, review candidate match cards, and manage timesheets right inside Microsoft Teams.
-                        </p>
+
+                        {/* Microsoft App Password */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                            Microsoft App Password (Client Secret)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showTeamsPassword ? 'text' : 'password'}
+                              value={botConfig.ms_teams.app_password}
+                              onChange={(e) => setBotConfig({
+                                ...botConfig,
+                                ms_teams: { ...botConfig.ms_teams, app_password: e.target.value }
+                              })}
+                              placeholder="Azure Bot Client Secret"
+                              className="w-full pl-3 pr-9 py-2 text-xs font-mono text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowTeamsPassword(!showTeamsPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer p-0.5"
+                            >
+                              {showTeamsPassword ? <EyeOff size={13} /> : <Eye size={13} />}
+                            </button>
+                          </div>
+                          <span className="text-[10px] text-gray-400 mt-1 block">
+                            Used to authenticate outbound Adaptive Card replies back to Teams.
+                          </span>
+                        </div>
                       </div>
-                    </div>
 
-                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={botConfig.ms_teams.enabled}
-                        onChange={(e) => setBotConfig({
-                          ...botConfig,
-                          ms_teams: { ...botConfig.ms_teams, enabled: e.target.checked }
-                        })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
-                    </label>
-                  </div>
-
-                  <div className="space-y-4 pt-2">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Microsoft App ID */}
+                      {/* Bot Name */}
                       <div>
-                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                          Microsoft App ID (Bot Client ID)
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5">
+                          Bot Display Name in Teams
                         </label>
                         <input
                           type="text"
-                          value={botConfig.ms_teams.app_id}
+                          value={botConfig.ms_teams.bot_name}
                           onChange={(e) => setBotConfig({
                             ...botConfig,
-                            ms_teams: { ...botConfig.ms_teams, app_id: e.target.value }
+                            ms_teams: { ...botConfig.ms_teams, bot_name: e.target.value }
                           })}
-                          placeholder="e.g. 7b3f9c6d-5a82-4f2c-b173-e38db0fa4b12"
-                          className="w-full px-3 py-2 bg-gray-50/70 border border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-black"
+                          placeholder="e.g. TermJobs Assistant"
+                          className="w-full sm:w-1/2 px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
                         />
-                        <span className="text-[10px] text-gray-400 mt-1 block">
-                          From Azure Bot Service or Microsoft Teams Developer Portal.
-                        </span>
                       </div>
 
-                      {/* Microsoft App Password */}
-                      <div>
-                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                          Microsoft App Password (Client Secret)
-                        </label>
-                        <div className="relative">
-                          <input
-                            type={showTeamsPassword ? 'text' : 'password'}
-                            value={botConfig.ms_teams.app_password}
-                            onChange={(e) => setBotConfig({
-                              ...botConfig,
-                              ms_teams: { ...botConfig.ms_teams, app_password: e.target.value }
-                            })}
-                            placeholder="Azure Bot Client Secret"
-                            className="w-full px-3 py-2 pr-9 bg-gray-50/70 border border-gray-200 rounded-xl text-xs font-mono text-gray-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-black"
-                          />
+                      {/* Bot Messaging Endpoint URL */}
+                      <div className="bg-black/[0.02] border border-black/[0.06] rounded-xl p-3.5 text-xs space-y-2">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10.5px] font-bold text-gray-700 uppercase tracking-wider">
+                              Bot Messaging Endpoint URL
+                            </span>
+                            <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200/60">
+                              Azure Bot Service
+                            </span>
+                          </div>
                           <button
                             type="button"
-                            onClick={() => setShowTeamsPassword(!showTeamsPassword)}
-                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black cursor-pointer"
+                            onClick={() => {
+                              navigator.clipboard.writeText(botConfig.ms_teams.bot_endpoint || `${window.location.origin}/api/teams/messages`);
+                              setCopiedTeamsEndpoint(true);
+                              setTimeout(() => setCopiedTeamsEndpoint(false), 2000);
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-white/90 hover:bg-white border border-gray-200/90 text-[11px] font-semibold text-gray-700 hover:text-black flex items-center gap-1.5 shadow-3xs cursor-pointer transition-all active:scale-98"
                           >
-                            {showTeamsPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                            {copiedTeamsEndpoint ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} className="text-gray-500" />}
+                            <span>{copiedTeamsEndpoint ? 'Copied URL!' : 'Copy Endpoint'}</span>
                           </button>
                         </div>
-                        <span className="text-[10px] text-gray-400 mt-1 block">
-                          Used to authenticate outbound Adaptive Card replies back to Teams.
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Bot Name */}
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                        Bot Display Name in Teams
-                      </label>
-                      <input
-                        type="text"
-                        value={botConfig.ms_teams.bot_name}
-                        onChange={(e) => setBotConfig({
-                          ...botConfig,
-                          ms_teams: { ...botConfig.ms_teams, bot_name: e.target.value }
-                        })}
-                        placeholder="e.g. TermJobs Assistant"
-                        className="w-full sm:w-1/2 px-3 py-2 bg-gray-50/70 border border-gray-200 rounded-xl text-xs text-gray-900 focus:bg-white focus:outline-hidden focus:ring-2 focus:ring-black"
-                      />
-                    </div>
-
-                    {/* Bot Messaging Endpoint URL */}
-                    <div className="bg-indigo-50/60 rounded-xl p-3 border border-indigo-100 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
-                          Bot Messaging Endpoint URL (Paste into Azure Bot Service)
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText(botConfig.ms_teams.bot_endpoint || `${window.location.origin}/api/teams/messages`);
-                            setCopiedTeamsEndpoint(true);
-                            setTimeout(() => setCopiedTeamsEndpoint(false), 2000);
-                          }}
-                          className="text-[10px] text-indigo-700 hover:text-indigo-950 font-semibold flex items-center gap-1 cursor-pointer bg-white px-2 py-0.5 rounded-md border border-indigo-200 shadow-2xs"
-                        >
-                          {copiedTeamsEndpoint ? <Check size={11} className="text-emerald-600" /> : <Copy size={11} />}
-                          <span>{copiedTeamsEndpoint ? 'Copied URL!' : 'Copy Endpoint'}</span>
-                        </button>
-                      </div>
-                      <div className="font-mono text-[11px] text-indigo-950 bg-white/90 p-2 rounded-lg border border-indigo-200/80 break-all select-all">
-                        {botConfig.ms_teams.bot_endpoint || `${window.location.origin}/api/teams/messages`}
-                      </div>
-                      <p className="text-[11px] text-indigo-800/80">
-                        In Azure Portal &gt; Bot Services &gt; Configuration, set this URL as your <b>Messaging Endpoint</b>.
-                      </p>
-                    </div>
-
-                    {/* Sideload App Package Download */}
-                    <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between gap-3 flex-wrap">
-                      <div>
-                        <div className="text-xs font-bold text-gray-800">Microsoft Teams App Package (.zip)</div>
-                        <div className="text-[11px] text-gray-500">
-                          Pre-packaged with manifest.json and icons. Sideload into Microsoft Teams or upload to Teams Admin Center.
+                        <div className="font-mono text-[11px] text-gray-800 break-all select-all bg-white/90 p-2.5 rounded-lg border border-black/[0.04] shadow-3xs">
+                          {botConfig.ms_teams.bot_endpoint || `${window.location.origin}/api/teams/messages`}
                         </div>
+                        <p className="text-[10.5px] text-gray-400">
+                          In Azure Portal &gt; Bot Services &gt; Configuration, set this URL as your <b>Messaging Endpoint</b>.
+                        </p>
                       </div>
-                      <a
-                        href={botConfig.ms_teams.package_url || '/api/teams/package'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-100 text-indigo-700 border border-indigo-200 text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
-                      >
-                        <ExternalLink size={13} />
-                        <span>Download Teams App (.zip)</span>
-                      </a>
-                    </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex items-center gap-2 pt-1 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleSaveTeams}
-                        disabled={savingBots}
-                        className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-60"
-                      >
-                        {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
-                        <span>Save Microsoft Teams Config</span>
-                      </button>
+                      {/* Sideload App Package Download */}
+                      <div className="p-3.5 bg-white/70 rounded-xl border border-black/[0.06] flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="text-xs font-bold text-gray-900">Microsoft Teams App Package (.zip)</div>
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            Pre-packaged with manifest.json and icons. Sideload into Microsoft Teams or upload to Teams Admin Center.
+                          </div>
+                        </div>
+                        <a
+                          href={botConfig.ms_teams.package_url || '/api/teams/package'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 text-indigo-700 border border-indigo-200/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0 active:scale-98"
+                        >
+                          <ExternalLink size={13} />
+                          <span>Download Teams App (.zip)</span>
+                        </a>
+                      </div>
 
-                      {botConfig.ms_teams.app_id && (
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-2 pt-1 flex-wrap">
                         <button
                           type="button"
-                          onClick={() => handleDisconnectBot('ms_teams')}
-                          className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer ml-auto"
+                          onClick={handleSaveTeams}
+                          disabled={savingBots}
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 active:scale-98"
                         >
-                          <Trash2 size={13} />
-                          <span>Disconnect</span>
+                          {savingBots ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                          <span>Save Microsoft Teams Config</span>
                         </button>
-                      )}
-                    </div>
 
-                    {/* Step-by-Step Instructions */}
-                    <div className="bg-gray-50/80 rounded-xl p-3 text-[11px] text-gray-600 space-y-1 border border-gray-200/50">
-                      <div className="font-bold text-gray-800">How to Setup Microsoft Teams Bot:</div>
-                      <ol className="list-decimal list-inside space-y-1 text-gray-600">
-                        <li>Register an Azure Bot in <b>Azure Portal</b> &gt; <b>Azure Bot</b> (or use Microsoft Teams Developer Portal).</li>
-                        <li>Copy the <b>Microsoft App ID</b> and create a <b>Client Secret</b>, then paste them above.</li>
-                        <li>Copy the <b>Bot Messaging Endpoint URL</b> above and paste it into the Azure Bot Configuration.</li>
-                        <li>Click <b>Download Teams App (.zip)</b> and upload it to <b>Teams Admin Center</b> &gt; <i>Manage apps</i> or sideload in Teams client.</li>
-                      </ol>
+                        {botConfig.ms_teams.app_id && (
+                          <button
+                            type="button"
+                            onClick={() => handleDisconnectBot('ms_teams')}
+                            className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200/70 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+                          >
+                            <Trash2 size={13} />
+                            <span>Disconnect</span>
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Step-by-Step Instructions (Collapsible Accordion) */}
+                      <div className="border border-black/[0.06] rounded-xl bg-white/40 overflow-hidden transition-all">
+                        <button
+                          type="button"
+                          onClick={() => setOpenTeamsGuide(!openTeamsGuide)}
+                          className="w-full px-3.5 py-2.5 flex items-center justify-between text-left hover:bg-white/60 transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-800">Microsoft Teams Bot Setup Guide</span>
+                            <span className="text-[10px] text-gray-400 font-medium hidden sm:inline">(Azure Bot Service & Manifest)</span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] font-semibold text-gray-500">
+                            <span>{openTeamsGuide ? 'Hide Instructions' : 'Show Instructions'}</span>
+                            {openTeamsGuide ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                          </div>
+                        </button>
+                        {openTeamsGuide && (
+                          <div className="p-3.5 pt-1 border-t border-black/[0.04] grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-gray-600 animate-in fade-in duration-200">
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
+                              <span>Register an Azure Bot in <b>Azure Portal</b> &gt; <b>Azure Bot</b> (or Teams Developer Portal).</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
+                              <span>Copy the <b>Microsoft App ID</b> and create a <b>Client Secret</b>, then paste them above.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
+                              <span>Copy the <b>Bot Messaging Endpoint URL</b> and paste it into the Azure Bot Configuration.</span>
+                            </div>
+                            <div className="flex items-start gap-2 bg-white/70 p-2.5 rounded-lg border border-black/[0.04]">
+                              <span className="w-4.5 h-4.5 rounded-full bg-black text-white text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">4</span>
+                              <span>Click <b>Download Teams App (.zip)</b> and upload it to <b>Teams Admin Center</b> &gt; <i>Manage apps</i>.</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* Tab 5: Team Chat & Messaging Governance */}
+              {activeTab === 'chat' && (
+                <div className="space-y-4">
+                  {/* Toast Alert */}
+                  {chatMessage.text && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs font-semibold flex items-center justify-between gap-2 shadow-xs ${
+                        chatMessage.type === 'success'
+                          ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                          : 'bg-red-50 text-red-800 border-red-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {chatMessage.type === 'success' ? (
+                          <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertCircle size={15} className="text-red-600 shrink-0" />
+                        )}
+                        <span>{chatMessage.text}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setChatMessage({ type: '', text: '' })}
+                        className="text-gray-400 hover:text-gray-700 cursor-pointer"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Header Card */}
+                  <div className="bg-white/60 backdrop-blur-2xl border border-white/80 rounded-2xl p-4 sm:p-5 shadow-xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <h2 className="text-base sm:text-lg font-extrabold text-gray-900 tracking-tight">
+                            Team Chat Governance
+                          </h2>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                              chatSettings.enabled
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-gray-100 text-gray-600 border-gray-200'
+                            }`}
+                          >
+                            {chatSettings.enabled ? 'ACTIVE' : 'PAUSED'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500 max-w-xl">
+                          Manage internal communications, enable or restrict messaging for hiring managers and team members, and ensure company-wide communication governance.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setIsProfileChatOpen(true)}
+                          className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 text-gray-800 border border-gray-200 text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer active:scale-98"
+                          title="Open team messages drawer"
+                        >
+                          <MessageSquare size={13} />
+                          <span>Open Messages</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleSaveChatSettings}
+                          disabled={savingChat}
+                          className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-60 active:scale-98"
+                        >
+                          {savingChat ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+                          <span>Save Settings</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Master Controls Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4 pt-4 border-t border-black/[0.05]">
+                      {/* Master Enable/Disable Switch */}
+                      <div className="p-3.5 rounded-xl bg-white/80 border border-black/[0.06] flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs font-bold text-gray-900">Enable Team Chat</div>
+                          <div className="text-[11px] text-gray-500 mt-0.5">
+                            Turn off to temporarily pause messaging across the entire organization.
+                          </div>
+                        </div>
+
+                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={chatSettings.enabled}
+                            onChange={(e) =>
+                              setChatSettings((prev) => ({ ...prev, enabled: e.target.checked }))
+                            }
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                        </label>
+                      </div>
+
+                      {/* Messaging Policy Mode */}
+                      <div className="p-3.5 rounded-xl bg-white/80 border border-black/[0.06] flex flex-col justify-between gap-2">
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs font-bold text-gray-900">Permission Policy</div>
+                          <span className="text-[10px] font-mono uppercase text-gray-400 font-semibold">
+                            {chatSettings.policy === 'all' ? 'All Members' : 'Restricted List'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-xl">
+                          <button
+                            type="button"
+                            onClick={() => setChatSettings((prev) => ({ ...prev, policy: 'all' }))}
+                            className={`py-1.5 text-center text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                              chatSettings.policy === 'all'
+                                ? 'bg-white text-gray-900 shadow-3xs'
+                                : 'text-gray-500 hover:text-gray-900'
+                            }`}
+                          >
+                            All Members
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setChatSettings((prev) => ({ ...prev, policy: 'restricted' }))}
+                            className={`py-1.5 text-center text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                              chatSettings.policy === 'restricted'
+                                ? 'bg-white text-gray-900 shadow-3xs'
+                                : 'text-gray-500 hover:text-gray-900'
+                            }`}
+                          >
+                            Restricted
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Individual Member Permissions Table */}
+                  <div className="bg-white/60 backdrop-blur-2xl border border-white/80 rounded-2xl p-4 sm:p-5 shadow-xs space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <h3 className="text-xs sm:text-sm font-bold text-gray-900">
+                          Member Messaging Access Control
+                        </h3>
+                        <p className="text-[11px] text-gray-500">
+                          Toggle messaging permissions individually for hiring managers, interviewers, and team staff.
+                        </p>
+                      </div>
+
+                      {/* Search members */}
+                      <div className="relative w-full sm:w-64">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="text"
+                          value={chatMemberFilter}
+                          onChange={(e) => setChatMemberFilter(e.target.value)}
+                          placeholder="Search members..."
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
+                        />
+                      </div>
+                    </div>
+
+                    {loadingChat ? (
+                      <div className="py-12 flex items-center justify-center text-xs text-gray-400 gap-2">
+                        <Loader2 size={15} className="animate-spin text-gray-500" />
+                        <span>Loading team members...</span>
+                      </div>
+                    ) : chatSettings.members.length === 0 ? (
+                      <div className="py-10 text-center text-xs text-gray-400">
+                        No team members registered under this tenant yet.
+                      </div>
+                    ) : (
+                      <div className="border border-black/[0.06] rounded-xl overflow-hidden bg-white/70">
+                        <div className="divide-y divide-black/[0.05]">
+                          {chatSettings.members
+                            .filter((m) => {
+                              const q = chatMemberFilter.toLowerCase().trim();
+                              if (!q) return true;
+                              return (
+                                (m.name || '').toLowerCase().includes(q) ||
+                                (m.email || '').toLowerCase().includes(q) ||
+                                (m.role || '').toLowerCase().includes(q) ||
+                                (m.department || '').toLowerCase().includes(q)
+                              );
+                            })
+                            .map((member) => {
+                              const isRestricted = chatSettings.restricted_user_ids.includes(member.id);
+                              const canMessage = !isRestricted && chatSettings.enabled;
+
+                              return (
+                                <div
+                                  key={member.id}
+                                  className="p-3 sm:px-4 flex items-center justify-between gap-3 hover:bg-white/80 transition-colors"
+                                >
+                                  {/* Member Info */}
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-black text-white text-xs font-bold flex items-center justify-center shrink-0">
+                                      {member.name ? member.name.charAt(0).toUpperCase() : 'U'}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-gray-900 truncate">
+                                          {member.name}
+                                        </span>
+                                        <span className="px-1.5 py-0.2 rounded text-[9.5px] font-semibold bg-gray-100 text-gray-600 border border-gray-200/80 shrink-0">
+                                          {member.role || 'Member'}
+                                        </span>
+                                      </div>
+                                      <div className="text-[11px] text-gray-500 truncate mt-0.5">
+                                        {member.email} {member.department ? `• ${member.department}` : ''}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Permission Toggle */}
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <span
+                                      className={`text-[11px] font-semibold hidden sm:inline ${
+                                        canMessage ? 'text-emerald-700' : 'text-gray-400'
+                                      }`}
+                                    >
+                                      {canMessage ? 'Can Message' : 'Restricted'}
+                                    </span>
+
+                                    <label className="relative inline-flex items-center cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={!isRestricted}
+                                        onChange={() => handleToggleMemberChat(member.id)}
+                                        className="sr-only peer"
+                                      />
+                                      <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                                    </label>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bottom Save Reminder */}
+                    <div className="pt-2 flex items-center justify-between text-xs text-gray-400">
+                      <span>Restricted members will be unable to send or receive team messages.</span>
+                      <button
+                        type="button"
+                        onClick={handleSaveChatSettings}
+                        disabled={savingChat}
+                        className="text-xs font-bold text-black hover:underline cursor-pointer disabled:opacity-50"
+                      >
+                        {savingChat ? 'Saving...' : 'Save permissions'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {/* Team Chat Drawer instance */}
+      <TeamChatDrawer
+        isOpen={isProfileChatOpen}
+        onClose={() => setIsProfileChatOpen(false)}
+        currentUserName={user?.name || 'Company Admin'}
+      />
     </div>
   );
 }

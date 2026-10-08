@@ -49,7 +49,7 @@
     <link rel="preconnect" href="http://localhost:8000" />
     <link rel="dns-prefetch" href="http://localhost:8000" />
 
-    <!-- Zero-Latency Speculative Prefetch for Public Requisitions (starts at 0ms in parallel with JS bundles) -->
+    <!-- Zero-Latency Speculative Prefetch for Public Requisitions and Stats (starts at 0ms in parallel with JS bundles) -->
     <script>
       (function() {
         try {
@@ -67,6 +67,20 @@
                 try {
                   sessionStorage.setItem('tj_cache:anon:' + url, JSON.stringify({ timestamp: Date.now(), data: data }));
                   sessionStorage.setItem('tj_cached_requisitions', JSON.stringify({ t: Date.now(), data: data }));
+                } catch(e) {}
+              }
+              return data;
+            })
+            .catch(function() { return null; });
+
+          var statsUrl = base + '/api/public/stats';
+          window.__PREFETCHED_STATS__ = fetch(statsUrl, { headers: { 'Accept': 'application/json' } })
+            .then(function(r) { return r.ok ? r.json() : null; })
+            .then(function(data) {
+              if (data && typeof data.partners_count === 'number') {
+                try {
+                  sessionStorage.setItem('tj_cache:anon:' + statsUrl, JSON.stringify({ timestamp: Date.now(), data: data }));
+                  sessionStorage.setItem('tj_cached_platform_stats', JSON.stringify(data));
                 } catch(e) {}
               }
               return data;

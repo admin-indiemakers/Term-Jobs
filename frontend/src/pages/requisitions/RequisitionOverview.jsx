@@ -92,15 +92,15 @@ function RequisitionStatusBadge({ status }) {
   const s = (status || '').toLowerCase().replace(/[\s_]+/g, '');
   if (s === 'published' || s === 'active' || s === 'open') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 backdrop-blur-md shadow-3xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
         Published
       </span>
     );
   }
   if (s === 'pendingapproval' || s === 'pending') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/10 text-amber-800 border border-amber-500/25 backdrop-blur-md shadow-3xs">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
         Pending Approval
       </span>
@@ -108,22 +108,22 @@ function RequisitionStatusBadge({ status }) {
   }
   if (s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-gray-500/10 text-gray-700 border border-gray-500/20 backdrop-blur-md shadow-3xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
         Drafted
       </span>
     );
   }
   if (s === 'closed' || s === 'completed' || s === 'filled') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-500/10 text-blue-800 border border-blue-500/25 backdrop-blur-md shadow-3xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
         Completed
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-gray-500/10 text-gray-700 border border-gray-500/20 backdrop-blur-md shadow-3xs">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
       {status || 'Draft'}
     </span>
@@ -310,31 +310,46 @@ export default function RequisitionOverview({ section }) {
     return list;
   }, [requisitions, activeTab, currentConfig, selectedDept, selectedStatus, searchQuery]);
 
+  const companyName = user?.tenant_name || 'TCS';
+  const currentDateFormatted = new Date().toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+
   return (
     <div
-      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 sm:gap-3.5 text-left overflow-hidden pb-1"
+      className="w-full max-w-[1580px] mx-auto space-y-4 sm:space-y-4.5 pt-1 sm:pt-2 text-left select-none antialiased font-inter"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
-      {/* Top Header Area (shrink-0) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-5 shrink-0">
-        <div>
+      {/* ── TOP HEADER AREA (Matches Hiring Console Dashboard Header) ── */}
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 pb-0.5 shrink-0">
+        <div className="pl-1 sm:pl-1 pt-1 sm:pt-2">
           <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
             TERM JOBS • CONTRACT PIPELINE
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+          <h1
+            className="text-2xl sm:text-3xl lg:text-[2.15rem] font-extrabold text-gray-900 tracking-tight leading-none mb-1.5"
+            style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+          >
             Requisitions Management
           </h1>
-          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
-            Create, track, and manage hiring requisitions for contract roles.
+          <p className="text-[11.5px] sm:text-xs text-gray-500 font-normal leading-normal max-w-xl">
+            Create, track, and manage hiring requisitions for contract roles across departments.
           </p>
         </div>
 
-        {/* Action Button: + New Requisition */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Date Stamp & Action Button: + New Requisition */}
+        <div className="flex items-center gap-3 pt-1 sm:pt-2 shrink-0">
+          <div className="text-left sm:text-right text-[11px] font-semibold text-gray-400 pr-1 hidden sm:block">
+            <div className="text-gray-900 font-bold text-xs">{companyName}</div>
+            <div>{currentDateFormatted}</div>
+          </div>
           <button
             type="button"
             onClick={() => navigate('/dashboard/requisitions/new')}
-            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
           >
             <Plus size={14} />
             <span>+ New Requisition</span>
@@ -342,76 +357,130 @@ export default function RequisitionOverview({ section }) {
         </div>
       </div>
 
-      {/* 5 Status Tab Cards Bar (shrink-0) */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-2.5 shrink-0">
+      {/* ── 5 STATUS STAT METRIC CARDS (Exact Dashboard Match) ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 sm:gap-3 shrink-0">
         {Object.entries(SECTION_CONFIG).map(([key, config]) => {
           const isActive = activeTab === key;
           const count = counts[key] || 0;
           const Icon = config.icon;
 
           return (
-            <button
+            <div
               key={key}
-              type="button"
               onClick={() => {
                 setActiveTab(key);
                 navigate(config.to);
               }}
-              className={`p-2.5 sm:p-3 rounded-2xl flex items-center justify-between gap-2 transition-all cursor-pointer ${isActive
-                  ? 'bg-black text-white shadow-xs'
-                  : 'bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 text-gray-700 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]'
-                }`}
+              className={`backdrop-blur-2xl rounded-2xl p-3 sm:p-3.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer ${
+                isActive
+                  ? 'bg-[#0A0A0A] text-white border border-[#0A0A0A] shadow-[0_12px_36px_0_rgba(0,0,0,0.18)] scale-[1.01]'
+                  : 'bg-white/80 hover:bg-white/95 border border-white/85 hover:border-white shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)]'
+              }`}
             >
-              <div className="flex items-center gap-2 min-w-0">
-                {Icon && <Icon size={15} className={isActive ? 'text-white' : 'text-gray-600'} />}
-                <span className="text-xs font-bold truncate">{config.title}</span>
+              <div className="flex items-center justify-between mb-2">
+                <div
+                  className={`w-7.5 h-7.5 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 ${
+                    isActive
+                      ? 'bg-white/15 text-white border border-white/20'
+                      : 'bg-white/70 backdrop-blur-md border border-white text-gray-700 shadow-3xs'
+                  }`}
+                >
+                  {Icon && <Icon size={14} />}
+                </div>
+                <div
+                  className={`text-xl sm:text-2xl font-black tracking-tight leading-none ${
+                    isActive ? 'text-white' : 'text-gray-900'
+                  }`}
+                >
+                  {count}
+                </div>
               </div>
 
-              <span
-                className={`px-2 py-0.5 rounded-full text-[10.5px] font-extrabold shrink-0 ${isActive
-                    ? 'bg-white text-black shadow-2xs'
-                    : 'bg-gray-200/80 text-gray-700'
+              <div>
+                <div
+                  className={`text-xs font-bold truncate ${
+                    isActive ? 'text-white' : 'text-gray-900'
                   }`}
-              >
-                {count}
-              </span>
-            </button>
+                >
+                  {config.title}
+                </div>
+                <div
+                  className={`text-[10px] font-medium mt-0.5 truncate ${
+                    isActive ? 'text-gray-300' : 'text-gray-400'
+                  }`}
+                >
+                  {key === 'published'
+                    ? 'Active candidate sourcing'
+                    : key === 'pending_approval'
+                    ? 'Awaiting signoff'
+                    : key === 'drafted'
+                    ? 'In draft creation'
+                    : key === 'completed'
+                    ? 'Positions fulfilled'
+                    : 'Complete hiring archive'}
+                </div>
+              </div>
+            </div>
           );
         })}
       </div>
 
-      {/* Notifications (shrink-0) */}
+      {/* Toast / Notification Alerts */}
       {error && (
-        <div className="p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs shrink-0">
-          <AlertCircle size={15} className="shrink-0 text-red-500" />
-          <span>{error}</span>
+        <div className="p-3 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center justify-between gap-2 shadow-xs shrink-0">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={15} className="text-red-500 shrink-0" />
+            <span>{error}</span>
+          </div>
+          <button type="button" onClick={() => setError('')} className="text-red-400 hover:text-red-700 cursor-pointer">
+            <X size={14} />
+          </button>
         </div>
       )}
 
       {info && (
-        <div className="p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-semibold flex items-center gap-2.5 shadow-2xs shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
-          <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
-          <span>{info}</span>
+        <div className="p-3 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-semibold flex items-center justify-between gap-2.5 shadow-xs shrink-0 animate-in fade-in slide-in-from-top-1 duration-200">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+            <span>{info}</span>
+          </div>
+          <button type="button" onClick={() => setInfo('')} className="text-emerald-400 hover:text-emerald-700 cursor-pointer">
+            <X size={14} />
+          </button>
         </div>
       )}
 
-      {/* Main Glassmorphic Table Card (Flex-1 Fills Remaining Height) */}
-      <div className="flex-1 min-h-0 max-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-3xl p-3.5 sm:p-4.5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
-        {/* Table Top Controls Row: Search Input + Department Filter + Status Filter + Filter Action */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-black/[0.04] shrink-0">
-          {/* Search Input Bar */}
-          <div className="relative w-full sm:w-80">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by title, department, or keyword..."
-              className="w-full pl-9 pr-3.5 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
-            />
+      {/* ── MAIN GLASSMORPHISED CARD (Dashboard Directory Card) ── */}
+      <div className="bg-white/80 backdrop-blur-2xl border border-white/85 rounded-2xl p-4 sm:p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] flex flex-col justify-between min-h-[460px]">
+        {/* Table Top Controls Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3.5 border-b border-black/[0.04] shrink-0 gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-white/70 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-800 shadow-2xs">
+              <Briefcase size={15} />
+            </div>
+            <div>
+              <h2 className="text-xs sm:text-[14px] font-bold text-gray-900 tracking-tight">
+                {currentConfig.title} Directory
+              </h2>
+              <p className="text-[10.5px] text-gray-400">
+                Filter by department, status, or search titles & requirements
+              </p>
+            </div>
           </div>
 
           <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
+            {/* Search Input Bar (Dashboard frosted pill input) */}
+            <div className="relative w-full sm:w-64">
+              <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search requisitions..."
+                className="w-full pl-8.5 pr-3 py-1.5 text-xs text-gray-900 bg-white/60 hover:bg-white/80 backdrop-blur-xl border border-white/80 rounded-xl focus:outline-none focus:ring-1 focus:ring-black/20 focus:border-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)] placeholder:text-gray-400 transition-all"
+              />
+            </div>
+
             {/* Department Filter Dropdown */}
             <div className="relative">
               <button
@@ -421,15 +490,15 @@ export default function RequisitionOverview({ section }) {
                   setShowDeptDropdown(!showDeptDropdown);
                   setShowStatusDropdown(false);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center gap-2 shadow-3xs cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-white/60 hover:bg-white/80 backdrop-blur-xl border border-white/80 text-xs font-semibold text-gray-700 hover:text-black transition-all flex items-center gap-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)] cursor-pointer"
               >
                 <span>{selectedDept}</span>
-                <ChevronDown size={13} className="text-gray-400" />
+                <ChevronDown size={12} className="text-gray-400" />
               </button>
 
               {showDeptDropdown && (
                 <div
-                  className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 animate-in fade-in zoom-in-95"
+                  className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {departmentsList.map((dept) => (
@@ -440,10 +509,11 @@ export default function RequisitionOverview({ section }) {
                         setSelectedDept(dept);
                         setShowDeptDropdown(false);
                       }}
-                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${selectedDept === dept
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                        selectedDept === dept
                           ? 'bg-black text-white font-bold'
                           : 'text-gray-700 hover:bg-gray-100/80'
-                        }`}
+                      }`}
                     >
                       <span>{dept}</span>
                       {selectedDept === dept && <Check size={12} />}
@@ -462,15 +532,15 @@ export default function RequisitionOverview({ section }) {
                   setShowStatusDropdown(!showStatusDropdown);
                   setShowDeptDropdown(false);
                 }}
-                className="px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center gap-2 shadow-3xs cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-white/60 hover:bg-white/80 backdrop-blur-xl border border-white/80 text-xs font-semibold text-gray-700 hover:text-black transition-all flex items-center gap-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)] cursor-pointer"
               >
                 <span>{selectedStatus}</span>
-                <ChevronDown size={13} className="text-gray-400" />
+                <ChevronDown size={12} className="text-gray-400" />
               </button>
 
               {showStatusDropdown && (
                 <div
-                  className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 animate-in fade-in zoom-in-95"
+                  className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95"
                   onClick={(e) => e.stopPropagation()}
                 >
                   {statusOptions.map((st) => (
@@ -481,10 +551,11 @@ export default function RequisitionOverview({ section }) {
                         setSelectedStatus(st);
                         setShowStatusDropdown(false);
                       }}
-                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${selectedStatus === st
+                      className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                        selectedStatus === st
                           ? 'bg-black text-white font-bold'
                           : 'text-gray-700 hover:bg-gray-100/80'
-                        }`}
+                      }`}
                     >
                       <span>{st}</span>
                       {selectedStatus === st && <Check size={12} />}
@@ -493,46 +564,45 @@ export default function RequisitionOverview({ section }) {
                 </div>
               )}
             </div>
-
-            {/* Filter Toggle Action Button */}
-            <button
-              type="button"
-              className="w-8.5 h-8.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 flex items-center justify-center text-gray-600 hover:text-black hover:bg-white shadow-3xs transition-all cursor-pointer"
-            >
-              <SlidersHorizontal size={14} />
-            </button>
           </div>
         </div>
 
-        {/* Data Table */}
+        {/* Data Table / Empty State */}
         {loading ? (
-          <div className="py-16 text-center text-xs text-gray-400 font-medium flex-1 flex items-center justify-center">
-            Loading requisitions...
+          <div className="py-24 text-center text-xs text-gray-400 font-medium flex-1 flex flex-col items-center justify-center gap-2">
+            <Loader2 size={18} className="animate-spin text-gray-500" />
+            <span>Loading requisitions...</span>
           </div>
         ) : filteredRows.length === 0 ? (
-          <div className="py-16 text-center space-y-2">
-            <div className="text-sm font-bold text-gray-800">No requisitions in {currentConfig.title}</div>
-            <p className="text-xs text-gray-400 max-w-sm mx-auto">
-              Create a new contract requirement to start candidate sourcing.
+          <div className="py-20 text-center flex-1 flex flex-col items-center justify-center">
+            <div className="w-14 h-14 rounded-2xl bg-white/80 backdrop-blur-md border border-white/90 flex items-center justify-center text-gray-400 mb-3 shadow-[0_8px_24px_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.9)]">
+              <Briefcase size={22} className="text-gray-400" />
+            </div>
+            <h3 className="text-sm sm:text-base font-bold text-gray-900 tracking-tight">
+              No requisitions in {currentConfig.title}
+            </h3>
+            <p className="text-xs text-gray-400 max-w-sm mx-auto mt-1 mb-4 leading-relaxed">
+              Create a new contract requirement to start candidate sourcing and talent matching.
             </p>
             <button
               type="button"
               onClick={() => navigate('/dashboard/requisitions/new')}
-              className="mt-2 px-4 py-2 rounded-xl bg-black text-white text-xs font-bold shadow-xs hover:bg-gray-900 transition-colors"
+              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs hover:shadow-md transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
             >
-              + Create Requisition
+              <Plus size={14} />
+              <span>+ Create Requisition</span>
             </button>
           </div>
         ) : (
           <div className="overflow-x-auto overflow-y-auto no-scrollbar flex-1 min-h-0 mt-1">
             <table className="w-full text-left text-xs border-collapse">
               <thead className="sticky top-0 bg-transparent border-b border-black/[0.04] z-10">
-                <tr className="text-[9.5px] font-bold text-gray-400 uppercase tracking-wider">
-                  <th className="py-2.5 px-3">TITLE</th>
-                  <th className="py-2.5 px-3">DEPARTMENT</th>
-                  <th className="py-2.5 px-3">STATUS</th>
-                  <th className="py-2.5 px-3">CREATED</th>
-                  <th className="py-2.5 px-3 text-right">ACTIONS</th>
+                <tr className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  <th className="py-3 px-3">TITLE & ROLE</th>
+                  <th className="py-3 px-3">DEPARTMENT</th>
+                  <th className="py-3 px-3">STATUS</th>
+                  <th className="py-3 px-3">CREATED</th>
+                  <th className="py-3 px-3 text-right">ACTIONS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-black/[0.03]">
@@ -542,20 +612,20 @@ export default function RequisitionOverview({ section }) {
                   return (
                     <tr
                       key={r.id}
-                      className="bg-transparent hover:bg-white/35 transition-colors relative"
+                      className="bg-transparent hover:bg-white/60 transition-colors relative group"
                     >
                       {/* Title Column with Briefcase Icon Box */}
                       <td className="py-3 px-3">
                         <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-xl bg-black/[0.04] border border-black/[0.04] flex items-center justify-center text-gray-700 shrink-0">
+                          <div className="w-9 h-9 rounded-xl bg-white/80 border border-white flex items-center justify-center text-gray-700 shrink-0 shadow-3xs group-hover:scale-105 transition-transform">
                             <Briefcase size={15} />
                           </div>
                           <div className="min-w-0">
                             <div className="font-bold text-gray-900 text-xs sm:text-[13.5px] leading-tight truncate">
                               {r.title || 'Untitled Role'}
                             </div>
-                            <div className="text-[10px] text-gray-400 truncate">
-                              {r.department || 'Engineering'}
+                            <div className="text-[10px] text-gray-400 truncate mt-0.5">
+                              {r.experience_range ? `${r.experience_range} exp • ` : ''}{r.primary_location || r.location || 'Remote'}
                             </div>
                           </div>
                         </div>
@@ -563,7 +633,7 @@ export default function RequisitionOverview({ section }) {
 
                       {/* Department Column */}
                       <td className="py-3 px-3">
-                        <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-gray-100/90 text-gray-700 border border-gray-200/70">
+                        <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-semibold bg-gray-100/90 text-gray-700 border border-gray-200/60 shadow-3xs">
                           {r.department || 'Engineering'}
                         </span>
                       </td>
@@ -575,21 +645,21 @@ export default function RequisitionOverview({ section }) {
 
                       {/* Created Column */}
                       <td className="py-3 px-3">
-                        <div className="text-xs font-medium text-gray-700 leading-tight">
+                        <div className="text-xs font-semibold text-gray-700 leading-tight">
                           {formatDate(r.created_at)}
                         </div>
-                        <div className="text-[10px] text-gray-400">
+                        <div className="text-[10px] text-gray-400 mt-0.5">
                           {timeAgo(r.created_at)}
                         </div>
                       </td>
 
-                      {/* Actions Column: View Details Pill Button + 3 Dots Button */}
+                      {/* Actions Column */}
                       <td className="py-3 px-3 text-right relative">
-                        <div className="inline-flex items-center gap-2">
+                        <div className="inline-flex items-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => navigate(`/dashboard/requisitions/${r.id}`)}
-                            className="px-3.5 py-1.5 rounded-full bg-white/90 hover:bg-white text-xs font-bold text-gray-900 border border-gray-200/80 shadow-3xs flex items-center gap-1 cursor-pointer transition-all hover:shadow-2xs"
+                            className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-gray-50 text-xs font-bold text-gray-900 border border-gray-200/80 shadow-3xs hover:shadow-2xs flex items-center gap-1 cursor-pointer transition-all active:scale-95"
                           >
                             <span>View Details</span>
                             <ArrowRight size={12} />
@@ -601,7 +671,7 @@ export default function RequisitionOverview({ section }) {
                               e.stopPropagation();
                               setActiveMenuId(isMenuOpen ? null : r.id);
                             }}
-                            className="w-8 h-8 rounded-full bg-white/60 hover:bg-white border border-gray-200/60 flex items-center justify-center text-gray-500 hover:text-black shadow-3xs transition-all cursor-pointer"
+                            className="w-7.5 h-7.5 rounded-xl bg-white/70 hover:bg-white border border-gray-200/80 flex items-center justify-center text-gray-500 hover:text-black shadow-3xs transition-all cursor-pointer active:scale-95"
                           >
                             <MoreHorizontal size={14} />
                           </button>
@@ -610,7 +680,7 @@ export default function RequisitionOverview({ section }) {
                         {/* Floating Action Menu Dropdown */}
                         {isMenuOpen && (
                           <div
-                            className="absolute right-3 top-10 w-40 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
+                            className="absolute right-3 top-10 w-42 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_40px_rgba(0,0,0,0.12)] p-1 z-30 animate-in fade-in zoom-in-95 text-left"
                             onClick={(e) => e.stopPropagation()}
                           >
                             <button
@@ -622,7 +692,7 @@ export default function RequisitionOverview({ section }) {
                               className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
                             >
                               <Eye size={13} className="text-gray-500" />
-                              <span>View Requisition</span>
+                              <span>View Details</span>
                             </button>
 
                             <button
@@ -661,7 +731,7 @@ export default function RequisitionOverview({ section }) {
           </div>
         )}
 
-        {/* Table Footer with Pagination Controls (shrink-0) */}
+        {/* Table Footer with Pagination Controls */}
         <div className="flex items-center justify-between pt-3 border-t border-black/[0.04] shrink-0 text-xs text-gray-400">
           <div>
             Showing 1–{filteredRows.length} of {filteredRows.length} requisitions
@@ -671,14 +741,14 @@ export default function RequisitionOverview({ section }) {
             <button
               type="button"
               disabled
-              className="w-7 h-7 rounded-lg bg-white/40 border border-white/60 flex items-center justify-center text-gray-400 disabled:opacity-40 cursor-not-allowed shadow-3xs"
+              className="w-7 h-7 rounded-lg bg-white/60 border border-white/80 flex items-center justify-center text-gray-400 disabled:opacity-40 cursor-not-allowed shadow-3xs"
             >
               <ChevronLeft size={13} />
             </button>
 
             <button
               type="button"
-              className="w-7 h-7 rounded-lg bg-white border border-gray-200 flex items-center justify-center font-bold text-gray-900 shadow-3xs"
+              className="w-7 h-7 rounded-lg bg-black text-white flex items-center justify-center font-bold text-xs shadow-3xs"
             >
               1
             </button>
@@ -686,7 +756,7 @@ export default function RequisitionOverview({ section }) {
             <button
               type="button"
               disabled
-              className="w-7 h-7 rounded-lg bg-white/40 border border-white/60 flex items-center justify-center text-gray-400 disabled:opacity-40 cursor-not-allowed shadow-3xs"
+              className="w-7 h-7 rounded-lg bg-white/60 border border-white/80 flex items-center justify-center text-gray-400 disabled:opacity-40 cursor-not-allowed shadow-3xs"
             >
               <ChevronRight size={13} />
             </button>

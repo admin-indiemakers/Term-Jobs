@@ -95,6 +95,36 @@ def _get_tenant_company_context(tenant_id: str = "local") -> Dict[str, Any]:
 
 
 PREDEFINED_ROLE_DICT = {
+    "python": {
+        "title": "Python Backend Developer",
+        "department": "Core Product Engineering",
+        "location": "Bengaluru / Hybrid",
+        "employment_type": "Contract (6 Months)",
+        "experience_level": "Mid (3-5 yrs)",
+        "salary_range": "₹1,500 - ₹2,200 / hr",
+        "skills": "Python, FastAPI, Django, PostgreSQL, Redis, Docker, REST APIs",
+        "job_description": "Design and develop scalable backend services using Python, FastAPI, and Django. Build robust RESTful APIs, optimize database queries, and containerize services with Docker."
+    },
+    "python backend": {
+        "title": "Python Backend Developer",
+        "department": "Core Product Engineering",
+        "location": "Bengaluru / Hybrid",
+        "employment_type": "Contract (6 Months)",
+        "experience_level": "Mid (3-5 yrs)",
+        "salary_range": "₹1,500 - ₹2,200 / hr",
+        "skills": "Python, FastAPI, Django, PostgreSQL, Redis, Docker, REST APIs",
+        "job_description": "Design and develop scalable backend services using Python, FastAPI, and Django. Build robust RESTful APIs, optimize database queries, and containerize services with Docker."
+    },
+    "full stack": {
+        "title": "Full Stack Engineer",
+        "department": "Core Product Engineering",
+        "location": "Bengaluru / Hybrid",
+        "employment_type": "Contract (6 Months)",
+        "experience_level": "Mid (3-5 yrs)",
+        "salary_range": "₹1,500 - ₹2,200 / hr",
+        "skills": "React, Node.js, Python, TypeScript, PostgreSQL, Docker, AWS",
+        "job_description": "Develop full-stack features using React on the frontend and Python/Node.js on the backend. Design clean UI components and resilient APIs."
+    },
     "devops": {
         "title": "DevOps Engineer",
         "department": "Infrastructure & Cloud",
@@ -206,6 +236,101 @@ PREDEFINED_ROLE_DICT = {
         "job_description": "Author REST API references, developer integration guides, release notes, and architecture diagrams for external developer portal."
     }
 }
+
+
+# ── AI SKILLS INFERENCE & ENRICHMENT (MIN 5, MAX 7 SKILLS) ───────────────────
+
+TECH_COMPLEMENT_MAP = {
+    "python": ["FastAPI", "PostgreSQL", "Redis", "Docker", "REST APIs", "Celery", "Microservices"],
+    "fastapi": ["Python", "PostgreSQL", "Redis", "Docker", "REST APIs", "AsyncIO", "Celery"],
+    "django": ["Python", "PostgreSQL", "Redis", "Docker", "Celery", "REST APIs", "Git"],
+    "flask": ["Python", "SQLAlchemy", "PostgreSQL", "Docker", "REST APIs", "Redis", "Git"],
+    "java": ["Spring Boot", "PostgreSQL", "Microservices", "Docker", "Kafka", "REST APIs", "Maven"],
+    "spring": ["Java", "PostgreSQL", "Microservices", "Docker", "Kafka", "REST APIs", "Hibernate"],
+    "golang": ["Docker", "Kubernetes", "PostgreSQL", "gRPC", "Microservices", "Redis", "Git"],
+    "go": ["Docker", "Kubernetes", "PostgreSQL", "gRPC", "Microservices", "Redis", "Git"],
+    "rust": ["Tokio", "PostgreSQL", "Docker", "Actix", "WebAssembly", "REST APIs", "Git"],
+    "c#": [".NET Core", "ASP.NET", "SQL Server", "Azure", "Docker", "REST APIs", "Microservices"],
+    ".net": ["C#", "ASP.NET Core", "SQL Server", "Azure", "Docker", "REST APIs", "Microservices"],
+    "c++": ["STL", "Linux", "Multithreading", "CMake", "Docker", "Git", "REST APIs"],
+    "php": ["Laravel", "MySQL", "Redis", "Docker", "REST APIs", "Git", "Composer"],
+    "ruby": ["Ruby on Rails", "PostgreSQL", "Redis", "Sidekiq", "Docker", "REST APIs", "Git"],
+    "node": ["TypeScript", "Express", "PostgreSQL", "Redis", "Docker", "REST APIs", "Microservices"],
+    "react": ["TypeScript", "Next.js", "TailwindCSS", "Redux Toolkit", "REST APIs", "HTML5/CSS3", "Vite"],
+    "next.js": ["React", "TypeScript", "TailwindCSS", "Node.js", "REST APIs", "GraphQL", "PostgreSQL"],
+    "vue": ["Nuxt.js", "TypeScript", "TailwindCSS", "Pinia", "REST APIs", "Vite", "HTML5/CSS3"],
+    "angular": ["TypeScript", "RxJS", "HTML5/CSS3", "REST APIs", "Sass", "Git", "Webpack"],
+    "devops": ["AWS", "Docker", "Kubernetes", "Terraform", "CI/CD", "Linux", "Python"],
+    "aws": ["Docker", "Kubernetes", "Terraform", "CI/CD", "Linux", "Python", "CloudWatch"],
+    "gcp": ["Docker", "Kubernetes", "Terraform", "CI/CD", "Linux", "Python", "BigQuery"],
+    "azure": ["Docker", "Kubernetes", "Terraform", "CI/CD", "Linux", "C#", "Azure DevOps"],
+    "data engineer": ["Python", "PySpark", "Apache Airflow", "Snowflake", "SQL", "Databricks", "Kafka"],
+    "machine learning": ["Python", "PyTorch", "Scikit-Learn", "SQL", "Pandas", "Docker", "MLflow"],
+    "ai": ["Python", "PyTorch", "LLMs", "LangChain", "Vector DBs", "Docker", "REST APIs"],
+    "mobile": ["Flutter", "Dart", "React Native", "iOS", "Android", "REST APIs", "Git"],
+    "flutter": ["Dart", "iOS", "Android", "REST APIs", "Firebase", "State Management", "Git"],
+    "react native": ["TypeScript", "React", "iOS", "Android", "REST APIs", "Redux", "Mobile UI"],
+    "qa": ["Selenium", "Playwright", "Python", "PyTest", "CI/CD", "Postman", "API Testing"],
+    "security": ["Kubernetes", "Terraform", "AWS", "CI/CD", "Docker", "Vault", "Linux"],
+    "ui/ux": ["Figma", "Wireframing", "Prototyping", "Design Systems", "User Research", "Mobile UI", "Usability Testing"],
+    "backend": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "REST APIs", "Microservices"],
+    "frontend": ["React", "TypeScript", "Next.js", "TailwindCSS", "Redux Toolkit", "REST APIs", "Vite"],
+    "fullstack": ["React", "Node.js", "TypeScript", "PostgreSQL", "Docker", "AWS", "REST APIs"],
+}
+
+
+def generate_role_skills(title: str = "", detected_skills: list = None, prompt: str = "") -> list:
+    """
+    Ensure generated skills always contain MINIMUM 3 and MAXIMUM 5 cohesive, relevant skills.
+    Preserves any explicitly mentioned user skills at the front, then enriches from domain knowledge.
+    """
+    detected_skills = detected_skills or []
+    combined = []
+    seen = set()
+
+    def add_skill(s: str):
+        cleaned = s.strip()
+        if cleaned and cleaned.lower() not in seen:
+            seen.add(cleaned.lower())
+            combined.append(cleaned)
+
+    # 1. Add explicitly detected / provided skills first
+    for s in detected_skills:
+        add_skill(s)
+
+    # 2. Check prompt and title against tech complement map
+    text_corpus = f"{title} {prompt}".lower()
+    for kw, comp_skills in TECH_COMPLEMENT_MAP.items():
+        if re.search(r"\b" + re.escape(kw) + r"\b", text_corpus):
+            for cs in comp_skills:
+                add_skill(cs)
+                if len(combined) >= 5:
+                    break
+        if len(combined) >= 5:
+            break
+
+    # 3. If matched a predefined role, pull from its default skills
+    for r_key, r_info in PREDEFINED_ROLE_DICT.items():
+        if r_key in text_corpus or r_info["title"].lower() in text_corpus:
+            for s in r_info["skills"].split(","):
+                add_skill(s)
+                if len(combined) >= 5:
+                    break
+        if len(combined) >= 5:
+            break
+
+    # 4. Standard safety defaults if still under 3
+    fallback_pool = ["Docker", "PostgreSQL", "REST APIs", "Git", "Redis", "CI/CD", "Linux", "AWS"]
+    for fb in fallback_pool:
+        if len(combined) >= 3:
+            break
+        add_skill(fb)
+
+    # 5. Strictly enforce bounds: minimum 3, maximum 5
+    if len(combined) > 5:
+        combined = combined[:5]
+
+    return combined
 
 
 # ── TOOL DEFINITIONS ─────────────────────────────────────────────────────────
@@ -636,11 +761,17 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
 def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = ""):
     dept = department or "Engineering & Product"
     loc = location or "Bangalore / Hybrid Remote"
-    emp_type = employment_type or "Full-Time"
-    exp = experience_level or "Senior (4-7 years)"
-    salary = salary_range or "$120,000 - $150,000 / year"
-    tech_skills = skills or "React, Node.js, Python, PostgreSQL, AWS, Docker"
-    jd = job_description or f"We are seeking a talented {title} to lead component architecture, collaborate with cross-functional product teams, and build robust digital experiences."
+    emp_type = employment_type or "Contract (6 Months)"
+    exp = experience_level or "Mid (3-5 years)"
+    salary = salary_range or "₹1,500 - ₹2,200 / hr"
+
+    # Enforce minimum 3 and maximum 5 AI generated / validated skills
+    raw_skills = [s.strip() for s in (skills or "").split(",") if s.strip()] if isinstance(skills, str) else list(skills or [])
+    if len(raw_skills) < 3 or len(raw_skills) > 5:
+        raw_skills = generate_role_skills(title=title, detected_skills=raw_skills, prompt=f"{title} {skills}")
+    tech_skills = ", ".join(raw_skills)
+
+    jd = job_description or f"We are seeking a talented {title} with {exp} of experience and expertise in {tech_skills} to lead component architecture, collaborate with cross-functional product teams, and build robust digital experiences."
 
     is_complete = bool(title and title.strip())
 
@@ -2857,7 +2988,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     "You help Hiring Managers inspect live requisitions, draft new job postings with flexible custom tech stacks, review shortlisted candidates, schedule candidate interviews, track timesheets/expenses, and submit requisitions for Director approval.\n"
                     "CRITICAL REQUISITION WORKFLOW RULES:\n"
                     "- DIRECT PUBLICATION IS STRICTLY FORBIDDEN. In TermJobs, Hiring Managers CANNOT publish requisitions directly. ALL requisitions require mandatory Director Approval.\n"
-                    "- When the user asks to create, draft, or make a job requisition, or provides role requirements/tech stacks, ALWAYS call the `draft_hiring_requisition` tool to generate an interactive draft preview card.\n"
+                    "- When the user asks to create, draft, or make a job requisition, or provides role requirements/tech stacks, ALWAYS call the `draft_hiring_requisition` tool to generate an interactive draft preview card. Always ensure the `skills` parameter includes between 3 and 5 relevant, cohesive technical skills (never just 1 or 2 skills).\n"
                     "- If the user asks generally to create a requisition without specifying a role (e.g. 'can u create a requisition', 'create a req', 'new job', 'can u create a requsion'), ALWAYS call `show_role_selection_dropdown`.\n"
                     "- If the user wants to change or edit any field of an active draft (e.g. 'change budget to 600-1000', 'make it remote', 'change experience'), call `draft_hiring_requisition` with the updated field and previous draft values.\n"
                     "- When the user asks about 'requisitions', 'active requisitions', 'live requisitions', 'open requisitions', or 'job directory', ALWAYS call the `list_hiring_requisitions` tool.\n"
@@ -2891,7 +3022,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 "max_tokens": 800
             }
 
-            resp = httpx.post(url, headers=headers, json=payload, timeout=4.0)
+            resp = httpx.post(url, headers=headers, json=payload, timeout=12.0)
             if resp.status_code == 200:
                 data = resp.json()
                 choice = data["choices"][0]["message"]
@@ -3057,7 +3188,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                                 "temperature": 0.3,
                                 "max_tokens": 800
                             }
-                            second_resp = httpx.post(url, headers=headers, json=second_payload, timeout=4.0)
+                            second_resp = httpx.post(url, headers=headers, json=second_payload, timeout=10.0)
                             if second_resp.status_code == 200:
                                 second_content = second_resp.json()["choices"][0]["message"].get("content")
                                 if second_content and len(second_content.strip()) > 10:
@@ -3151,12 +3282,13 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 if re.search(r"\b" + re.escape(kw) + r"\b", prompt_lower):
                     detected_skills.append(proper)
 
-            if detected_skills:
-                skills_val = ", ".join(detected_skills)
-                jd_val = f"We are seeking a talented {matched_role['title']} with {exp_val} of experience and hands-on expertise in {skills_val}. You will design, automate, and maintain core services and pipelines in a collaborative engineering culture."
-            else:
-                skills_val = matched_role["skills"]
-                jd_val = matched_role["job_description"]
+            enriched_skills = generate_role_skills(
+                title=matched_role["title"],
+                detected_skills=detected_skills,
+                prompt=prompt_lower
+            )
+            skills_val = ", ".join(enriched_skills)
+            jd_val = f"We are seeking a talented {matched_role['title']} with {exp_val} of experience and hands-on expertise in {skills_val}. You will design, automate, and maintain core services and pipelines in a collaborative engineering culture."
 
             draft_res = draft_requisition_preview(
                 title=matched_role["title"],

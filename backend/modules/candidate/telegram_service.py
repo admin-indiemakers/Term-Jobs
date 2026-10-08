@@ -35,16 +35,24 @@ _FRONTEND_URL  = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
 
 def _send_email_thread(to_email: str, subject: str, html_body: str, plain_text: str) -> None:
     """Fire-and-forget email sender — runs in a daemon thread."""
-    if not _GMAIL_SENDER or not _GMAIL_APP_PW or not to_email:
+    sender = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
+    app_pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+    if not sender or not app_pw:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        sender = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
+        app_pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+
+    if not sender or not app_pw or not to_email:
         return
 
     def _send():
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"]    = subject
-            msg["From"]       = f"TermJob <{_GMAIL_SENDER}>"
+            msg["From"]       = f"TermJob <{sender}>"
             msg["To"]         = to_email
-            msg["Reply-To"]   = _GMAIL_SENDER
+            msg["Reply-To"]   = sender
             msg["Message-ID"] = email.utils.make_msgid(domain="termjob.in")
             msg["Date"]       = email.utils.formatdate(localtime=True)
             msg["X-Mailer"]   = "TermJob Notification Service"
@@ -55,9 +63,9 @@ def _send_email_thread(to_email: str, subject: str, html_body: str, plain_text: 
                 smtp.ehlo()
                 smtp.starttls()
                 smtp.ehlo()
-                smtp.login(_GMAIL_SENDER, _GMAIL_APP_PW)
-                smtp.sendmail(_GMAIL_SENDER, [to_email], msg.as_string())
-            print(f"[TermJob EMAIL] Sent '{subject}' → {to_email}")
+                smtp.login(sender, app_pw)
+                smtp.sendmail(sender, [to_email], msg.as_string())
+            print(f"[TermJob EMAIL] Sent '{subject}' -> {to_email}")
         except Exception as exc:
             print(f"[TermJob EMAIL ERROR] {to_email}: {exc}")
 

@@ -5,6 +5,8 @@ import { request, API_BASE_URL } from '../api/client';
 import { marked } from 'marked';
 import { useMicVAD, utils } from '@ricky0123/vad-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import termjobsLogo from '../assets/termjobs-logo.png';
+import HiringPipelineResponseCard, { parseHiringPipelineData } from '../components/HiringPipelineResponseCard';
 
 import {
   Sparkles,
@@ -3217,15 +3219,166 @@ export default function AiChat() {
   const [isSessionDropdownOpen, setIsSessionDropdownOpen] = useState(false);
   const sessionDropdownRef = useRef(null);
 
-  const [messages, setMessages] = useState(() => [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)]);
-  const [activeTab, setActiveTab] = useState('new'); // 'new' | 'review'
+  const userKey = user?.id || user?.email || 'default';
+  const storageKey = `termjobs_ai_chat_sessions_${userKey}`;
+  const activeKey = `termjobs_ai_active_session_${userKey}`;
+
+  // Initial load of saved AI chat sessions from localStorage
+  const [sessions, setSessions] = useState(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse saved AI chat sessions:', e);
+    }
+    return [
+      {
+        id: `session_${Date.now()}`,
+        title: 'New Conversation',
+        messages: [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)],
+        updatedAt: Date.now(),
+        createdAt: Date.now()
+      }
+    ];
+  });
+
+  const [activeSessionId, setActiveSessionId] = useState(() => {
+    try {
+      const savedActive = localStorage.getItem(activeKey);
+      if (savedActive) return savedActive;
+    } catch {}
+    return 'new';
+  });
+
+  const activeTab = activeSessionId === 'review' ? 'review' : 'new';
+  const setActiveTab = (tab) => {
+    if (tab === 'review') {
+      setActiveSessionId('review');
+    } else {
+      if (activeSessionId === 'review') {
+        const firstNonReview = sessions.find((s) => s.id !== 'review');
+        setActiveSessionId(firstNonReview ? firstNonReview.id : `session_${Date.now()}`);
+      }
+    }
+  };
+
+  const [messages, setMessages] = useState(() => {
+    try {
+      const savedActive = localStorage.getItem(activeKey);
+      if (savedActive === 'review') {
+        return Q3_REVIEW_CONVERSATION;
+      }
+      const raw = localStorage.getItem(storageKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const matched = parsed.find((s) => s.id === savedActive);
+          if (matched && Array.isArray(matched.messages) && matched.messages.length > 0) {
+            return matched.messages;
+          }
+          if (Array.isArray(parsed[0]?.messages) && parsed[0]?.messages.length > 0) {
+            return parsed[0].messages;
+          }
+        }
+      }
+    } catch {}
+    return [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)];
+  });
 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Sync messages to active session and save to localStorage
+  useEffect(() => {
+    if (activeSessionId === 'review') return;
+    if (!messages || messages.length === 0) return;
+
+    setSessions((prev) => {
+      const firstUserMsg = messages.find((m) => m.role === 'user');
+      const autoTitle = firstUserMsg?.content
+        ? (() => {
+            const raw = firstUserMsg.content.replace(/\s+/g, ' ').trim();
+            const clean = raw.charAt(0).toUpperCase() + raw.slice(1);
+            return clean.length > 38 ? clean.slice(0, 38) + '...' : clean;
+          })()
+        : 'New Conversation';
+
+      let found = false;
+      const nextSessions = prev.map((s) => {
+        if (s.id === activeSessionId) {
+          found = true;
+          const currentTitle = s.title && s.title !== 'New Conversation' ? s.title : autoTitle;
+          return {
+            ...s,
+            title: currentTitle,
+            messages,
+            updatedAt: Date.now()
+          };
+        }
+        return s;
+      });
+
+      if (!found) {
+        nextSessions.unshift({
+          id: activeSessionId,
+          title: autoTitle,
+          messages,
+          updatedAt: Date.now(),
+          createdAt: Date.now()
+        });
+      }
+
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(nextSessions));
+      } catch (e) {
+        console.warn('Failed to save AI chat sessions:', e);
+      }
+      return nextSessions;
+    });
+  }, [messages, activeSessionId, storageKey]);
+
+  // Keep activeSessionId in localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(activeKey, activeSessionId);
+    } catch {}
+  }, [activeSessionId, activeKey]);
+
   const handleNewChat = () => {
-    setActiveTab('new');
-    setMessages([getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)]);
+    const current = sessions.find((s) => s.id === activeSessionId);
+    if (current && current.title === 'New Conversation' && current.messages?.length <= 1) {
+      setActiveSessionId(current.id);
+      setIsAnalyticsVisible(false);
+      setActiveWidget(null);
+      setTableModal(null);
+      setInput('');
+      return;
+    }
+
+    const newId = `session_${Date.now()}`;
+    const newSession = {
+      id: newId,
+      title: 'New Conversation',
+      messages: [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)],
+      updatedAt: Date.now(),
+      createdAt: Date.now()
+    };
+
+    setSessions((prev) => {
+      const next = [newSession, ...prev];
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    setActiveSessionId(newId);
+    setMessages(newSession.messages);
     setIsAnalyticsVisible(false);
     setActiveWidget(null);
     setTableModal(null);
@@ -3233,10 +3386,55 @@ export default function AiChat() {
   };
 
   const handleLoadQ3Review = () => {
-    setActiveTab('review');
+    setActiveSessionId('review');
     setMessages(Q3_REVIEW_CONVERSATION);
     setIsAnalyticsVisible(true);
   };
+
+  const handleSelectSession = (session) => {
+    setActiveSessionId(session.id);
+    setMessages(session.messages || [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)]);
+    setIsAnalyticsVisible(false);
+    setActiveWidget(null);
+    setTableModal(null);
+    setInput('');
+  };
+
+  const handleDeleteSession = (e, sessionId) => {
+    e.stopPropagation();
+    const filtered = sessions.filter((s) => s.id !== sessionId);
+    const nextSessions = filtered.length > 0 ? filtered : [
+      {
+        id: `session_${Date.now()}`,
+        title: 'New Conversation',
+        messages: [getInitialWelcomeMessage(user?.name, isCompanyAdmin, companyName)],
+        updatedAt: Date.now(),
+        createdAt: Date.now()
+      }
+    ];
+
+    setSessions(nextSessions);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextSessions));
+    } catch {}
+
+    if (activeSessionId === sessionId) {
+      const nextActive = nextSessions[0];
+      setActiveSessionId(nextActive.id);
+      setMessages(nextActive.messages);
+      try {
+        localStorage.setItem(activeKey, nextActive.id);
+      } catch {}
+    }
+  };
+
+  const currentSessionTitle = useMemo(() => {
+    if (activeSessionId === 'review') {
+      return 'Q3 Talent & Operations Review';
+    }
+    const curr = sessions.find((s) => s.id === activeSessionId);
+    return curr?.title || 'New Conversation';
+  }, [activeSessionId, sessions]);
 
   // Sync initial welcome message if user profile loads asynchronously
   useEffect(() => {
@@ -3314,6 +3512,7 @@ export default function AiChat() {
   const messagesEndRef = useRef(null);
   const projectedEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const textareaRef = useRef(null);
   const ttsPlaybackIdRef = useRef(0);
   const vadStartupTimeRef = useRef(0);
 
@@ -3700,9 +3899,6 @@ export default function AiChat() {
         top: chatContainerRef.current.scrollHeight,
         behavior,
       });
-    }
-    if (typeof window !== 'undefined' && window.scrollY !== 0) {
-      window.scrollTo(0, 0);
     }
   };
 
@@ -4204,6 +4400,11 @@ export default function AiChat() {
       return;
     }
 
+    if (activeSessionId === 'review') {
+      const newId = `session_${Date.now()}`;
+      setActiveSessionId(newId);
+    }
+
     const userMsg = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -4214,6 +4415,9 @@ export default function AiChat() {
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
     setLoading(true);
 
     try {
@@ -4269,28 +4473,7 @@ export default function AiChat() {
         };
       }
 
-      // Automatically open or compare tabs side-by-side (NEVER for greetings or casual remarks)
-      if (modalPayload && !isGreeting) {
-        setModalTabs((currentTabs) => {
-          const prevTabs = (currentTabs && currentTabs.length > 0)
-            ? currentTabs
-            : (modalTabsRef.current && modalTabsRef.current.length > 0 ? modalTabsRef.current : []);
-
-          if (isComparative && prevTabs.length > 0) {
-            // Minimize current tab to left, open new tab on right!
-            return [prevTabs[0], modalPayload];
-          } else {
-            // Standard single tab view
-            return [modalPayload];
-          }
-        });
-
-        const hadExisting = modalTabs.length > 0 || (modalTabsRef.current && modalTabsRef.current.length > 0);
-        if (isComparative && hadExisting) {
-          showToast('⚡ Dual Split View: Current tab minimized to left, new data opened at right');
-        }
-      }
-
+      // Render structured table directly inside the conversation stream (no auto modal tab projection)
       setMessages((prev) => [
         ...prev,
         {
@@ -4302,7 +4485,7 @@ export default function AiChat() {
           points: [
             {
               label: '',
-              text: cleanText || textNotice
+              text: textNotice
             }
           ],
           tableInfo: isGreeting ? null : modalPayload,
@@ -4395,9 +4578,11 @@ export default function AiChat() {
   };
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      window.scrollTo(0, 0);
-    }
+    const origBody = document.body.style.overflow;
+    const origHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
     const handleQuickPrompt = (e) => {
       if (e.detail?.prompt) handleSend(e.detail.prompt);
     };
@@ -4407,15 +4592,22 @@ export default function AiChat() {
     window.addEventListener('ai-chat-quick-prompt', handleQuickPrompt);
     window.addEventListener('ai-chat-toast', handleToastEvt);
     return () => {
+      document.body.style.overflow = origBody;
+      document.documentElement.style.overflow = origHtml;
       window.removeEventListener('ai-chat-quick-prompt', handleQuickPrompt);
       window.removeEventListener('ai-chat-toast', handleToastEvt);
     };
   }, []);
 
-  // Auto-scroll chat conversation when messages change or popup modal opens
+  // Auto-scroll chat conversation smoothly and strictly inside container (prevents ancestor layout jumps)
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    if (tableModal) {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+    if (tableModal && projectedEndRef.current) {
       projectedEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages, tableModal]);
@@ -4441,8 +4633,8 @@ export default function AiChat() {
         {visibleMsgs.map((msg) => {
           if (msg.role === 'user') {
             return (
-              <div key={msg.id} className="flex justify-end items-start py-1 px-1 my-1 mt-1.5 animate-in fade-in duration-200">
-                <div className="bg-[#111417] text-white text-[12.5px] sm:text-[13px] font-medium leading-relaxed max-w-[80%] px-3.5 py-2 rounded-2xl rounded-tr-xs shadow-2xs">
+              <div key={msg.id} className="w-full flex justify-end items-start py-1 px-1 my-0.5 relative isolate select-text">
+                <div className="bg-[#111417] text-white text-[12.5px] sm:text-[13px] font-medium leading-relaxed max-w-[80%] px-3.5 py-2 rounded-2xl rounded-tr-xs shadow-2xs select-text">
                   {msg.content}
                 </div>
               </div>
@@ -4450,69 +4642,73 @@ export default function AiChat() {
           }
 
           const rawText = cleanReplyText(msg.points?.[0]?.text || msg.content || '');
+          const pipelineData = parseHiringPipelineData(rawText, msg.executedActions);
+
+          if (pipelineData) {
+            return (
+              <div key={msg.id} className="w-full flex items-start gap-2.5 py-1 px-1 my-1 relative isolate select-text">
+                {/* Assistant Avatar */}
+                <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
+                  <img src="/logo.png" alt="Bearitt Logo" className="w-full h-full object-contain" />
+                </div>
+
+                <div className="flex-1 min-w-0 max-w-3xl xl:max-w-4xl">
+                  <HiringPipelineResponseCard
+                    data={pipelineData}
+                    timestamp={msg.timestamp || 'Just now'}
+                    onSendMessage={(prompt) => handleSend(prompt)}
+                    onCopy={copyToClipboard}
+                  />
+                </div>
+              </div>
+            );
+          }
+
           const { cleanText, tableInfo: dynamicTableInfo } = extractTableFromText(rawText);
           const effectiveTable = msg.tableInfo || dynamicTableInfo;
-          const displayText = cleanText || rawText;
+          let displayText = rawText;
+          if (effectiveTable?.headers && effectiveTable?.rows?.length > 0 && !displayText.includes('|')) {
+            const tableMd = `\n\n| ${effectiveTable.headers.join(' | ')} |\n| ${effectiveTable.headers.map(() => '---').join(' | ')} |\n` +
+              effectiveTable.rows.map((row) => `| ${row.join(' | ')} |`).join('\n');
+            displayText = `${displayText}\n\n${tableMd}`;
+          }
 
           return (
-            <div key={msg.id} className="flex items-start gap-2.5 py-1 px-1 my-1 animate-in fade-in duration-200">
+            <div key={msg.id} className="w-full flex items-start gap-2.5 py-1 px-1 my-0.5 relative isolate select-text group">
               {/* Assistant Avatar */}
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs mt-0.5">
-                <Sparkles size={14} />
+              <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
+                <img src="/logo.png" alt="Bearitt Logo" className="w-full h-full object-contain" />
               </div>
 
-              {/* Message Bubble */}
-              <div className="flex-1 min-w-0 bg-white/80 hover:bg-white/95 backdrop-blur-md border border-black/[0.06] rounded-2xl rounded-tl-xs p-3 sm:p-3.5 shadow-2xs space-y-2">
+              {/* Message Bubble - Elevated with subtle border and micro-actions */}
+              <div className="flex-1 min-w-0 bg-white border border-gray-100/90 rounded-2xl rounded-tl-xs p-3.5 sm:p-4 shadow-xs space-y-2 select-text hover:border-gray-200/80 transition-all">
                 {msg.heading && (
-                  <div className="font-extrabold text-gray-950 text-xs sm:text-[13px] tracking-tight">
+                  <div className="font-extrabold text-gray-950 text-xs sm:text-[13px] tracking-tight select-text">
                     {msg.heading}
                   </div>
                 )}
 
                 {displayText && (
                   <div
-                    className="chat-markdown-body prose prose-sm max-w-none text-gray-800 font-sans text-xs sm:text-[12.5px] leading-relaxed"
+                    className="chat-markdown-body prose prose-sm max-w-none text-gray-800 font-sans text-xs sm:text-[12.5px] leading-relaxed select-text"
                     dangerouslySetInnerHTML={{
                       __html: marked.parse(formatMarkdownContent(displayText))
                     }}
                   />
                 )}
 
-                {/* Embedded Preview Summary Card */}
-                {effectiveTable && (
-                  <div className="p-2.5 sm:p-3 rounded-xl bg-white border border-black/[0.08] shadow-3xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition hover:border-black/20">
-                    <div className="min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-1.5 font-extrabold text-xs text-gray-900">
-                        <Table size={13} className="text-gray-900 shrink-0" />
-                        <span className="truncate">{effectiveTable.title || 'Data Records'}</span>
-                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-black text-white border border-black shrink-0">
-                          {tableModal ? 'Active in Top Tab' : 'Popup Tab'}
-                        </span>
-                      </div>
-                      <div className="text-[10.5px] text-gray-500 font-medium">
-                        {effectiveTable.rows ? `${effectiveTable.rows.length} records available · Click to inspect` : 'Interactive live management console ready'}
-                      </div>
-                    </div>
-
-                    {!isProjected && (
-                      <button
-                        type="button"
-                        onClick={() => setTableModal(effectiveTable)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
-                          tableModal?.title === effectiveTable?.title
-                            ? 'bg-black text-white shadow-xs'
-                            : 'bg-black/5 hover:bg-black text-gray-800 hover:text-white'
-                        }`}
-                      >
-                        <Table size={12} />
-                        <span>{tableModal?.title === effectiveTable?.title ? 'View in Top Tab ↗' : 'View Table ↗'}</span>
-                      </button>
-                    )}
+                <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono pt-1 border-t border-gray-100/60 select-text">
+                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(displayText)}
+                      className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition cursor-pointer"
+                      title="Copy message"
+                    >
+                      <Copy size={11} />
+                    </button>
                   </div>
-                )}
-
-                <div className="text-[10px] text-gray-400 font-mono text-right pt-0.5">
-                  {msg.timestamp || 'Just now'}
+                  <div>{msg.timestamp || 'Just now'}</div>
                 </div>
               </div>
             </div>
@@ -4641,13 +4837,41 @@ export default function AiChat() {
             <Paperclip size={17} />
           </button>
 
-          {/* Input Text Box */}
-          <input
-            type="text"
+          {/* Input Text Box with Multiline & Ctrl+Shift+I / Enter newline support */}
+          <textarea
+            ref={textareaRef}
+            rows={1}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              e.target.style.height = 'auto';
+              e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              const isCtrlShiftI = e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'i';
+              const isShiftEnter = e.shiftKey && e.key === 'Enter';
+              const isCtrlEnter = e.ctrlKey && e.key === 'Enter';
+              const isCtrlShiftEnter = e.ctrlKey && e.shiftKey && e.key === 'Enter';
+
+              if (isCtrlShiftI || isShiftEnter || isCtrlEnter || isCtrlShiftEnter) {
+                e.preventDefault();
+                const target = e.target;
+                const start = target.selectionStart;
+                const end = target.selectionEnd;
+                const val = target.value;
+                const nextVal = val.substring(0, start) + '\n' + val.substring(end);
+                setInput(nextVal);
+                setTimeout(() => {
+                  if (target) {
+                    target.selectionStart = target.selectionEnd = start + 1;
+                    target.style.height = 'auto';
+                    target.style.height = `${Math.min(target.scrollHeight, 120)}px`;
+                  }
+                }, 0);
+                return;
+              }
+
+              if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
                 e.preventDefault();
                 handleSend();
               }
@@ -4675,7 +4899,7 @@ export default function AiChat() {
                         ? `Ask ${companyName} Admin AI...`
                         : "Ask SuperAdmin AI..."
             }
-            className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 placeholder:font-normal font-normal focus:outline-none py-1"
+            className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 placeholder:text-gray-400 placeholder:font-normal font-normal focus:outline-none py-1 resize-none max-h-[120px] min-h-[26px] select-text leading-relaxed scrollbar-thin"
           />
 
           {/* Right Controls: Mic + Send */}
@@ -4750,7 +4974,7 @@ export default function AiChat() {
   };
 
   return (
-    <div className="w-full h-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-none overflow-hidden" style={{ minHeight: 'calc(100vh - 84px)' }}>
+    <div className="w-full h-full flex-1 flex flex-col text-[13px] font-sans text-[#1A1D20] antialiased select-text overflow-hidden">
       {/* Toast Notification */}
       {notification && (
         <div className="fixed top-5 right-5 z-50 bg-black text-white border border-gray-800 px-4 py-2.5 rounded-2xl shadow-xl flex items-center gap-2 text-xs font-semibold animate-in fade-in slide-in-from-top-3">
@@ -4760,22 +4984,19 @@ export default function AiChat() {
       )}
 
       {/* Main Container */}
-      <div className="w-full h-full flex-1 flex justify-center items-stretch overflow-hidden relative" data-purpose="main-dashboard-wrapper" style={{ minHeight: 'calc(100vh - 84px)' }}>
+      <div className="w-full h-full flex-1 flex justify-center items-stretch overflow-hidden relative" data-purpose="main-dashboard-wrapper">
 
         {/* ================================================================= */}
         {/* BEGIN: Main Focused Chat Layout (Right Panel moved to Popup Tab Modal) */}
         {/* ================================================================= */}
-        <main className={`flex-1 flex flex-col justify-start items-stretch h-full min-h-0 overflow-hidden w-full relative max-w-[96%] xl:max-w-[94%] 2xl:max-w-[1620px] mx-auto transition-all duration-200 ${
+        <main className={`flex-1 flex flex-col justify-start items-stretch h-full min-h-0 overflow-hidden w-full relative transition-all duration-200 ${
           modalTabs.length > 0 ? 'z-50' : 'z-10'
-        }`} data-purpose="main-content-layout" style={{ minHeight: 'calc(100vh - 84px)' }}>
+        }`} data-purpose="main-content-layout">
 
-          {/* Background Chat Workspace (Hidden when Table Modal is Open) */}
+          {/* Background Chat Workspace */}
           <motion.section
             layout={false}
-            className={`w-full h-full min-h-0 border rounded-2xl flex flex-col justify-between relative overflow-hidden transition-all duration-300 p-4 sm:p-5 bg-white/40 backdrop-blur-2xl border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] ${
-              modalTabs.length > 0 ? 'hidden' : 'flex'
-            }`}
-            style={{ height: '100%', minHeight: 'calc(100vh - 84px)' }}
+            className="w-full h-full min-h-0 border rounded-[24px] flex flex-col justify-between relative overflow-hidden p-3 sm:p-5 bg-white/40 backdrop-blur-2xl border-white/70 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex"
             data-purpose="pure-chat-workspace"
           >
             <div className="relative z-10 flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -4789,8 +5010,8 @@ export default function AiChat() {
                     className="flex items-center gap-2 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold text-gray-800 bg-white/60 hover:bg-white/90 backdrop-blur-md border border-white/80 shadow-2xs transition cursor-pointer active:scale-95"
                   >
                     <span className="text-gray-950 font-black text-xs leading-none">✦</span>
-                    <span className="text-gray-900 font-semibold text-xs tracking-tight">
-                      {activeTab === 'review' ? 'Q3 Talent & Operations Review' : 'Q3 Talent & Operations Review'}
+                    <span className="text-gray-900 font-semibold text-xs tracking-tight truncate max-w-[210px] sm:max-w-[260px]">
+                      {currentSessionTitle}
                     </span>
                     <ChevronDown
                       size={14}
@@ -4800,38 +5021,107 @@ export default function AiChat() {
 
                   {/* Dropdown Menu */}
                   {isSessionDropdownOpen && (
-                    <div className="absolute left-0 top-full mt-2 w-72 p-2 rounded-2xl glass-card border border-white/95 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95">
+                    <div className="absolute left-0 top-full mt-2 w-80 max-w-[92vw] p-2 rounded-2xl glass-card border border-white/95 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-2xl bg-white/95">
+                      {/* Q3 Review Option */}
                       <button
                         type="button"
                         onClick={() => {
                           handleLoadQ3Review();
                           setIsSessionDropdownOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${activeTab === 'review' ? 'bg-black text-white' : 'hover:bg-black/5 text-gray-800'
-                          }`}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer ${
+                          activeSessionId === 'review' ? 'bg-black text-white shadow-xs' : 'hover:bg-black/5 text-gray-800'
+                        }`}
                       >
-                        <div className="flex items-center gap-2">
-                          <span className={activeTab === 'review' ? 'text-white' : 'text-gray-500'}>✦</span>
-                          <span>Q3 Talent & Operations Review</span>
+                        <div className="flex items-center gap-2 truncate pr-2">
+                          <span className={activeSessionId === 'review' ? 'text-white' : 'text-gray-500'}>✦</span>
+                          <span className="truncate">Q3 Talent & Operations Review</span>
                         </div>
-                        {activeTab === 'review' && <Check size={14} className="text-white" />}
+                        {activeSessionId === 'review' && <Check size={14} className="text-white shrink-0" />}
                       </button>
 
+                      {/* New Conversation Button */}
                       <button
                         type="button"
                         onClick={() => {
                           handleNewChat();
                           setIsSessionDropdownOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${activeTab === 'new' ? 'bg-black text-white' : 'hover:bg-black/5 text-gray-800'
-                          }`}
+                        className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer mt-1 ${
+                          activeSessionId !== 'review' && (!sessions.find(s => s.id === activeSessionId)?.messages || sessions.find(s => s.id === activeSessionId)?.messages.length <= 1)
+                            ? 'bg-black text-white shadow-xs'
+                            : 'hover:bg-black/5 text-gray-800'
+                        }`}
                       >
                         <div className="flex items-center gap-2">
                           <Plus size={14} />
                           <span>New Conversation</span>
                         </div>
-                        {activeTab === 'new' && <Check size={14} className="text-white" />}
+                        {activeSessionId !== 'review' && (!sessions.find(s => s.id === activeSessionId)?.messages || sessions.find(s => s.id === activeSessionId)?.messages.length <= 1) && (
+                          <Check size={14} className="text-white shrink-0" />
+                        )}
                       </button>
+
+                      {/* Saved Chats / History Section */}
+                      {sessions.filter(s => s.id !== 'review' && (s.messages?.some(m => m.role === 'user') || s.title !== 'New Conversation')).length > 0 && (
+                        <div className="mt-2 pt-2 border-t border-black/[0.06]">
+                          <div className="flex items-center justify-between px-2 pb-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                            <div className="flex items-center gap-1.5">
+                              <History size={11} />
+                              <span>Saved Chats</span>
+                            </div>
+                            <span className="text-[9.5px] font-mono text-gray-400">
+                              {sessions.filter(s => s.id !== 'review' && (s.messages?.some(m => m.role === 'user') || s.title !== 'New Conversation')).length}
+                            </span>
+                          </div>
+
+                          <div className="max-h-56 overflow-y-auto space-y-1 pr-0.5 scrollbar-thin">
+                            {sessions
+                              .filter(s => s.id !== 'review' && (s.messages?.some(m => m.role === 'user') || s.title !== 'New Conversation'))
+                              .map((s) => {
+                                const isActive = activeSessionId === s.id;
+                                return (
+                                  <div
+                                    key={s.id}
+                                    onClick={() => {
+                                      handleSelectSession(s);
+                                      setIsSessionDropdownOpen(false);
+                                    }}
+                                    className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-semibold transition text-left cursor-pointer group ${
+                                      isActive ? 'bg-black text-white shadow-xs' : 'hover:bg-black/5 text-gray-800'
+                                    }`}
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0 pr-2">
+                                      <span className={isActive ? 'text-white' : 'text-gray-400 group-hover:text-black'}>✦</span>
+                                      <div className="min-w-0">
+                                        <div className="truncate text-xs leading-tight font-medium">
+                                          {s.title}
+                                        </div>
+                                        <div className={`text-[10px] ${isActive ? 'text-gray-300' : 'text-gray-400'} font-normal mt-0.5`}>
+                                          {s.messages?.filter(m => m.role === 'user').length || 1} prompts · {new Date(s.updatedAt || Date.now()).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      {isActive && <Check size={14} className="text-white" />}
+                                      <button
+                                        type="button"
+                                        title="Delete chat"
+                                        onClick={(e) => handleDeleteSession(e, s.id)}
+                                        className={`p-1 rounded-md opacity-0 group-hover:opacity-100 transition ${
+                                          isActive ? 'text-gray-300 hover:text-white hover:bg-white/20' : 'text-gray-400 hover:text-red-600 hover:bg-black/5'
+                                        }`}
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -5028,13 +5318,12 @@ export default function AiChat() {
               {/* Middle Section: Image 2 Hero OR Chat Message Stream */}
               {messages.length === 1 && (messages[0]?.id === 'welcome-init' || messages[0]?.isWelcome) ? (
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-4 py-6 select-none animate-in fade-in duration-300">
-                  {/* 3D Glass AI Orb with floating animation */}
-                  <div className="relative mb-5 flex items-center justify-center">
-                    <div className="absolute inset-0 rounded-full bg-white/90 blur-2xl scale-125 opacity-80 pointer-events-none" />
+                  {/* Bearitt Logo */}
+                  <div className="relative mb-4 flex items-center justify-center">
                     <img
-                      src="/glass_ai_orb.png"
-                      alt="AI Copilot Orb"
-                      className="w-28 h-28 sm:w-32 sm:h-32 object-contain relative z-10 mix-blend-multiply drop-shadow-xl animate-orb-float pointer-events-none"
+                      src="/logo.png"
+                      alt="Bearitt"
+                      className="w-14 h-14 sm:w-16 sm:h-16 object-contain relative z-10 drop-shadow-sm pointer-events-none"
                     />
                   </div>
 
@@ -5110,7 +5399,8 @@ export default function AiChat() {
               ) : (
                 <div
                   ref={chatContainerRef}
-                  className="flex-1 overflow-y-auto min-h-0 pt-8 pb-4 pr-1 space-y-4 scrollbar-thin overscroll-contain"
+                  className="flex-1 overflow-y-auto min-h-0 pt-2 pb-6 px-1 space-y-4 scroll-smooth scrollbar-thin overscroll-contain select-text"
+                  style={{ scrollBehavior: 'smooth' }}
                 >
                   {renderMessagesContent(messagesEndRef, false)}
                 </div>

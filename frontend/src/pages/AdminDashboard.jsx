@@ -29,8 +29,11 @@ import {
   Trash2,
   Check,
   Activity,
-  Bell
+  Bell,
+  MessageSquare,
+  User
 } from 'lucide-react';
+import TeamChatDrawer from '../components/TeamChatDrawer';
 
 function formatDate(iso) {
   if (!iso) return 'Sep 25, 2026';
@@ -136,6 +139,8 @@ export default function AdminDashboard() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showCalModal, setShowCalModal] = useState(false);
+  const [isTeamChatOpen, setIsTeamChatOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   // Invite Form
   const [inviteForm, setInviteForm] = useState(EMPTY_INVITE);
@@ -230,6 +235,23 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     load();
+  }, [token]);
+
+  // Periodic polling for team chat unread messages
+  useEffect(() => {
+    if (!token) return;
+    const fetchUnread = () => {
+      request('/api/team-chat/unread-count', { token, noCache: true, forceRefresh: true })
+        .then((res) => {
+          if (res && typeof res.unread_count === 'number') {
+            setUnreadChatCount(res.unread_count);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 8000);
+    return () => clearInterval(interval);
   }, [token]);
 
   // 2-second auto-dismiss timer for success notifications
@@ -465,7 +487,10 @@ export default function AdminDashboard() {
   });
 
   return (
-    <div className="w-full max-w-[1580px] mx-auto space-y-4 sm:space-y-4.5 pt-1 sm:pt-2 text-left select-none antialiased">
+    <div
+      className="w-full max-w-[1580px] mx-auto space-y-4 sm:space-y-4.5 pt-1 sm:pt-2 text-left select-none antialiased font-inter"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
       {/* Toast Alert Messages */}
       {error && (
         <div className="p-3 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center justify-between gap-2 shadow-xs">
@@ -492,12 +517,15 @@ export default function AdminDashboard() {
       )}
 
       {/* Top Header Area (Fixed at top) */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 pb-0.5 shrink-0">
-        <div className="pl-2.5 sm:pl-2.5 pt-4 sm:pt-9">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 pb-0.5 shrink-0">
+        <div className="pl-2.5 sm:pl-2.5 pt-1 sm:pt-2">
           <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
             TERM JOBS • COMPANY GOVERNANCE
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-[2.15rem] font-black text-gray-900 tracking-tight leading-none mb-1.5">
+          <h1
+            className="text-2xl sm:text-3xl lg:text-[2.15rem] font-extrabold text-gray-900 tracking-tight leading-none mb-1.5"
+            style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+          >
             {companyName} Admin Console
           </h1>
           <p className="text-[11.5px] sm:text-xs text-gray-500 font-normal leading-normal max-w-xl">
@@ -505,24 +533,52 @@ export default function AdminDashboard() {
           </p>
         </div>
 
-        {/* Date Stamp (Moved upward) */}
-        <div className="text-left sm:text-right text-[11px] font-semibold text-gray-400 pt-7.5 sm:pt-16 shrink-0 pr-1">
-          {currentDateFormatted}
+        {/* Top Header Action Cluster: Top Right Icon-Only Action Buttons */}
+        <div className="flex items-center gap-2 pt-0.5 sm:pt-1.5 pr-1 shrink-0 self-end sm:self-start">
+          {/* Date Stamp */}
+          <div className="hidden lg:block text-right text-[11px] font-semibold text-gray-400 mr-1">
+            {currentDateFormatted}
+          </div>
+
+          {/* Message Icon-Only Button */}
+          <button
+            type="button"
+            onClick={() => setIsTeamChatOpen((prev) => !prev)}
+            className="relative w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-white hover:bg-[#F7F7F5] border border-gray-200/90 text-gray-900 shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95 group"
+            title="Team Messages"
+          >
+            <MessageSquare size={15} strokeWidth={2.1} className="text-gray-800 group-hover:scale-105 transition-transform" />
+            {unreadChatCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-0.5 rounded-full bg-black text-white text-[9px] font-bold flex items-center justify-center font-mono ring-2 ring-white">
+                {unreadChatCount}
+              </span>
+            )}
+          </button>
+
+          {/* Profile Icon-Only Button */}
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/admin/profile')}
+            className="w-8.5 h-8.5 sm:w-9 sm:h-9 rounded-xl bg-[#000000] hover:bg-[#111111] text-white text-[10px] font-bold shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95 uppercase tracking-tight"
+            title="Company & Admin Profile"
+          >
+            {user?.name ? user.name.slice(0, 2).toUpperCase() : 'AD'}
+          </button>
         </div>
       </div>
 
       {/* Main Content Grid: Left Column (7 cols) & Right Column (5 cols) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch h-[475px] sm:h-[425px]">
-        {/* Left Column (7 cols): 4 Stat Metric Cards + Recent Requisitions (Untouched) */}
-        <div className="lg:col-span-7 flex flex-col justify-between gap-2.5 sm:gap-3 h-full min-h-0 pt-9 sm:pt-10 lg:pt-11">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch min-h-0 pt-2 sm:pt-4">
+        {/* Left Column (7 cols): 4 Stat Metric Cards + Recent Requisitions */}
+        <div className="lg:col-span-7 flex flex-col justify-between gap-2.5 sm:gap-3 h-[520px] sm:h-[500px] min-h-0 pt-1 sm:pt-2">
           {/* 4 Metric Stat Cards Grid (Only on top of Recent Requisitions) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5 shrink-0">
             {/* Stat Card 1: Active Requisitions */}
             <div
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
+              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
                   <FileText size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
@@ -537,10 +593,10 @@ export default function AdminDashboard() {
             {/* Stat Card 2: Hiring Managers */}
             <div
               onClick={() => navigate('/dashboard/admin/hiring-managers')}
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
             >
               <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
                   <Users size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
@@ -554,10 +610,10 @@ export default function AdminDashboard() {
 
             {/* Stat Card 3: Draft Requisitions */}
             <div
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
+              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
                   <FilePlus size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
@@ -571,10 +627,10 @@ export default function AdminDashboard() {
 
             {/* Stat Card 4: Pending Approvals */}
             <div
-              className="bg-white/40 hover:bg-white/60 backdrop-blur-2xl border border-white/70 hover:border-white/90 rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
+              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
             >
               <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-xl bg-white/50 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
+                <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
                   <Clock size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
@@ -588,7 +644,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Dedicated Recent Requisitions Glassmorphic Card (Roomy & Less Compact) */}
-          <div className="flex-1 min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="flex-1 min-h-0 bg-white/80 backdrop-blur-2xl border border-white/85 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] flex flex-col justify-between">
             <div className="flex items-center justify-between pb-2.5 border-b border-black/[0.04] shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-800 shadow-2xs">
@@ -679,10 +735,10 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Right Column (5 cols): Team Members + Recent Activity (Moved Upward) */}
-        <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 sm:gap-3 h-[560px] sm:h-[590px] lg:h-[510px] min-h-0 -mt-6 sm:-mt-8 lg:-mt-10">
+        {/* Right Column (5 cols): Team Members + Recent Activity */}
+        <div className="lg:col-span-5 flex flex-col justify-between gap-2.5 sm:gap-3 h-[520px] sm:h-[500px] min-h-0 pt-1 sm:pt-2">
           {/* Card 1: Team Members Glassmorphic Card */}
-          <div className="flex-1 min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="flex-1 min-h-0 bg-white/80 backdrop-blur-2xl border border-white/85 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] flex flex-col justify-between">
             <div className="flex items-center justify-between pb-2 border-b border-black/[0.04] shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-800 shadow-2xs">
@@ -769,7 +825,7 @@ export default function AdminDashboard() {
           </div>
 
           {/* Card 2: Recent Activity Glassmorphic Card */}
-          <div className="flex-1 min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="flex-1 min-h-0 bg-white/80 backdrop-blur-2xl border border-white/85 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] flex flex-col justify-between">
             <div className="flex items-center justify-between pb-2 border-b border-black/[0.04] shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-7.5 h-7.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/70 flex items-center justify-center text-gray-800 shadow-2xs">
@@ -1196,6 +1252,13 @@ export default function AdminDashboard() {
           </div>
         </div>
       )}
+
+      {/* Team Chat Drawer (Chat with Hiring Managers) */}
+      <TeamChatDrawer
+        isOpen={isTeamChatOpen}
+        onClose={() => setIsTeamChatOpen(false)}
+        currentUserName={user?.name || 'Company Admin'}
+      />
     </div>
   );
 }

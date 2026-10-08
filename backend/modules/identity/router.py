@@ -39,14 +39,24 @@ from email.mime.text import MIMEText
 # ---------------------------------------------------------------------------
 # Email helper — fires in a background thread so the API never blocks
 # ---------------------------------------------------------------------------
-_GMAIL_SENDER  = os.getenv("GMAIL_SENDER_EMAIL", "")
-_GMAIL_APP_PW  = os.getenv("GMAIL_APP_PASSWORD", "")
-_FRONTEND_URL  = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+_FRONTEND_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+
+def _get_gmail_creds() -> tuple[str, str]:
+    """Dynamically fetch Gmail credentials from environment or reload .env if needed."""
+    sender = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
+    pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+    if not sender or not pw:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        sender = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
+        pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
+    return sender, pw
 
 def _send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:
     """Send a welcome / credential email to the newly created user."""
-    if not _GMAIL_SENDER or not _GMAIL_APP_PW:
-        print(f"[TermJob] Email skipped — Gmail credentials not configured (to: {to_email})")
+    sender, app_pw = _get_gmail_creds()
+    if not sender or not app_pw:
+        print(f"[TermJob] Email skipped — Gmail credentials not configured in .env (to: {to_email})")
         return  # silently skip if not configured
 
     login_url = f"{_FRONTEND_URL}/login"
@@ -238,9 +248,9 @@ If you did not expect this message, please contact your administrator.
     import email.utils, uuid, datetime as _dt
     msg = MIMEMultipart("alternative")
     msg["Subject"]     = subject
-    msg["From"]        = f"TermJob <{_GMAIL_SENDER}>"
+    msg["From"]        = f"TermJob <{sender}>"
     msg["To"]          = to_email
-    msg["Reply-To"]    = _GMAIL_SENDER
+    msg["Reply-To"]    = sender
     msg["Message-ID"]  = email.utils.make_msgid(domain="termjob.in")
     msg["Date"]        = email.utils.formatdate(localtime=True)
     msg["X-Mailer"]    = "TermJob Notification Service"
@@ -256,11 +266,11 @@ If you did not expect this message, please contact your administrator.
             smtp.ehlo()
             smtp.starttls()
             smtp.ehlo()
-            smtp.login(_GMAIL_SENDER, _GMAIL_APP_PW)
-            smtp.sendmail(_GMAIL_SENDER, [to_email], msg.as_string())
-        print(f"[TermJob] Credential email sent → {to_email}")
+            smtp.login(sender, app_pw)
+            smtp.sendmail(sender, [to_email], msg.as_string())
+        print(f"[TermJob] Credential email sent -> {to_email}")
     except Exception as exc:
-        print(f"[TermJob] Email delivery failed → {to_email}: {exc}")
+        print(f"[TermJob] Email delivery failed -> {to_email}: {exc}")
 
 
 def send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:

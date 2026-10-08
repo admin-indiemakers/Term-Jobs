@@ -5994,4 +5994,27 @@ html, body, #root {
   font-style: italic;
 }
 
+/* AI Chat Fixed Mode - strictly fix viewport and prevent any outer page / window scroll */
+.app-shell.ai-fixed-mode,
+.app-shell.ai-chat-mode {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.app-shell.ai-fixed-mode .main-area,
+.app-shell.ai-chat-mode .main-area {
+  height: 100vh !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+}
+
+.app-shell.ai-fixed-mode .content-area,
+.app-shell.ai-chat-mode .content-area {
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
 

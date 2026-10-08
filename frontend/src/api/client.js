@@ -56,6 +56,18 @@ const STALE_CACHE_TTL_MS = 180000; // 3 minutes stale-while-revalidate
 export function clearApiCache() {
   apiGetCache.clear();
   inflightGetRequests.clear();
+  if (typeof window !== 'undefined') {
+    try {
+      const keysToRemove = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const key = sessionStorage.key(i);
+        if (key && key.startsWith('tj_cache:')) {
+          keysToRemove.push(key);
+        }
+      }
+      keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch (e) {}
+  }
 }
 
 export function prefetch(path, options = {}) {
@@ -74,9 +86,9 @@ export async function request(path, {
   const upperMethod = method.toUpperCase();
   const payloadBody = body !== undefined ? body : requestData;
 
-  // On any mutating method (POST, PUT, PATCH, DELETE), clear cache immediately
+  // On any mutating method (POST, PUT, PATCH, DELETE), clear both in-memory and session cache immediately
   if (upperMethod !== 'GET') {
-    apiGetCache.clear();
+    clearApiCache();
   }
 
   let normalizedPath = String(path || '');

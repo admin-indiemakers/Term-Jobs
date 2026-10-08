@@ -50,16 +50,94 @@ import {
   UserCheck,
   Settings,
   History,
-  Menu
+  Menu,
+  AlertCircle,
+  User,
+  Lock,
+  LogOut,
+  KeyRound
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { marked } from 'marked';
 import { interviewApi } from '../interview/services/interviewApi';
+import HiringPipelineResponseCard, { parseHiringPipelineData } from '../components/HiringPipelineResponseCard';
+import TeamChatDrawer from '../components/TeamChatDrawer';
 
 marked.setOptions({
   breaks: true,
   gfm: true,
 });
+
+/* Helper to convert space-aligned pseudo-tables into standard GitHub Markdown tables (matching AiChat.jsx) */
+const formatMarkdownContent = (text) => {
+  if (!text) return '';
+  const lines = String(text).split('\n');
+  const result = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    if (
+      trimmed &&
+      !trimmed.startsWith('|') &&
+      !trimmed.startsWith('#') &&
+      !trimmed.startsWith('-') &&
+      !trimmed.startsWith('•') &&
+      !trimmed.startsWith('*') &&
+      !trimmed.startsWith('>')
+    ) {
+      const parts = trimmed.split(/\s{2,}|\t+/).filter(Boolean);
+      if (parts.length >= 3) {
+        const tableRows = [parts];
+        let j = i + 1;
+        while (j < lines.length) {
+          const nextTrim = lines[j].trim();
+          if (
+            !nextTrim ||
+            nextTrim.startsWith('#') ||
+            nextTrim.startsWith('-') ||
+            nextTrim.startsWith('•') ||
+            nextTrim.startsWith('*') ||
+            nextTrim.startsWith('|')
+          ) {
+            break;
+          }
+          const nextParts = nextTrim.split(/\s{2,}|\t+/).filter(Boolean);
+          if (nextParts.length >= 2) {
+            tableRows.push(nextParts);
+            j++;
+          } else {
+            break;
+          }
+        }
+
+        if (tableRows.length >= 2) {
+          const maxCols = Math.max(...tableRows.map((r) => r.length));
+          const headerRow = [...tableRows[0]];
+          while (headerRow.length < maxCols) headerRow.push('');
+          result.push('');
+          result.push('| ' + headerRow.join(' | ') + ' |');
+          result.push('| ' + Array(maxCols).fill(':---').join(' | ') + ' |');
+          for (let r = 1; r < tableRows.length; r++) {
+            const row = [...tableRows[r]];
+            while (row.length < maxCols) row.push('');
+            result.push('| ' + row.join(' | ') + ' |');
+          }
+          result.push('');
+          i = j;
+          continue;
+        }
+      }
+    }
+
+    result.push(line);
+    i++;
+  }
+
+  return result.join('\n');
+};
 
 const REQUISITION_TABS = [
   { id: 'role', label: 'Role', icon: Briefcase },
@@ -245,7 +323,7 @@ const PREDEFINED_ROLES = [
 ];
 
 export default function HiringManagerDashboard() {
-  const { user, token } = useAuth();
+  const { user, token, logout } = useAuth();
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);
@@ -335,6 +413,11 @@ export default function HiringManagerDashboard() {
   const [pingingBot, setPingingBot] = useState(false);
   const [showCliqModal, setShowCliqModal] = useState(false);
   const [showTeamsModal, setShowTeamsModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [pwdForm, setPwdForm] = useState({ current_password: '', new_password: '' });
+  const [changingPwd, setChangingPwd] = useState(false);
+  const [pwdMessage, setPwdMessage] = useState({ type: '', text: '' });
   const [linkingTeams, setLinkingTeams] = useState(false);
   const [copiedCliqBotName, setCopiedCliqBotName] = useState(false);
   const [copiedCliqUrl, setCopiedCliqUrl] = useState(false);
@@ -475,6 +558,43 @@ export default function HiringManagerDashboard() {
       await loadBotStatus();
     } catch (err) {
       setBotFeedback({ type: 'error', text: err?.message || 'Failed to unlink Teams account' });
+    }
+  };
+
+  // Periodic polling for team chat unread messages
+  useEffect(() => {
+    if (!token) return;
+    const fetchUnread = () => {
+      request('/api/team-chat/unread-count', { token, noCache: true, forceRefresh: true })
+        .then((res) => {
+          if (res && typeof res.unread_count === 'number') {
+            setUnreadChatCount(res.unread_count);
+          }
+        })
+        .catch(() => {});
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 8000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  const handleChangePassword = async (e) => {
+    e?.preventDefault();
+    if (!pwdForm.current_password || !pwdForm.new_password) return;
+    setChangingPwd(true);
+    setPwdMessage({ type: '', text: '' });
+    try {
+      await request('/api/auth/change-password', {
+        method: 'POST',
+        token,
+        body: pwdForm,
+      });
+      setPwdMessage({ type: 'success', text: 'Password changed successfully.' });
+      setPwdForm({ current_password: '', new_password: '' });
+    } catch (err) {
+      setPwdMessage({ type: 'error', text: err?.message || 'Failed to change password.' });
+    } finally {
+      setChangingPwd(false);
     }
   };
 
@@ -942,10 +1062,7 @@ export default function HiringManagerDashboard() {
   useEffect(() => {
     if (messages.length > 1 || isAiTyping) {
       if (chatContainerRef.current) {
-        chatContainerRef.current.scrollTo({
-          top: chatContainerRef.current.scrollHeight,
-          behavior: 'smooth',
-        });
+        chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
       }
     }
   }, [messages, isAiTyping]);
@@ -1594,6 +1711,7 @@ export default function HiringManagerDashboard() {
   const [isConversationsDrawerOpen, setIsConversationsDrawerOpen] = useState(false);
   const [conversationsSearchQuery, setConversationsSearchQuery] = useState('');
   const [activeConversationId, setActiveConversationId] = useState(null);
+  const [isTeamChatDrawerOpen, setIsTeamChatDrawerOpen] = useState(false);
 
   const [conversations, setConversations] = useState(() => {
     try {
@@ -1944,11 +2062,12 @@ export default function HiringManagerDashboard() {
       if (e.key === 'Escape') {
         if (isConversationsDrawerOpen) setIsConversationsDrawerOpen(false);
         if (isToolsDrawerOpen) setIsToolsDrawerOpen(false);
+        if (isTeamChatDrawerOpen) setIsTeamChatDrawerOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isConversationsDrawerOpen, isToolsDrawerOpen]);
+  }, [isConversationsDrawerOpen, isToolsDrawerOpen, isTeamChatDrawerOpen]);
 
   // Pending requisitions count for badge
   const pendingRequisitionsCount = useMemo(() => {
@@ -2167,7 +2286,7 @@ export default function HiringManagerDashboard() {
 
   return (
     <div
-      className="w-full h-full max-h-screen lg:h-[calc(100vh-32px)] overflow-hidden flex flex-col justify-between text-left relative selection:bg-black selection:text-white bg-transparent"
+      className="w-full h-full max-h-screen lg:h-[calc(100vh-32px)] overflow-hidden flex flex-col text-left relative selection:bg-black selection:text-white bg-transparent"
       style={{
         fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
       }}
@@ -2308,16 +2427,23 @@ export default function HiringManagerDashboard() {
           </svg>
         </button>
 
+        {/* Team Chat Drawer Icon */}
         <button
           type="button"
-          onClick={() => {
-            setToolsSearchQuery('report');
-            setIsToolsDrawerOpen(true);
-          }}
-          className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-white hover:bg-[#F7F7F5] border border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs flex items-center justify-center transition-all cursor-pointer active:scale-95"
-          title="Analytics & Reports"
+          onClick={() => setIsTeamChatDrawerOpen((prev) => !prev)}
+          className={`relative w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg border transition-all cursor-pointer active:scale-95 flex items-center justify-center ${
+            isTeamChatDrawerOpen
+              ? 'bg-[#111111] text-white border-[#111111] shadow-xs'
+              : 'bg-white hover:bg-[#F7F7F5] border-[#E5E5E5] text-[#111111] shadow-2xs hover:shadow-xs'
+          }`}
+          title="Team Messages (Chat with Company Admin & Hiring Managers)"
         >
-          <BarChart2 size={12.5} strokeWidth={2} />
+          <MessageSquare size={12.5} strokeWidth={2} />
+          {unreadChatCount > 0 && (
+            <span className="absolute -top-1 -right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-black text-white text-[8.5px] font-bold flex items-center justify-center font-mono">
+              {unreadChatCount}
+            </span>
+          )}
         </button>
 
         <button
@@ -2350,12 +2476,9 @@ export default function HiringManagerDashboard() {
 
         <button
           type="button"
-          onClick={() => {
-            setToolsSearchQuery('settings');
-            setIsToolsDrawerOpen(true);
-          }}
+          onClick={() => setShowProfileModal(true)}
           className="w-7 h-7 sm:w-7.5 sm:h-7.5 rounded-lg bg-[#000000] text-white text-[9px] font-bold shadow-2xs hover:bg-[#111111] flex items-center justify-center transition-all cursor-pointer active:scale-95 uppercase tracking-tight"
-          title="Hiring Manager Settings"
+          title="Hiring Manager Profile & Account Settings"
         >
           {userInitials || 'HM'}
         </button>
@@ -2503,50 +2626,61 @@ export default function HiringManagerDashboard() {
               </div>
 
               {/* CHAT MESSAGES STREAM CONTAINER */}
-              <div ref={chatContainerRef} className="flex-1 min-h-0 overflow-y-auto pr-1.5 scroll-smooth overscroll-contain space-y-4 pt-1 pb-2">
+              <div
+                ref={chatContainerRef}
+                className="flex-1 min-h-0 overflow-y-auto pr-1.5 overscroll-contain flex flex-col gap-4 pt-1 pb-3"
+                style={{ scrollBehavior: 'auto' }}
+              >
 
               {messages.map((msg) => {
                 const isUser = msg.sender === 'user';
                 return (
-                  <div key={msg.id} className="space-y-2">
+                  <div key={msg.id} className="w-full shrink-0">
                     {/* User Message Bubble */}
                     {isUser ? (
-                      <div className="flex justify-end">
-                        <div className="max-w-[85%] space-y-1">
-                          <div className="flex items-center justify-end gap-1.5 px-1 text-[10px] text-gray-400 font-medium">
-                            <span>You</span>
-                            <span>•</span>
-                            <span>{msg.timestamp}</span>
-                          </div>
-                          <div className="bg-gray-900 text-white rounded-xl rounded-tr-xs px-3.5 py-2 text-xs sm:text-[13px] font-medium shadow-xs leading-relaxed">
-                            {msg.text}
-                          </div>
+                      <div className="w-full flex justify-end items-start py-1 px-1 relative isolate select-text">
+                        <div className="bg-[#111417] text-white text-[12.5px] sm:text-[13px] font-medium leading-relaxed max-w-[80%] px-4 py-2.5 rounded-2xl rounded-tr-xs shadow-2xs select-text break-words">
+                          {msg.text}
+                        </div>
+                      </div>
+                    ) : parseHiringPipelineData(msg.text, msg.executedActions) ? (
+                      <div className="w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
+                          <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />
+                        </div>
+                        <div className="flex-1 min-w-0 max-w-3xl xl:max-w-4xl">
+                          <HiringPipelineResponseCard
+                            data={parseHiringPipelineData(msg.text, msg.executedActions)}
+                            timestamp={msg.timestamp || 'Just now'}
+                            onSendMessage={(prompt) => handleSendPrompt(prompt)}
+                          />
                         </div>
                       </div>
                     ) : (
-                      /* Assistant Message Bubble */
-                      <div className="flex items-start gap-2.5">
-                        <div className="w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
-                          <img src={termjobsLogo} alt="TermJobs" className="w-5 h-5 object-contain" />
+                      /* Assistant Message Bubble - Matching AiChat.jsx Modern Borderless Design */
+                      <div className="w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate select-text">
+                        {/* Assistant Avatar */}
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
+                          <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain" />
                         </div>
-                        <div className="flex-1 min-w-0 space-y-1.5">
-                          <div className="flex items-center gap-2 px-1 text-[9.5px] text-gray-400 font-medium">
-                            <span className="font-semibold text-gray-700">Hiring Assistant</span>
-                            <span>•</span>
-                            <span>{msg.timestamp}</span>
-                            {msg.executedActions && msg.executedActions.length > 0 && (
-                              <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-mono">
-                                {msg.executedActions[0].tool?.replace(/_/g, ' ')}
-                              </span>
-                            )}
-                          </div>
 
-                          <div className="bg-white/95 backdrop-blur-md rounded-xl rounded-tl-xs p-3 sm:p-3.5 border border-gray-100 shadow-xs text-xs sm:text-[13px] text-gray-800 leading-relaxed max-w-3xl xl:max-w-4xl">
+                        {/* Message Bubble - BORDERLESS white card with high-end ergonomics */}
+                        <div className="flex-1 min-w-0 bg-white border-0 rounded-2xl rounded-tl-xs p-4 sm:p-5 shadow-xs space-y-3 select-text max-w-3xl xl:max-w-4xl">
+                          {msg.heading && (
+                            <div className="font-extrabold text-gray-950 text-xs sm:text-[13px] tracking-tight select-text">
+                              {msg.heading}
+                            </div>
+                          )}
+
+                          {/* Markdown Body using .chat-markdown-body and formatMarkdownContent */}
+                          {msg.text && (
                             <div
-                              className="prose prose-sm max-w-none text-gray-800 [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_ul]:my-1.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-1.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_strong]:font-semibold [&_strong]:text-gray-900 [&_code]:bg-gray-100 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:font-mono [&_code]:text-[11px]"
-                              dangerouslySetInnerHTML={{ __html: marked.parse(msg.text || '') }}
+                              className="chat-markdown-body prose prose-sm max-w-none text-gray-800 font-sans text-xs sm:text-[12.5px] leading-relaxed select-text"
+                              dangerouslySetInnerHTML={{
+                                __html: marked.parse(formatMarkdownContent(msg.text || ''))
+                              }}
                             />
-                          </div>
+                          )}
 
                           {/* Inline Requisition Card (Exact Image 2 Match) */}
                           {msg.requisitionDraft && (
@@ -3017,6 +3151,11 @@ export default function HiringManagerDashboard() {
                               </div>
                             </div>
                           )}
+
+                          {/* Bottom Right Corner Timestamp (Matching AiChat.jsx) */}
+                          <div className="text-[10px] text-gray-400 font-mono text-right pt-0.5 select-text">
+                            {msg.timestamp || 'Just now'}
+                          </div>
                         </div>
                       </div>
                     )}
@@ -3026,15 +3165,13 @@ export default function HiringManagerDashboard() {
 
               {/* AI Thinking / Typing Indicator */}
               {isAiTyping && (
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
-                    <img src={termjobsLogo} alt="TermJobs" className="w-5 h-5 object-contain animate-pulse" />
+                <div className="w-full flex items-start gap-2.5 sm:gap-3 py-1 px-1 relative isolate">
+                  <div className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center shrink-0 mt-0.5">
+                    <img src={termjobsLogo} alt="TermJobs" className="w-full h-full object-contain animate-pulse" />
                   </div>
-                  <div className="bg-white/95 backdrop-blur-md rounded-2xl rounded-tl-xs px-4 py-3 border border-gray-100 shadow-xs flex items-center gap-2 text-xs text-gray-500">
+                  <div className="bg-white border-0 rounded-2xl rounded-tl-xs px-4 py-3 shadow-xs flex items-center gap-2.5 text-xs font-medium text-gray-600">
                     <div className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                      <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
                     </div>
                     <span>Assistant is analyzing your pipeline...</span>
                   </div>
@@ -3650,6 +3787,178 @@ export default function HiringManagerDashboard() {
         </div>
       )}
 
+      {/* Hiring Manager Profile & Account Settings Modal */}
+      {showProfileModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 text-left font-sans animate-in fade-in duration-150">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs cursor-pointer"
+            onClick={() => setShowProfileModal(false)}
+          />
+          <div className="relative w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-100 p-5 sm:p-6 z-10 space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar select-text">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center font-bold text-xs">
+                  <User size={15} />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-gray-950">Hiring Manager Profile</h3>
+                  <p className="text-[11px] text-gray-500">Account identity, team messaging & preferences</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(false)}
+                className="p-1.5 text-gray-400 hover:text-gray-900 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Profile Summary Card */}
+            <div className="p-4 rounded-xl bg-[#FAFBFD] border border-gray-200/80 flex items-start gap-3.5">
+              <div className="w-12 h-12 rounded-2xl bg-black text-white font-black text-base flex items-center justify-center shrink-0 shadow-2xs">
+                {userInitials || 'HM'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h4 className="text-sm font-bold text-gray-950 truncate">{userName}</h4>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-black text-white">
+                    {user?.role || 'Hiring Manager'}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500 truncate mt-0.5">{user?.email}</div>
+                <div className="flex items-center gap-3 text-[11px] text-gray-600 mt-2 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <Building2 size={12} className="text-gray-400" />
+                    <b>{user?.tenant_name || 'TermJobs Company'}</b>
+                  </span>
+                  {user?.department && (
+                    <span className="flex items-center gap-1">
+                      <Layers size={12} className="text-gray-400" />
+                      {user.department}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Team Messaging Status & Quick Access */}
+            <div className="p-3.5 rounded-xl bg-white border border-gray-200/90 shadow-3xs space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <MessageSquare size={14} className="text-gray-800" />
+                  <span className="text-xs font-bold text-gray-900">Internal Team Messaging</span>
+                </div>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  PERMITTED
+                </span>
+              </div>
+              <p className="text-[11.5px] text-gray-600 leading-relaxed">
+                You have active messaging access. Chat directly with your Company Admin and fellow Hiring Managers to coordinate requisitions and interview feedback.
+              </p>
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProfileModal(false);
+                    setIsTeamChatDrawerOpen(true);
+                  }}
+                  className="w-full py-2 px-3 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <MessageSquare size={13} />
+                  <span>Open Team Messages</span>
+                  {unreadChatCount > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.2 rounded-full bg-white text-black text-[9.5px] font-bold">
+                      {unreadChatCount} new
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Change Password Collapsible Card */}
+            <form onSubmit={handleChangePassword} className="p-3.5 rounded-xl bg-white border border-gray-200/90 shadow-3xs space-y-2.5">
+              <div className="flex items-center gap-2">
+                <Lock size={14} className="text-gray-800" />
+                <span className="text-xs font-bold text-gray-900">Change Password</span>
+              </div>
+
+              {pwdMessage.text && (
+                <div
+                  className={`p-2 rounded-lg text-xs font-medium ${
+                    pwdMessage.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-red-50 text-red-800 border border-red-200'
+                  }`}
+                >
+                  {pwdMessage.text}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Current Password</label>
+                  <input
+                    type="password"
+                    value={pwdForm.current_password}
+                    onChange={(e) => setPwdForm({ ...pwdForm, current_password: e.target.value })}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-1.5 text-xs bg-[#F6F8FA] border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-black"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">New Password</label>
+                  <input
+                    type="password"
+                    value={pwdForm.new_password}
+                    onChange={(e) => setPwdForm({ ...pwdForm, new_password: e.target.value })}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-1.5 text-xs bg-[#F6F8FA] border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-black"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-1 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={changingPwd || !pwdForm.current_password || !pwdForm.new_password}
+                  className="px-3.5 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-semibold disabled:opacity-40 cursor-pointer transition-colors flex items-center gap-1.5"
+                >
+                  {changingPwd && <Loader2 size={12} className="animate-spin" />}
+                  <span>Update Password</span>
+                </button>
+              </div>
+            </form>
+
+            {/* Modal Actions Footer */}
+            <div className="pt-2 flex items-center justify-between border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('Are you sure you want to sign out?')) {
+                    logout?.();
+                    navigate('/login');
+                  }
+                }}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <LogOut size={13} />
+                <span>Sign Out</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(false)}
+                className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold cursor-pointer transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {/* Right-Side Tools Drawer (Slide-in Panel) */}
       <AnimatePresence>
@@ -3908,6 +4217,13 @@ export default function HiringManagerDashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Right-Side Team Chat Drawer (Chat with Admins & Hiring Managers) */}
+      <TeamChatDrawer
+        isOpen={isTeamChatDrawerOpen}
+        onClose={() => setIsTeamChatDrawerOpen(false)}
+        currentUserName={userName}
+      />
 
 </div>
 );

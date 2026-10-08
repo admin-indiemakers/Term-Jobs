@@ -331,7 +331,7 @@ export default function ManageHiringManagers() {
       )}
 
       {/* Main Content Area: Left Table Card + Right Vertical Stat Cards */}
-      <div className="flex-1 min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3.5 items-stretch overflow-hidden">
+      <div className="flex-1 min-h-[calc(100vh-260px)] flex flex-col lg:flex-row gap-3.5 items-stretch overflow-hidden pt-2.5 sm:pt-4">
         {/* Left: Main Glassmorphic Table Card */}
         <div className="flex-1 min-w-0 h-full min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
           {/* Table Top Controls Row: Search Input Bar + Department Filter + Filter Action */}

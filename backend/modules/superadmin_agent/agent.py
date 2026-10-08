@@ -627,6 +627,17 @@ def tool_onboard_client_company(
     session.add(user)
     session.commit()
 
+    try:
+        from modules.identity.router import send_credentials_email
+        send_credentials_email(
+            to_email=admin_email,
+            name=admin_name,
+            role="Admin",
+            plain_password=password
+        )
+    except Exception as mail_err:
+        print("Failed to dispatch company admin credentials email:", mail_err)
+
     db["users"].update_one(
         {"id": user_id},
         {"$set": {
@@ -721,6 +732,17 @@ def tool_onboard_vendor_consultancy(
     )
     session.add(user)
     session.commit()
+
+    try:
+        from modules.identity.router import send_credentials_email
+        send_credentials_email(
+            to_email=admin_email,
+            name=admin_name,
+            role="Recruiter",
+            plain_password=password
+        )
+    except Exception as mail_err:
+        print("Failed to dispatch recruiter credentials email:", mail_err)
 
     db["users"].update_one(
         {"id": user_id},
@@ -846,6 +868,17 @@ def tool_create_user_account(name: str, email: str, role: str, tenant_id: str, p
     )
     session.add(user)
     session.commit()
+
+    try:
+        from modules.identity.router import send_credentials_email
+        send_credentials_email(
+            to_email=email,
+            name=name,
+            role=role,
+            plain_password=password
+        )
+    except Exception as mail_err:
+        print("Failed to dispatch user credentials email:", mail_err)
 
     return {
         "status": "success",

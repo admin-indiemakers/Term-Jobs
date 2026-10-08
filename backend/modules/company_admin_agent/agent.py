@@ -196,6 +196,49 @@ COMPANY_ADMIN_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "delete_company_hiring_manager",
+            "description": "Delete and remove an existing Hiring Manager account from this company by name, email, or ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "identifier": {
+                        "type": "string",
+                        "description": "Email address or full name of the hiring manager to delete"
+                    }
+                },
+                "required": [
+                    "identifier"
+                ]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_hiring_manager_password",
+            "description": "Reset or change the password for an existing Hiring Manager in this company, and dispatch notification email with credentials.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "identifier": {
+                        "type": "string",
+                        "description": "Email address or name of the hiring manager"
+                    },
+                    "new_password": {
+                        "type": "string",
+                        "description": "New password to set (e.g. 1234 or a secure passphrase)"
+                    }
+                },
+                "required": [
+                    "identifier",
+                    "new_password"
+                ]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_company_requisitions",
             "description": "List all job requisitions opened by this company filtered by status (open, draft, closed, or all).",
             "parameters": {
@@ -709,6 +752,18 @@ def create_company_hiring_manager(name: str, email: str, department: str = "Engi
         session.add(new_user)
         session.commit()
 
+        # Dispatch welcome credential email via Gmail SMTP
+        try:
+            from modules.identity.router import send_credentials_email
+            send_credentials_email(
+                to_email=email.strip().lower(),
+                name=name.strip(),
+                role="Hiring Manager",
+                plain_password=pwd
+            )
+        except Exception as mail_err:
+            print("Failed to dispatch hiring manager credentials email:", mail_err)
+
         return {
             "status": "created",
             "id": new_id,
@@ -721,6 +776,158 @@ def create_company_hiring_manager(name: str, email: str, department: str = "Engi
     except Exception as e:
         print("Error creating hiring manager:", e)
         return {"status": "error", "message": str(e)}
+
+
+def delete_company_hiring_manager(identifier: str, tenant_id: str = "local") -> dict:
+    """Delete and remove an existing Hiring Manager account from this company."""
+    session = get_session()
+    clean_id = (identifier or "").strip().lower()
+    if not clean_id:
+        return {"status": "error", "message": "Please specify the hiring manager name or email to delete."}
+
+    user = None
+    query = session.query(User).filter(User.role == "Hiring Manager")
+    if tenant_id and tenant_id != "local":
+        query = query.filter(User.tenant_id == tenant_id)
+
+    for u in query.all():
+        if (u.email and clean_id == u.email.lower()) or \
+           (u.name and clean_id in u.name.lower()) or \
+           (u.id and clean_id == u.id.lower()):
+            user = u
+            break
+
+    if not user:
+        # Fallback to Mongo query
+        mongo_q = {"role": "Hiring Manager"}
+        if tenant_id and tenant_id != "local":
+            mongo_q["tenant_id"] = tenant_id
+        mongo_user = db["users"].find_one({
+            **mongo_q,
+            "$or": [
+                {"email": {"$regex": f"^{re.escape(clean_id)}$", "$options": "i"}},
+                {"name": {"$regex": re.escape(clean_id), "$options": "i"}},
+                {"id": clean_id}
+            ]
+        })
+        if mongo_user:
+            uid = mongo_user.get("id") or str(mongo_user.get("_id"))
+            u_email = mongo_user.get("email")
+            u_name = mongo_user.get("name")
+            db["users"].delete_one({"_id": mongo_user["_id"]})
+            return {
+                "status": "deleted",
+                "id": uid,
+                "name": u_name,
+                "email": u_email,
+                "message": f"Hiring Manager {u_name} ({u_email}) has been permanently deleted from this company."
+            }
+        return {"status": "error", "message": f"No hiring manager found matching '{identifier}' in this company."}
+
+    uid = user.id
+    u_email = user.email
+    u_name = user.name
+    session.delete(user)
+    session.commit()
+
+    db["users"].delete_many({"$or": [{"id": uid}, {"email": u_email}]})
+
+    return {
+        "status": "deleted",
+        "id": uid,
+        "name": u_name,
+        "email": u_email,
+        "message": f"Hiring Manager {u_name} ({u_email}) has been permanently deleted from this company."
+    }
+
+
+def update_hiring_manager_password(identifier: str, new_password: str = "1234", tenant_id: str = "local") -> dict:
+    """Update or reset a hiring manager's password and dispatch updated credentials email."""
+    session = get_session()
+    clean_id = (identifier or "").strip().lower()
+    clean_pass = (new_password or "").strip() or "1234"
+    hashed = hash_password(clean_pass)
+
+    user = None
+    query = session.query(User).filter(User.role == "Hiring Manager")
+    if tenant_id and tenant_id != "local":
+        query = query.filter(User.tenant_id == tenant_id)
+
+    for u in query.all():
+        if (u.email and clean_id == u.email.lower()) or \
+           (u.name and clean_id in u.name.lower()) or \
+           (u.id and clean_id == u.id.lower()):
+            user = u
+            break
+
+    if not user:
+        # Fallback to Mongo query
+        mongo_q = {"role": "Hiring Manager"}
+        if tenant_id and tenant_id != "local":
+            mongo_q["tenant_id"] = tenant_id
+        mongo_user = db["users"].find_one({
+            **mongo_q,
+            "$or": [
+                {"email": {"$regex": f"^{re.escape(clean_id)}$", "$options": "i"}},
+                {"name": {"$regex": re.escape(clean_id), "$options": "i"}},
+                {"id": clean_id}
+            ]
+        })
+        if mongo_user:
+            uid = mongo_user.get("id") or str(mongo_user.get("_id"))
+            u_email = mongo_user.get("email")
+            u_name = mongo_user.get("name")
+            db["users"].update_one({"_id": mongo_user["_id"]}, {"$set": {"password_hash": hashed}})
+            try:
+                from modules.identity.router import send_credentials_email
+                send_credentials_email(
+                    to_email=u_email,
+                    name=u_name,
+                    role="Hiring Manager",
+                    plain_password=clean_pass
+                )
+            except Exception as mail_err:
+                print("Failed to dispatch updated password email:", mail_err)
+            return {
+                "status": "success",
+                "id": uid,
+                "name": u_name,
+                "email": u_email,
+                "new_password": clean_pass,
+                "message": f"Successfully updated password for Hiring Manager {u_name} ({u_email}) to '{clean_pass}' and dispatched notification email."
+            }
+        return {"status": "error", "message": f"No hiring manager found matching '{identifier}' in this company."}
+
+    uid = user.id
+    u_email = user.email
+    u_name = user.name
+    user.password_hash = hashed
+    session.commit()
+
+    db["users"].update_many(
+        {"$or": [{"id": uid}, {"email": u_email}]},
+        {"$set": {"password_hash": hashed}}
+    )
+
+    try:
+        from modules.identity.router import send_credentials_email
+        send_credentials_email(
+            to_email=u_email,
+            name=u_name,
+            role="Hiring Manager",
+            plain_password=clean_pass
+        )
+    except Exception as mail_err:
+        print("Failed to dispatch updated password email:", mail_err)
+
+    return {
+        "status": "success",
+        "id": uid,
+        "name": u_name,
+        "email": u_email,
+        "new_password": clean_pass,
+        "message": f"Successfully updated password for Hiring Manager {u_name} ({u_email}) to '{clean_pass}' and dispatched notification email."
+    }
 
 
 def list_company_requisitions(tenant_id: str, status_filter: str = "all") -> list:
@@ -752,7 +959,12 @@ def draft_requisition_preview(
     emp_type = employment_type or "Contract (6 Months)"
     exp = experience_level or "Senior (5-8 yrs)"
     salary = salary_range or "₹1,800 - ₹2,500 / hr"
-    skill_str = skills or "React, Python, TypeScript, Docker"
+    
+    from modules.hiring_manager_agent.agent import generate_role_skills
+    raw_skills = [s.strip() for s in (skills or "").split(",") if s.strip()] if isinstance(skills, str) else list(skills or [])
+    if len(raw_skills) < 3 or len(raw_skills) > 5:
+        raw_skills = generate_role_skills(title=title, detected_skills=raw_skills, prompt=f"{title} {skills}")
+    skill_str = ", ".join(raw_skills)
     jd = job_description or f"Responsible for delivering scalable engineering solutions in {dept}."
 
     return {
@@ -1076,6 +1288,96 @@ def run_company_admin_agent_chat(prompt: str, history: list = None, current_user
         except Exception as e:
             print("Error scheduling interview:", e)
 
+    # Confirmation for delete hiring manager
+    if prompt_clean.startswith("CONFIRM_DELETE_HIRING_MANAGER:"):
+        try:
+            parts = {}
+            for token_str in prompt_clean.replace("CONFIRM_DELETE_HIRING_MANAGER:", "").split(", "):
+                if "=" in token_str:
+                    k, v = token_str.split("=", 1)
+                    parts[k.strip()] = v.strip().strip('"')
+            identifier = parts.get("identifier") or parts.get("email") or parts.get("name") or ""
+            res = delete_company_hiring_manager(identifier=identifier, tenant_id=tenant_id)
+            return {
+                "reply": f"🗑️ {res.get('message', 'Hiring Manager removed.')}",
+                "executed_actions": [{"tool": "delete_company_hiring_manager", "result": res}]
+            }
+        except Exception as e:
+            print("Error deleting hiring manager:", e)
+
+    # Confirmation for update password
+    if prompt_clean.startswith("CONFIRM_UPDATE_PASSWORD:"):
+        try:
+            parts = {}
+            for token_str in prompt_clean.replace("CONFIRM_UPDATE_PASSWORD:", "").split(", "):
+                if "=" in token_str:
+                    k, v = token_str.split("=", 1)
+                    parts[k.strip()] = v.strip().strip('"')
+            identifier = parts.get("identifier") or parts.get("email") or parts.get("name") or ""
+            new_pass = parts.get("new_password") or parts.get("password") or "1234"
+            res = update_hiring_manager_password(identifier=identifier, new_password=new_pass, tenant_id=tenant_id)
+            return {
+                "reply": f"🔑 {res.get('message', 'Password updated successfully.')}",
+                "executed_actions": [{"tool": "update_hiring_manager_password", "result": res}]
+            }
+        except Exception as e:
+            print("Error updating password:", e)
+
+    # Fast-path for direct password update (e.g. "change password for sreehari to 1234")
+    pw_match = re.search(r'(?:change|reset|update|set)\s+(?:the\s+)?password\s+(?:for|of|to)?\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s+(?:to\s+|as\s+|with\s+)?([^\s,]+)', prompt_lower)
+    if pw_match:
+        target_ident = pw_match.group(1).strip()
+        new_pass_val = pw_match.group(2).strip()
+        res = update_hiring_manager_password(identifier=target_ident, new_password=new_pass_val, tenant_id=tenant_id)
+        if res.get("status") == "success":
+            return {
+                "reply": f"🔑 **{res.get('message')}**\n\nThe account is now active with the new password and a notification email with their credentials has been sent.",
+                "executed_actions": [{"tool": "update_hiring_manager_password", "result": res}]
+            }
+
+    # Fast-path for direct deletion (e.g. "delete hiring manager sreehari")
+    del_match = re.search(r'\b(?:delete|remove)\s+(?:the\s+)?(?:hiring\s+manager|manager|account)?\s*([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|[a-zA-Z]+(?:\s+[a-zA-Z]+)?)', prompt_lower)
+    if del_match and not any(q in prompt_lower for q in ('who', 'why', 'can you', 'how', '?')):
+        target_ident = del_match.group(1).strip()
+        if target_ident and target_ident not in ('requisition', 'job', 'all', 'interview'):
+            res = delete_company_hiring_manager(identifier=target_ident, tenant_id=tenant_id)
+            if res.get("status") == "deleted":
+                return {
+                    "reply": f"🗑️ **{res.get('message')}**",
+                    "executed_actions": [{"tool": "delete_company_hiring_manager", "result": res}]
+                }
+
+    # If user replies "yes", "confirm", "proceed" and the previous assistant turn asked about deleting or password reset:
+    if prompt_lower in ("yes", "confirm", "proceed", "sure", "do it", "yes please", "ok", "okay"):
+        if history and len(history) > 0:
+            last_msg = ""
+            for h in reversed(history):
+                content_val = (h.get("content") or h.get("reply") or h.get("heading") or "")
+                if content_val:
+                    last_msg = content_val
+                    break
+            if any(w in last_msg.lower() for w in ("delete", "remove", "recreate", "password", "1234")):
+                email_found = re.search(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', last_msg)
+                name_found = re.search(r'\b(sreehari|adwaith|marcus|elena|don)\b', last_msg.lower())
+                ident = email_found.group(0) if email_found else (name_found.group(0) if name_found else "")
+                if ident:
+                    if "password" in last_msg.lower() or "1234" in last_msg.lower():
+                        pw_val = "1234"
+                        pw_in_msg = re.search(r'(?:to|password|pass)\s+([a-zA-Z0-9@!#]{3,12})', last_msg.lower())
+                        if pw_in_msg:
+                            pw_val = pw_in_msg.group(1)
+                        res = update_hiring_manager_password(identifier=ident, new_password=pw_val, tenant_id=tenant_id)
+                        return {
+                            "reply": f"🔑 **{res.get('message')}**",
+                            "executed_actions": [{"tool": "update_hiring_manager_password", "result": res}]
+                        }
+                    elif "delete" in last_msg.lower() or "remove" in last_msg.lower():
+                        res = delete_company_hiring_manager(identifier=ident, tenant_id=tenant_id)
+                        return {
+                            "reply": f"🗑️ **{res.get('message')}**",
+                            "executed_actions": [{"tool": "delete_company_hiring_manager", "result": res}]
+                        }
+
     # Step 3: Explicit creation commands (imperative only, not questions)
     is_creation_intent = (
         re.search(r'^(create|draft|new|add|make|post)\s+(a\s+)?(req[a-z]*|job|role|position|opening|vacanc[a-z]*)', prompt_lower)
@@ -1288,6 +1590,17 @@ def _execute_tool_action(fn_name: str, args: dict, tenant_id: str, company_name:
                 name=args.get("name", ""),
                 email=args.get("email", ""),
                 department=args.get("department", "Engineering"),
+                tenant_id=tenant_id
+            )
+        elif fn_name == "delete_company_hiring_manager":
+            return delete_company_hiring_manager(
+                identifier=args.get("identifier", ""),
+                tenant_id=tenant_id
+            )
+        elif fn_name == "update_hiring_manager_password":
+            return update_hiring_manager_password(
+                identifier=args.get("identifier", ""),
+                new_password=args.get("new_password", "1234"),
                 tenant_id=tenant_id
             )
         elif fn_name == "list_company_requisitions":

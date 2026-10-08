@@ -22,20 +22,28 @@ def send_email_via_gmail(
     to_email: str,
     subject: str,
     html_content: str,
-    sender_email: str = GMAIL_SENDER_EMAIL,
-    app_password: str = GMAIL_APP_PASSWORD
+    sender_email: Optional[str] = None,
+    app_password: Optional[str] = None
 ) -> Dict[str, Any]:
     """Send an email to any recipient using Gmail SMTP."""
     if not to_email:
         return {"status": "skipped", "reason": "No candidate email provided"}
 
-    if not sender_email or not app_password:
+    sender = (sender_email or os.getenv("GMAIL_SENDER_EMAIL") or GMAIL_SENDER_EMAIL or "").strip()
+    pw = (app_password or os.getenv("GMAIL_APP_PASSWORD") or GMAIL_APP_PASSWORD or "").strip()
+    if not sender or not pw:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        sender = (os.getenv("GMAIL_SENDER_EMAIL") or "").strip()
+        pw = (os.getenv("GMAIL_APP_PASSWORD") or "").strip()
+
+    if not sender or not pw:
         return {"status": "skipped", "reason": "Gmail credentials not configured (GMAIL_SENDER_EMAIL / GMAIL_APP_PASSWORD)"}
 
-    clean_password = app_password.replace(" ", "")
+    clean_password = pw.replace(" ", "")
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = f"Hiring Team <{sender_email}>"
+    msg["From"] = f"Hiring Team <{sender}>"
     msg["To"] = to_email
     msg["Subject"] = subject
 
