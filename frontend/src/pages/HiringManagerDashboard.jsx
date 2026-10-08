@@ -1602,137 +1602,173 @@ export default function HiringManagerDashboard() {
 
       // 2. Draft requisition cards from backend tool or context
       let reqDraft = null;
+      // Check if user is updating draft openings
+      let explicitOpenings = null;
+      const openMatch =
+        prompt.match(/(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i) ||
+        prompt.match(/(?:to|as|is|be)\s+(\d+)\s*(?:openings?|headcount|positions?|seats?)/i) ||
+        prompt.match(/(?:change|set|update|make)\s+(?:the\s+)?(?:number\s+of\s+)?openings?\s+(?:to|as|is|be)?\s*(\d+)/i) ||
+        prompt.match(/number\s+of\s+openings?\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i);
+      if (openMatch && openMatch[1]) {
+        explicitOpenings = parseInt(openMatch[1], 10);
+      }
+
+      const prevDraft = [...messages].reverse().find((m) => m.requisitionDraft)?.requisitionDraft;
+      const isOpeningsUpdate = /opening|openings|headcount|vacanc|positions|seats/i.test(textLower);
+      const isSkillUpdate = textLower.includes('skill') || textLower.includes('tech stack');
+      const isSummaryUpdate = textLower.includes('role summary') || textLower.includes('summary') || textLower.includes('job description') || textLower.includes('description');
+      const isDraftIntent = textLower.includes('draft') || textLower.includes('create req') || replyContent.toLowerCase().includes('drafted the requisition') || replyContent.toLowerCase().includes('draft details below');
+
       const draftAction = executedActions.find((a) => a.tool === 'draft_hiring_requisition');
       if (draftAction && draftAction.result) {
         const r = draftAction.result;
+        const resolvedOpenings = explicitOpenings || parseInt(r.openings || r.headcount, 10) || prevDraft?.openings || 1;
+        let cleanSummary = r.job_description || prevDraft?.summary || `We are seeking a talented ${r.title || 'professional'} to join our engineering team.`;
+        cleanSummary = cleanSummary.replace(/\b(?:number\s+of\s+)?openings?\s*[:=]?\s*\d+\.?/gi, '').trim();
+
         reqDraft = {
-          id: `draft-${Date.now()}`,
-          title: r.title || 'Job Requisition',
-          department: r.department || 'Engineering',
-          location: r.location || 'Bangalore, India (Hybrid)',
-          experience: r.experience_level || 'Mid (2-4 yrs)',
-          employment_type: r.employment_type || 'Contract',
-          hiring_model: (r.location && r.location.toLowerCase().includes('remote')) ? 'Remote' : 'Hybrid',
-          openings: 1,
-          target_start_date: 'Flexible',
+          id: prevDraft?.id || `draft-${Date.now()}`,
+          title: r.title || prevDraft?.title || 'Job Requisition',
+          department: r.department || prevDraft?.department || 'Engineering',
+          location: r.location || prevDraft?.location || 'Bangalore, India (Hybrid)',
+          experience: r.experience_level || prevDraft?.experience || 'Mid (2-4 yrs)',
+          employment_type: r.employment_type || prevDraft?.employment_type || 'Contract',
+          hiring_model: (r.location && r.location.toLowerCase().includes('remote')) ? 'Remote' : (prevDraft?.hiring_model || 'Hybrid'),
+          openings: resolvedOpenings,
+          target_start_date: prevDraft?.target_start_date || 'Flexible',
           skills: Array.isArray(r.skills)
             ? r.skills
             : typeof r.skills === 'string'
             ? r.skills.split(',').map((s) => s.trim()).filter(Boolean)
-            : ['Python', 'FastAPI', 'PostgreSQL', 'Docker'],
-          summary: r.job_description || `We are seeking a talented ${r.title || 'professional'} to join our engineering team.`,
+            : (prevDraft?.skills || ['Python', 'FastAPI', 'PostgreSQL', 'Docker']),
+          summary: cleanSummary,
         };
-      } else {
-        const prevDraft = [...messages].reverse().find((m) => m.requisitionDraft)?.requisitionDraft;
-        const isSkillUpdate = textLower.includes('skill') || textLower.includes('tech stack');
-        const isSummaryUpdate = textLower.includes('role summary') || textLower.includes('summary') || textLower.includes('job description') || textLower.includes('description');
-        const isDraftIntent = textLower.includes('draft') || textLower.includes('create req') || replyContent.toLowerCase().includes('drafted the requisition') || replyContent.toLowerCase().includes('draft details below');
 
-        if (prevDraft && (isSkillUpdate || isSummaryUpdate || isDraftIntent)) {
-          let updatedSkills = prevDraft.skills;
-          let updatedSummary = prevDraft.summary || prevDraft.job_description;
-
-          if (isSkillUpdate) {
-            let skillText = '';
-            const m =
-              prompt.match(/(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
-              prompt.match(/(?:key\s*skills?)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
-              prompt.match(/want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)/i);
-            if (m && m[1]) {
-              skillText = m[1].replace(/\bonly\b/gi, '').trim();
-            } else if (textLower.includes('python') || textLower.includes('react')) {
-              skillText = prompt;
-            }
-
-            if (skillText) {
-              const parsed = skillText
-                .split(/,|\band\b|&/i)
-                .map((s) => s.replace(/[^a-zA-Z0-9\.\+#\-]/g, '').trim())
-                .filter((s) => s && !['i', 'want', 'key', 'skill', 'skills', 'as', 'only', 'to', 'the', 'for'].includes(s.toLowerCase()))
-                .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
-              if (parsed.length > 0) {
-                updatedSkills = parsed;
-              }
-            }
-          }
-
-          if (isSummaryUpdate) {
-            const m = prompt.match(/(?:role\s*summary|summary|job\s*description|description)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)/i);
-            if (m && m[1] && m[1].trim()) {
-              updatedSummary = m[1].trim();
-            }
-          }
-
-          const updatedDraftObj = {
-            ...prevDraft,
-            skills: updatedSkills,
-            summary: updatedSummary,
-            job_description: updatedSummary,
-          };
-
-          reqDraft = updatedDraftObj;
-
+        if (prevDraft) {
           setMessages((prev) =>
             prev.map((m) =>
               m.requisitionDraft
-                ? { ...m, requisitionDraft: { ...m.requisitionDraft, ...updatedDraftObj } }
+                ? { ...m, requisitionDraft: { ...m.requisitionDraft, ...reqDraft } }
                 : m
             )
           );
-
-          if (replyContent.toLowerCase().includes('requires the skill list') || replyContent.toLowerCase().includes('3-5') || replyContent.toLowerCase().includes('3 to 5')) {
-            replyContent = `Got it! I've updated the draft for **${updatedDraftObj.title}** with key skills: **${Array.isArray(updatedSkills) ? updatedSkills.join(', ') : updatedSkills}**. The draft card above has been updated.`;
-          }
-        } else if (isDraftIntent) {
-          let roleTitle = 'Python Backend Engineer';
-          const match = replyContent.match(/for\s+\*\*?([A-Za-z0-9\s\/\+\#\-]+?)\*\*?(?:\s*\(|\.|\?|$|,)/i) ||
-                        replyContent.match(/requisition for\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s*\(|\.|\?|$|,)/i);
-          if (match && match[1] && match[1].trim()) {
-            roleTitle = match[1].trim();
-          }
-          reqDraft = {
-            id: `draft-${Date.now()}`,
-            title: roleTitle,
-            department: 'Engineering',
-            location: 'Bangalore, India (Hybrid)',
-            experience: 'Mid (2-4 yrs)',
-            employment_type: 'Contract',
-            hiring_model: 'Hybrid',
-            openings: 1,
-            target_start_date: 'Flexible',
-            skills: roleTitle.toLowerCase().includes('python')
-              ? ['Python', 'FastAPI', 'PostgreSQL', 'Redis', 'Docker']
-              : ['Kubernetes', 'AWS', 'Terraform', 'CI/CD', 'Security'],
-            summary: `We are looking for a ${roleTitle} to help build and maintain secure, scalable systems and robust APIs.`,
-          };
         }
+      } else if (prevDraft && (isOpeningsUpdate || isSkillUpdate || isSummaryUpdate || isDraftIntent)) {
+        let updatedSkills = prevDraft.skills;
+        let updatedSummary = prevDraft.summary || prevDraft.job_description;
+        let updatedOpenings = explicitOpenings || prevDraft.openings || 1;
+
+        if (isSkillUpdate) {
+          let skillText = '';
+          const m =
+            prompt.match(/(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
+            prompt.match(/(?:key\s*skills?)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
+            prompt.match(/want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)/i);
+          if (m && m[1]) {
+            skillText = m[1].replace(/\bonly\b/gi, '').trim();
+          } else if (textLower.includes('python') || textLower.includes('react')) {
+            skillText = prompt;
+          }
+
+          if (skillText) {
+            const parsed = skillText
+              .split(/,|\band\b|&/i)
+              .map((s) => s.replace(/[^a-zA-Z0-9\.\+#\-]/g, '').trim())
+              .filter((s) => s && !['i', 'want', 'key', 'skill', 'skills', 'as', 'only', 'to', 'the', 'for'].includes(s.toLowerCase()))
+              .map((s) => s.charAt(0).toUpperCase() + s.slice(1));
+            if (parsed.length > 0) {
+              updatedSkills = parsed;
+            }
+          }
+        }
+
+        if (isSummaryUpdate) {
+          const m = prompt.match(/(?:role\s*summary|summary|job\s*description|description)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)/i);
+          if (m && m[1] && m[1].trim()) {
+            updatedSummary = m[1].trim();
+          }
+        }
+
+        if (updatedSummary) {
+          updatedSummary = updatedSummary.replace(/\b(?:number\s+of\s+)?openings?\s*[:=]?\s*\d+\.?/gi, '').trim();
+        }
+
+        const updatedDraftObj = {
+          ...prevDraft,
+          openings: updatedOpenings,
+          skills: updatedSkills,
+          summary: updatedSummary,
+          job_description: updatedSummary,
+        };
+
+        reqDraft = updatedDraftObj;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.requisitionDraft
+              ? { ...m, requisitionDraft: { ...m.requisitionDraft, ...updatedDraftObj } }
+              : m
+          )
+        );
+
+        if (isOpeningsUpdate) {
+          replyContent = `Got it! I've updated the number of openings for **${updatedDraftObj.title}** to **${updatedOpenings}**. The draft card above has been updated.`;
+        } else if (replyContent.toLowerCase().includes('requires the skill list') || replyContent.toLowerCase().includes('3-5') || replyContent.toLowerCase().includes('3 to 5')) {
+          replyContent = `Got it! I've updated the draft for **${updatedDraftObj.title}** with key skills: **${Array.isArray(updatedSkills) ? updatedSkills.join(', ') : updatedSkills}**. The draft card above has been updated.`;
+        }
+      } else if (isDraftIntent) {
+        let roleTitle = 'Python Backend Engineer';
+        const match = replyContent.match(/for\s+\*\*?([A-Za-z0-9\s\/\+\#\-]+?)\*\*?(?:\s*\(|\.|\?|$|,)/i) ||
+                      replyContent.match(/requisition for\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s*\(|\.|\?|$|,)/i);
+        if (match && match[1] && match[1].trim()) {
+          roleTitle = match[1].trim();
+        }
+        reqDraft = {
+          id: `draft-${Date.now()}`,
+          title: roleTitle,
+          department: 'Engineering',
+          location: 'Bangalore, India (Hybrid)',
+          experience: 'Mid (2-4 yrs)',
+          employment_type: 'Contract',
+          hiring_model: 'Hybrid',
+          openings: explicitOpenings || 1,
+          target_start_date: 'Flexible',
+          skills: roleTitle.toLowerCase().includes('python')
+            ? ['Python', 'FastAPI', 'PostgreSQL', 'Redis', 'Docker']
+            : ['Kubernetes', 'AWS', 'Terraform', 'CI/CD', 'Security'],
+          summary: `We are looking for a ${roleTitle} to help build and maintain secure, scalable systems and robust APIs.`,
+        };
       }
 
       // 3. Requisitions list results from backend tool or query
       let reqList = null;
-      const listAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions');
-      if (listAction && Array.isArray(listAction.result) && listAction.result.length > 0) {
-        reqList = listAction.result;
-      }
+      // CRITICAL: If we have an active draft card, NEVER attach or display published requisitions!
+      if (!reqDraft) {
+        const listAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions');
+        if (listAction && Array.isArray(listAction.result) && listAction.result.length > 0) {
+          reqList = listAction.result;
+        }
 
-      // Robust typo-tolerant check for requisitions query (e.g. "requsitions", "requisitions", "requsition", "reqs", "jobs", "roles")
-      const isReqQuery =
-        /(requsition|requisition|requstion|requision|recquisition|req|role|job|opening|position)s?/i.test(textLower) &&
-        /(show|list|all|view|display|what|get|see|active|open|draft|have|tell)/i.test(textLower);
+        // Strict word boundary check for requisitions listing query (avoid matching 'open' in 'opening' or 'change')
+        const isReqQuery =
+          !/change|update|set|make|edit|modify/i.test(textLower) &&
+          /\b(requsition|requisition|requstion|requision|recquisition|req|role|job|position)s?\b/i.test(textLower) &&
+          /\b(show|list|all|view|display|what|get|see|active|have|tell|directory)\b/i.test(textLower);
 
-      if (
-        !reqList &&
-        (isReqQuery ||
-          replyContent.toLowerCase().includes('job requisitions directory') ||
-          replyContent.toLowerCase().includes('live requisition') ||
-          replyContent.toLowerCase().includes('total requisitions'))
-      ) {
-        reqList = requisitions.length > 0 ? requisitions : null;
-      }
+        if (
+          !reqList &&
+          (isReqQuery ||
+            replyContent.toLowerCase().includes('job requisitions directory') ||
+            replyContent.toLowerCase().includes('live requisition') ||
+            replyContent.toLowerCase().includes('total requisitions'))
+        ) {
+          reqList = requisitions.length > 0 ? requisitions : null;
+        }
 
-      // If user specifically asked for requisitions and we have cards, ensure reply text is informative
-      if (isReqQuery && reqList && reqList.length > 0 && (!replyContent || replyContent.includes('0 Total') || replyContent.startsWith('I am here to help'))) {
-        replyContent = `Here are the ${reqList.length} requisitions currently in your active pipeline:`;
+        // If user specifically asked for requisitions and we have cards, ensure reply text is informative
+        if (isReqQuery && reqList && reqList.length > 0 && (!replyContent || replyContent.includes('0 Total') || replyContent.startsWith('I am here to help'))) {
+          replyContent = `Here are the ${reqList.length} requisitions currently in your active pipeline:`;
+        }
       }
 
       // If user asked for candidates and we have cards, ensure reply text is informative
@@ -3256,8 +3292,8 @@ export default function HiringManagerDashboard() {
                             </div>
                           )}
 
-                          {/* Inline Requisitions List Cards */}
-                          {msg.requisitionsList && msg.requisitionsList.length > 0 && (
+                          {/* Inline Requisitions List Cards - Only show when NOT viewing a requisition draft card */}
+                          {!msg.requisitionDraft && msg.requisitionsList && msg.requisitionsList.length > 0 && (
                             <div className="space-y-2 mt-3 w-full max-w-4xl xl:max-w-5xl text-left">
                               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                                 {msg.requisitionsList.map((req) => {

@@ -414,7 +414,8 @@ TOOLS = [
                     "experience_level": {"type": "string", "description": "Experience level e.g. Senior (4-7 yrs)"},
                     "salary_range": {"type": "string", "description": "Target salary budget e.g. $120,000 - $150,000 / yr"},
                     "skills": {"type": "string", "description": "Required skills / tech stack e.g. React, Node.js, Python"},
-                    "job_description": {"type": "string", "description": "Brief description of responsibilities & key duties"}
+                    "job_description": {"type": "string", "description": "Brief description of responsibilities & key duties"},
+                    "openings": {"type": "integer", "description": "Number of open positions/headcount for this role, e.g. 1, 2, 5"}
                 },
                 "required": ["title"]
             }
@@ -915,12 +916,17 @@ def list_hiring_requisitions(user_id: str, tenant_id: str, status_filter: str = 
     return results
 
 
-def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = ""):
+def draft_requisition_preview(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", openings: Any = 1):
     dept = department or "Engineering & Product"
     loc = location or "Bangalore / Hybrid Remote"
     emp_type = employment_type or "Contract (6 Months)"
     exp = experience_level or "Mid (3-5 years)"
     salary = salary_range or "₹1,500 - ₹2,200 / hr"
+
+    try:
+        num_openings = int(openings) if openings is not None else 1
+    except (ValueError, TypeError):
+        num_openings = 1
 
     # Allow user-specified skills of any length; only fallback to auto-generation if empty
     raw_skills = [s.strip() for s in (skills or "").split(",") if s.strip()] if isinstance(skills, str) else list(skills or [])
@@ -928,7 +934,10 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
         raw_skills = generate_role_skills(title=title, detected_skills=[], prompt=f"{title}")
     tech_skills = ", ".join(raw_skills)
 
-    jd = job_description or f"We are seeking a talented {title} with {exp} of experience and expertise in {tech_skills} to lead component architecture, collaborate with cross-functional product teams, and build robust digital experiences."
+    raw_jd = job_description or f"We are seeking {num_openings} talented {title}(s) with {exp} of experience and expertise in {tech_skills} to lead component architecture, collaborate with cross-functional product teams, and build robust digital experiences."
+    # Clean any accidental "Number of openings: X" or "openings: X" appended into role summary
+    clean_jd = re.sub(r"\b(?:number\s+of\s+)?openings?\s*[:=]?\s*\d+\.?", "", raw_jd, flags=re.IGNORECASE).strip()
+    clean_jd = re.sub(r"\s{2,}", " ", clean_jd).strip()
 
     is_complete = bool(title and title.strip())
 
@@ -939,14 +948,16 @@ def draft_requisition_preview(title: str, department: str = "", location: str = 
         "employment_type": emp_type,
         "experience_level": exp,
         "salary_range": salary,
+        "openings": num_openings,
+        "headcount": num_openings,
         "skills": tech_skills,
-        "job_description": jd,
+        "job_description": clean_jd or raw_jd,
         "is_complete": is_complete,
         "created_at": _utcnow_iso()
     }
 
 
-def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = ""):
+def create_hiring_requisition(title: str, department: str = "", location: str = "", employment_type: str = "", experience_level: str = "", salary_range: str = "", skills: str = "", job_description: str = "", user_id: str = "", tenant_id: str = "local", user_name: str = "", openings: Any = 1):
     """Enforce mandatory Director Approval for all Hiring Manager created requisitions."""
     return submit_requisition_for_director_approval(
         title=title,
@@ -959,7 +970,8 @@ def create_hiring_requisition(title: str, department: str = "", location: str = 
         job_description=job_description,
         user_id=user_id,
         user_name=user_name or "Hiring Manager",
-        tenant_id=tenant_id
+        tenant_id=tenant_id,
+        openings=openings
     )
 
 
@@ -975,13 +987,20 @@ def submit_requisition_for_director_approval(
     user_id: str = "",
     user_name: str = "",
     tenant_id: str = "local",
-    req_id: str = ""
+    req_id: str = "",
+    openings: Any = 1
 ):
     """Save requisition with 'Pending Approval' status and trigger Director notification."""
     session = get_session()
     now_iso = _utcnow_iso()
     new_id = req_id if req_id else str(uuid.uuid4())
     hm_display_name = user_name or "Hiring Manager"
+
+    try:
+        num_openings = int(openings) if openings is not None else 1
+    except (ValueError, TypeError):
+        num_openings = 1
+
     structured_role = {
         "title": title,
         "department": department or "Engineering & Product",
@@ -989,6 +1008,8 @@ def submit_requisition_for_director_approval(
         "employment_type": employment_type or "Contract (6 Months)",
         "experience_level": experience_level or "Mid-Level",
         "salary_range": salary_range or "₹1,500 - ₹2,200 / hr",
+        "openings": num_openings,
+        "headcount": num_openings,
         "skills": skills or "AWS, Docker, Kubernetes, CI/CD",
         "job_description": job_description or f"Job requisition for {title} submitted for Director approval.",
         "hiring_manager": hm_display_name,
@@ -1039,6 +1060,8 @@ def submit_requisition_for_director_approval(
                 "hiring_manager_name": hm_display_name,
                 "status": "Pending Approval",
                 "title": title,
+                "openings": num_openings,
+                "headcount": num_openings,
                 "department": department or "Engineering & Product",
                 "location": location or "Bangalore / Hybrid Remote",
                 "structured_role": structured_role,
@@ -3446,7 +3469,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     "- DIRECT PUBLICATION IS STRICTLY FORBIDDEN. In TermJobs, Hiring Managers CANNOT publish requisitions directly. ALL requisitions require mandatory Director Approval.\n"
                     "- When the user asks to create, draft, or make a job requisition, provides role requirements, or specifies key skills, ALWAYS call the `draft_hiring_requisition` tool to generate an interactive draft preview card. ALWAYS honor whatever exact skills the user specifies (e.g. 'i want key skill as python and react only', 'skills: python, react'). Never refuse or demand a 3-5 skill minimum when the user specifies skills.\n"
                     "- If the user asks generally to create a requisition without specifying a role (e.g. 'can u create a requisition', 'create a req', 'new job', 'can u create a requsion'), ALWAYS call `show_role_selection_dropdown`.\n"
-                    "- If the user wants to change, set, or edit any field of an active draft (e.g. key skills, role summary, budget, location, experience), ALWAYS call `draft_hiring_requisition` with the updated field and previous draft values.\n"
+                    "- If the user wants to change, set, or edit any field of an active draft (e.g. number of openings/headcount, key skills, role summary, budget, location, experience), ALWAYS call `draft_hiring_requisition` with the updated field and previous draft values. When changing openings (e.g. 'change number of opening to 2', 'set openings to 3'), pass `openings: 2` (or the requested integer) directly to `draft_hiring_requisition`. NEVER append 'Number of openings' into the role summary or job description text.\n"
                     "- When the user asks about 'requisitions', 'active requisitions', 'live requisitions', 'open requisitions', or 'job directory', ALWAYS call the `list_hiring_requisitions` tool.\n"
                     "- Only call `submit_for_director_approval` when the user explicitly asks to send or submit the requisition to the Director for approval.\n"
                     "CRITICAL FOR CANDIDATE INQUIRIES:\n"
@@ -3974,18 +3997,20 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             "executed_actions": [{"tool": "schedule_candidate_interview", "result": sched_res}]
         }
 
-    # Intercept Draft Field Modification intent (e.g. "i want key skill as python and react only", "change skills to...", "role summary: ...")
+    # Intercept Draft Field Modification intent (e.g. "change number of opening to 2", "i want key skill as python and react only", "change skills to...", "role summary: ...")
     is_skill_change = bool(re.search(r"\b(skill|skills|tech\s*stack)\b", prompt_lower))
     is_summary_change = bool(re.search(r"\b(role\s*summary|summary|job\s*description|description|jd)\b", prompt_lower))
-    is_field_change = is_skill_change or is_summary_change or bool(re.search(r"\b(change|update|set|modify|make|want)\b", prompt_lower) and any(f in prompt_lower for f in ["location", "experience", "department", "openings", "skills", "summary"]))
+    is_opening_change = bool(re.search(r"\b(openings?|headcount|vacanc|positions?|seats?)\b", prompt_lower))
+    is_field_change = is_skill_change or is_summary_change or is_opening_change or bool(re.search(r"\b(change|update|set|modify|make|want)\b", prompt_lower) and any(f in prompt_lower for f in ["location", "experience", "department", "opening", "openings", "skills", "summary"]))
 
     if is_field_change and not any(k in prompt_lower for k in ["interview plan", "schedule interview", "timesheet", "pending"]):
-        last_role_title = "Forward Deployment Engineer"
+        last_role_title = "Python Backend Developer"
         last_role_dept = "Engineering"
         last_role_loc = "Kozhikode"
         last_role_exp = "Mid (2-5 yrs)"
-        last_role_skills = "Python, React"
+        last_role_skills = "React, Python"
         last_role_summary = ""
+        last_role_openings = 1
 
         # Scan history for previous role context
         for h in reversed(history or []):
@@ -4006,6 +4031,18 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 last_role_exp = "Mid (2-5 yrs)"
                 last_role_summary = "Design, develop, and maintain forward deployment pipelines and automation tools."
                 break
+
+        if is_opening_change:
+            m = re.search(r"(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)", prompt_clean, re.IGNORECASE)
+            if not m:
+                m = re.search(r"(?:to|as|is|be)\s+(\d+)", prompt_clean, re.IGNORECASE)
+            if not m:
+                m = re.search(r"\b(\d+)\b", prompt_clean)
+            if m and m.group(1):
+                try:
+                    last_role_openings = int(m.group(1))
+                except ValueError:
+                    last_role_openings = 1
 
         if is_skill_change:
             skill_text = prompt_clean
@@ -4030,11 +4067,21 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             location=last_role_loc,
             experience_level=last_role_exp,
             skills=last_role_skills,
-            job_description=last_role_summary or f"Design, develop, and maintain {last_role_title} solutions and pipelines with hands-on expertise in {last_role_skills}."
+            job_description=last_role_summary or f"Design, develop, and maintain {last_role_title} solutions and pipelines with hands-on expertise in {last_role_skills}.",
+            openings=last_role_openings
         )
 
+        reply_parts = []
+        if is_opening_change:
+            reply_parts.append(f"to **{last_role_openings} opening(s)**")
+        if is_skill_change:
+            reply_parts.append(f"with key skills: **{last_role_skills}**")
+        if is_summary_change:
+            reply_parts.append("with the updated role summary")
+        change_desc = " ".join(reply_parts) if reply_parts else "with your requested updates"
+
         return {
-            "reply": f"Got it! I've updated the draft for **{last_role_title}** with key skills: **{last_role_skills}**.\n\nPlease review the updated draft card below — would you like to send this to the Director for approval?",
+            "reply": f"Got it! I've updated the draft for **{last_role_title}** {change_desc}.\n\nPlease review the updated draft card below — would you like to send this to the Director for approval?",
             "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
         }
 
