@@ -42,6 +42,7 @@ const NORMALIZED = {
   Structuring: 'Structuring',
   PendingApproval: 'PendingApproval',
   Pending_Approval: 'PendingApproval',
+  'Pending Approval': 'PendingApproval',
   Published: 'Published',
   Closed: 'Closed',
 };
@@ -290,6 +291,21 @@ export default function RequisitionDetail() {
     }
   };
 
+  const handleSubmitForDirectorApproval = async () => {
+    setBusy('submit-approval');
+    setError('');
+    setInfo('');
+    try {
+      await request(`/requisitions/${id}/submit-for-approval`, { method: 'POST', token });
+      setInfo('Requisition submitted to Director for approval!');
+      load();
+    } catch (err) {
+      setError(err.message || 'Failed to submit requisition for Director approval');
+    } finally {
+      setBusy('');
+    }
+  };
+
   const handleStartIntake = async () => {
     setBusy('start');
     try {
@@ -434,17 +450,38 @@ export default function RequisitionDetail() {
                   </button>
 
                   {status !== 'Published' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handlePublish();
-                        setShowActionMenu(false);
-                      }}
-                      className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
-                    >
-                      <Sparkles size={13} className="text-gray-500" />
-                      <span>Publish Requisition</span>
-                    </button>
+                    user?.role === 'Hiring Manager' ? (
+                      status === 'Pending Approval' || status === 'PendingApproval' ? (
+                        <div className="w-full px-3 py-1.5 text-xs text-amber-700 bg-amber-50 rounded-xl flex items-center gap-2 font-medium">
+                          <Clock size={13} className="text-amber-600" />
+                          <span>Awaiting Director Approval</span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            handleSubmitForDirectorApproval();
+                            setShowActionMenu(false);
+                          }}
+                          className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                        >
+                          <ShieldCheck size={13} className="text-gray-500" />
+                          <span>Submit for Director Approval</span>
+                        </button>
+                      )
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handlePublish();
+                          setShowActionMenu(false);
+                        }}
+                        className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
+                      >
+                        <Sparkles size={13} className="text-gray-500" />
+                        <span>Publish Requisition</span>
+                      </button>
+                    )
                   )}
 
                   <div className="h-px bg-black/[0.04] my-1" />

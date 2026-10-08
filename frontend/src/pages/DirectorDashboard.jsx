@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -226,12 +226,17 @@ export default function DirectorDashboard({ view = 'overview' }) {
     }
   };
 
+  const isReqPendingApproval = useCallback((r) => {
+    if (!r) return false;
+    if (r.director_approved) return false;
+    const s = String(r.status || '').toLowerCase().replace(/[\s_-]+/g, '');
+    return s === 'pendingapproval' || s === 'pending' || s.includes('pending');
+  }, []);
+
   const pendingApprovalsList = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
-    return list.filter(
-      (r) => (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved
-    );
-  }, [requisitions]);
+    return list.filter(isReqPendingApproval);
+  }, [requisitions, isReqPendingApproval]);
 
   const pendingWorkOrders = useMemo(() => {
     const list = Array.isArray(workOrders) ? workOrders : [];
@@ -287,7 +292,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
       if (!matchSearch) return false;
 
       if (statusFilter === 'PENDING') {
-        return (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved;
+        return isReqPendingApproval(r);
       }
       if (statusFilter === 'APPROVED') {
         return Boolean(r.director_approved) || r.status === 'Published';
@@ -811,7 +816,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredRequisitions.map((r) => {
-                  const isPending = (r.status === 'PendingApproval' || r.status === 'Pending_Approval') && !r.director_approved;
+                  const isPending = isReqPendingApproval(r);
                   return (
                     <tr
                       key={r.id}
