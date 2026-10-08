@@ -863,6 +863,8 @@ const PREDEFINED_ROLES = [
       });
 
       const newId = res.id || res.requisition_id;
+      window.dispatchEvent(new CustomEvent('refresh-hm-data'));
+      window.dispatchEvent(new CustomEvent('tj-requisitions-updated'));
       if (newId) {
         navigate(`/dashboard/requisitions/${newId}`);
       } else {

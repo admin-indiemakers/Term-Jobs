@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
@@ -211,40 +211,73 @@ export default function DashboardLayout() {
 
   // Dynamic live count badges for Hiring Manager
   const [hmCounts, setHmCounts] = useState({ requisitions: 0, candidates: 0, openIssues: 0, pendingTimesheets: 0, pendingExpenses: 0 });
-  const hasFetchedHmCountsRef = useRef(false);
+
+  const fetchHmCounts = useCallback((force = false) => {
+    if (user?.role !== 'Hiring Manager' || !token) return;
+    Promise.all([
+      request('/api/requisitions', { token, forceRefresh: force }).catch(() => []),
+      request('/api/candidates/shortlisted', { token, forceRefresh: force }).catch(() => []),
+      request('/api/candidates?status=Accepted', { token, forceRefresh: force }).catch(() => []),
+      request('/api/onboarding/issues', { token, forceRefresh: force }).catch(() => []),
+      request('/api/workforce/stats', { token, forceRefresh: force }).catch(() => null),
+    ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
+      const rCount = Array.isArray(reqs) ? reqs.length : (Array.isArray(reqs?.requisitions) ? reqs.requisitions.length : 0);
+      const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
+      const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
+      const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
+      const openIssues = issueList.filter((i) => (i.status || '').toLowerCase() === 'open').length;
+      const pendingTs = wfStats?.stats?.pending_timesheets || 0;
+      const pendingExp = wfStats?.stats?.pending_expenses || 0;
+      setHmCounts((prev) => ({
+        ...prev,
+        requisitions: rCount,
+        candidates: sList.length + aList.length,
+        openIssues: openIssues,
+        pendingTimesheets: pendingTs,
+        pendingExpenses: pendingExp,
+      }));
+    }).catch(() => { });
+  }, [user?.role, token]);
 
   useEffect(() => {
-    if (user?.role === 'Hiring Manager' && token && !hasFetchedHmCountsRef.current) {
-      hasFetchedHmCountsRef.current = true;
-      // Defer badge polling by 2.5s so active page loads with maximum network bandwidth and zero delay
-      const timer = setTimeout(() => {
-        Promise.all([
-          request('/api/requisitions', { token }).catch(() => []),
-          request('/api/candidates/shortlisted', { token }).catch(() => []),
-          request('/api/candidates?status=Accepted', { token }).catch(() => []),
-          request('/api/onboarding/issues', { token }).catch(() => []),
-          request('/api/workforce/stats', { token }).catch(() => null),
-        ]).then(([reqs, shortlisted, accepted, issuesData, wfStats]) => {
-          const rCount = Array.isArray(reqs) ? reqs.length : 0;
-          const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
-          const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
-          const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
-          const openIssues = issueList.filter((i) => i.status === 'open').length;
-          const pendingTs = wfStats?.stats?.pending_timesheets || 0;
-          const pendingExp = wfStats?.stats?.pending_expenses || 0;
-          setHmCounts({
-            requisitions: rCount,
-            candidates: sList.length + aList.length,
-            openIssues: openIssues,
-            pendingTimesheets: pendingTs,
-            pendingExpenses: pendingExp,
-          });
-        }).catch(() => { });
-      }, 2500);
+    if (user?.role === 'Hiring Manager' && token) {
+      // Immediate fresh fetch on role ready/mount
+      fetchHmCounts(true);
 
-      return () => clearTimeout(timer);
+      const handleRefresh = (e) => {
+        if (typeof e?.detail?.count === 'number') {
+          setHmCounts((prev) => ({ ...prev, requisitions: e.detail.count }));
+        } else if (typeof e?.detail?.requisitionCount === 'number') {
+          setHmCounts((prev) => ({ ...prev, requisitions: e.detail.requisitionCount }));
+        } else {
+          fetchHmCounts(true);
+        }
+      };
+
+      const handleReqCount = (e) => {
+        if (typeof e?.detail?.count === 'number') {
+          setHmCounts((prev) => ({ ...prev, requisitions: e.detail.count }));
+        }
+      };
+
+      window.addEventListener('refresh-hm-data', handleRefresh);
+      window.addEventListener('tj-requisitions-updated', handleRefresh);
+      window.addEventListener('tj-requisition-count-updated', handleReqCount);
+
+      return () => {
+        window.removeEventListener('refresh-hm-data', handleRefresh);
+        window.removeEventListener('tj-requisitions-updated', handleRefresh);
+        window.removeEventListener('tj-requisition-count-updated', handleReqCount);
+      };
     }
-  }, [user?.role, token]);
+  }, [user?.role, token, fetchHmCounts]);
+
+  // Keep counts in sync on route transitions
+  useEffect(() => {
+    if (user?.role === 'Hiring Manager' && token) {
+      fetchHmCounts(false);
+    }
+  }, [location.pathname, user?.role, token, fetchHmCounts]);
 
   // Global mobile sidebar drawer listener
   useEffect(() => {
