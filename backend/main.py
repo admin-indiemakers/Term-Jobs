@@ -2940,6 +2940,34 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
                 db_req.director_approved_at = None
             session.commit()
 
+    try:
+        from modules.shared.db import db
+        now_iso = _utcnow().isoformat()
+        db["requisitions"].update_one(
+            {"id": requisition_id},
+            {"$set": {
+                "status": "Pending Approval",
+                "director_approved": False,
+                "updated_at": now_iso
+            }}
+        )
+        if current_user.role not in ("Director", "Admin", "Super Admin"):
+            req_title = db_req.title if db_req else "Job Requisition"
+            db["notifications"].insert_one({
+                "id": str(uuid.uuid4()),
+                "tenant_id": str(current_user.tenant_id or "local"),
+                "type": "requisition_approval_request",
+                "title": f"New Requisition Approval Request: {req_title}",
+                "message": f"{current_user.name or 'Hiring Manager'} submitted requisition '{req_title}' for Director approval.",
+                "requisition_id": requisition_id,
+                "target_role": "Director",
+                "status": "unread",
+                "created_at": now_iso
+            })
+    except Exception:
+        pass
+
+    _cache.clear()
     return _requisition_dict(requisition_id)
 
 
