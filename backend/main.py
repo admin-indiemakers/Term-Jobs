@@ -741,6 +741,7 @@ def _template_dict(t: models.RoleTemplate) -> dict:
 
 
 @app.post("/templates", status_code=201)
+@app.post("/api/templates", status_code=201)
 async def upload_template(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
@@ -748,47 +749,114 @@ async def upload_template(
     """Upload a JSON role template (director-defined) that hiring managers can
     use to pre-fill the New Requisition form.
 
-    Accepts a single template or a ``{"templates": [...]}`` bundle. Each item
-    may use the app's internal ``structured_role`` shape or the director's
-    flat format with nested ``role`` / ``engagement`` / ``commercials`` /
-    ``work_setup`` / ``compliance`` / ``process`` objects.
+    Accepts a single template or a ``{"templates": [...]}`` bundle or an array of templates.
     """
-    if file.content_type not in ("application/json", "text/json"):
-        raise HTTPException(status_code=400, detail="Template must be a JSON file")
-    content = await file.read()
-    try:
-        payload = json.loads(content.decode("utf-8"))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Template file contains invalid JSON")
-    if not isinstance(payload, dict):
-        raise HTTPException(status_code=400, detail="Template JSON must be an object")
+    # 1. Flexible filename and mime type check (many browsers send application/octet-stream or text/plain for .json files)
+    is_json_ext = bool(file.filename and file.filename.lower().endswith(".json"))
+    is_json_mime = (
+        file.content_type in (
+            "application/json", "text/json", "text/plain", "application/octet-stream",
+            "application/x-javascript", "text/javascript", None, ""
+        )
+    )
+    if not (is_json_ext or is_json_mime):
+        raise HTTPException(status_code=400, detail="Template must be a JSON file (.json)")
 
-    bundle = payload.get("templates")
-    items = bundle if isinstance(bundle, list) else [payload]
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Uploaded template file is empty")
+
+    # 2. Resilient decoding (handles UTF-8 BOM, standard UTF-8, and fallback)
+    try:
+        text_content = content.decode("utf-8-sig")
+    except Exception:
+        try:
+            text_content = content.decode("utf-8", errors="replace")
+        except Exception:
+            text_content = content.decode("latin-1", errors="replace")
+
+    try:
+        payload = json.loads(text_content)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Template file contains invalid JSON: {str(e)}")
+
+    # 3. Flexible payload structure: list of templates, bundle object, or single template object
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        bundle = (
+            payload.get("templates") or
+            payload.get("roles") or
+            payload.get("items") or
+            payload.get("data")
+        )
+        items = bundle if isinstance(bundle, list) else [payload]
+    else:
+        raise HTTPException(status_code=400, detail="Template JSON must be an object or array of template objects")
 
     created = []
+    user_tenant = getattr(current_user, "tenant_id", None) or "local"
+    user_id = getattr(current_user, "id", None) or "director"
+
     with get_session() as session:
         for item in items:
             if not isinstance(item, dict):
                 continue
             role, name, description = _template_role(item)
-            title = (role or {}).get("title") or item.get("title") or item.get("name")
+            title = (
+                (role or {}).get("title") or
+                (role or {}).get("job_title") or
+                (role or {}).get("role_title") or
+                item.get("title") or
+                item.get("job_title") or
+                item.get("position_name") or
+                item.get("name") or
+                item.get("position") or
+                item.get("role_title") or
+                name
+            )
             if not title:
-                continue
+                title = "Untitled Role Template"
+
+            if isinstance(role, dict):
+                role["title"] = title
+
+            tpl_name = name or f"Template – {title}"
             tpl = models.RoleTemplate(
-                tenant_id=current_user.tenant_id,
-                created_by=current_user.id,
-                name=name or f"Template  {title}",
+                tenant_id=user_tenant,
+                created_by=user_id,
+                name=tpl_name,
                 description=description or "",
                 structured_role=role,
             )
             session.add(tpl)
             created.append(tpl)
+
+            # Also mirror in MongoDB role_templates collection for high availability
+            try:
+                from modules.shared.db import db as mongo_db
+                mongo_db["role_templates"].update_one(
+                    {"id": tpl.id},
+                    {"$set": {
+                        "id": tpl.id,
+                        "tenant_id": user_tenant,
+                        "created_by": user_id,
+                        "name": tpl_name,
+                        "description": description or "",
+                        "structured_role": role,
+                        "created_at": datetime.now(timezone.utc).isoformat()
+                    }},
+                    upsert=True
+                )
+            except Exception:
+                pass
+
         if not created:
             raise HTTPException(status_code=400, detail="No valid templates found in the JSON file")
         session.commit()
         for tpl in created:
             session.refresh(tpl)
+
     result = [_template_dict(t) for t in created]
     return result if len(result) > 1 else result[0]
 
@@ -951,6 +1019,7 @@ def list_templates(current_user: User = Depends(get_current_user)) -> list[dict]
 
 
 @app.delete("/templates/{template_id}", status_code=204)
+@app.delete("/api/templates/{template_id}", status_code=204)
 def delete_template(template_id: str, current_user: User = Depends(get_current_user)) -> None:
     with get_session() as session:
         tpl = session.get(models.RoleTemplate, template_id)
@@ -960,6 +1029,11 @@ def delete_template(template_id: str, current_user: User = Depends(get_current_u
             raise HTTPException(status_code=403, detail="You do not have access to this template")
         session.delete(tpl)
         session.commit()
+    try:
+        from modules.shared.db import db as mongo_db
+        mongo_db["role_templates"].delete_one({"id": template_id})
+    except Exception:
+        pass
 
 
 # --- requisition lifecycle --------------------------------------------------

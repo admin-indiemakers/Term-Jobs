@@ -110,20 +110,15 @@ export default function DirectorDashboard({ view = 'overview' }) {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const response = await fetch(`${API_BASE_URL}/templates`, {
+      await request('/templates', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
         body: formData,
+        token,
       });
-      if (!response.ok) {
-        const errData = await response.json();
-        throw new Error(errData.detail || 'Upload failed');
-      }
-      await response.json();
       setTemplateMsg(`Template "${file.name}" uploaded successfully.`);
       loadTemplates();
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || 'Upload failed');
     } finally {
       setUploading(false);
       if (templateFileRef.current) templateFileRef.current.value = '';
@@ -138,7 +133,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
       setTemplates((prev) => prev.filter((t) => t.id !== id));
       setTemplateMsg('Template removed.');
     } catch (err) {
-      setError(err.message);
+      setError(err?.message || 'Failed to remove template');
     }
   };
 
@@ -691,7 +686,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
             <input
               ref={templateFileRef}
               type="file"
-              accept=".json,application/json"
+              accept=".json,application/json,text/json,text/plain,application/octet-stream"
               onChange={handleTemplateUpload}
               className="hidden"
             />
@@ -706,6 +701,14 @@ export default function DirectorDashboard({ view = 'overview' }) {
               <span>{uploading ? 'Uploading...' : 'Upload JSON Template'}</span>
             </button>
           </div>
+
+          {/* Inline Upload Status Notification */}
+          {templateMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-900 flex items-center gap-2 shadow-2xs">
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+              <span className="font-semibold">{templateMsg}</span>
+            </div>
+          )}
 
           {templates.length === 0 ? (
             <p className="text-xs text-gray-400 py-4">No role templates uploaded yet.</p>
