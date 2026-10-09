@@ -47,23 +47,6 @@ export function getRequisitionDisplayInfo(r) {
     };
   }
 
-  // Approved: Director sign-off should show Approved, and the requisition status should change to Published.
-  const isApproved = (Boolean(r.director_approved) || r.status === 'Published') && r.status !== 'Closed';
-  if (isApproved) {
-    const approvalDate = r.director_approved_at || r.approved_at || (r.director_approved ? r.updated_at : null);
-    return {
-      status: 'Published',
-      statusBadge: 'Published',
-      signOffType: 'approved',
-      signOffText: r.director_approved_by ? `Approved (${r.director_approved_by})` : 'Approved',
-      approvedBy: r.director_approved_by || r.approved_by || 'Director',
-      approvedAt: approvalDate,
-      isApproved: true,
-      isRejected: false,
-      isPending: false,
-    };
-  }
-
   // Rejected: Director sign-off should show Rejected, and the requisition status should change to Restructuring.
   // When a requisition is in the Restructuring state, the Director sign-off status should clearly indicate that it was rejected and requires revision before resubmission.
   const isRejected =
@@ -83,6 +66,29 @@ export function getRequisitionDisplayInfo(r) {
       rejectionReason: r.rejection_reason || '',
       isRejected: true,
       isApproved: false,
+      isPending: false,
+    };
+  }
+
+  // Approved: Director sign-off should show Approved, and the requisition status should change to Published.
+  const normStatus = String(r.status || '').trim().toLowerCase();
+  const isApproved =
+    (Boolean(r.director_approved) ||
+      normStatus === 'published' ||
+      normStatus === 'approved') &&
+    normStatus !== 'closed';
+
+  if (isApproved) {
+    const approvalDate = r.director_approved_at || r.approved_at || (r.director_approved ? r.updated_at : null);
+    return {
+      status: 'Published',
+      statusBadge: 'Published',
+      signOffType: 'approved',
+      signOffText: r.director_approved_by ? `Approved (${r.director_approved_by})` : 'Approved',
+      approvedBy: r.director_approved_by || r.approved_by || 'Director',
+      approvedAt: approvalDate,
+      isApproved: true,
+      isRejected: false,
       isPending: false,
     };
   }
@@ -255,8 +261,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
     loadTemplates(newTid);
   };
 
-  const loadAll = () => {
-    setLoading(true);
+  const loadAll = (isSilent = false) => {
+    if (!isSilent) setLoading(true);
     const tid = (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id);
     const tplUrl = tid ? `/templates?tenant_id=${tid}` : '/templates';
     Promise.all([
@@ -295,7 +301,9 @@ export default function DirectorDashboard({ view = 'overview' }) {
         setError('');
       })
       .catch((err) => setError(err?.message || 'Failed to load dashboard data'))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!isSilent) setLoading(false);
+      });
   };
 
   useEffect(loadAll, [token]);
@@ -474,7 +482,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
             }
           : prev
       );
-      loadAll();
+      loadAll(true);
     } catch (err) {
       setError(err.message || 'Failed to approve requisition');
     } finally {
@@ -541,7 +549,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
             }
           : prev
       );
-      loadAll();
+      loadAll(true);
     } catch (err) {
       setError(err.message || 'Failed to reject requisition');
     } finally {
@@ -551,11 +559,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const isReqPendingApproval = useCallback((r) => {
     if (!r) return false;
-    if (r.is_deleted || r.status === 'Deleted by HM') return false;
-    if (r.director_approved || r.status === 'Published') return false;
-    if (Boolean(r.rejection_reason) || Boolean(r.rejected_by) || r.status === 'Restructuring') return false;
-    const s = String(r.status || '').toLowerCase().replace(/[\s_-]+/g, '');
-    return s === 'pendingapproval' || s === 'pending' || s.includes('pending');
+    return getRequisitionDisplayInfo(r).isPending;
   }, []);
 
   const pendingApprovalsList = useMemo(() => {
@@ -580,7 +584,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
         token,
       });
       setTemplateMsg(`Work Order for candidate ${cid} approved successfully!`);
-      loadAll();
+      loadAll(true);
     } catch (err) {
       setError(err?.message || 'Failed to approve Work Order.');
     } finally {
@@ -590,7 +594,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const approvedList = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
-    return list.filter((r) => (Boolean(r.director_approved) || r.status === 'Published') && !r.is_deleted && r.status !== 'Deleted by HM');
+    return list.filter((r) => getRequisitionDisplayInfo(r).isApproved);
   }, [requisitions]);
 
   const rejectedList = useMemo(() => {
@@ -598,13 +602,11 @@ export default function DirectorDashboard({ view = 'overview' }) {
     return list.filter((r) => getRequisitionDisplayInfo(r).isRejected);
   }, [requisitions]);
 
-  const publishedCount = (Array.isArray(requisitions) ? requisitions : []).filter(
-    (r) => r.status === 'Published' && !r.is_deleted && r.status !== 'Deleted by HM'
-  ).length;
+  const publishedCount = approvedList.length;
 
   const deletedByHmRequisitions = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
-    return list.filter((r) => r.status === 'Deleted by HM' || r.is_deleted);
+    return list.filter((r) => getRequisitionDisplayInfo(r).isDeleted);
   }, [requisitions]);
 
   const engagedVendors = (Array.isArray(vendors) ? vendors : []).filter((v) => v.engaged).length;
@@ -818,23 +820,31 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
       {/* Metrics Row */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs">
+        <div
+          onClick={() => setStatusFilter('ALL')}
+          className="bg-white hover:border-gray-400 transition-all border border-gray-200/90 rounded-2xl p-4 shadow-xs cursor-pointer group"
+          title="View All Requisitions"
+        >
           <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Total Requisitions</span>
-            <Briefcase size={16} className="text-gray-700" />
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400 group-hover:text-black">Total Requisitions</span>
+            <Briefcase size={16} className="text-gray-700 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black text-gray-900">{requisitions.length}</div>
           <div className="text-[11px] text-gray-500 mt-1 font-medium">Company wide created</div>
         </div>
 
-        <div className={`border rounded-2xl p-4 shadow-xs transition-all ${
-          (pendingApprovalsList.length + pendingWorkOrders.length) > 0
-            ? 'bg-gradient-to-br from-amber-50 to-white border-amber-300 ring-2 ring-amber-400/20'
-            : 'bg-white border-gray-200/90'
-        }`}>
+        <div
+          onClick={() => setStatusFilter('PENDING')}
+          className={`border rounded-2xl p-4 shadow-xs transition-all cursor-pointer group hover:border-amber-400 ${
+            (pendingApprovalsList.length + pendingWorkOrders.length) > 0
+              ? 'bg-gradient-to-br from-amber-50 to-white border-amber-300 ring-2 ring-amber-400/20'
+              : 'bg-white border-gray-200/90'
+          }`}
+          title="Filter by Pending Sign-off"
+        >
           <div className="flex items-center justify-between text-amber-700 mb-2">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-900">Pending Sign-off</span>
-            <Clock size={16} className="text-amber-600" />
+            <Clock size={16} className="text-amber-600 group-hover:scale-110 transition-transform" />
           </div>
           <div className="text-2xl font-black text-amber-950">{pendingApprovalsList.length + pendingWorkOrders.length}</div>
           <div className="text-[11px] text-amber-800 mt-1 font-medium">
@@ -842,13 +852,19 @@ export default function DirectorDashboard({ view = 'overview' }) {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs">
+        <div
+          onClick={() => setStatusFilter('APPROVED')}
+          className="bg-white hover:border-emerald-400 transition-all border border-gray-200/90 rounded-2xl p-4 shadow-xs cursor-pointer group"
+          title="Filter by Approved Requisitions"
+        >
           <div className="flex items-center justify-between text-gray-400 mb-2">
-            <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">Approved / Live</span>
-            <CheckCircle2 size={16} className="text-emerald-600" />
+            <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 group-hover:text-emerald-950">Approved Requisitions</span>
+            <CheckCircle2 size={16} className="text-emerald-600 group-hover:scale-110 transition-transform" />
           </div>
-          <div className="text-2xl font-black text-gray-900">{publishedCount}</div>
-          <div className="text-[11px] text-gray-500 mt-1 font-medium">Published to vendors</div>
+          <div className="text-2xl font-black text-gray-900">{approvedList.length}</div>
+          <div className="text-[11px] text-gray-500 mt-1 font-medium">
+            {approvedList.length === 1 ? '1 role approved & live' : `${approvedList.length} roles approved & live`}
+          </div>
         </div>
 
         <div className="bg-white border border-gray-200/90 rounded-2xl p-4 shadow-xs">
@@ -1264,28 +1280,28 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 type="button"
                 onClick={() => setStatusFilter('ALL')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'ALL' ? 'bg-white text-black shadow-2xs' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'ALL' ? 'bg-white text-black shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
               >
-                All
+                All {requisitions.length > 0 ? `(${requisitions.length})` : ''}
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('PENDING')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'PENDING' ? 'bg-white text-amber-900 shadow-2xs' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'PENDING' ? 'bg-white text-amber-900 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
               >
-                Pending Approval
+                Pending Approval {pendingApprovalsList.length > 0 ? `(${pendingApprovalsList.length})` : ''}
               </button>
               <button
                 type="button"
                 onClick={() => setStatusFilter('APPROVED')}
                 className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  statusFilter === 'APPROVED' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-gray-500 hover:text-black'
+                  statusFilter === 'APPROVED' ? 'bg-white text-emerald-800 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-black'
                 }`}
               >
-                Approved
+                Approved {approvedList.length > 0 ? `(${approvedList.length})` : ''}
               </button>
               <button
                 type="button"
