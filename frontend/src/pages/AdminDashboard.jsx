@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from '../components/NotificationBell';
 import {
   Users,
   Building2,
@@ -344,7 +345,7 @@ export default function AdminDashboard() {
         title: `${u.name || u.email} provisioned`,
         description: `Role: ${u.role} ${u.department ? `(${u.department})` : ''} • Status: Active`,
         timestamp: u.created_at,
-        link: `/dashboard/admin/hiring-managers`,
+        link: `/dashboard/admin/team`,
         icon: UserPlus,
         color: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
         badge: 'Team',
@@ -538,6 +539,10 @@ export default function AdminDashboard() {
           {/* Date Stamp */}
           <div className="hidden lg:block text-right text-[11px] font-semibold text-gray-400 mr-1">
             {currentDateFormatted}
+          </div>
+
+          <div className="hidden lg:block">
+            <NotificationBell />
           </div>
 
           {/* Message Icon-Only Button */}
@@ -759,7 +764,7 @@ export default function AdminDashboard() {
                   <span>+ Invite</span>
                 </button>
                 <Link
-                  to="/dashboard/admin/hiring-managers"
+                  to="/dashboard/admin/team"
                   className="text-[11.5px] font-bold text-gray-600 hover:text-black flex items-center gap-1 transition-colors group cursor-pointer pl-1"
                 >
                   <span>View all</span>
@@ -812,7 +817,8 @@ export default function AdminDashboard() {
                       </span>
                       <button
                         type="button"
-                        onClick={() => navigate('/dashboard/admin/hiring-managers')}
+                        onClick={() => navigate('/dashboard/admin/team')}
+                        aria-label={`View ${u.name || 'team member'} in Team Members`}
                         className="p-1 text-gray-400 hover:text-black cursor-pointer"
                       >
                         <MoreHorizontal size={13} />

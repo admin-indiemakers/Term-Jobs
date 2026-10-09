@@ -176,8 +176,8 @@ export default function SuperAdminDashboard() {
   return (
     <div className="w-full min-w-0 pb-12 space-y-5 text-left" style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}>
       {/* Main Header Banner Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-5">
-        <div>
+      <div className="bg-white border border-gray-200/90 rounded-2xl p-6 sm:p-7 shadow-xs flex flex-col items-start gap-5">
+        <div className="min-w-0 w-full">
           <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
             TERM JOBS • PLATFORM CONTROL
           </div>
@@ -195,7 +195,7 @@ export default function SuperAdminDashboard() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+        <div className="flex w-full flex-wrap items-center gap-2.5">
           <Link
             to="/dashboard/superadmin/candidate-management"
             className="px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold shadow-2xs transition-colors flex items-center gap-1.5"

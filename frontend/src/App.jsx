@@ -13,6 +13,7 @@ import { directorRedirect } from './utils/directorAccess';
 const InterviewRequests = lazy(() => import('./pages/recruiter/InterviewRequests'));
 const VendorAgreements = lazy(() => import('./pages/recruiter/VendorAgreements'));
 const VendorBilling = lazy(() => import('./pages/recruiter/VendorBilling'));
+const AdminTeamMembers = lazy(() => import('./pages/AdminTeamMembers'));
 const JoinHiringManager = lazy(() => import('./pages/JoinHiringManager'));
 const JoinDirector = lazy(() => import('./pages/JoinDirector'));
 const JoinProcurement = lazy(() => import('./pages/JoinProcurement'));
@@ -309,6 +310,7 @@ export default function App() {
             <Route path="admin/chat" element={<AiChat />} />
             <Route path="admin/directors" element={<ManageDirectors />} />
             <Route path="admin/hiring-managers" element={<ManageHiringManagers />} />
+            <Route path="admin/team" element={<AdminTeamMembers />} />
             <Route path="admin/procurement" element={<ManageProcurement />} />
             <Route path="admin/finance" element={<ManageFinance />} />
             <Route path="admin/profile" element={<CompanyAdminProfile />} />

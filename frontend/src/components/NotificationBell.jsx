@@ -34,6 +34,7 @@ export default function NotificationBell() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const panelRef = useRef(null);
 
   const load = useCallback(
@@ -42,9 +43,11 @@ export default function NotificationBell() {
       if (!quiet) setLoading(true);
       try {
         const list = await request('/api/notifications', { token });
-        if (Array.isArray(list)) setItems(list);
-      } catch {
-        // ignore transient errors
+        if (!Array.isArray(list)) throw new Error('Invalid notification response');
+        setItems(list);
+        setError('');
+      } catch (err) {
+        if (!quiet) setError(err.message || 'Unable to load notifications.');
       } finally {
         setLoading(false);
       }
@@ -70,7 +73,7 @@ export default function NotificationBell() {
 
   const handleOpen = () => {
     setOpen((v) => !v);
-    if (!open) load(true);
+    if (!open) load();
   };
 
   const markRead = async (n) => {
@@ -124,6 +127,11 @@ export default function NotificationBell() {
           <div className="notif-panel-body">
             {loading && items.length === 0 ? (
               <div className="notif-empty muted">Loading notifications...</div>
+            ) : error && items.length === 0 ? (
+              <div className="notif-empty" role="alert">
+                <p>Unable to load notifications.</p>
+                <button type="button" className="notif-read-all" onClick={() => load()}>Try again</button>
+              </div>
             ) : items.length === 0 ? (
               <div className="notif-empty">
                 <p>No notifications yet</p>
