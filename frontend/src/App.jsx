@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from './context/AuthContext';
@@ -121,7 +121,15 @@ function CandidateRouteDispatcher() {
 
 function RequisitionRouteGuard({ children }) {
   const { user } = useAuth();
-  if (user?.role === 'Admin' || user?.role?.toLowerCase() === 'admin') {
+  const params = useParams();
+  const role = user?.role?.toLowerCase() || '';
+  if (role === 'director') {
+    if (params?.id) {
+      return <Navigate to={`/dashboard/director/requisitions?reqId=${encodeURIComponent(params.id)}`} replace />;
+    }
+    return <Navigate to="/dashboard/director/requisitions" replace />;
+  }
+  if (role === 'admin') {
     return <Navigate to="/dashboard/admin" replace />;
   }
   return children;
@@ -301,6 +309,7 @@ export default function App() {
             <Route path="director" element={<DirectorDashboard view="overview" />} />
             <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
             <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
+            <Route path="director/requisitions/:id" element={<DirectorDashboard view="requisitions" />} />
             <Route path="director/work-orders" element={<DirectorWorkOrders />} />
             <Route path="director/agreements" element={<DirectorAgreements />} />
             <Route path="procurement" element={<ProcurementDashboard />} />
