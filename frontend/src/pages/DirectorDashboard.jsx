@@ -138,7 +138,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const { token, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const routeParams = useParams();
 
   const currentTab = useMemo(() => {
@@ -206,38 +206,32 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const reqIdFromUrl = searchParams.get('reqId') || routeParams?.id;
 
   useEffect(() => {
-    if (!reqIdFromUrl) return;
-    const found = (Array.isArray(requisitions) ? requisitions : []).find((r) => r.id === reqIdFromUrl);
-    if (found) {
-      setSelectedRequisitionForView(found);
-    } else if (token) {
-      setViewModalLoading(true);
-      request(`/requisitions/${reqIdFromUrl}`, { token })
-        .then((res) => {
-          if (res && res.id) setSelectedRequisitionForView(res);
-        })
-        .catch(() => {})
-        .finally(() => setViewModalLoading(false));
+    let cancelled = false;
+    setSelectedRequisitionForView(null);
+    if (!reqIdFromUrl || !token) {
+      setViewModalLoading(false);
+      return;
     }
-  }, [reqIdFromUrl, requisitions, token]);
+    setViewModalLoading(true);
+    request(`/requisitions/${reqIdFromUrl}`, { token })
+      .then((res) => {
+        if (!cancelled && res?.id) setSelectedRequisitionForView(res);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message || 'Unable to load requisition criteria.');
+      })
+      .finally(() => { if (!cancelled) setViewModalLoading(false); });
+    return () => { cancelled = true; };
+  }, [reqIdFromUrl, token]);
 
   const handleViewRequisition = (r, e) => {
     if (e) e.stopPropagation();
-    setSelectedRequisitionForView(r);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set('reqId', r.id);
-      return next;
-    }, { replace: true });
+    navigate(`/dashboard/director/requisitions?reqId=${encodeURIComponent(r.id)}`);
   };
 
   const handleCloseRequisitionView = () => {
     setSelectedRequisitionForView(null);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('reqId');
-      return next;
-    }, { replace: true });
+    navigate('/dashboard/director/requisitions', { replace: true });
   };
 
   const activeTenantName = useMemo(() => {
@@ -1499,6 +1493,11 @@ export default function DirectorDashboard({ view = 'overview' }) {
       </div>
       )}
 
+      {viewModalLoading && (
+        <div role="status" className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="rounded-2xl bg-white p-6 shadow-xl">Loading requisition criteria…</div>
+        </div>
+      )}
       {/* DEDICATED DIRECTOR REQUISITION DETAILS MODAL */}
       {selectedRequisitionForView && (
         <div
@@ -1687,6 +1686,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 const disp = getRequisitionDisplayInfo(selectedRequisitionForView);
                 const sr = selectedRequisitionForView.structured_role || {};
                 const skillsList = (() => {
+                  if (Array.isArray(sr.must_have_skills)) return sr.must_have_skills;
+                  if (Array.isArray(sr.skills)) return sr.skills;
                   if (Array.isArray(sr.primary_skills)) return sr.primary_skills;
                   if (Array.isArray(sr.required_skills)) return sr.required_skills;
                   if (Array.isArray(selectedRequisitionForView.skills)) return selectedRequisitionForView.skills;

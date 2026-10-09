@@ -633,7 +633,7 @@ def _require_tenant(req: models.Requisition, current_user: User) -> models.Requi
 
 def _require_writable(current_user: User) -> None:
     """Raise 403 for read-only roles (Director) on mutation endpoints."""
-    if current_user.role == "Director":
+    if str(current_user.role or "").strip().lower() == "director":
         raise HTTPException(
             status_code=403,
             detail="Directors have read-only access",

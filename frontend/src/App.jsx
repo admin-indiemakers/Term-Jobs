@@ -7,6 +7,7 @@ import AuthPage from './pages/AuthPage';
 import LandingPage from './pages/LandingPage';
 import OpenRolesPage from './pages/OpenRolesPage';
 import DashboardLayout from './pages/DashboardLayout';
+import { directorRedirect } from './utils/directorAccess';
 
 // Lazy-loaded routes for code splitting (reduces initial bundle from 4.15MB down to ~250KB)
 const InterviewRequests = lazy(() => import('./pages/recruiter/InterviewRequests'));
@@ -117,6 +118,13 @@ function CandidateRouteDispatcher() {
     return <SuperAdminCandidatePool />;
   }
   return <ShortlistedCandidates />;
+}
+
+function DashboardAccessGuard({ children }) {
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  const redirect = directorRedirect(user?.role, pathname);
+  return redirect ? <Navigate to={redirect} replace /> : children;
 }
 
 function RequisitionRouteGuard({ children }) {
@@ -253,7 +261,7 @@ export default function App() {
             path="/dashboard"
             element={
               <RequireAuth>
-                <DashboardLayout />
+                <DashboardAccessGuard><DashboardLayout /></DashboardAccessGuard>
               </RequireAuth>
             }
           >
