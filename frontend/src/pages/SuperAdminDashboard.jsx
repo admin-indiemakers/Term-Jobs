@@ -339,11 +339,11 @@ export default function SuperAdminDashboard() {
               <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-black transition-colors">
                 CANDIDATE POOL
               </span>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-700 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+              <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
                 <FileText size={16} />
               </div>
             </div>
-            <div className="text-3xl font-extrabold text-emerald-600 tracking-tight my-1">
+            <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
               {poolStats.total}
             </div>
             <div className="text-xs text-gray-500 font-medium">
@@ -362,21 +362,21 @@ export default function SuperAdminDashboard() {
         >
           <div>
             <div className="flex items-center justify-between gap-2 mb-2">
-              <span className="text-[11px] font-bold text-purple-600 uppercase tracking-wider group-hover:text-purple-800 transition-colors flex items-center gap-1">
-                <Sparkles size={11} className="text-amber-500" /> AI OUTREACH
+              <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider group-hover:text-gray-900 transition-colors flex items-center gap-1">
+                <Sparkles size={11} /> AI OUTREACH
               </span>
-              <div className="w-8 h-8 rounded-xl bg-purple-50 border border-purple-200/80 text-purple-700 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
+              <div className="w-8 h-8 rounded-xl bg-gray-50 border border-gray-200/80 text-gray-800 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
                 <Mail size={16} />
               </div>
             </div>
-            <div className="text-3xl font-extrabold text-purple-700 tracking-tight my-1">
+            <div className="text-3xl font-extrabold text-gray-900 tracking-tight my-1">
               {outreachStats.total_outreach_sent}
             </div>
             <div className="text-xs text-gray-500 font-medium">
               Top 20 candidate match emails sent ({outreachStats.response_rate_percent}% RSVP)
             </div>
           </div>
-          <div className="mt-3 text-xs font-bold text-purple-700 group-hover:underline flex items-center gap-1">
+          <div className="mt-3 text-xs font-bold text-gray-900 group-hover:underline flex items-center gap-1">
             Control Panel <ArrowRight size={12} />
           </div>
         </Link>

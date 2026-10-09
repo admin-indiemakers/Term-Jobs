@@ -23,6 +23,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { request } from '../../api/client';
 import { interviewApi } from '../services/interviewApi';
 import { RoundTimeline } from '../components/RoundTimeline';
 import { CreateRoundModal } from '../components/CreateRoundModal';
@@ -66,6 +67,8 @@ export function HiringManagerInterviews() {
 
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const [poolCandidates, setPoolCandidates] = useState([]);
+  const [poolError, setPoolError] = useState('');
   const [roundCommAnalysis, setRoundCommAnalysis] = useState(null);
   const [candidateAiAnalysis, setCandidateAiAnalysis] = useState(null);
   const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
@@ -324,7 +327,7 @@ export function HiringManagerInterviews() {
     try {
       // The summary already includes the rounds grouped by candidate. Avoid a
       // second full rounds request just to calculate the KPI cards.
-      const summaryRes = await interviewApi.getSummary(token).catch(() => []);
+      const summaryRes = await interviewApi.getSummary(token);
 
       const sumList = Array.isArray(summaryRes) ? summaryRes : [];
       setCandidatesSummary(sumList);
@@ -359,6 +362,20 @@ export function HiringManagerInterviews() {
       loadData();
     }
   }, [token, loadData]);
+
+  useEffect(() => {
+    if (!token || user?.role !== 'Super Admin') return;
+    let cancelled = false;
+    request('/api/superadmin/candidate-pool', { token })
+      .then((result) => {
+        if (!cancelled) {
+          setPoolCandidates(Array.isArray(result?.candidates) ? result.candidates : []);
+          setPoolError('');
+        }
+      })
+      .catch(() => { if (!cancelled) setPoolError('Candidate match scores could not be loaded.'); });
+    return () => { cancelled = true; };
+  }, [token, user?.role]);
 
   // Quick action: Open Create Round modal pre-populated for a candidate's next company round
   const handleScheduleForCandidate = (cand) => {
@@ -449,6 +466,16 @@ export function HiringManagerInterviews() {
   const inProgressCount = rounds.filter((r) => r.status === 'In Progress').length;
   const completedCount = rounds.filter((r) => r.status === 'Completed').length;
   const readyToScheduleCount = acceptedCandidates.filter((c) => c.ready_for_round_1 || c.ready_for_next_round).length;
+  const poolApplications = poolCandidates.flatMap((candidate) =>
+    (candidate.applications || [])
+      .filter((application) => application.match_score != null && Number.isFinite(Number(application.match_score)))
+      .map((application) => ({
+        id: `${candidate.id}-${application.submission_id}`,
+        name: candidate.candidate_name,
+        title: application.requisition_title,
+        score: Math.max(0, Math.min(100, Number(application.match_score))),
+      }))
+  );
 
   return (
     <div className="space-y-6 max-w-7xl w-full mx-auto pb-12 font-sans">
@@ -673,6 +700,36 @@ export function HiringManagerInterviews() {
         </div>
       )}
 
+      {user?.role === 'Super Admin' && (
+        <section className="rounded-3xl border border-zinc-200 bg-white p-5 sm:p-6 shadow-xs" aria-label="Candidate resume match scores">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 className="text-base font-extrabold text-zinc-950">Candidate match scores</h2>
+              <p className="mt-1 text-xs text-zinc-500">Resume-to-requisition match scores from the candidate pool. AI interview scores appear after screening is completed.</p>
+            </div>
+            <button type="button" onClick={() => navigate('/dashboard/superadmin/candidates')} className="text-xs font-bold text-zinc-800 underline cursor-pointer">Open Candidate Pool</button>
+          </div>
+          {poolError ? <p role="alert" className="mt-4 text-sm text-rose-700">{poolError}</p>
+            : poolApplications.length === 0 ? <p className="mt-4 text-sm text-zinc-500">No scored applications yet.</p>
+            : <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {poolApplications.map((application) => (
+                <div key={application.id} className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-zinc-950">{application.name}</p>
+                      <p className="truncate text-xs text-zinc-500">{application.title}</p>
+                    </div>
+                    <span className="shrink-0 text-sm font-black text-zinc-950">{Math.round(application.score)}%</span>
+                  </div>
+                  <div role="meter" aria-label={`${application.name} resume match`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={application.score} className="mt-3 h-2 overflow-hidden rounded-full bg-zinc-200">
+                    <div className="h-full rounded-full bg-zinc-900" style={{ width: `${application.score}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>}
+        </section>
+      )}
+
       {/* Filter & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative flex-1 max-w-md">
@@ -751,7 +808,9 @@ export function HiringManagerInterviews() {
             </div>
           ) : filteredCandidates.length === 0 ? (
             <div className="p-8 text-center text-xs text-zinc-500 bg-white rounded-3xl border border-zinc-200">
-              No candidates found matching the filter.
+              {searchQuery || statusFilter !== 'all'
+                ? 'No candidates found matching the filter.'
+                : 'No candidates have completed AI screening yet. Candidate pool match scores are shown above.'}
             </div>
           ) : (
             filteredCandidates.map((cand) => {
