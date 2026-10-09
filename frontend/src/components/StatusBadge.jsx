@@ -5,6 +5,9 @@ const STATUS_LABELS = {
   PendingApproval: 'Pending Approval',
   Published: 'Published',
   Closed: 'Closed',
+  DeletedbyHM: 'Deleted by HM',
+  Deleted: 'Deleted',
+  Cancelled: 'Cancelled',
 };
 
 export default function StatusBadge({ status }) {

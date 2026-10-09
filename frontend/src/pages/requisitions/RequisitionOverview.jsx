@@ -23,7 +23,8 @@ import {
   SlidersHorizontal,
   Users,
   Eye,
-  Loader2
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 
 const SECTION_CONFIG = {
@@ -786,9 +787,17 @@ export default function RequisitionOverview({ section }) {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="text-base font-bold text-gray-900">Delete Requisition?</h3>
-            <p className="text-xs text-gray-500 mt-1 mb-5">
+            <p className="text-xs text-gray-500 mt-1 mb-4">
               This will permanently remove <strong>{confirmDelete.title || 'Untitled'}</strong> ({confirmDelete.department || 'General'}). This action cannot be undone.
             </p>
+            {(confirmDelete.director_approved || confirmDelete.status === 'Published') && (
+              <div className="p-3 mb-5 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 flex items-start gap-2 shadow-2xs">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Notice:</strong> This requisition was approved & published by the Director. Deleting it will immediately notify the Company Director and record the cancellation in the Director Dashboard.
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-end gap-2">
               <button
                 type="button"

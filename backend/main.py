@@ -1312,6 +1312,42 @@ def list_requisitions(
             }
             for r in rows
         ]
+
+        if current_user.role == "Director":
+            try:
+                from modules.shared.db import db
+                del_query = {"tenant_id": current_user.tenant_id}
+                deleted_docs = list(db["deleted_requisitions"].find(del_query).sort("deleted_at", -1))
+                for d in deleted_docs:
+                    result.append({
+                        "id": str(d.get("id")),
+                        "ref": f"REQ-{str(d.get('id'))[:6].upper()}",
+                        "tenant_id": d.get("tenant_id", current_user.tenant_id),
+                        "status": d.get("status", "Deleted by HM"),
+                        "title": d.get("title", "Untitled Requisition"),
+                        "company_profile_id": d.get("company_profile_id"),
+                        "company_name": None,
+                        "generated_jd_markdown": None,
+                        "structured_role": d.get("structured_role") or {},
+                        "hiring_manager_name": d.get("deleted_by") or "",
+                        "intent": None,
+                        "created_at": d.get("created_at"),
+                        "director_approved": d.get("director_approved", True),
+                        "director_approved_by": d.get("director_approved_by"),
+                        "director_approved_at": d.get("director_approved_at"),
+                        "rejection_reason": None,
+                        "rejected_by": None,
+                        "rejected_at": None,
+                        "approved_by": d.get("director_approved_by"),
+                        "approved_at": d.get("director_approved_at"),
+                        "deleted_by": d.get("deleted_by"),
+                        "deleted_by_role": d.get("deleted_by_role"),
+                        "deleted_at": d.get("deleted_at"),
+                        "is_deleted": True,
+                    })
+            except Exception as del_err:
+                logger.warning(f"Failed to fetch deleted requisitions for Director view: {del_err}")
+
         _cache.set(_cache_key, result, ttl=30)  # 30s cache
         return result
 
@@ -3870,7 +3906,50 @@ def reset_requisition(requisition_id: str, current_user: User = Depends(get_curr
 @app.delete("/api/requisitions/{requisition_id}", status_code=204)
 def delete_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> None:
     _require_writable(current_user)
-    _require_tenant(_get_requisition(requisition_id), current_user)
+    req = _get_requisition(requisition_id)
+    _require_tenant(req, current_user)
+
+    was_director_approved = bool(getattr(req, "director_approved", False)) or req.status in ("Published", "Approved")
+    if was_director_approved:
+        from modules.notifications.services.notification_service import notify_requisition_deleted_by_hm
+        hm_name = current_user.name or current_user.email or "Hiring Manager"
+        req_title = req.title or "Untitled Requisition"
+        tenant_id = str(req.tenant_id or current_user.tenant_id or "local")
+
+        notify_requisition_deleted_by_hm(
+            requisition_id=str(req.id),
+            requisition_title=req_title,
+            tenant_id=tenant_id,
+            deleted_by_name=hm_name,
+            deleted_by_role=current_user.role,
+            deleted_by_email=current_user.email or "",
+            previous_status=req.status or "Published",
+            director_approved_by=getattr(req, "director_approved_by", None) or "Director",
+        )
+
+        try:
+            from modules.shared.db import db
+            now_iso = _utcnow().isoformat()
+            db["deleted_requisitions"].insert_one({
+                "id": str(req.id),
+                "title": req_title,
+                "status": "Deleted by HM" if current_user.role == "Hiring Manager" else "Deleted",
+                "original_status": req.status,
+                "director_approved": True,
+                "director_approved_by": getattr(req, "director_approved_by", None) or "Director",
+                "director_approved_at": req.director_approved_at.isoformat() if getattr(req, "director_approved_at", None) else None,
+                "deleted_by": hm_name,
+                "deleted_by_role": current_user.role,
+                "deleted_by_email": current_user.email,
+                "deleted_at": now_iso,
+                "tenant_id": tenant_id,
+                "company_profile_id": str(req.company_profile_id or ""),
+                "created_at": req.created_at.isoformat() if getattr(req, "created_at", None) else now_iso,
+                "is_deleted": True,
+            })
+        except Exception as e:
+            logger.warning(f"Failed to record deleted_requisition in MongoDB: {e}")
+
     service.delete(requisition_id)
     _cache.clear()
 

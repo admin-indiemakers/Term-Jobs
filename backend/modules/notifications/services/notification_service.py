@@ -25,6 +25,7 @@ LINK_TEMPLATES = {
     "candidate.rejected": "/dashboard/requisitions/{requisition_id}/candidates",
     "shortlist.dispatched": "/dashboard/requisitions/{requisition_id}/candidates",
     "candidate.selected": "/dashboard/superadmin/candidate-management",
+    "requisition.deleted_by_hm": "/dashboard/director/requisitions",
 }
 
 
@@ -36,11 +37,11 @@ def _utcnow_iso() -> str:
 
 def create_notification(user_id: str, tenant_id: str, ntype: str, title: str, body: str, data: dict | None = None) -> None:
     """Persist a single notification for one recipient."""
-    from modules.shared.db import get_session
+    import modules.shared.db as shared_db
 
     data = data or {}
     try:
-        with get_session() as session:
+        with shared_db.get_session() as session:
             n = Notification(
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -387,3 +388,87 @@ def notify_candidate_selected_by_hm(
     except Exception as e:
         logger.warning(f"notify_candidate_selected_by_hm failed: {e}")
         return {}
+
+
+def notify_requisition_deleted_by_hm(
+    requisition_id: str,
+    requisition_title: str,
+    tenant_id: str,
+    deleted_by_name: str,
+    deleted_by_role: str,
+    deleted_by_email: str = "",
+    previous_status: str = "Published",
+    director_approved_by: str = "Director",
+) -> None:
+    """Notify Company Director(s) when an approved or published requisition is deleted by a Hiring Manager."""
+    from modules.identity.domain.models import User
+    import modules.shared.db as shared_db
+    import uuid
+
+    now_iso = _utcnow_iso()
+    ref_code = f"REQ-{str(requisition_id)[:6].upper()}"
+
+    try:
+        with shared_db.get_session() as session:
+            # 1. Find Director accounts for this tenant (fallback to Admin if no Director)
+            directors = [
+                u for u in session.query(User).filter(
+                    User.tenant_id == tenant_id,
+                    User.role == "Director",
+                ).all() if u.is_active
+            ]
+            if not directors:
+                directors = [
+                    u for u in session.query(User).filter(
+                        User.tenant_id == tenant_id,
+                        User.role.in_(["Director", "Admin"]),
+                    ).all() if u.is_active
+                ]
+
+            title = "Published Requisition Deleted by Hiring Manager"
+            body = f"{deleted_by_name} ({deleted_by_role}) deleted published requisition '{requisition_title}' ({ref_code})."
+            data = {
+                "requisition_id": requisition_id,
+                "requisition_ref": ref_code,
+                "requisition_title": requisition_title,
+                "deleted_by": deleted_by_name,
+                "deleted_by_role": deleted_by_role,
+                "deleted_by_email": deleted_by_email,
+                "deleted_at": now_iso,
+                "previous_status": previous_status,
+                "director_approved_by": director_approved_by,
+                "link": LINK_TEMPLATES.get("requisition.deleted_by_hm", "/dashboard/director/requisitions"),
+            }
+
+            for d in directors:
+                create_notification(
+                    user_id=d.id,
+                    tenant_id=tenant_id,
+                    ntype="requisition.deleted_by_hm",
+                    title=title,
+                    body=body,
+                    data=data,
+                )
+
+        # 2. Persist in MongoDB notifications collection
+        try:
+            shared_db.db["notifications"].insert_one({
+                "id": str(uuid.uuid4()),
+                "tenant_id": str(tenant_id or "local"),
+                "type": "requisition_deleted_by_hm",
+                "title": f"Requisition Deleted by HM: {requisition_title}",
+                "message": f"Hiring Manager {deleted_by_name} deleted approved/published requisition '{requisition_title}' ({ref_code}).",
+                "requisition_id": requisition_id,
+                "requisition_title": requisition_title,
+                "deleted_by": deleted_by_name,
+                "deleted_by_role": deleted_by_role,
+                "deleted_at": now_iso,
+                "target_role": "Director",
+                "status": "unread",
+                "created_at": now_iso,
+            })
+        except Exception as mongo_err:
+            logger.warning(f"Failed to record MongoDB notification: {mongo_err}")
+
+    except Exception as e:
+        logger.warning(f"notify_requisition_deleted_by_hm failed: {e}")

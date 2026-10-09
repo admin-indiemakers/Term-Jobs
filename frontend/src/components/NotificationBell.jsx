@@ -9,6 +9,7 @@ const TYPE_ICON = {
   'candidate.rejected': '🚫',
   'candidate.selected': '🎉',
   'shortlist.dispatched': '⚡',
+  'requisition.deleted_by_hm': '🗑️',
 };
 
 function timeAgo(iso) {

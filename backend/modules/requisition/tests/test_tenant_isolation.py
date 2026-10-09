@@ -20,6 +20,8 @@ def db_session_factory(monkeypatch):
         return Session(database)
 
     monkeypatch.setattr(app_main, "get_session", factory)
+    monkeypatch.setattr("modules.shared.db.get_session", factory)
+    monkeypatch.setattr("modules.shared.db.db", database)
     return factory
 
 
@@ -53,8 +55,8 @@ def _make_profile(session, tenant_id, name="Acme Corp"):
     return prof
 
 
-def _make_requisition(session, tenant_id, profile_id, title="Backend Engineer"):
-    req = Requisition(tenant_id=tenant_id, company_profile_id=profile_id, title=title)
+def _make_requisition(session, tenant_id, profile_id, title="Backend Engineer", **kwargs):
+    req = Requisition(tenant_id=tenant_id, company_profile_id=profile_id, title=title, **kwargs)
     session.add(req)
     session.commit()
     session.refresh(req)
@@ -351,5 +353,56 @@ async def test_upload_template_tenant_isolation(db_session_factory):
                 current_user=director_b
             )
         assert exc.value.status_code == 403
+
+
+def test_hiring_manager_delete_published_requisition_notifies_director(db_session_factory, monkeypatch):
+    """Verify that when a Hiring Manager deletes an approved/published requisition:
+    1. Director receives an in-app notification.
+    2. Requisition deletion is logged in deleted_requisitions with 'Deleted by HM' status.
+    3. Director Dashboard listing (list_requisitions) shows the deleted requisition.
+    4. Hiring Manager listing does not include it.
+    """
+    from modules.notifications.domain.models import Notification
+
+    with db_session_factory() as session:
+        monkeypatch.setattr(app_main, "service", _FakeService())
+        tenant = _make_tenant(session, name="Acme Corp")
+        director = _make_user(session, "Director", tenant.id, "director@acme.test")
+        hm = _make_user(session, "Hiring Manager", tenant.id, "hm@acme.test")
+        prof = _make_profile(session, tenant.id, name="Acme Corp")
+
+        # Create requisition that was published and approved by Director
+        req = _make_requisition(
+            session,
+            tenant.id,
+            prof.id,
+            title="Lead Security Architect",
+            status="Published",
+            director_approved=True,
+            director_approved_by="Jane Director",
+            created_by=hm.id,
+        )
+
+        # HM deletes the published requisition
+        app_main.delete_requisition(req.id, current_user=hm)
+
+        # 1. SQL row is deleted
+        assert session.get(Requisition, req.id) is None
+
+        # 2. Director notification was created
+        notifs = session.query(Notification).filter(Notification.user_id == director.id).all()
+        assert any(n.type == "requisition.deleted_by_hm" and "Lead Security Architect" in (n.title + n.body) for n in notifs)
+
+        # 3. Director listing includes the deleted requisition with 'Deleted by HM' status
+        director_reqs = app_main.list_requisitions(current_user=director)
+        deleted_match = next((r for r in director_reqs if r["id"] == str(req.id)), None)
+        assert deleted_match is not None
+        assert deleted_match["status"] == "Deleted by HM"
+        assert deleted_match["is_deleted"] is True
+
+        # 4. Hiring manager listing does NOT show the deleted requisition
+        hm_reqs = app_main.list_requisitions(current_user=hm)
+        assert not any(r["id"] == str(req.id) for r in hm_reqs)
+
 
 

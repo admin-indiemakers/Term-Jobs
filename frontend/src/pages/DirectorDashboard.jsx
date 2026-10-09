@@ -20,6 +20,7 @@ import {
   Building,
   Check,
   AlertCircle,
+  AlertTriangle,
   Receipt
 } from 'lucide-react';
 
@@ -62,6 +63,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [rejectModalReq, setRejectModalReq] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [dismissedDeletedAlerts, setDismissedDeletedAlerts] = useState(false);
   const templateFileRef = useRef(null);
 
   useEffect(() => {
@@ -261,6 +263,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const isReqPendingApproval = useCallback((r) => {
     if (!r) return false;
+    if (r.is_deleted || r.status === 'Deleted by HM') return false;
     if (r.director_approved) return false;
     const s = String(r.status || '').toLowerCase().replace(/[\s_-]+/g, '');
     return s === 'pendingapproval' || s === 'pending' || s.includes('pending');
@@ -298,10 +301,18 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
   const approvedList = useMemo(() => {
     const list = Array.isArray(requisitions) ? requisitions : [];
-    return list.filter((r) => Boolean(r.director_approved) || r.status === 'Published');
+    return list.filter((r) => (Boolean(r.director_approved) || r.status === 'Published') && !r.is_deleted && r.status !== 'Deleted by HM');
   }, [requisitions]);
 
-  const publishedCount = (Array.isArray(requisitions) ? requisitions : []).filter((r) => r.status === 'Published').length;
+  const publishedCount = (Array.isArray(requisitions) ? requisitions : []).filter(
+    (r) => r.status === 'Published' && !r.is_deleted && r.status !== 'Deleted by HM'
+  ).length;
+
+  const deletedByHmRequisitions = useMemo(() => {
+    const list = Array.isArray(requisitions) ? requisitions : [];
+    return list.filter((r) => r.status === 'Deleted by HM' || r.is_deleted);
+  }, [requisitions]);
+
   const engagedVendors = (Array.isArray(vendors) ? vendors : []).filter((v) => v.engaged).length;
 
   const candidatesByRequisition = useMemo(() => {
@@ -324,18 +335,21 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
       if (!matchSearch) return false;
 
+      if (statusFilter === 'DELETED') {
+        return r.status === 'Deleted by HM' || r.is_deleted;
+      }
       if (statusFilter === 'PENDING') {
         return isReqPendingApproval(r);
       }
       if (statusFilter === 'APPROVED') {
-        return Boolean(r.director_approved) || r.status === 'Published';
+        return (Boolean(r.director_approved) || r.status === 'Published') && !r.is_deleted && r.status !== 'Deleted by HM';
       }
       if (statusFilter === 'PUBLISHED') {
-        return r.status === 'Published';
+        return r.status === 'Published' && !r.is_deleted;
       }
       return true;
     });
-  }, [requisitions, searchTerm, statusFilter]);
+  }, [requisitions, searchTerm, statusFilter, isReqPendingApproval]);
 
   if (loading) {
     return (
@@ -452,6 +466,57 @@ export default function DirectorDashboard({ view = 'overview' }) {
         <div className="p-4 bg-red-50 border border-red-200 rounded-2xl text-xs text-red-900 flex items-center gap-2.5 shadow-xs">
           <AlertCircle size={18} className="shrink-0 text-red-600" />
           <span className="font-semibold">{error}</span>
+        </div>
+      )}
+
+      {/* Alert Banner: Requisitions Deleted by Hiring Manager after Director Approval */}
+      {!dismissedDeletedAlerts && deletedByHmRequisitions.length > 0 && (
+        <div className="p-4 sm:p-5 bg-gradient-to-r from-rose-50 via-red-50 to-amber-50 border border-rose-200 rounded-3xl text-xs shadow-xs space-y-3 animate-in fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-rose-950 font-extrabold text-sm">
+              <AlertTriangle size={18} className="shrink-0 text-rose-600" />
+              <span>Notice: {deletedByHmRequisitions.length} Approved / Published Requisition(s) Deleted by Hiring Manager</span>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('requisitions');
+                  setStatusFilter('DELETED');
+                }}
+                className="text-[11px] font-bold text-rose-800 bg-rose-100 hover:bg-rose-200 border border-rose-200 px-3 py-1 rounded-xl transition-colors cursor-pointer"
+              >
+                View in Directory →
+              </button>
+              <button
+                type="button"
+                onClick={() => setDismissedDeletedAlerts(true)}
+                className="text-[11px] font-bold text-gray-400 hover:text-gray-600 px-2 py-1 rounded-xl cursor-pointer"
+                title="Dismiss banner"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+          <p className="text-[11px] text-rose-800">
+            The following job requisition(s) were previously approved and published by the Director, but subsequently deleted/cancelled by the Hiring Manager:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-0.5">
+            {deletedByHmRequisitions.slice(0, 4).map((dr) => (
+              <div key={dr.id} className="bg-white/90 border border-rose-100 rounded-2xl p-3 flex items-start justify-between gap-3 shadow-2xs">
+                <div>
+                  <div className="font-extrabold text-gray-900">{dr.title || 'Untitled Requisition'}</div>
+                  <div className="text-[10px] text-gray-400">REQ #{dr.id.slice(0, 8)}</div>
+                  <div className="text-[10px] text-rose-700 font-semibold mt-1">
+                    Deleted by <strong className="underline">{dr.deleted_by || 'Hiring Manager'}</strong> on {formatDate(dr.deleted_at || dr.created_at)}
+                  </div>
+                </div>
+                <span className="shrink-0 text-[10px] font-extrabold text-rose-800 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full">
+                  Was Live / Published
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -858,6 +923,18 @@ export default function DirectorDashboard({ view = 'overview' }) {
               >
                 Approved
               </button>
+              {deletedByHmRequisitions.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('DELETED')}
+                  className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    statusFilter === 'DELETED' ? 'bg-white text-rose-800 shadow-2xs font-extrabold' : 'text-gray-500 hover:text-rose-700'
+                  }`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                  <span>Deleted by HM ({deletedByHmRequisitions.length})</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -880,18 +957,26 @@ export default function DirectorDashboard({ view = 'overview' }) {
               <tbody className="divide-y divide-gray-100">
                 {filteredRequisitions.map((r) => {
                   const isPending = isReqPendingApproval(r);
+                  const isDeletedByHm = r.is_deleted || r.status === 'Deleted by HM';
                   return (
                     <tr
                       key={r.id}
-                      onClick={() => navigate(`/dashboard/requisitions/${r.id}`)}
-                      className="hover:bg-gray-50/80 cursor-pointer transition-colors"
+                      onClick={() => !isDeletedByHm && navigate(`/dashboard/requisitions/${r.id}`)}
+                      className={`transition-colors ${
+                        isDeletedByHm ? 'bg-rose-50/25 hover:bg-rose-50/40' : 'hover:bg-gray-50/80 cursor-pointer'
+                      }`}
                     >
                       <td className="py-3.5 font-bold text-gray-900">
                         {r.title || 'Untitled Requisition'}
                         <div className="text-[10px] text-gray-400 font-normal">REQ #{r.id.slice(0, 8)}</div>
                       </td>
                       <td className="py-3.5">
-                        {r.director_approved && r.status !== 'Published' && r.status !== 'Closed' ? (
+                        {isDeletedByHm ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-50 text-rose-800 border border-rose-300">
+                            <Trash2 size={12} className="text-rose-600" />
+                            <span>Deleted by HM</span>
+                          </span>
+                        ) : r.director_approved && r.status !== 'Published' && r.status !== 'Closed' ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             <CheckCircle2 size={12} className="text-emerald-600" />
                             <span>Approved</span>
@@ -901,7 +986,20 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         )}
                       </td>
                       <td className="py-3.5">
-                        {r.director_approved ? (
+                        {isDeletedByHm ? (
+                          <div className="space-y-0.5">
+                            <div className="text-[10px] text-gray-400 line-through">
+                              Approved ({r.director_approved_by || 'Director'})
+                            </div>
+                            <div className="text-[11px] font-bold text-rose-700 flex items-center gap-1">
+                              <AlertTriangle size={11} className="text-rose-600" />
+                              <span>Deleted by {r.deleted_by || 'Hiring Manager'}</span>
+                            </div>
+                            {r.deleted_at && (
+                              <div className="text-[10px] text-gray-400">{formatDate(r.deleted_at)}</div>
+                            )}
+                          </div>
+                        ) : r.director_approved ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
                             <CheckCircle2 size={12} className="text-emerald-600" />
                             <span>Approved ({r.director_approved_by || 'Director'})</span>
@@ -914,11 +1012,15 @@ export default function DirectorDashboard({ view = 'overview' }) {
                         )}
                       </td>
                       <td className="py-3.5 font-semibold text-gray-700">
-                        {candidatesByRequisition[r.id] || 0} candidates
+                        {isDeletedByHm ? '—' : `${candidatesByRequisition[r.id] || 0} candidates`}
                       </td>
                       <td className="py-3.5 text-gray-400 font-medium">{formatDate(r.created_at)}</td>
                       <td className="py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        {isPending ? (
+                        {isDeletedByHm ? (
+                          <span className="inline-block px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[10px] font-bold">
+                            Removed by HM
+                          </span>
+                        ) : isPending ? (
                           <div className="flex items-center justify-end gap-1.5">
                             <button
                               type="button"
