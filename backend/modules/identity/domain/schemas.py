@@ -74,6 +74,16 @@ def _validate_real_email(email: str) -> str:
     return email
 
 
+def _validate_phone_field(v):
+    if not v or not str(v).strip():
+        return v
+    from modules.shared.phone_validator import validate_phone_number
+    err = validate_phone_number(str(v).strip(), required=False)
+    if err:
+        raise ValueError(err)
+    return str(v).strip()
+
+
 class TenantCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     tenant_type: str = Field("client", pattern="^(client|consultancy)$")
@@ -123,6 +133,11 @@ class UserCreate(BaseModel):
     candidate_limit: int | None = Field(None, ge=1, le=100)
     candidate_id: str = ""
 
+    @field_validator("phone", mode="before")
+    @classmethod
+    def validate_phone(cls, v):
+        return _validate_phone_field(v)
+
     @field_validator("email", mode="before")
     @classmethod
     def validate_email_real(cls, v: str) -> str:
@@ -136,6 +151,11 @@ class UserUpdate(BaseModel):
     department: str | None = None
     is_active: bool | None = None
     candidate_limit: int | None = Field(None, ge=1, le=100)
+
+    @field_validator("phone", mode="before")
+    @classmethod
+    def validate_phone(cls, v):
+        return _validate_phone_field(v)
 
     @field_validator("email", mode="before")
     @classmethod

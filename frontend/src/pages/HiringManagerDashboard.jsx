@@ -4028,7 +4028,7 @@ export default function HiringManagerDashboard() {
                     value={pwdForm.current_password}
                     onChange={(e) => setPwdForm({ ...pwdForm, current_password: e.target.value })}
                     placeholder="••••••••"
-                    className="w-full px-3 py-1.5 text-xs bg-[#F6F8FA] border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-black"
+                    className="w-full px-3 py-1.5 text-sm text-gray-900 caret-gray-900 placeholder:text-gray-400 bg-[#F6F8FA] border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-black"
                   />
                 </div>
                 <div>
@@ -4038,7 +4038,7 @@ export default function HiringManagerDashboard() {
                     value={pwdForm.new_password}
                     onChange={(e) => setPwdForm({ ...pwdForm, new_password: e.target.value })}
                     placeholder="••••••••"
-                    className="w-full px-3 py-1.5 text-xs bg-[#F6F8FA] border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-black"
+                    className="w-full px-3 py-1.5 text-sm text-gray-900 caret-gray-900 placeholder:text-gray-400 bg-[#F6F8FA] border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-1 focus:ring-black"
                   />
                 </div>
               </div>

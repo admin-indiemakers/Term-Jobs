@@ -13,6 +13,7 @@ import { directorRedirect } from './utils/directorAccess';
 const InterviewRequests = lazy(() => import('./pages/recruiter/InterviewRequests'));
 const VendorAgreements = lazy(() => import('./pages/recruiter/VendorAgreements'));
 const VendorBilling = lazy(() => import('./pages/recruiter/VendorBilling'));
+const TenantDashboard = lazy(() => import('./pages/TenantDashboard'));
 const AdminTeamMembers = lazy(() => import('./pages/AdminTeamMembers'));
 const JoinHiringManager = lazy(() => import('./pages/JoinHiringManager'));
 const JoinDirector = lazy(() => import('./pages/JoinDirector'));
@@ -126,6 +127,11 @@ function DashboardAccessGuard({ children }) {
   const { pathname } = useLocation();
   const redirect = directorRedirect(user?.role, pathname);
   return redirect ? <Navigate to={redirect} replace /> : children;
+}
+
+function SuperAdminRouteGuard({ children }) {
+  const { user } = useAuth();
+  return user?.role === 'Super Admin' ? children : <Navigate to="/dashboard" replace />;
 }
 
 function RequisitionRouteGuard({ children }) {
@@ -331,6 +337,7 @@ export default function App() {
             <Route path="superadmin/onboard" element={<OnboardCompany />} />
             <Route path="superadmin/onboard-vendor" element={<OnboardVendor />} />
             <Route path="superadmin/accounts" element={<ConfigureCompanyAccounts />} />
+            <Route path="superadmin/tenants/:tenantId" element={<SuperAdminRouteGuard><TenantDashboard /></SuperAdminRouteGuard>} />
             <Route path="superadmin/vendor-accounts" element={<ConfigureVendorAccounts />} />
             <Route path="superadmin/admin-accounts" element={<AdminAccounts />} />
             <Route path="superadmin/admins" element={<AdminAccounts />} />

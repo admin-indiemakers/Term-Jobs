@@ -2583,6 +2583,9 @@ def register_hiring_manager(
     db.add(user)
     db.commit()
     db.refresh(user)
+    # Invalidate the users list cache so the Manager's dashboard polling
+    # immediately reflects the new pending approval request.
+    _cache.invalidate_prefix("users:")
 
     return {
         "success": True,
@@ -2707,6 +2710,7 @@ def register_director(
     db.add(user)
     db.commit()
     db.refresh(user)
+    _cache.invalidate_prefix("users:")
 
     return {
         "success": True,
@@ -2775,6 +2779,7 @@ def register_procurement(
     db.add(user)
     db.commit()
     db.refresh(user)
+    _cache.invalidate_prefix("users:")
 
     return {
         "success": True,
@@ -2843,6 +2848,7 @@ def register_finance(
     db.add(user)
     db.commit()
     db.refresh(user)
+    _cache.invalidate_prefix("users:")
 
     return {
         "success": True,

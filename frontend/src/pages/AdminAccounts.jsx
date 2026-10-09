@@ -27,6 +27,7 @@ import {
   History,
   UserCog
 } from 'lucide-react';
+import { validatePhone } from '../utils/phoneValidation';
 
 function formatDate(iso) {
   if (!iso) return '—';
@@ -133,6 +134,13 @@ export default function AdminAccounts() {
     if (form.password !== form.confirmPassword) {
       setError('Passwords do not match. Please re-enter.');
       return;
+    }
+    if (form.phone.trim()) {
+      const phoneErr = validatePhone(form.phone, { required: false });
+      if (phoneErr) {
+        setError(phoneErr);
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -725,10 +733,22 @@ export default function AdminAccounts() {
                   <input
                     type="tel"
                     value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    placeholder="+91 98765 43210"
-                    className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:border-black font-medium transition-all"
+                    onChange={(e) => {
+                      setForm({ ...form, phone: e.target.value });
+                      if (error) setError('');
+                    }}
+                    placeholder="e.g. 9876543210 or +91 98765 43210"
+                    className={`w-full bg-white border ${
+                      form.phone && validatePhone(form.phone, { required: false })
+                        ? 'border-rose-400 focus:border-rose-500'
+                        : 'border-gray-200 focus:border-black'
+                    } rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-gray-900 placeholder-gray-400 focus:outline-none font-medium transition-all`}
                   />
+                  {form.phone && validatePhone(form.phone, { required: false }) && (
+                    <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                      {validatePhone(form.phone, { required: false })}
+                    </p>
+                  )}
                 </div>
               </div>
 

@@ -25,6 +25,7 @@ import {
   Briefcase,
   GraduationCap
 } from 'lucide-react';
+import { validatePhone } from '../utils/phoneValidation';
 
 const getSkillsArray = (skills) => {
   if (Array.isArray(skills)) {
@@ -197,6 +198,13 @@ export default function SuperAdminCandidatePool() {
     if (!addForm.name || !addForm.email) {
       alert('Name and email are required.');
       return;
+    }
+    if (addForm.phone && addForm.phone.trim()) {
+      const phoneErr = validatePhone(addForm.phone, { required: false });
+      if (phoneErr) {
+        alert(phoneErr);
+        return;
+      }
     }
 
     setAddSubmitting(true);
@@ -1132,9 +1140,18 @@ export default function SuperAdminCandidatePool() {
                     type="tel"
                     value={addForm.phone}
                     onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })}
-                    placeholder="+91 9876543210"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                    placeholder="e.g. 9876543210 or +91 9876543210"
+                    className={`w-full px-3.5 py-2.5 bg-gray-50 border ${
+                      addForm.phone && validatePhone(addForm.phone, { required: false })
+                        ? 'border-rose-400 focus:border-rose-500'
+                        : 'border-gray-200 focus:border-black'
+                    } rounded-xl text-xs focus:bg-white focus:outline-none`}
                   />
+                  {addForm.phone && validatePhone(addForm.phone, { required: false }) && (
+                    <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                      {validatePhone(addForm.phone, { required: false })}
+                    </p>
+                  )}
                 </div>
               </div>
 

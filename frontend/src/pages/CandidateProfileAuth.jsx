@@ -17,6 +17,7 @@ import {
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import { Backdrop } from '../components/landing/Backdrop';
+import { validatePhone } from '../utils/phoneValidation';
 
 // Google OAuth Client ID
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
@@ -188,6 +189,13 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
     if (regPassword.length < 6) {
       setError('Password must be at least 6 characters long.');
       return;
+    }
+    if (regPhone.trim()) {
+      const phoneErr = validatePhone(regPhone, { required: false });
+      if (phoneErr) {
+        setError(phoneErr);
+        return;
+      }
     }
     setError('');
     setLoading(true);
@@ -499,11 +507,19 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
                       <input
                         type="tel"
                         value={regPhone}
-                        onChange={(e) => setRegPhone(e.target.value)}
-                        placeholder="+91 98765 43210"
+                        onChange={(e) => {
+                          setRegPhone(e.target.value);
+                          if (error) setError('');
+                        }}
+                        placeholder="e.g. 9876543210 or +91 9876543210"
                         disabled={loading}
                       />
                     </div>
+                    {regPhone && validatePhone(regPhone, { required: false }) && (
+                      <p className="mt-1 text-[11px] text-rose-500 font-medium">
+                        {validatePhone(regPhone, { required: false })}
+                      </p>
+                    )}
                   </label>
                 </div>
 

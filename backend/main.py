@@ -1737,6 +1737,12 @@ async def apply_to_requisition(
     from modules.candidate.extractor import extract_candidate_profile
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.shared.db import db
+    from modules.shared.phone_validator import validate_phone_number
+
+    if phone and phone.strip():
+        phone_err = validate_phone_number(phone, required=False)
+        if phone_err:
+            raise HTTPException(status_code=400, detail=phone_err)
 
     with get_session() as session:
         req = session.get(models.Requisition, requisition_id)
@@ -2005,6 +2011,12 @@ async def register_public_candidate(
     from modules.candidate.extractor import extract_candidate_profile
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.shared.db import db
+    from modules.shared.phone_validator import validate_phone_number
+
+    if phone and phone.strip():
+        phone_err = validate_phone_number(phone, required=False)
+        if phone_err:
+            raise HTTPException(status_code=400, detail=phone_err)
 
     content = None
     if resume and hasattr(resume, "read"):

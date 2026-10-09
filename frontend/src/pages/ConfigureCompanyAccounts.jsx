@@ -35,6 +35,7 @@ export default function ConfigureAccounts({ defaultTab }) {
   const tabFromUrl = searchParams.get('tab') || defaultTab || 'all';
 
   const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -49,7 +50,7 @@ export default function ConfigureAccounts({ defaultTab }) {
   const load = () => {
     setLoading(true);
     Promise.all([
-      request('/api/auth/users?role=Admin,Recruiter', { token }),
+      request('/api/auth/users', { token }),
       request('/api/auth/tenants', { token }),
     ])
       .then(([usersRes, tenantsRes]) => {
@@ -84,6 +85,7 @@ export default function ConfigureAccounts({ defaultTab }) {
         });
 
         setUsers(filteredUsers);
+        setAllUsers(Array.isArray(usersRes) ? usersRes : []);
         setTenants(tList);
         setError('');
       })
@@ -315,6 +317,8 @@ export default function ConfigureAccounts({ defaultTab }) {
                 {filteredUsers.map((u) => {
                   const isRecruiter = u.role === 'Recruiter';
                   const tenantObj = tenants.find((t) => t.id === u.tenant_id);
+                  const tenantUsers = allUsers.filter((member) => member.tenant_id === u.tenant_id && member.is_active !== false);
+                  const roleCount = (roles) => tenantUsers.filter((member) => roles.includes((member.role || '').toLowerCase())).length;
 
                   return (
                     <tr key={u.id} className="hover:bg-gray-50/60 transition-colors">
@@ -341,7 +345,13 @@ export default function ConfigureAccounts({ defaultTab }) {
                       {/* Company Name */}
                       <td className="py-3.5 px-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-semibold text-gray-900">{u.tenant_name || '—'}</span>
+                          {u.tenant_id && u.role === 'Admin' && tenantObj?.tenant_type === 'client' ? (
+                            <Link to={`/dashboard/superadmin/tenants/${encodeURIComponent(u.tenant_id)}`}
+                              className="font-semibold text-gray-900 hover:underline focus:underline"
+                              aria-label={`Open ${u.tenant_name || 'company'} dashboard`}>
+                              {u.tenant_name || '—'}
+                            </Link>
+                          ) : <span className="font-semibold text-gray-900">{u.tenant_name || '—'}</span>}
                           {(tenantObj?.is_guest || tenantObj?.vendor_type === 'guest') && (
                             <span className="px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold">
                               Guest
@@ -351,6 +361,9 @@ export default function ConfigureAccounts({ defaultTab }) {
                         <div className="text-[10px] text-gray-400 capitalize">
                           {(tenantObj?.is_guest || tenantObj?.vendor_type === 'guest') ? 'Guest Consultancy' : (u.tenant_type || 'Consultancy')}
                         </div>
+                        {u.role === 'Admin' && <div className="mt-1 text-[10px] text-gray-600">
+                          {roleCount(['finance', 'finance team'])} Finance · {roleCount(['director'])} Directors · {roleCount(['hiring manager', 'hr'])} Hiring/HR · {tenantUsers.length} total users
+                        </div>}
                       </td>
 
                       {/* Joined Date */}

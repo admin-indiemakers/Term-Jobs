@@ -37,6 +37,7 @@ import {
   Search
 } from 'lucide-react';
 import TeamChatDrawer from '../components/TeamChatDrawer';
+import { validatePhone } from '../utils/phoneValidation';
 
 const INDUSTRY_OPTIONS = [
   'Information Technology',
@@ -576,6 +577,13 @@ export default function CompanyAdminProfile() {
     if (!updatedAdmin.admin_email.trim()) {
       setError('Admin email cannot be empty');
       return false;
+    }
+    if (updatedAdmin.admin_phone && updatedAdmin.admin_phone.trim()) {
+      const phoneErr = validatePhone(updatedAdmin.admin_phone, { required: false });
+      if (phoneErr) {
+        setError(phoneErr);
+        return false;
+      }
     }
 
     setSaving(true);
@@ -1351,10 +1359,22 @@ export default function CompanyAdminProfile() {
                             <input
                               type="tel"
                               value={adminForm.admin_phone}
-                              onChange={(e) => setAdminForm({ ...adminForm, admin_phone: e.target.value })}
-                              placeholder="+91 98765 43210"
-                              className="w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border border-gray-200/80 focus:border-black rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all"
+                              onChange={(e) => {
+                                setAdminForm({ ...adminForm, admin_phone: e.target.value });
+                                if (error) setError('');
+                              }}
+                              placeholder="e.g. 9876543210 or +91 98765 43210"
+                              className={`w-full px-3 py-2 text-xs text-gray-900 bg-white/70 hover:bg-white focus:bg-white backdrop-blur-md border ${
+                                adminForm.admin_phone && validatePhone(adminForm.admin_phone, { required: false })
+                                  ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                                  : 'border-gray-200/80 focus:border-black'
+                              } rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs transition-all`}
                             />
+                            {adminForm.admin_phone && validatePhone(adminForm.admin_phone, { required: false }) && (
+                              <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                                {validatePhone(adminForm.admin_phone, { required: false })}
+                              </p>
+                            )}
                           </div>
                         </div>
                       ) : (

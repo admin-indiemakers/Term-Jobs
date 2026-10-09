@@ -2,14 +2,16 @@ import base64
 import logging
 import os
 import re
+import hashlib
+import secrets
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from modules.identity.services.auth_service import (
     create_access_token,
@@ -19,6 +21,7 @@ from modules.identity.services.auth_service import (
 )
 from modules.shared.config import settings
 from modules.shared.db import db
+from modules.shared.phone_validator import validate_phone_number
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +42,14 @@ class GoogleAuthRequest(BaseModel):
     email: str | None = None
     name: str | None = None
     picture: str | None = None
+
+
+class EmailChangeRequest(BaseModel):
+    email: EmailStr
+
+
+class EmailChangeConfirm(BaseModel):
+    code: str
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -62,6 +73,11 @@ def sanitize_candidate_doc(doc: dict) -> dict:
     res.pop("_id", None)
     res.pop("password_hash", None)
     res.pop("resume_pdf", None)  # Omit large base64 string from standard profile payloads
+    res.pop("pending_email_hash", None)
+    res.pop("pending_email", None)
+    res.pop("pending_email_expires", None)
+    res.pop("pending_email_requested_at", None)
+    res.pop("pending_email_attempts", None)
     return res
 
 
@@ -148,13 +164,6 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
         except Exception as ex:
             print(f"[GOOGLE USERINFO ERROR] {ex}")
 
-    # 3. Fallback for development / mock test if explicitly provided in dev environment
-    if not verified_email and payload.email:
-        # Only allow fallback if no secret or credential verification failed in non-strict dev
-        verified_email = payload.email.strip().lower()
-        verified_name = payload.name or verified_email.split("@")[0]
-        verified_picture = payload.picture or ""
-
     if not verified_email:
         raise HTTPException(
             status_code=400,
@@ -162,7 +171,11 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
         )
 
     now_utc = datetime.now(timezone.utc)
-    candidate = db["candidates"].find_one({"candidate_email": verified_email})
+    candidate = db["candidates"].find_one({"google_sub": google_sub}) if google_sub else None
+    if not candidate:
+        candidate = db["candidates"].find_one({"$or": [
+            {"candidate_email": verified_email}, {"google_login_email": verified_email},
+        ]})
 
     if candidate:
         # Update google profile info if not set
@@ -173,8 +186,10 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
             updates["google_sub"] = google_sub
         if not candidate.get("candidate_name") and verified_name:
             updates["candidate_name"] = verified_name
-        db["candidates"].update_one({"candidate_email": verified_email}, {"$set": updates})
-        candidate = db["candidates"].find_one({"candidate_email": verified_email})
+        if google_sub and not candidate.get("google_login_email"):
+            updates["google_login_email"] = verified_email
+        db["candidates"].update_one({"id": candidate["id"]}, {"$set": updates})
+        candidate = db["candidates"].find_one({"id": candidate["id"]})
     else:
         # Automatically create candidate profile
         cand_id = f"CND-GOOG-{uuid.uuid4().hex[:8]}"
@@ -186,6 +201,7 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
             "candidate_phone": "",
             "picture": verified_picture,
             "google_sub": google_sub,
+            "google_login_email": verified_email,
             "vendor_company_name": "Direct Applicant",
             "skills": [],
             "summary": "Profile created via Google Sign-In.",
@@ -205,7 +221,7 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
     # Generate candidate JWT token
     token = create_access_token(
         data={
-            "sub": verified_email,
+            "sub": candidate["candidate_email"],
             "candidate_id": candidate.get("id"),
             "role": "CandidateProfile",
             "name": candidate.get("candidate_name", ""),
@@ -282,6 +298,11 @@ async def candidate_register(
     email_clean = email.strip().lower()
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+
+    if phone and phone.strip():
+        phone_err = validate_phone_number(phone, required=False)
+        if phone_err:
+            raise HTTPException(status_code=400, detail=phone_err)
 
     existing = db["candidates"].find_one({"candidate_email": email_clean})
     if existing and existing.get("password_hash"):
@@ -391,6 +412,89 @@ async def candidate_register(
         "candidate": sanitize_candidate_doc(created_doc),
         "message": "Candidate Profile created successfully.",
     }
+
+
+@router.post("/email-change/request")
+async def request_candidate_email_change(
+    body: EmailChangeRequest, candidate: dict = Depends(get_current_candidate),
+) -> dict:
+    """Send a short-lived code to the proposed new account email."""
+    new_email = str(body.email).strip().lower()
+    old_email = candidate["candidate_email"].strip().lower()
+    if new_email == old_email:
+        raise HTTPException(status_code=400, detail="This is already your login email.")
+    existing = db["candidates"].find_one({"$or": [
+        {"candidate_email": {"$regex": f"^{re.escape(new_email)}$", "$options": "i"}},
+        {"google_login_email": {"$regex": f"^{re.escape(new_email)}$", "$options": "i"}},
+    ]})
+    if existing and existing.get("id") != candidate["id"]:
+        raise HTTPException(status_code=409, detail="This email is already linked to another account.")
+    requested_at = candidate.get("pending_email_requested_at")
+    if isinstance(requested_at, str):
+        requested_at = datetime.fromisoformat(requested_at.replace("Z", "+00:00"))
+    if requested_at and requested_at.tzinfo is None:
+        requested_at = requested_at.replace(tzinfo=timezone.utc)
+    if requested_at and requested_at > datetime.now(timezone.utc) - timedelta(seconds=60):
+        raise HTTPException(status_code=429, detail="Please wait a minute before requesting another code.")
+
+    code = f"{secrets.randbelow(1000000):06d}"
+    from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
+    delivered = send_email_via_gmail(
+        new_email, "Verify your TermJobs email change",
+        f"<p>Your TermJobs email verification code is <strong>{code}</strong>. It expires in 10 minutes.</p>",
+    )
+    if delivered.get("status") != "success":
+        raise HTTPException(status_code=503, detail="Could not send the verification code. Please try again later.")
+    db["candidates"].update_one({"id": candidate["id"]}, {"$set": {
+        "pending_email": new_email,
+        "pending_email_hash": hashlib.sha256(code.encode()).hexdigest(),
+        "pending_email_expires": datetime.now(timezone.utc) + timedelta(minutes=10),
+        "pending_email_requested_at": datetime.now(timezone.utc),
+        "pending_email_attempts": 0,
+    }})
+    return {"status": "verification_sent", "message": "Verification code sent to your new email."}
+
+
+@router.post("/email-change/confirm")
+async def confirm_candidate_email_change(
+    body: EmailChangeConfirm, candidate: dict = Depends(get_current_candidate),
+) -> dict:
+    """Change account email only after proving access to the new address."""
+    pending_email = candidate.get("pending_email")
+    expires = candidate.get("pending_email_expires")
+    if isinstance(expires, str):
+        expires = datetime.fromisoformat(expires.replace("Z", "+00:00"))
+    if expires and expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    if not pending_email or not expires or expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification code expired. Request a new code.")
+    if candidate.get("pending_email_attempts", 0) >= 5:
+        raise HTTPException(status_code=429, detail="Too many attempts. Request a new code.")
+    supplied = hashlib.sha256(body.code.strip().encode()).hexdigest()
+    if not secrets.compare_digest(supplied, candidate.get("pending_email_hash") or ""):
+        db["candidates"].update_one({"id": candidate["id"]}, {"$inc": {"pending_email_attempts": 1}})
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
+    existing = db["candidates"].find_one({"$or": [
+        {"candidate_email": {"$regex": f"^{re.escape(pending_email)}$", "$options": "i"}},
+        {"google_login_email": {"$regex": f"^{re.escape(pending_email)}$", "$options": "i"}},
+    ]})
+    if existing and existing.get("id") != candidate["id"]:
+        raise HTTPException(status_code=409, detail="This email is already linked to another account.")
+
+    old_email = candidate["candidate_email"]
+    db["candidates"].update_one({"id": candidate["id"], "candidate_email": old_email}, {
+        "$set": {"candidate_email": pending_email, "updated_at": datetime.now(timezone.utc)},
+        "$unset": {"pending_email": "", "pending_email_hash": "", "pending_email_expires": "",
+                   "pending_email_requested_at": "", "pending_email_attempts": ""},
+    })
+    for collection in ("candidate_submissions", "applications", "candidate_applications", "agreements", "candidate_agreements"):
+        db[collection].update_many({"candidate_email": old_email}, {"$set": {"candidate_email": pending_email}})
+    updated = db["candidates"].find_one({"id": candidate["id"]})
+    token = create_access_token(data={
+        "sub": pending_email, "candidate_id": candidate["id"],
+        "role": "CandidateProfile", "name": updated.get("candidate_name", ""),
+    })
+    return {"status": "success", "token": token, "candidate": sanitize_candidate_doc(updated)}
 
 
 @router.get("/me")
@@ -896,12 +1000,21 @@ async def sign_candidate_agreement_endpoint(
     return {"status": "success", "message": "Employment agreement signed and accepted successfully!"}
 
 
+def resolve_candidate_skills(extracted: list[str], existing: list[str],
+                             override: bool, edited: str) -> list[str]:
+    """Use resume skills unless the candidate explicitly replaces the saved list."""
+    if override:
+        return list(dict.fromkeys(skill.strip() for skill in edited.split(",") if skill.strip()))
+    return extracted or existing
+
+
 @router.post("/setup")
 async def setup_candidate_profile(
     candidate_phone: str = Form(...),
     candidate_title: str = Form("Candidate"),
     candidate_name: str | None = Form(None),
     skills: str = Form(""),
+    skills_override: bool = Form(False),
     linkedin_url: str = Form(""),
     github_url: str = Form(""),
     summary: str = Form(""),
@@ -910,8 +1023,9 @@ async def setup_candidate_profile(
 ) -> dict:
     """Sets up or completes the candidate profile with mandatory resume upload or updates."""
     email = candidate.get("candidate_email", "").strip().lower()
-    if not candidate_phone or not candidate_phone.strip():
-        raise HTTPException(status_code=400, detail="Phone number is required to complete your profile.")
+    phone_err = validate_phone_number(candidate_phone, required=True)
+    if phone_err:
+        raise HTTPException(status_code=400, detail=phone_err)
 
     pdf_base64 = ""
     filename = ""
@@ -970,15 +1084,10 @@ async def setup_candidate_profile(
                 detail="A resume file (PDF or DOCX) is required to complete your profile."
             )
 
-    # Build parsed skills
-    parsed_skills = profile_extracted.get("skills") or []
-    if skills:
-        manual_skills = [s.strip() for s in skills.split(",") if s.strip()]
-        for s in manual_skills:
-            if s not in parsed_skills:
-                parsed_skills.append(s)
-    elif not parsed_skills:
-        parsed_skills = candidate.get("skills") or []
+    parsed_skills = resolve_candidate_skills(
+        profile_extracted.get("skills") or [], candidate.get("skills") or [],
+        skills_override, skills,
+    )
 
     now_utc = datetime.now(timezone.utc)
     details = candidate.get("details", {}) or {}
@@ -1038,6 +1147,9 @@ async def update_my_candidate_profile(
     if body.candidate_title is not None:
         updates["candidate_title"] = body.candidate_title.strip()
     if body.candidate_phone is not None:
+        phone_err = validate_phone_number(body.candidate_phone, required=False)
+        if phone_err:
+            raise HTTPException(status_code=400, detail=phone_err)
         updates["candidate_phone"] = body.candidate_phone.strip()
     if body.skills is not None:
         updates["skills"] = body.skills

@@ -190,6 +190,35 @@ export function CandidateAuthProvider({ children }) {
     return data;
   };
 
+  const requestEmailChange = async (email) => {
+    if (!candidateToken) throw new Error('Not authenticated');
+    const res = await fetch(`${API_BASE_URL}/api/candidate-profile/email-change/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${candidateToken}` },
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Could not send verification code.');
+    return data;
+  };
+
+  const confirmEmailChange = async (code) => {
+    if (!candidateToken) throw new Error('Not authenticated');
+    const res = await fetch(`${API_BASE_URL}/api/candidate-profile/email-change/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${candidateToken}` },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Could not update login email.');
+    localStorage.setItem(CANDIDATE_TOKEN_KEY, data.token);
+    localStorage.setItem(CANDIDATE_USER_KEY, JSON.stringify(data.candidate));
+    setCandidateToken(data.token);
+    setCandidateUser(data.candidate);
+    await refreshProfile(data.token);
+    return data;
+  };
+
   // 5. Setup Profile with Mandatory Resume
   const setupProfile = async (formData) => {
     if (!candidateToken) throw new Error('Not authenticated');
@@ -268,6 +297,8 @@ export function CandidateAuthProvider({ children }) {
     loginWithGoogle,
     register,
     updateProfile,
+    requestEmailChange,
+    confirmEmailChange,
     setupProfile,
     refreshProfile,
     logout,

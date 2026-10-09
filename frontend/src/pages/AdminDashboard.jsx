@@ -255,6 +255,36 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, [token]);
 
+  // ── Background polling for pending HM approval requests ─────────────────
+  // Re-fetch users silently every 30 s so any new account registered via the
+  // invite link appears on the dashboard without requiring a manual refresh.
+  useEffect(() => {
+    if (!token) return;
+    const POLL_MS = 30_000;
+    const pollUsers = () => {
+      request('/api/auth/users?compact=true', { token, forceRefresh: true, noCache: true })
+        .then((usersRes) => {
+          if (!Array.isArray(usersRes)) return;
+          setUsers((prev) => {
+            const prevPending = prev.filter((u) => u.is_active === false).length;
+            const nextPending = usersRes.filter((u) => u.is_active === false).length;
+            // Only trigger a re-render when the pending count or total has changed
+            if (usersRes.length !== prev.length || nextPending !== prevPending) {
+              try {
+                sessionStorage.setItem('tj_cached_admin_users', JSON.stringify(usersRes));
+              } catch (_) {}
+              return usersRes;
+            }
+            return prev;
+          });
+        })
+        .catch(() => {}); // silent — never show polling errors in the UI
+    };
+    const id = setInterval(pollUsers, POLL_MS);
+    return () => clearInterval(id);
+  }, [token]);
+  // ─────────────────────────────────────────────────────────────────────────
+
   // 2-second auto-dismiss timer for success notifications
   useEffect(() => {
     if (success) {

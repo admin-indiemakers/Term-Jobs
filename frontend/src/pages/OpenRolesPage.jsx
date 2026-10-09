@@ -36,15 +36,17 @@ import {
   Check,
   LogIn,
   Home,
-  Download,
 } from 'lucide-react';
 import { API_BASE_URL, request } from '../api/client';
 import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
+import ResumePreviewModal from '../components/ResumePreviewModal';
+import CandidateEmailEditor from '../components/CandidateEmailEditor';
 import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
+import { validatePhone } from '../utils/phoneValidation';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'Termjobs_alertbot';
@@ -265,6 +267,8 @@ export default function OpenRolesPage({ enabled = true }) {
     summary: '',
   });
   const [setupResumeFile, setSetupResumeFile] = useState(null);
+  const [showResumePreview, setShowResumePreview] = useState(false);
+  const [editingSkills, setEditingSkills] = useState(false);
   const setupFileInputRef = useRef(null);
   const [setupSubmitting, setSetupSubmitting] = useState(false);
   const [setupError, setSetupError] = useState(null);
@@ -276,7 +280,6 @@ export default function OpenRolesPage({ enabled = true }) {
     email: '',
     phone: '',
     title: '',
-    skills: '',
     linkedin_url: '',
     github_url: '',
     cover_note: '',
@@ -483,6 +486,13 @@ export default function OpenRolesPage({ enabled = true }) {
       setAuthError('Password must be at least 6 characters long.');
       return;
     }
+    if (regPhone.trim()) {
+      const regPhoneErr = validatePhone(regPhone, { required: false });
+      if (regPhoneErr) {
+        setAuthError(regPhoneErr);
+        return;
+      }
+    }
     setAuthError(null);
     setAuthLoading(true);
     try {
@@ -643,7 +653,6 @@ export default function OpenRolesPage({ enabled = true }) {
         email: candidateUser.candidate_email || prev.email,
         phone: candidateUser.candidate_phone || candidateUser.details?.candidate_phone || prev.phone,
         title: candidateUser.candidate_title || prev.title,
-        skills: Array.isArray(candidateUser.skills) ? candidateUser.skills.join(', ') : prev.skills,
         linkedin_url: candidateUser.details?.linkedin_url || prev.linkedin_url,
         github_url: candidateUser.details?.github_url || prev.github_url,
       }));
@@ -889,6 +898,14 @@ export default function OpenRolesPage({ enabled = true }) {
     const applicantEmail = applyForm.email.trim() || candidateUser?.candidate_email || '';
     const applicantPhone = applyForm.phone.trim() || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '';
 
+    if (applicantPhone) {
+      const applyPhoneErr = validatePhone(applicantPhone);
+      if (applyPhoneErr) {
+        setSubmitError(applyPhoneErr);
+        return;
+      }
+    }
+
     if (!applicantName) {
       setSubmitError('Please enter your full name.');
       return;
@@ -1012,8 +1029,9 @@ export default function OpenRolesPage({ enabled = true }) {
       setSetupError('Please enter your full name.');
       return;
     }
-    if (!setupForm.phone.trim()) {
-      setSetupError('Phone number is required so hiring managers can reach you.');
+    const setupPhoneErr = validatePhone(setupForm.phone);
+    if (setupPhoneErr) {
+      setSetupError(setupPhoneErr);
       return;
     }
 
@@ -1023,7 +1041,10 @@ export default function OpenRolesPage({ enabled = true }) {
       formData.append('candidate_name', setupForm.name.trim());
       formData.append('candidate_phone', setupForm.phone.trim());
       formData.append('candidate_title', setupForm.title.trim());
-      formData.append('skills', setupForm.skills.trim());
+      if (editingSkills && hasResume && !setupResumeFile) {
+        formData.append('skills', setupForm.skills.trim());
+        formData.append('skills_override', 'true');
+      }
       formData.append('linkedin_url', setupForm.linkedin_url.trim());
       formData.append('github_url', setupForm.github_url.trim());
       formData.append('summary', setupForm.summary.trim());
@@ -1035,6 +1056,7 @@ export default function OpenRolesPage({ enabled = true }) {
       if (setupProfile) {
         await setupProfile(formData);
       }
+      setEditingSkills(false);
       setSetupSuccess(true);
       setTimeout(() => {
         setShowSetupModal(false);
@@ -1053,6 +1075,14 @@ export default function OpenRolesPage({ enabled = true }) {
       setPoolError('Please upload your resume file (PDF or DOCX).');
       return;
     }
+    const poolPhone = poolForm.phone.trim() || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '';
+    if (poolPhone) {
+      const poolPhoneErr = validatePhone(poolPhone);
+      if (poolPhoneErr) {
+        setPoolError(poolPhoneErr);
+        return;
+      }
+    }
     setPoolSubmitting(true);
     setPoolError(null);
     try {
@@ -1061,7 +1091,6 @@ export default function OpenRolesPage({ enabled = true }) {
       formData.append('email', poolForm.email.trim() || candidateUser?.candidate_email || '');
       formData.append('phone', poolForm.phone.trim() || candidateUser?.candidate_phone || candidateUser?.details?.candidate_phone || '');
       formData.append('title', poolForm.title.trim() || candidateUser?.candidate_title || '');
-      formData.append('skills', poolForm.skills.trim());
       formData.append('linkedin_url', poolForm.linkedin_url.trim() || candidateUser?.details?.linkedin_url || '');
       formData.append('github_url', poolForm.github_url.trim() || candidateUser?.details?.github_url || '');
       formData.append('cover_note', poolForm.cover_note.trim());
@@ -2235,10 +2264,22 @@ export default function OpenRolesPage({ enabled = true }) {
                               type="tel"
                               required
                               value={applyForm.phone}
-                              onChange={(e) => setApplyForm({ ...applyForm, phone: e.target.value })}
-                              placeholder="+1 (555) 000-0000"
-                              className="w-full bg-white/[0.03] border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:border-white/35 focus:bg-white/[0.05] transition-all"
+                              onChange={(e) => {
+                                setApplyForm({ ...applyForm, phone: e.target.value });
+                                if (submitError) setSubmitError(null);
+                              }}
+                              placeholder="e.g. 9876543210 or +91 9876543210"
+                              className={`w-full bg-white/[0.03] border ${
+                                applyForm.phone && validatePhone(applyForm.phone)
+                                  ? 'border-rose-400/80 focus:border-rose-400'
+                                  : 'border-white/10 focus:border-white/35'
+                              } rounded-xl px-3.5 py-2 text-xs text-white placeholder-white/30 focus:outline-none focus:bg-white/[0.05] transition-all`}
                             />
+                            {applyForm.phone && validatePhone(applyForm.phone) && (
+                              <p className="mt-1 text-[11px] text-rose-400 font-medium">
+                                {validatePhone(applyForm.phone)}
+                              </p>
+                            )}
                           </div>
                           <div>
                             <label className="block text-[11px] font-semibold text-white/60 uppercase tracking-wider mb-1">
@@ -2452,6 +2493,13 @@ export default function OpenRolesPage({ enabled = true }) {
       {/* ============================================================ */}
       {/* MODAL 3: CANDIDATE PROFILE SETUP / EDIT                      */}
       {/* ============================================================ */}
+      {showResumePreview && candidateAuth?.candidateToken && (
+        <ResumePreviewModal token={candidateAuth.candidateToken}
+          filename={currentResumeName}
+          extractedText={candidateUser?.extracted_text || ''}
+          onClose={() => setShowResumePreview(false)} />
+      )}
+
       {showSetupModal && typeof document !== 'undefined' && createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xl overflow-y-auto">
           <div className="bg-white border border-neutral-200 rounded-3xl max-w-lg w-full p-6 shadow-2xl my-auto text-neutral-900">
@@ -2485,6 +2533,8 @@ export default function OpenRolesPage({ enabled = true }) {
                   </div>
                 )}
 
+                <CandidateEmailEditor />
+
                 <div>
                   <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Full Name *</label>
                   <input
@@ -2502,9 +2552,22 @@ export default function OpenRolesPage({ enabled = true }) {
                     type="tel"
                     required
                     value={setupForm.phone}
-                    onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
-                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                    onChange={(e) => {
+                      setSetupForm({ ...setupForm, phone: e.target.value });
+                      if (setupError) setSetupError(null);
+                    }}
+                    placeholder="e.g. 9876543210 or +91 9876543210"
+                    className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
+                      setupForm.phone && validatePhone(setupForm.phone)
+                        ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                        : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                    } rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:ring-1 transition-all`}
                   />
+                  {setupForm.phone && validatePhone(setupForm.phone) && (
+                    <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                      {validatePhone(setupForm.phone)}
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -2514,17 +2577,6 @@ export default function OpenRolesPage({ enabled = true }) {
                     value={setupForm.title}
                     onChange={(e) => setSetupForm({ ...setupForm, title: e.target.value })}
                     placeholder="e.g. Senior Frontend Engineer"
-                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase mb-1">Skills (comma separated)</label>
-                  <input
-                    type="text"
-                    value={setupForm.skills}
-                    onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
-                    placeholder="React, TypeScript, Node.js, Next.js"
                     className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-neutral-900 text-xs focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
                   />
                 </div>
@@ -2556,16 +2608,12 @@ export default function OpenRolesPage({ enabled = true }) {
                           </div>
                         </div>
                         {candidateAuth?.candidateToken && (
-                          <a
-                            href={`${API_BASE_URL}/api/candidate-profile/resume?token=${candidateAuth.candidateToken}`}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button type="button" onClick={() => setShowResumePreview(true)}
                             className="px-3 py-1.5 rounded-xl bg-white hover:bg-neutral-100 border border-neutral-300 text-[11px] font-semibold text-neutral-800 transition flex items-center gap-1.5 shrink-0 cursor-pointer shadow-sm"
-                            title="View or download your master resume"
-                          >
-                            <Download size={12} />
-                            <span>View / Download</span>
-                          </a>
+                            title="Preview your master resume">
+                            <FileText size={12} />
+                            <span>View Uploaded Resume</span>
+                          </button>
                         )}
                       </div>
 
@@ -2618,6 +2666,24 @@ export default function OpenRolesPage({ enabled = true }) {
                     </div>
                   )}
                 </div>
+
+                {hasResume && !setupResumeFile && (
+                  <div className="rounded-xl border border-neutral-200 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold text-neutral-700 uppercase">Skills from resume</span>
+                      <button type="button" onClick={() => { if (editingSkills) setSetupForm((prev) => ({ ...prev, skills: (Array.isArray(candidateUser?.skills) ? candidateUser.skills : []).join(', ') })); setEditingSkills(!editingSkills); }} className="text-xs font-semibold text-neutral-900 underline">
+                        {editingSkills ? 'Cancel' : 'Edit Skills'}
+                      </button>
+                    </div>
+                    {editingSkills ? (
+                      <input type="text" aria-label="Edit Skills" value={setupForm.skills}
+                        onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
+                        placeholder="Comma-separated skills" className="mt-2 w-full rounded-lg border border-neutral-300 p-2 text-xs" />
+                    ) : (
+                      <p className="mt-2 text-xs text-neutral-600">{setupForm.skills || 'No skills found. Choose Edit Skills to add them.'}</p>
+                    )}
+                  </div>
+                )}
 
                 <button
                   type="submit"
@@ -2764,10 +2830,22 @@ export default function OpenRolesPage({ enabled = true }) {
                       type="tel"
                       required
                       value={poolForm.phone}
-                      onChange={(e) => setPoolForm({ ...poolForm, phone: e.target.value })}
-                      placeholder="+1 (555) 000-0000"
-                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                      onChange={(e) => {
+                        setPoolForm({ ...poolForm, phone: e.target.value });
+                        if (poolError) setPoolError(null);
+                      }}
+                      placeholder="e.g. 9876543210 or +91 9876543210"
+                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
+                        poolForm.phone && validatePhone(poolForm.phone)
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                      } rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
+                    {poolForm.phone && validatePhone(poolForm.phone) && (
+                      <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                        {validatePhone(poolForm.phone)}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Target Title / Role *</label>
@@ -2782,16 +2860,6 @@ export default function OpenRolesPage({ enabled = true }) {
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Core Skills (Optional)</label>
-                  <input
-                    type="text"
-                    value={poolForm.skills}
-                    onChange={(e) => setPoolForm({ ...poolForm, skills: e.target.value })}
-                    placeholder="e.g. React, TypeScript, Node.js, AWS"
-                    className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3.5 py-2.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
-                  />
-                </div>
 
                 {/* Resume Dropzone */}
                 <div>
@@ -3567,10 +3635,22 @@ export default function OpenRolesPage({ enabled = true }) {
                     <input
                       type="tel"
                       value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      placeholder="+1 (555) 000-0000"
-                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                      onChange={(e) => {
+                        setRegPhone(e.target.value);
+                        if (authError) setAuthError(null);
+                      }}
+                      placeholder="e.g. 9876543210 or +91 9876543210"
+                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
+                        regPhone && validatePhone(regPhone, { required: false })
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                      } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
+                    {regPhone && validatePhone(regPhone, { required: false }) && (
+                      <p className="mt-1 text-[10px] text-rose-600 font-medium">
+                        {validatePhone(regPhone, { required: false })}
+                      </p>
+                    )}
                   </div>
                 </div>
 

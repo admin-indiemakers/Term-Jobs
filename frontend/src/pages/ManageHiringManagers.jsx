@@ -78,6 +78,7 @@ export default function ManageHiringManagers() {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [edit, setEdit] = useState(null);
+  const [editOriginal, setEditOriginal] = useState(null); // tracks original values to detect actual changes
   const [editing, setEditing] = useState(false);
   const [viewProfile, setViewProfile] = useState(null);
   const [emailError, setEmailError] = useState('');
@@ -105,6 +106,47 @@ export default function ManageHiringManagers() {
   useEffect(() => {
     load();
   }, [token]);
+
+  // ── Background polling ──────────────────────────────────────────────────
+  // Silently re-fetch the HM list every 30 s so that new approval requests
+  // submitted via the invite link appear without a manual page refresh.
+  useEffect(() => {
+    if (!token) return;
+    const POLL_MS = 30_000;
+    const poll = () => {
+      request('/api/auth/users?role=Hiring+Manager&compact=true', {
+        token,
+        forceRefresh: true,
+        noCache: true,
+      })
+        .then((data) => {
+          const list = Array.isArray(data) ? data : [];
+          const filtered = list.filter((u) => u.role === 'Hiring Manager');
+          // Only update state (and storage) when the list has actually changed
+          setManagers((prev) => {
+            const prevPending = prev.filter((m) => m.is_active === false).length;
+            const nextPending = filtered.filter((m) => m.is_active === false).length;
+            if (
+              filtered.length !== prev.length ||
+              nextPending !== prevPending
+            ) {
+              try {
+                sessionStorage.setItem(
+                  'tj_cached_hiring_managers',
+                  JSON.stringify(filtered)
+                );
+              } catch (_) {}
+              return filtered;
+            }
+            return prev;
+          });
+        })
+        .catch(() => {}); // silent — don't surface polling errors in the UI
+    };
+    const id = setInterval(poll, POLL_MS);
+    return () => clearInterval(id);
+  }, [token]);
+  // ────────────────────────────────────────────────────────────────────────
 
   // Keyboard shortcut ⌘K or Ctrl+K to focus search
   useEffect(() => {
@@ -231,12 +273,23 @@ export default function ManageHiringManagers() {
       const payload = {};
       if (edit.email !== '') payload.email = edit.email.trim();
       if (edit.name !== '') payload.name = edit.name.trim();
-      if (edit.department !== undefined) payload.department = edit.department.trim();
+
+      // Only send department if it was actually changed by the manager.
+      // This prevents a password-only save from sending a stale/empty department
+      // that would overwrite the existing value in the database.
+      const newDept = (edit.department || '').trim();
+      const origDept = (editOriginal?.department || '').trim();
+      if (newDept !== origDept) {
+        // null signals backend to clear the department; empty string would do the same
+        payload.department = newDept || null;
+      }
+
       if (edit.password) payload.password = edit.password;
 
       await request(`/api/auth/users/${edit.id}`, { method: 'PATCH', token, body: payload });
       setSuccess(`Hiring Manager "${edit.name || edit.email}" updated successfully.`);
       setEdit(null);
+      setEditOriginal(null);
       load(true);
     } catch (err) {
       setError(err.message || 'Failed to update manager account');
@@ -531,6 +584,7 @@ export default function ManageHiringManagers() {
                                 type="button"
                                 onClick={() => {
                                   setEdit({ ...u, password: '' });
+                                  setEditOriginal({ ...u });
                                   setActiveMenuId(null);
                                 }}
                                 className="w-full px-3 py-1.5 text-xs text-gray-700 hover:text-black hover:bg-gray-100/80 rounded-xl transition-colors flex items-center gap-2 font-medium cursor-pointer"
@@ -708,6 +762,7 @@ export default function ManageHiringManagers() {
                 type="button"
                 onClick={() => {
                   setEdit({ ...viewProfile, password: '' });
+                  setEditOriginal({ ...viewProfile });
                   setViewProfile(null);
                 }}
                 className="px-4 py-2 text-xs font-bold text-white bg-black hover:bg-gray-900 rounded-xl shadow-xs transition-all cursor-pointer"
@@ -862,7 +917,7 @@ export default function ManageHiringManagers() {
               </div>
               <button
                 type="button"
-                onClick={() => setEdit(null)}
+                onClick={() => { setEdit(null); setEditOriginal(null); }}
                 className="p-1.5 text-gray-400 hover:text-gray-700 rounded-lg hover:bg-white/60 transition-colors cursor-pointer"
               >
                 <X size={18} />
@@ -930,7 +985,7 @@ export default function ManageHiringManagers() {
               <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => setEdit(null)}
+                  onClick={() => { setEdit(null); setEditOriginal(null); }}
                   disabled={editing}
                   className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors cursor-pointer"
                 >

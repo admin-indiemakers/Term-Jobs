@@ -26,9 +26,11 @@ import {
   Check,
 } from 'lucide-react';
 import { API_BASE_URL } from '../api/client';
+import CandidateEmailEditor from './CandidateEmailEditor';
 import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import { formatDueDate } from '../utils/dateUtils';
+import { validatePhone } from '../utils/phoneValidation';
 
 export default function PublicJobBoard({ onBackToHome, candidateProfile: propCandidate, onCandidateLogout }) {
   const candidateAuth = useCandidateAuth();
@@ -51,6 +53,7 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
     summary: '',
   });
   const [setupResumeFile, setSetupResumeFile] = useState(null);
+  const [editingSkills, setEditingSkills] = useState(false);
   const [setupSubmitting, setSetupSubmitting] = useState(false);
   const [setupError, setSetupError] = useState(null);
   const [setupSuccess, setSetupSuccess] = useState(false);
@@ -114,7 +117,6 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
     email: '',
     phone: '',
     title: '',
-    skills: '',
     linkedin_url: '',
     github_url: '',
     cover_note: '',
@@ -154,7 +156,6 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
         email: candidateUser.candidate_email || prev.email,
         phone: candidateUser.candidate_phone || candidateUser.details?.candidate_phone || prev.phone,
         title: candidateUser.candidate_title || prev.title,
-        skills: Array.isArray(candidateUser.skills) ? candidateUser.skills.join(', ') : prev.skills,
         linkedin_url: candidateUser.details?.linkedin_url || prev.linkedin_url,
         github_url: candidateUser.details?.github_url || prev.github_url,
       }));
@@ -305,8 +306,9 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       setSetupError('Please enter your full name.');
       return;
     }
-    if (!setupForm.phone.trim()) {
-      setSetupError('Phone number is required so hiring managers can reach you.');
+    const phoneErr = validatePhone(setupForm.phone);
+    if (phoneErr) {
+      setSetupError(phoneErr);
       return;
     }
     if (!setupForm.title.trim()) {
@@ -325,7 +327,10 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       fd.append('candidate_name', setupForm.name.trim());
       fd.append('candidate_phone', setupForm.phone.trim());
       fd.append('candidate_title', setupForm.title.trim());
-      fd.append('skills', setupForm.skills.trim());
+      if (editingSkills && hasResume && !setupResumeFile) {
+        fd.append('skills', setupForm.skills.trim());
+        fd.append('skills_override', 'true');
+      }
       fd.append('linkedin_url', setupForm.linkedin_url.trim());
       fd.append('github_url', setupForm.github_url.trim());
       fd.append('summary', setupForm.summary.trim());
@@ -334,6 +339,7 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       }
 
       await setupProfile(fd);
+      setEditingSkills(false);
       setSetupSuccess(true);
       setTimeout(() => {
         setSetupSuccess(false);
@@ -408,8 +414,9 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       setSubmitError('Please enter a valid email address.');
       return;
     }
-    if (!applicantPhone) {
-      setSubmitError('Please enter your contact phone number.');
+    const applyPhoneErr = validatePhone(applicantPhone);
+    if (applyPhoneErr) {
+      setSubmitError(applyPhoneErr);
       return;
     }
 
@@ -468,6 +475,13 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       setPoolError('Please upload your resume (PDF or DOCX).');
       return;
     }
+    if (poolForm.phone.trim()) {
+      const poolPhoneErr = validatePhone(poolForm.phone);
+      if (poolPhoneErr) {
+        setPoolError(poolPhoneErr);
+        return;
+      }
+    }
     setPoolSubmitting(true);
     setPoolError(null);
     try {
@@ -476,7 +490,6 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
       formData.append('email', poolForm.email.trim());
       formData.append('phone', poolForm.phone.trim());
       formData.append('title', poolForm.title.trim());
-      formData.append('skills', poolForm.skills.trim());
       formData.append('linkedin_url', poolForm.linkedin_url.trim());
       formData.append('github_url', poolForm.github_url.trim());
       formData.append('cover_note', poolForm.cover_note.trim());
@@ -1470,19 +1483,7 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
                       />
                     </div>
-                    <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
-                        Email Address <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={poolForm.email}
-                        onChange={(e) => setPoolForm({ ...poolForm, email: e.target.value })}
-                        placeholder="sarah@example.com"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
-                      />
-                    </div>
+
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1493,10 +1494,22 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                       <input
                         type="tel"
                         value={poolForm.phone}
-                        onChange={(e) => setPoolForm({ ...poolForm, phone: e.target.value })}
-                        placeholder="+91 9876543210"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                        onChange={(e) => {
+                          setPoolForm({ ...poolForm, phone: e.target.value });
+                          if (poolError) setPoolError(null);
+                        }}
+                        placeholder="e.g. 9876543210 or +91 9876543210"
+                        className={`w-full px-3.5 py-2.5 rounded-xl border ${
+                          poolForm.phone && validatePhone(poolForm.phone, { required: false })
+                            ? 'border-rose-400 bg-rose-50/20'
+                            : 'border-[#E5E5E0] bg-[#FAFAF8]'
+                        } text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white`}
                       />
+                      {poolForm.phone && validatePhone(poolForm.phone, { required: false }) && (
+                        <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                          {validatePhone(poolForm.phone, { required: false })}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
@@ -1510,19 +1523,6 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
                       />
                     </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
-                      Key Technical Skills (comma separated)
-                    </label>
-                    <input
-                      type="text"
-                      value={poolForm.skills}
-                      onChange={(e) => setPoolForm({ ...poolForm, skills: e.target.value })}
-                      placeholder="Python, React, FastAPI, AWS, Docker, Kubernetes"
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
-                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1684,6 +1684,8 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                     </div>
                   </div>
 
+                  <CandidateEmailEditor />
+
                   {/* Phone & Title Row */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                     <div>
@@ -1694,10 +1696,22 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                         type="tel"
                         required
                         value={setupForm.phone}
-                        onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
-                        placeholder="+91 98765 43210"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
+                        onChange={(e) => {
+                          setSetupForm({ ...setupForm, phone: e.target.value });
+                          if (setupError) setSetupError(null);
+                        }}
+                        placeholder="e.g. 9876543210 or +91 9876543210"
+                        className={`w-full px-3.5 py-2.5 rounded-xl border ${
+                          setupForm.phone && validatePhone(setupForm.phone)
+                            ? 'border-rose-400 bg-rose-50/20'
+                            : 'border-[#E5E5E0] bg-[#FAFAF8]'
+                        } text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white`}
                       />
+                      {setupForm.phone && validatePhone(setupForm.phone) && (
+                        <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                          {validatePhone(setupForm.phone)}
+                        </p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
@@ -1712,20 +1726,6 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
                       />
                     </div>
-                  </div>
-
-                  {/* Skills */}
-                  <div>
-                    <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
-                      Key Technical Skills <span className="text-[10px] font-normal text-[#8A8A85] lowercase">(comma-separated)</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={setupForm.skills}
-                      onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
-                      placeholder="React, TypeScript, Next.js, Node.js, Python..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
-                    />
                   </div>
 
                   {/* LinkedIn & GitHub */}
@@ -1819,6 +1819,24 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                       </div>
                     )}
                   </div>
+
+                  {hasResume && !setupResumeFile && (
+                    <div className="rounded-xl border border-[#E5E5E0] p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase">Skills from resume</span>
+                        <button type="button" onClick={() => { if (editingSkills) setSetupForm((prev) => ({ ...prev, skills: (Array.isArray(candidateUser?.skills) ? candidateUser.skills : []).join(', ') })); setEditingSkills(!editingSkills); }} className="text-xs font-semibold underline cursor-pointer">
+                          {editingSkills ? 'Cancel' : 'Edit Skills'}
+                        </button>
+                      </div>
+                      {editingSkills ? (
+                        <input type="text" aria-label="Edit Skills" value={setupForm.skills}
+                          onChange={(e) => setSetupForm({ ...setupForm, skills: e.target.value })}
+                          placeholder="Comma-separated skills" className="mt-2 w-full rounded-lg border border-[#E5E5E0] p-2 text-xs" />
+                      ) : (
+                        <p className="mt-2 text-xs text-[#666660]">{setupForm.skills || 'No skills found. Choose Edit Skills to add them.'}</p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Submit Button */}
                   <div className="pt-3 border-t border-[#EAEAE6] flex items-center justify-end gap-2.5">
