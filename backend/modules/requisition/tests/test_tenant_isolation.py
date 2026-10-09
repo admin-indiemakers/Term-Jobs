@@ -265,3 +265,91 @@ class _FakeService:
                 raise ValueError(f"requisition {requisition_id} not found")
             session.delete(req)
             session.commit()
+
+
+def test_role_template_strict_tenant_isolation(db_session_factory):
+    """Verify role templates assigned to Buyer Company A are NOT leaked to Buyer Company B."""
+    from modules.requisition.domain.models import RoleTemplate
+
+    with db_session_factory() as session:
+        tenant_a = _make_tenant(session, name="Buyer A")
+        tenant_b = _make_tenant(session, name="Buyer B")
+        director_a = _make_user(session, "Director", tenant_a.id, "director@buyera.test")
+        director_b = _make_user(session, "Director", tenant_b.id, "director@buyera.b.test")
+        hm_b = _make_user(session, "Hiring Manager", tenant_b.id, "hm@buyerb.test")
+
+        # Create role template for Buyer Company A
+        tpl_a = RoleTemplate(
+            tenant_id=tenant_a.id,
+            created_by=director_a.id,
+            name="Confidential Senior Python Architect",
+            structured_role={
+                "title": "Senior Python Architect",
+                "ceiling_internal": 2500000,
+                "must_have_skills": ["Python", "FastAPI"]
+            }
+        )
+        session.add(tpl_a)
+        session.commit()
+
+        # Buyer Company A sees its own template
+        seen_a = app_main.list_templates(current_user=director_a)
+        assert len(seen_a) == 1
+        assert seen_a[0]["name"] == "Confidential Senior Python Architect"
+
+        # Buyer Company B Director and Hiring Manager CANNOT see Buyer Company A's template
+        seen_b_director = app_main.list_templates(current_user=director_b)
+        assert len(seen_b_director) == 0
+
+        seen_b_hm = app_main.list_templates(current_user=hm_b)
+        assert len(seen_b_hm) == 0
+
+        # Cross-tenant delete is blocked with 403
+        with pytest.raises(HTTPException) as exc:
+            app_main.delete_template(tpl_a.id, current_user=director_b)
+        assert exc.value.status_code == 403
+
+        # Super Admin can filter by tenant or see all
+        super_admin = _make_user(session, "Super Admin", tenant_a.id, "super@platform.test")
+        seen_super_a = app_main.list_templates(tenant_id=tenant_a.id, current_user=super_admin)
+        assert len(seen_super_a) == 1
+
+        seen_super_b = app_main.list_templates(tenant_id=tenant_b.id, current_user=super_admin)
+        assert len(seen_super_b) == 0
+
+
+@pytest.mark.anyio
+async def test_upload_template_tenant_isolation(db_session_factory):
+    """Verify that uploading templates enforces tenant boundaries and rejects cross-tenant assignment."""
+    import io
+    from fastapi import UploadFile
+
+    with db_session_factory() as session:
+        tenant_a = _make_tenant(session, name="Company Alpha")
+        tenant_b = _make_tenant(session, name="Company Beta")
+        director_a = _make_user(session, "Director", tenant_a.id, "dir@alpha.test")
+        director_b = _make_user(session, "Director", tenant_b.id, "dir@beta.test")
+
+        json_bytes = b'{"title": "Confidential Alpha Lead", "role": {"job_title": "Alpha Lead"}}'
+
+        # Upload by Director A without tenant_id explicitly passes -> assigned to Company Alpha
+        upload_file_a = UploadFile(filename="alpha_role.json", file=io.BytesIO(json_bytes))
+        await app_main.upload_template(file=upload_file_a, current_user=director_a)
+
+        # Company Alpha sees it
+        assert len(app_main.list_templates(current_user=director_a)) == 1
+
+        # Company Beta DOES NOT see Company Alpha's template
+        assert len(app_main.list_templates(current_user=director_b)) == 0
+
+        # Director B attempts to upload into Company Alpha's tenant -> 403 Forbidden
+        upload_file_b = UploadFile(filename="beta_exploit.json", file=io.BytesIO(json_bytes))
+        with pytest.raises(HTTPException) as exc:
+            await app_main.upload_template(
+                file=upload_file_b,
+                tenant_id=tenant_a.id,
+                current_user=director_b
+            )
+        assert exc.value.status_code == 403
+
+

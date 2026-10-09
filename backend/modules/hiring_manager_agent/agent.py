@@ -238,8 +238,74 @@ PREDEFINED_ROLE_DICT = {
 }
 
 
-def get_unique_predefined_roles() -> List[Dict[str, Any]]:
-    """Return deduplicated list of predefined roles with full specifications."""
+def get_unique_predefined_roles(tenant_id: str = "") -> List[Dict[str, Any]]:
+    """Return deduplicated list of role templates strictly scoped to the tenant.
+    
+    If the tenant has uploaded role templates assigned by their Director, returns those templates.
+    Only falls back to standard generic templates if no tenant-specific templates exist,
+    guaranteeing zero data leakage across buyer companies.
+    """
+    tenant_roles = []
+    if tenant_id and str(tenant_id).strip() not in ("local", "platform", ""):
+        try:
+            from modules.shared.db import db as mongo_db
+            clean_tid = str(tenant_id).strip()
+            docs = list(mongo_db["role_templates"].find({"tenant_id": clean_tid}))
+            if not docs:
+                from modules.shared.db import get_session
+                import modules.requisition.domain.models as req_models
+                with get_session() as session:
+                    rows = session.query(req_models.RoleTemplate).filter(
+                        req_models.RoleTemplate.tenant_id == clean_tid
+                    ).all()
+                    for r in rows:
+                        docs.append({
+                            "id": r.id,
+                            "name": r.name,
+                            "structured_role": r.structured_role or {}
+                        })
+
+            seen_titles = set()
+            for doc in docs:
+                sr = doc.get("structured_role") or {}
+                title = sr.get("title") or sr.get("job_title") or doc.get("name") or "Custom Role"
+                if title in seen_titles:
+                    continue
+                seen_titles.add(title)
+
+                skills = sr.get("must_have_skills") or []
+                if isinstance(skills, list):
+                    skills_str = ", ".join(skills)
+                else:
+                    skills_str = str(skills)
+
+                salary_str = ""
+                ceiling = sr.get("ceiling_internal")
+                rate_band = sr.get("rate_band") or sr.get("range_vendors_see")
+                if ceiling:
+                    salary_str = f"Up to ₹{int(ceiling):,}" if isinstance(ceiling, (int, float)) else f"Up to {ceiling}"
+                elif rate_band and isinstance(rate_band, (list, tuple)) and len(rate_band) == 2:
+                    salary_str = f"₹{rate_band[0]:,} - ₹{rate_band[1]:,}"
+
+                tenant_roles.append({
+                    "id": doc.get("id"),
+                    "title": title,
+                    "department": sr.get("job_family") or sr.get("department") or "Engineering",
+                    "job_family": sr.get("job_family") or "Engineering",
+                    "experience_level": sr.get("experience") or sr.get("seniority") or "Mid-Level",
+                    "seniority": sr.get("seniority") or "Mid",
+                    "skills": skills_str or "Standard requirements",
+                    "salary_range": salary_str or "Budget approved",
+                    "location": sr.get("location") or sr.get("work_mode") or "Hybrid",
+                    "job_description": sr.get("job_description") or sr.get("description") or f"Standard approved requisition template for {title} assigned by Director.",
+                    "structured_role": sr
+                })
+        except Exception as e:
+            logger.warning(f"Error querying tenant role templates for {tenant_id}: {e}")
+
+    if tenant_roles:
+        return tenant_roles
+
     seen = set()
     result = []
     for r in PREDEFINED_ROLE_DICT.values():
@@ -1829,24 +1895,26 @@ def get_hiring_manager_guide(user_name: str = "Hiring Manager", company_name: st
     }
 
 
-def get_requisition_templates() -> Dict[str, Any]:
-    """List pre-configured requisition role templates."""
-    templates = [
-        {"title": "DevSecOps Engineer", "dept": "Infrastructure & Security", "exp": "Mid-Senior (4-7 yrs)", "skills": "Kubernetes, AWS, Terraform, CI/CD, Vault"},
-        {"title": "Python Backend Engineer", "dept": "Core Product Engineering", "exp": "Mid (3-5 yrs)", "skills": "Python, FastAPI, PostgreSQL, Redis, Docker"},
-        {"title": "React Frontend Engineer", "dept": "Web & Mobile Platforms", "exp": "Mid-Senior (3-6 yrs)", "skills": "React, TypeScript, Next.js, TailwindCSS"},
-        {"title": "Data Platform Engineer", "dept": "Data & Analytics", "exp": "Senior (5-8 yrs)", "skills": "Python, Apache Spark, Snowflake, Kafka, Airflow"},
-        {"title": "QA Automation Engineer", "dept": "Quality Engineering", "exp": "Mid (3-5 yrs)", "skills": "Playwright, Cypress, Python, Selenium, CI/CD"}
-    ]
+def get_requisition_templates(tenant_id: str = "") -> Dict[str, Any]:
+    """List pre-configured requisition role templates scoped to tenant."""
+    roles = get_unique_predefined_roles(tenant_id)
+    templates = []
     cards = []
-    for t in templates:
-        cards.append(f"• **{t['title']}** ({t['dept']}) — `{t['exp']}`\n  🛠 *Stack:* `{t['skills']}`")
+    for r in roles:
+        t_entry = {
+            "title": r.get("title", ""),
+            "dept": r.get("department", "Engineering"),
+            "exp": r.get("experience_level", "Mid-Level"),
+            "skills": r.get("skills", "")
+        }
+        templates.append(t_entry)
+        cards.append(f"• **{t_entry['title']}** ({t_entry['dept']}) — `{t_entry['exp']}`\n  🛠 *Stack:* `{t_entry['skills']}`")
 
     markdown = (
-        "📚 **PRE-CONFIGURED REQUISITION TEMPLATES**\n"
+        "📚 **PRE-APPROVED COMPANY ROLE TEMPLATES**\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"{chr(10).join(cards)}\n\n"
-        "Select any role or say **\"Draft a DevSecOps Engineer\"** to create an interactive requisition preview in 1 click!"
+        "Select any role or say **\"Draft a role\"** to create an interactive requisition preview in 1 click!"
     )
     return {"templates": templates, "markdown": markdown}
 
@@ -3534,10 +3602,17 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
     if re.search(create_req_pattern, prompt_lower) and not any(k in prompt_lower for k in ["interview plan", "interview rounds", "interview question", "rubric", "rubrics", "assessment plan", "criteria"]):
         matched_role = None
-        for key, role_data in PREDEFINED_ROLE_DICT.items():
-            if key in prompt_lower or role_data["title"].lower() in prompt_lower:
-                matched_role = role_data
+        unique_roles = get_unique_predefined_roles(tenant_id)
+        for r_entry in unique_roles:
+            if r_entry["title"].lower() in prompt_lower:
+                matched_role = r_entry
                 break
+
+        if not matched_role:
+            for key, role_data in PREDEFINED_ROLE_DICT.items():
+                if key in prompt_lower or role_data["title"].lower() in prompt_lower:
+                    matched_role = role_data
+                    break
 
         if matched_role:
             exp_match = re.search(r"(\d+)\s*(?:-|to)?\s*(\d+)?\s*(?:yr|yrs|year|years)\b", prompt_lower)
@@ -3587,11 +3662,11 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
             draft_res = draft_requisition_preview(
                 title=matched_role["title"],
-                department=matched_role["department"],
-                location=matched_role["location"],
-                employment_type=matched_role["employment_type"],
+                department=matched_role.get("department", "Engineering"),
+                location=matched_role.get("location", "Hybrid"),
+                employment_type=matched_role.get("employment_type", "Contract"),
                 experience_level=exp_val,
-                salary_range=matched_role["salary_range"],
+                salary_range=matched_role.get("salary_range", "Competitive"),
                 skills=skills_val,
                 job_description=jd_val,
                 openings=init_openings
@@ -3601,7 +3676,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 "executed_actions": [{"tool": "draft_hiring_requisition", "result": draft_res}]
             }
         else:
-            unique_roles = get_unique_predefined_roles()
+            unique_roles = get_unique_predefined_roles(tenant_id)
             role_lines = []
             for idx, r in enumerate(unique_roles[:8], 1):
                 role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
@@ -3835,7 +3910,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             executed.append({"tool": "draft_hiring_requisition", "result": res})
                             reply_buf.append(f"Sure! I've drafted the requisition for **{res['title']}** ({res.get('experience_level', 'Mid-Level')}).\n\nReview the draft details below — would you like me to send this to the Director for approval?")
                         elif fn_name == "show_role_selection_dropdown":
-                            unique_roles = get_unique_predefined_roles()
+                            unique_roles = get_unique_predefined_roles(tenant_id)
                             res = {"roles": unique_roles}
                             executed.append({"tool": "show_role_selection_dropdown", "result": res})
                             role_lines = []
@@ -3881,7 +3956,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             executed.append({"tool": "get_candidate_import_guide", "result": res})
                             reply_buf.append(res["markdown"])
                         elif fn_name == "get_requisition_templates":
-                            res = get_requisition_templates()
+                            res = get_requisition_templates(tenant_id)
                             executed.append({"tool": "get_requisition_templates", "result": res})
                             reply_buf.append(res["markdown"])
                         elif fn_name == "get_hiring_analytics_report":
@@ -3990,7 +4065,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # Available Predefined Roles Intent (e.g. "where are the roles", "show roles", "available roles", "which roles", "list roles")
     roles_inquiry_pattern = r"\b(where\s+(are\s+)?(the\s+)?roles?|show\s+(available\s+)?roles?|what\s+roles?(\s+are\s+there)?|which\s+roles?|available\s+roles?|list\s+roles?|role\s+options?|select\s+role)\b"
     if re.search(roles_inquiry_pattern, prompt_lower):
-        unique_roles = get_unique_predefined_roles()
+        unique_roles = get_unique_predefined_roles(tenant_id)
         role_lines = []
         for idx, r in enumerate(unique_roles[:8], 1):
             role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
@@ -4075,7 +4150,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
     # 6. Pre-configured Requisition Templates Intent
     if any(k in prompt_lower for k in ["template", "templates", "requisition template", "job description template", "available template"]):
-        res = get_requisition_templates()
+        res = get_requisition_templates(tenant_id)
         return {
             "reply": res["markdown"],
             "executed_actions": [{"tool": "get_requisition_templates", "result": res}]

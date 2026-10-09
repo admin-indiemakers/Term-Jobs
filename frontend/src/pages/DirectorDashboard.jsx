@@ -50,6 +50,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [vendors, setVendors] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
+  const [clientTenants, setClientTenants] = useState([]);
+  const [selectedTenantId, setSelectedTenantId] = useState(user?.tenant_id || '');
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -66,33 +68,64 @@ export default function DirectorDashboard({ view = 'overview' }) {
     setActiveTab(currentTab);
   }, [currentTab]);
 
-  const loadTemplates = () => {
-    request('/templates', { token })
+  const activeTenantName = useMemo(() => {
+    if (user?.role === 'Super Admin') {
+      const matched = clientTenants.find((t) => t.id === selectedTenantId);
+      return matched ? matched.name : (user?.tenant_name || 'Buyer Company');
+    }
+    return user?.tenant_name || 'Buyer Company';
+  }, [user, clientTenants, selectedTenantId]);
+
+  const loadTemplates = (overrideTenantId) => {
+    const tid = overrideTenantId !== undefined ? overrideTenantId : (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id);
+    const url = tid ? `/templates?tenant_id=${tid}` : '/templates';
+    request(url, { token })
       .then((res) => setTemplates(Array.isArray(res) ? res : res?.templates || []))
       .catch((err) => setError(err?.message || 'Failed to load templates'));
   };
 
+  const handleTenantChange = (newTid) => {
+    setSelectedTenantId(newTid);
+    loadTemplates(newTid);
+  };
+
   const loadAll = () => {
     setLoading(true);
+    const tid = (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id);
+    const tplUrl = tid ? `/templates?tenant_id=${tid}` : '/templates';
     Promise.all([
       request('/requisitions', { token }).catch(() => []),
       request('/candidates/shortlisted', { token }).catch(() => []),
       request('/api/auth/vendors', { token }).catch(() => []),
-      request('/templates', { token }).catch(() => []),
+      request(tplUrl, { token }).catch(() => []),
       request('/api/workforce/director/work-orders', { token }).catch(() => ({ work_orders: [] })),
+      request('/api/auth/tenants', { token }).catch(() => []),
     ])
-      .then(([reqsRes, candsRes, vendorsRes, templatesRes, wosRes]) => {
+      .then(([reqsRes, candsRes, vendorsRes, templatesRes, wosRes, tenantsRes]) => {
         const reqList = Array.isArray(reqsRes) ? reqsRes : (reqsRes?.requisitions || []);
         const candList = Array.isArray(candsRes) ? candsRes : (candsRes?.shortlisted_candidates || candsRes?.candidates || []);
         const vendorList = Array.isArray(vendorsRes) ? vendorsRes : (vendorsRes?.vendors || []);
         const templateList = Array.isArray(templatesRes) ? templatesRes : (templatesRes?.templates || []);
         const woList = Array.isArray(wosRes?.work_orders) ? wosRes.work_orders : (Array.isArray(wosRes) ? wosRes : []);
+        const allTenants = Array.isArray(tenantsRes) ? tenantsRes : (tenantsRes?.tenants || []);
+        const clientList = allTenants.filter((t) => t.tenant_type === 'client');
 
         setRequisitions(reqList);
         setCandidates(candList);
         setVendors(vendorList);
         setTemplates(templateList);
         setWorkOrders(woList);
+        setClientTenants(clientList);
+
+        if (user?.role === 'Super Admin' && !selectedTenantId && clientList.length > 0) {
+          const defaultTenant = clientList.find((c) => c.id !== user?.tenant_id) || clientList[0];
+          setSelectedTenantId(defaultTenant.id);
+          const customTplUrl = `/templates?tenant_id=${defaultTenant.id}`;
+          request(customTplUrl, { token })
+            .then((res) => setTemplates(Array.isArray(res) ? res : res?.templates || []))
+            .catch(() => {});
+        }
+
         setError('');
       })
       .catch((err) => setError(err?.message || 'Failed to load dashboard data'))
@@ -108,15 +141,20 @@ export default function DirectorDashboard({ view = 'overview' }) {
     setError('');
     setUploading(true);
     try {
+      const targetTenant = (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id) || '';
       const formData = new FormData();
       formData.append('file', file);
-      await request('/templates', {
+      if (targetTenant) {
+        formData.append('tenant_id', targetTenant);
+      }
+      const uploadUrl = targetTenant ? `/templates?tenant_id=${targetTenant}` : '/templates';
+      await request(uploadUrl, {
         method: 'POST',
         body: formData,
         token,
       });
-      setTemplateMsg(`Template "${file.name}" uploaded successfully.`);
-      loadTemplates();
+      setTemplateMsg(`Template "${file.name}" uploaded successfully for ${activeTenantName}.`);
+      loadTemplates(targetTenant);
     } catch (err) {
       setError(err?.message || 'Upload failed');
     } finally {
@@ -676,12 +714,34 @@ export default function DirectorDashboard({ view = 'overview' }) {
         <div className="bg-white border border-gray-200/90 rounded-3xl p-6 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
             <div>
-              <h2 className="text-base font-extrabold text-gray-900">Pre-Approved Role Templates</h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Upload JSON templates so hiring managers can pre-fill new job requisitions instantly with standardized criteria.
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-base font-extrabold text-gray-900">Pre-Approved Role Templates</h2>
+                {user?.role === 'Super Admin' && clientTenants.length > 0 ? (
+                  <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg shadow-2xs">
+                    <Building size={13} className="text-gray-500" />
+                    <span className="text-[10.5px] font-bold text-gray-500 uppercase">Target Buyer:</span>
+                    <select
+                      value={selectedTenantId}
+                      onChange={(e) => handleTenantChange(e.target.value)}
+                      className="text-xs font-extrabold bg-transparent text-gray-900 focus:outline-none cursor-pointer"
+                    >
+                      {clientTenants.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <span className="px-2.5 py-0.5 rounded-md bg-gray-100 text-gray-700 text-[11px] font-bold border border-gray-200">
+                    🏢 {activeTenantName}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Standardized JSON role templates assigned exclusively to <strong>{activeTenantName}</strong>. Hiring managers at {activeTenantName} can pre-fill requisitions with standardized criteria.
               </p>
             </div>
-
 
             <input
               ref={templateFileRef}
@@ -698,7 +758,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
               className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 shrink-0 cursor-pointer disabled:opacity-50"
             >
               <Upload size={14} />
-              <span>{uploading ? 'Uploading...' : 'Upload JSON Template'}</span>
+              <span>{uploading ? 'Uploading...' : `Upload JSON Template (${activeTenantName})`}</span>
             </button>
           </div>
 

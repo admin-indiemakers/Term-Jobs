@@ -1365,7 +1365,7 @@ def list_tenants(
 
     if current_user.role == "Super Admin":
         tenants = db.query(Tenant).all()
-    elif current_user.role == "Admin":
+    elif current_user.role in ("Admin", "Director", "HR", "Hiring Manager", "Procurement", "Procurement Team", "Finance", "Finance Team"):
         tenants = db.query(Tenant).filter(Tenant.id == current_user.tenant_id).all()
     else:
         raise HTTPException(

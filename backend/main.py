@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv()
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Query, Request, BackgroundTasks
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
@@ -744,12 +744,16 @@ def _template_dict(t: models.RoleTemplate) -> dict:
 @app.post("/api/templates", status_code=201)
 async def upload_template(
     file: UploadFile = File(...),
+    tenant_id: str | None = Form(default=None),
+    company_name: str | None = Form(default=None),
+    query_tenant_id: str | None = Query(default=None, alias="tenant_id"),
     current_user: User = Depends(get_current_user),
 ):
     """Upload a JSON role template (director-defined) that hiring managers can
     use to pre-fill the New Requisition form.
 
     Accepts a single template or a ``{"templates": [...]}`` bundle or an array of templates.
+    Strictly scopes templates to the target buyer company tenant to prevent cross-company data leakage.
     """
     # 1. Flexible filename and mime type check (many browsers send application/octet-stream or text/plain for .json files)
     is_json_ext = bool(file.filename and file.filename.lower().endswith(".json"))
@@ -795,13 +799,67 @@ async def upload_template(
         raise HTTPException(status_code=400, detail="Template JSON must be an object or array of template objects")
 
     created = []
-    user_tenant = getattr(current_user, "tenant_id", None) or "local"
     user_id = getattr(current_user, "id", None) or "director"
+    user_tenant = getattr(current_user, "tenant_id", None) or ""
+
+    # Determine default tenant for this upload batch
+    clean_tenant_id = tenant_id if isinstance(tenant_id, str) else None
+    clean_query_tenant_id = query_tenant_id if isinstance(query_tenant_id, str) else None
+    clean_company_name = company_name if isinstance(company_name, str) else None
+    target_tenant_id = (clean_tenant_id or clean_query_tenant_id or "").strip()
+    target_company = (clean_company_name or "").strip()
+    if isinstance(payload, dict):
+        if not target_tenant_id:
+            target_tenant_id = str(payload.get("tenant_id") or payload.get("target_tenant_id") or "").strip()
+        if not target_company:
+            target_company = str(payload.get("company_name") or payload.get("company") or payload.get("buyer_company") or "").strip()
 
     with get_session() as session:
+        # Resolve company name to tenant_id if provided
+        if not target_tenant_id and target_company:
+            matched_tenant = session.query(Tenant).filter(
+                Tenant.name.ilike(target_company),
+                Tenant.is_deleted == False
+            ).first()
+            if matched_tenant:
+                target_tenant_id = matched_tenant.id
+
+        # Multi-tenant security check:
+        # Super Admin can assign templates to any tenant.
+        # Other roles (Director, Admin, etc.) can ONLY upload to their own company tenant.
+        if current_user.role != "Super Admin":
+            if target_tenant_id and target_tenant_id != user_tenant:
+                raise HTTPException(
+                    status_code=403,
+                    detail="You can only assign role templates to your own buyer company."
+                )
+            target_tenant_id = user_tenant
+
+        if not target_tenant_id or target_tenant_id in ("local", "platform", ""):
+            db_user = session.query(User).filter(User.id == current_user.id).first()
+            if db_user and db_user.tenant_id and db_user.tenant_id not in ("local", "platform", ""):
+                target_tenant_id = db_user.tenant_id
+            else:
+                if current_user.role != "Super Admin":
+                    raise HTTPException(status_code=400, detail="User must belong to a valid buyer company tenant to upload templates.")
+                target_tenant_id = user_tenant or "platform"
+
         for item in items:
             if not isinstance(item, dict):
                 continue
+
+            item_tenant_id = target_tenant_id
+            item_company = str(item.get("company") or item.get("company_name") or item.get("buyer_company") or "").strip()
+            item_custom_tenant = str(item.get("tenant_id") or "").strip()
+
+            if current_user.role == "Super Admin":
+                if item_custom_tenant:
+                    item_tenant_id = item_custom_tenant
+                elif item_company:
+                    t = session.query(Tenant).filter(Tenant.name.ilike(item_company), Tenant.is_deleted == False).first()
+                    if t:
+                        item_tenant_id = t.id
+
             role, name, description = _template_role(item)
             title = (
                 (role or {}).get("title") or
@@ -823,7 +881,7 @@ async def upload_template(
 
             tpl_name = name or f"Template – {title}"
             tpl = models.RoleTemplate(
-                tenant_id=user_tenant,
+                tenant_id=item_tenant_id,
                 created_by=user_id,
                 name=tpl_name,
                 description=description or "",
@@ -839,7 +897,7 @@ async def upload_template(
                     {"id": tpl.id},
                     {"$set": {
                         "id": tpl.id,
-                        "tenant_id": user_tenant,
+                        "tenant_id": item_tenant_id,
                         "created_by": user_id,
                         "name": tpl_name,
                         "description": description or "",
@@ -1000,21 +1058,22 @@ def _normalize_template(payload: dict) -> dict:
 
 @app.get("/templates")
 @app.get("/api/templates")
-def list_templates(current_user: User = Depends(get_current_user)) -> list[dict]:
+def list_templates(
+    tenant_id: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user)
+) -> list[dict]:
     with get_session() as session:
-        # Templates are shared platform config: Super Admin-created templates are
-        # visible to everyone; company-scoped templates only to that tenant.
-        super_admin_ids = {
-            u.id
-            for u in session.query(User).filter(User.role == "Super Admin").all()
-        }
-        rows = session.query(models.RoleTemplate).order_by(models.RoleTemplate.created_at.desc()).all()
-        if current_user.role != "Super Admin":
-            rows = [
-                r
-                for r in rows
-                if r.tenant_id in (current_user.tenant_id, "local", "platform", None) or r.created_by in super_admin_ids or not r.created_by
-            ]
+        query = session.query(models.RoleTemplate).order_by(models.RoleTemplate.created_at.desc())
+        if current_user.role == "Super Admin":
+            if tenant_id:
+                query = query.filter(models.RoleTemplate.tenant_id == tenant_id)
+            rows = query.all()
+        else:
+            user_tenant = current_user.tenant_id
+            if not user_tenant or user_tenant in ("local", "platform", ""):
+                return []
+            # Strictly scoped to user's company tenant. NO cross-tenant or platform template leakage.
+            rows = query.filter(models.RoleTemplate.tenant_id == user_tenant).all()
         return [_template_dict(r) for r in rows]
 
 
