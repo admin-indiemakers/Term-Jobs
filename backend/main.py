@@ -393,6 +393,34 @@ class CandidateLimitIn(BaseModel):
     limit: int = Field(ge=1, le=100)
 
 
+class RoleTemplateCreateIn(BaseModel):
+    name: str = Field(..., description="Template display name")
+    title: str | None = Field(default=None, description="Job title")
+    description: str | None = Field(default="", description="Role summary / description")
+    job_family: str | None = Field(default="", description="Department or job family")
+    must_have_skills: list[str] | str | None = Field(default=None, description="Mandatory skills")
+    nice_to_have_skills: list[str] | str | None = Field(default=None, description="Nice-to-have skills")
+    experience: str | None = Field(default="", description="Experience band (e.g. 5-8 years)")
+    headcount: int | None = Field(default=1, description="Number of openings")
+    certifications: list[str] | str | None = Field(default=None, description="Certifications")
+    engagement_type: str | None = Field(default="Contract", description="Engagement type")
+    duration: str | None = Field(default="", description="Contract duration")
+    extension_likely: bool | str | None = Field(default=False, description="Extension likely")
+    rate_basis: str | None = Field(default="Hourly", description="Rate basis")
+    budget_cap_currency: str | None = Field(default="INR", description="Currency")
+    vendor_floor: int | float | None = Field(default=None, description="Min vendor rate")
+    vendor_cap: int | float | None = Field(default=None, description="Max vendor rate")
+    ceiling_internal: int | float | None = Field(default=None, description="Internal rate ceiling")
+    work_mode: str | None = Field(default="Remote", description="Work mode")
+    primary_location: str | None = Field(default="", description="Primary location")
+    equipment_provided: str | None = Field(default="", description="Equipment provisioning")
+    bgv_required: str | None = Field(default="", description="Background verification level")
+    nda_required: str | bool | None = Field(default="", description="NDA required")
+    priority: str | None = Field(default="Normal", description="Priority level")
+    tenant_id: str | None = Field(default=None, description="Target buyer company tenant ID")
+    structured_role: dict | None = Field(default=None, description="Optional raw structured role")
+
+
 # --- serialization helpers --------------------------------------------------
 def _company_dict(prof: models.CompanyProfile) -> dict:
     return {
@@ -738,6 +766,137 @@ def _template_dict(t: models.RoleTemplate) -> dict:
         "structured_role": t.structured_role,
         "created_at": _format_datetime(t.created_at),
     }
+
+
+@app.post("/templates/create", status_code=201)
+@app.post("/api/templates/create", status_code=201)
+@app.post("/templates/form", status_code=201)
+@app.post("/api/templates/form", status_code=201)
+def create_template_from_form(
+    payload: RoleTemplateCreateIn,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Create a standardized role template directly from form details (Director or Super Admin).
+    Strictly scopes template to the target buyer company tenant to prevent cross-tenant data leaks.
+    """
+    if current_user.role not in ("Director", "Admin", "Super Admin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Only Directors or Administrators can create role templates"
+        )
+
+    user_tenant = getattr(current_user, "tenant_id", None) or ""
+    user_id = getattr(current_user, "id", None) or "director"
+
+    # Multi-tenant security check
+    target_tenant_id = user_tenant
+    if current_user.role == "Super Admin":
+        target_tenant_id = (payload.tenant_id or user_tenant or "platform").strip()
+    else:
+        if payload.tenant_id and payload.tenant_id.strip() != user_tenant:
+            raise HTTPException(
+                status_code=403,
+                detail="You can only assign role templates to your own buyer company."
+            )
+
+    with get_session() as session:
+        if not target_tenant_id or target_tenant_id in ("local", "platform", ""):
+            db_user = session.query(User).filter(User.id == current_user.id).first()
+            if db_user and db_user.tenant_id and db_user.tenant_id not in ("local", "platform", ""):
+                target_tenant_id = db_user.tenant_id
+            else:
+                if current_user.role != "Super Admin":
+                    raise HTTPException(
+                        status_code=400,
+                        detail="User must belong to a valid buyer company tenant to create templates."
+                    )
+                target_tenant_id = user_tenant or "platform"
+
+        def _parse_list(val):
+            if isinstance(val, list):
+                return [str(x).strip() for x in val if str(x).strip()]
+            if isinstance(val, str):
+                return [s.strip() for s in val.split(",") if s.strip()]
+            return []
+
+        skills_must = _parse_list(payload.must_have_skills)
+        skills_nice = _parse_list(payload.nice_to_have_skills)
+        certs = _parse_list(payload.certifications)
+
+        vendor_range = None
+        if payload.vendor_floor is not None and payload.vendor_cap is not None:
+            vendor_range = [payload.vendor_floor, payload.vendor_cap]
+        elif payload.vendor_cap is not None:
+            vendor_range = [0, payload.vendor_cap]
+
+        role_title = (payload.title or payload.name or "").strip()
+        if not role_title:
+            role_title = "Untitled Role Template"
+
+        base_structured_role = dict(payload.structured_role or {})
+        structured_role = {
+            **base_structured_role,
+            "title": role_title,
+            "job_family": payload.job_family or base_structured_role.get("job_family") or "",
+            "department": payload.job_family or base_structured_role.get("department") or "",
+            "must_have_skills": skills_must or base_structured_role.get("must_have_skills") or [],
+            "nice_to_have_skills": skills_nice or base_structured_role.get("nice_to_have_skills") or [],
+            "experience": payload.experience or base_structured_role.get("experience") or "",
+            "experience_band": payload.experience or base_structured_role.get("experience_band") or "",
+            "headcount": payload.headcount or base_structured_role.get("headcount") or 1,
+            "certifications": certs or base_structured_role.get("certifications") or [],
+            "engagement_type": payload.engagement_type or base_structured_role.get("engagement_type") or "Contract",
+            "duration": payload.duration or base_structured_role.get("duration") or "",
+            "extension_likely": bool(payload.extension_likely) if payload.extension_likely is not None else base_structured_role.get("extension_likely", False),
+            "rate_basis": payload.rate_basis or base_structured_role.get("rate_basis") or "Hourly",
+            "budget_cap_currency": payload.budget_cap_currency or base_structured_role.get("budget_cap_currency") or "INR",
+            "vendor_floor": payload.vendor_floor if payload.vendor_floor is not None else base_structured_role.get("vendor_floor"),
+            "vendor_cap": payload.vendor_cap if payload.vendor_cap is not None else base_structured_role.get("vendor_cap"),
+            "ceiling_internal": payload.ceiling_internal if payload.ceiling_internal is not None else base_structured_role.get("ceiling_internal"),
+            "rate_band": vendor_range or base_structured_role.get("rate_band"),
+            "range_vendors_see": vendor_range or base_structured_role.get("range_vendors_see"),
+            "work_mode": payload.work_mode or base_structured_role.get("work_mode") or "Remote",
+            "primary_location": payload.primary_location or base_structured_role.get("primary_location") or "",
+            "equipment_provided": payload.equipment_provided or base_structured_role.get("equipment_provided") or "",
+            "equipment_provisioning": payload.equipment_provided or base_structured_role.get("equipment_provisioning") or "",
+            "bgv_required": str(payload.bgv_required or base_structured_role.get("bgv_required") or ""),
+            "background_check": str(payload.bgv_required or base_structured_role.get("background_check") or ""),
+            "nda_required": "Yes" if payload.nda_required in (True, "Yes", "yes") else (base_structured_role.get("nda_required") or ""),
+            "priority": payload.priority or base_structured_role.get("priority") or "Normal",
+            "notes": payload.description or base_structured_role.get("notes") or "",
+        }
+
+        tpl_name = (payload.name or role_title).strip()
+        tpl = models.RoleTemplate(
+            tenant_id=target_tenant_id,
+            created_by=user_id,
+            name=tpl_name,
+            description=payload.description or "",
+            structured_role=structured_role,
+        )
+        session.add(tpl)
+        session.commit()
+        session.refresh(tpl)
+
+        try:
+            from modules.shared.db import db as mongo_db
+            mongo_db["role_templates"].update_one(
+                {"id": tpl.id},
+                {"$set": {
+                    "id": tpl.id,
+                    "tenant_id": target_tenant_id,
+                    "created_by": user_id,
+                    "name": tpl.name,
+                    "description": tpl.description or "",
+                    "structured_role": structured_role,
+                    "created_at": datetime.now(timezone.utc).isoformat()
+                }},
+                upsert=True
+            )
+        except Exception:
+            pass
+
+        return _template_dict(tpl)
 
 
 @app.post("/templates", status_code=201)

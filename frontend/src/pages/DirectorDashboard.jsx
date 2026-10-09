@@ -21,7 +21,9 @@ import {
   Check,
   AlertCircle,
   AlertTriangle,
-  Receipt
+  Receipt,
+  Plus,
+  X
 } from 'lucide-react';
 
 function formatDate(iso) {
@@ -64,6 +66,33 @@ export default function DirectorDashboard({ view = 'overview' }) {
   const [rejectModalReq, setRejectModalReq] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [dismissedDeletedAlerts, setDismissedDeletedAlerts] = useState(false);
+  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false);
+  const [templateSubmitting, setTemplateSubmitting] = useState(false);
+  const [templateFormError, setTemplateFormError] = useState('');
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    title: '',
+    job_family: '',
+    priority: 'Normal',
+    must_have_skills: '',
+    nice_to_have_skills: '',
+    experience: '3-5 years',
+    headcount: 1,
+    certifications: '',
+    engagement_type: 'Contract',
+    duration: '6 Months',
+    rate_basis: 'Hourly',
+    budget_cap_currency: 'INR',
+    vendor_floor: '',
+    vendor_cap: '',
+    ceiling_internal: '',
+    work_mode: 'Remote',
+    primary_location: '',
+    equipment_provided: 'Company-provided',
+    bgv_required: 'Standard',
+    nda_required: 'Yes',
+    description: '',
+  });
   const templateFileRef = useRef(null);
 
   useEffect(() => {
@@ -174,6 +203,92 @@ export default function DirectorDashboard({ view = 'overview' }) {
       setTemplateMsg('Template removed.');
     } catch (err) {
       setError(err?.message || 'Failed to remove template');
+    }
+  };
+
+  const handleCreateTemplateSubmit = async (e) => {
+    e.preventDefault();
+    setTemplateFormError('');
+    if (!templateForm.name.trim()) {
+      setTemplateFormError('Please enter a Template Name.');
+      return;
+    }
+    if (!templateForm.title.trim()) {
+      setTemplateFormError('Please enter a Job Title.');
+      return;
+    }
+    if (!templateForm.must_have_skills.trim()) {
+      setTemplateFormError('Please enter at least one Must-Have Skill.');
+      return;
+    }
+
+    setTemplateSubmitting(true);
+    try {
+      const targetTenant = (user?.role === 'Super Admin' ? selectedTenantId : user?.tenant_id) || '';
+      const payload = {
+        name: templateForm.name.trim(),
+        title: templateForm.title.trim(),
+        job_family: templateForm.job_family.trim(),
+        priority: templateForm.priority,
+        must_have_skills: templateForm.must_have_skills,
+        nice_to_have_skills: templateForm.nice_to_have_skills,
+        experience: templateForm.experience,
+        headcount: parseInt(templateForm.headcount, 10) || 1,
+        certifications: templateForm.certifications,
+        engagement_type: templateForm.engagement_type,
+        duration: templateForm.duration,
+        rate_basis: templateForm.rate_basis,
+        budget_cap_currency: templateForm.budget_cap_currency,
+        vendor_floor: templateForm.vendor_floor !== '' ? Number(templateForm.vendor_floor) : null,
+        vendor_cap: templateForm.vendor_cap !== '' ? Number(templateForm.vendor_cap) : null,
+        ceiling_internal: templateForm.ceiling_internal !== '' ? Number(templateForm.ceiling_internal) : null,
+        work_mode: templateForm.work_mode,
+        primary_location: templateForm.primary_location.trim(),
+        equipment_provided: templateForm.equipment_provided,
+        bgv_required: templateForm.bgv_required,
+        nda_required: templateForm.nda_required,
+        description: templateForm.description.trim(),
+        tenant_id: targetTenant,
+      };
+
+      await request('/api/templates/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        token,
+      });
+
+      setTemplateMsg(`Role template "${payload.name}" created successfully for ${activeTenantName}.`);
+      setShowCreateTemplateModal(false);
+      setTemplateForm({
+        name: '',
+        title: '',
+        job_family: '',
+        priority: 'Normal',
+        must_have_skills: '',
+        nice_to_have_skills: '',
+        experience: '3-5 years',
+        headcount: 1,
+        certifications: '',
+        engagement_type: 'Contract',
+        duration: '6 Months',
+        rate_basis: 'Hourly',
+        budget_cap_currency: 'INR',
+        vendor_floor: '',
+        vendor_cap: '',
+        ceiling_internal: '',
+        work_mode: 'Remote',
+        primary_location: '',
+        equipment_provided: 'Company-provided',
+        bgv_required: 'Standard',
+        nda_required: 'Yes',
+        description: '',
+      });
+      loadTemplates(targetTenant);
+    } catch (err) {
+      setTemplateFormError(err?.message || 'Failed to create role template');
+    } finally {
+      setTemplateSubmitting(false);
     }
   };
 
@@ -804,27 +919,42 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 )}
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Standardized JSON role templates assigned exclusively to <strong>{activeTenantName}</strong>. Hiring managers at {activeTenantName} can pre-fill requisitions with standardized criteria.
+                Standardized role templates assigned exclusively to <strong>{activeTenantName}</strong>. Hiring managers at {activeTenantName} can pre-fill requisitions with standardized criteria.
               </p>
             </div>
 
-            <input
-              ref={templateFileRef}
-              type="file"
-              accept=".json,application/json,text/json,text/plain,application/octet-stream"
-              onChange={handleTemplateUpload}
-              className="hidden"
-            />
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <input
+                ref={templateFileRef}
+                type="file"
+                accept=".json,application/json,text/json,text/plain,application/octet-stream"
+                onChange={handleTemplateUpload}
+                className="hidden"
+              />
 
-            <button
-              type="button"
-              onClick={() => templateFileRef.current?.click()}
-              disabled={uploading}
-              className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 shrink-0 cursor-pointer disabled:opacity-50"
-            >
-              <Upload size={14} />
-              <span>{uploading ? 'Uploading...' : `Upload JSON Template (${activeTenantName})`}</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTemplateFormError('');
+                  setShowCreateTemplateModal(true);
+                }}
+                className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+              >
+                <Plus size={14} />
+                <span>Create Role Template</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => templateFileRef.current?.click()}
+                disabled={uploading}
+                title="Alternative: Import existing JSON template file"
+                className="px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <Upload size={13} className="text-gray-500" />
+                <span className="hidden sm:inline">{uploading ? 'Importing...' : 'Import JSON'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Inline Upload Status Notification */}
@@ -836,35 +966,88 @@ export default function DirectorDashboard({ view = 'overview' }) {
           )}
 
           {templates.length === 0 ? (
-            <p className="text-xs text-gray-400 py-4">No role templates uploaded yet.</p>
+            <div className="py-8 text-center bg-gray-50/50 rounded-2xl border border-dashed border-gray-200">
+              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-2 text-gray-400">
+                <Briefcase size={20} />
+              </div>
+              <p className="text-xs font-bold text-gray-700">No role templates added yet</p>
+              <p className="text-[11px] text-gray-400 max-w-sm mx-auto mt-1 mb-3">
+                Create pre-approved role templates with standardized skills, rates, and compliance criteria for your Hiring Managers.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setTemplateFormError('');
+                  setShowCreateTemplateModal(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
+              >
+                <Plus size={13} />
+                <span>Create First Template</span>
+              </button>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
-                    <th className="pb-2">Template Name</th>
-                    <th className="pb-2">Role Title</th>
-                    <th className="pb-2">Uploaded</th>
+                    <th className="pb-2">Template & Role</th>
+                    <th className="pb-2">Department / Skills</th>
+                    <th className="pb-2">Rates / Commercials</th>
+                    <th className="pb-2">Work Mode</th>
+                    <th className="pb-2">Created</th>
                     <th className="pb-2 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {templates.map((t) => (
-                    <tr key={t.id} className="hover:bg-gray-50/50">
-                      <td className="py-3 font-bold text-gray-900">{t.name || 'Untitled Template'}</td>
-                      <td className="py-3 text-gray-600">{t.structured_role?.title || '—'}</td>
-                      <td className="py-3 text-gray-400">{formatDate(t.created_at)}</td>
-                      <td className="py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleTemplateDelete(t.id)}
-                          className="text-red-600 hover:text-red-800 text-xs font-bold cursor-pointer"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {templates.map((t) => {
+                    const sr = t.structured_role || {};
+                    const skills = Array.isArray(sr.must_have_skills) ? sr.must_have_skills : [];
+                    const currency = sr.budget_cap_currency === 'USD' ? '$' : (sr.budget_cap_currency === 'EUR' ? '€' : (sr.budget_cap_currency === 'GBP' ? '£' : '₹'));
+                    const rateStr = sr.vendor_cap || (sr.rate_band && sr.rate_band[1])
+                      ? `${currency}${sr.vendor_floor || (sr.rate_band && sr.rate_band[0]) || 0} - ${currency}${sr.vendor_cap || (sr.rate_band && sr.rate_band[1])}/${sr.rate_basis === 'Annual' ? 'yr' : 'hr'}`
+                      : (sr.ceiling_internal ? `Max ${currency}${sr.ceiling_internal}` : '—');
+
+                    return (
+                      <tr key={t.id} className="hover:bg-gray-50/50">
+                        <td className="py-3">
+                          <div className="font-bold text-gray-900">{t.name || 'Untitled Template'}</div>
+                          <div className="text-[11px] text-gray-500 font-medium">{sr.title || '—'}</div>
+                        </td>
+                        <td className="py-3">
+                          <div className="text-gray-700 font-semibold">{sr.department || sr.job_family || 'General'}</div>
+                          {skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {skills.slice(0, 3).map((s, idx) => (
+                                <span key={idx} className="px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600 text-[10px] font-medium">
+                                  {s}
+                                </span>
+                              ))}
+                              {skills.length > 3 && (
+                                <span className="text-[10px] text-gray-400 font-medium">+{skills.length - 3}</span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="py-3 text-gray-700 font-semibold">{rateStr}</td>
+                        <td className="py-3">
+                          <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200/60">
+                            {sr.work_mode || 'Remote'}
+                          </span>
+                        </td>
+                        <td className="py-3 text-gray-400">{formatDate(t.created_at)}</td>
+                        <td className="py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleTemplateDelete(t.id)}
+                            className="text-red-600 hover:text-red-800 text-xs font-bold cursor-pointer"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1115,6 +1298,398 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
                 >
                   <span>{approvingId === rejectModalReq.id ? 'Rejecting...' : 'Confirm Rejection & Send Reason ✕'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREATE ROLE TEMPLATE FORM */}
+      {showCreateTemplateModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-3xl w-full shadow-2xl border border-gray-200 overflow-hidden my-auto max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/70 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-2xl bg-black text-white flex items-center justify-center shadow-xs">
+                  <Briefcase size={18} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm sm:text-base text-gray-900">
+                    Create Pre-Approved Role Template
+                  </h3>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    Standardized criteria assigned exclusively to <strong className="text-gray-700">{activeTenantName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateTemplateModal(false)}
+                className="w-8 h-8 rounded-xl hover:bg-gray-200/80 text-gray-500 flex items-center justify-center transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateTemplateSubmit} className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-left">
+              {templateFormError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-900 flex items-center gap-2">
+                  <AlertCircle size={15} className="shrink-0 text-red-600" />
+                  <span className="font-semibold">{templateFormError}</span>
+                </div>
+              )}
+
+              {/* Group 1: Role Identification */}
+              <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 text-gray-800 font-extrabold text-xs">
+                  <span className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center text-[10px]">1</span>
+                  <span>Role Identification</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Template Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={templateForm.name}
+                      onChange={(e) => setTemplateForm({ ...templateForm, name: e.target.value })}
+                      placeholder="e.g. Senior Frontend React Engineer"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Job Title <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={templateForm.title}
+                      onChange={(e) => setTemplateForm({ ...templateForm, title: e.target.value })}
+                      placeholder="e.g. Senior React Developer"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Department / Job Family
+                    </label>
+                    <input
+                      type="text"
+                      value={templateForm.job_family}
+                      onChange={(e) => setTemplateForm({ ...templateForm, job_family: e.target.value })}
+                      placeholder="e.g. Engineering / Frontend"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Priority Level
+                    </label>
+                    <select
+                      value={templateForm.priority}
+                      onChange={(e) => setTemplateForm({ ...templateForm, priority: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Normal">Normal</option>
+                      <option value="High">High</option>
+                      <option value="Critical">Critical / Urgent</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 2: Skills & Requirements */}
+              <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 text-gray-800 font-extrabold text-xs">
+                  <span className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center text-[10px]">2</span>
+                  <span>Skills & Candidate Specifications</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Must-Have Skills <span className="text-red-500">*</span> <span className="text-[10px] text-gray-400 normal-case font-normal">(Comma-separated)</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={templateForm.must_have_skills}
+                      onChange={(e) => setTemplateForm({ ...templateForm, must_have_skills: e.target.value })}
+                      placeholder="e.g. React.js, TypeScript, Redux Toolkit, REST APIs"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Nice-To-Have Skills <span className="text-[10px] text-gray-400 normal-case font-normal">(Comma-separated)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={templateForm.nice_to_have_skills}
+                      onChange={(e) => setTemplateForm({ ...templateForm, nice_to_have_skills: e.target.value })}
+                      placeholder="e.g. Next.js, Tailwind CSS, GraphQL, Docker"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                        Experience Level
+                      </label>
+                      <input
+                        type="text"
+                        value={templateForm.experience}
+                        onChange={(e) => setTemplateForm({ ...templateForm, experience: e.target.value })}
+                        placeholder="e.g. 5-8 years"
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                        Openings / Headcount
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={templateForm.headcount}
+                        onChange={(e) => setTemplateForm({ ...templateForm, headcount: e.target.value })}
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                        Certifications
+                      </label>
+                      <input
+                        type="text"
+                        value={templateForm.certifications}
+                        onChange={(e) => setTemplateForm({ ...templateForm, certifications: e.target.value })}
+                        placeholder="e.g. AWS Certified Developer"
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:border-black transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 3: Commercials & Engagement */}
+              <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 text-gray-800 font-extrabold text-xs">
+                  <span className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center text-[10px]">3</span>
+                  <span>Commercials & Engagement Details</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Engagement Type
+                    </label>
+                    <select
+                      value={templateForm.engagement_type}
+                      onChange={(e) => setTemplateForm({ ...templateForm, engagement_type: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Contract">Contract (C2C / Vendor)</option>
+                      <option value="Fixed Term">Fixed Term Contract</option>
+                      <option value="Contract to Hire">Contract to Hire</option>
+                      <option value="Full Time">Full-Time Employee</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Duration
+                    </label>
+                    <input
+                      type="text"
+                      value={templateForm.duration}
+                      onChange={(e) => setTemplateForm({ ...templateForm, duration: e.target.value })}
+                      placeholder="e.g. 6 Months"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Rate Basis
+                    </label>
+                    <select
+                      value={templateForm.rate_basis}
+                      onChange={(e) => setTemplateForm({ ...templateForm, rate_basis: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Hourly">Hourly Rate</option>
+                      <option value="Daily">Daily Rate</option>
+                      <option value="Monthly">Monthly Fixed</option>
+                      <option value="Annual">Annual CTC</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Currency
+                    </label>
+                    <select
+                      value={templateForm.budget_cap_currency}
+                      onChange={(e) => setTemplateForm({ ...templateForm, budget_cap_currency: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="INR">₹ INR</option>
+                      <option value="USD">$ USD</option>
+                      <option value="EUR">€ EUR</option>
+                      <option value="GBP">£ GBP</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Vendor Floor Rate
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 800"
+                      value={templateForm.vendor_floor}
+                      onChange={(e) => setTemplateForm({ ...templateForm, vendor_floor: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Vendor Cap Rate
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1200"
+                      value={templateForm.vendor_cap}
+                      onChange={(e) => setTemplateForm({ ...templateForm, vendor_cap: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Internal Ceiling
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="e.g. 1400"
+                      value={templateForm.ceiling_internal}
+                      onChange={(e) => setTemplateForm({ ...templateForm, ceiling_internal: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 4: Work Setup & Compliance */}
+              <div className="space-y-3 bg-gray-50/60 p-4 rounded-2xl border border-gray-100">
+                <div className="flex items-center gap-2 text-gray-800 font-extrabold text-xs">
+                  <span className="w-5 h-5 rounded-full bg-black text-white flex items-center justify-center text-[10px]">4</span>
+                  <span>Work Setup & Compliance</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Work Mode
+                    </label>
+                    <select
+                      value={templateForm.work_mode}
+                      onChange={(e) => setTemplateForm({ ...templateForm, work_mode: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Remote">100% Remote</option>
+                      <option value="Hybrid">Hybrid</option>
+                      <option value="On-site">On-site</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Primary Location
+                    </label>
+                    <input
+                      type="text"
+                      value={templateForm.primary_location}
+                      onChange={(e) => setTemplateForm({ ...templateForm, primary_location: e.target.value })}
+                      placeholder="e.g. Bangalore / Remote"
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-medium text-gray-900 focus:outline-none focus:border-black transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Equipment Provisioning
+                    </label>
+                    <select
+                      value={templateForm.equipment_provided}
+                      onChange={(e) => setTemplateForm({ ...templateForm, equipment_provided: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Company-provided">Company-provided Laptop</option>
+                      <option value="Vendor-provided">Vendor-provided Equipment</option>
+                      <option value="BYOD">BYOD (Bring Your Own Device)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      Background Check
+                    </label>
+                    <select
+                      value={templateForm.bgv_required}
+                      onChange={(e) => setTemplateForm({ ...templateForm, bgv_required: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Standard">Standard BGV</option>
+                      <option value="Enhanced">Enhanced / Strict BGV</option>
+                      <option value="None">None</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                      NDA Required
+                    </label>
+                    <select
+                      value={templateForm.nda_required}
+                      onChange={(e) => setTemplateForm({ ...templateForm, nda_required: e.target.value })}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black cursor-pointer"
+                    >
+                      <option value="Yes">Yes (Standard NDA)</option>
+                      <option value="No">No</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Group 5: Role Overview / Notes */}
+              <div className="space-y-2">
+                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
+                  Role Summary & Instructions <span className="text-[10px] text-gray-400 normal-case font-normal">(Optional guidance for Hiring Managers)</span>
+                </label>
+                <textarea
+                  rows="3"
+                  value={templateForm.description}
+                  onChange={(e) => setTemplateForm({ ...templateForm, description: e.target.value })}
+                  placeholder="e.g. Pre-approved profile for UI engineering pods. Candidates must have extensive experience in state management and testing."
+                  className="w-full bg-white border border-gray-200 rounded-xl p-3 text-xs text-gray-900 focus:outline-none focus:border-black transition-all font-medium"
+                />
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateTemplateModal(false)}
+                  className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={templateSubmitting}
+                  className="px-5 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Check size={14} />
+                  <span>{templateSubmitting ? 'Saving Template...' : 'Save Role Template'}</span>
                 </button>
               </div>
             </form>

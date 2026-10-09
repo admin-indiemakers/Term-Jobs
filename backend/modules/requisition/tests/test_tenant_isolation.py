@@ -405,4 +405,75 @@ def test_hiring_manager_delete_published_requisition_notifies_director(db_sessio
         assert not any(r["id"] == str(req.id) for r in hm_reqs)
 
 
+def test_create_template_from_form_tenant_isolation(db_session_factory):
+    """Verify that creating role templates via form fill works, populates all required details,
+    enforces tenant boundaries, and blocks cross-tenant tampering.
+    """
+    with db_session_factory() as session:
+        tenant_a = _make_tenant(session, name="Company Alpha")
+        tenant_b = _make_tenant(session, name="Company Beta")
+        director_a = _make_user(session, "Director", tenant_a.id, "dir@alpha.test")
+        director_b = _make_user(session, "Director", tenant_b.id, "dir@beta.test")
+        hm_a = _make_user(session, "Hiring Manager", tenant_a.id, "hm@alpha.test")
+
+        form_payload = app_main.RoleTemplateCreateIn(
+            name="Senior React Engineer",
+            title="Senior React Engineer",
+            job_family="Frontend Engineering",
+            must_have_skills=["React", "TypeScript", "Redux"],
+            nice_to_have_skills="Next.js, GraphQL",
+            experience="5-8 years",
+            headcount=2,
+            certifications="AWS Certified Developer",
+            engagement_type="Contract",
+            duration="6 Months",
+            rate_basis="Hourly",
+            budget_cap_currency="USD",
+            vendor_floor=80,
+            vendor_cap=110,
+            ceiling_internal=125,
+            work_mode="Remote",
+            primary_location="San Francisco, CA / Remote",
+            equipment_provided="Company-provided",
+            bgv_required="Standard",
+            nda_required="Yes",
+            priority="High",
+            description="Standardized template for senior frontend contractors",
+        )
+
+        # 1. Director A creates the template via form
+        result = app_main.create_template_from_form(form_payload, current_user=director_a)
+        assert result["name"] == "Senior React Engineer"
+        sr = result["structured_role"]
+        assert sr["title"] == "Senior React Engineer"
+        assert sr["must_have_skills"] == ["React", "TypeScript", "Redux"]
+        assert sr["nice_to_have_skills"] == ["Next.js", "GraphQL"]
+        assert sr["rate_band"] == [80, 110]
+        assert sr["work_mode"] == "Remote"
+        assert sr["equipment_provided"] == "Company-provided"
+
+        # 2. Company Alpha sees it in their template list
+        templates_a = app_main.list_templates(current_user=director_a)
+        assert len(templates_a) == 1
+        assert templates_a[0]["name"] == "Senior React Engineer"
+
+        # 3. Company Beta DOES NOT see Company Alpha's template
+        templates_b = app_main.list_templates(current_user=director_b)
+        assert len(templates_b) == 0
+
+        # 4. Director B cannot assign template to Company Alpha's tenant -> 403 Forbidden
+        exploit_payload = app_main.RoleTemplateCreateIn(
+            name="Poached Template",
+            tenant_id=tenant_a.id,
+        )
+        with pytest.raises(HTTPException) as exc:
+            app_main.create_template_from_form(exploit_payload, current_user=director_b)
+        assert exc.value.status_code == 403
+
+        # 5. Non-director/admin role (Hiring Manager) cannot create template -> 403 Forbidden
+        with pytest.raises(HTTPException) as exc:
+            app_main.create_template_from_form(form_payload, current_user=hm_a)
+        assert exc.value.status_code == 403
+
+
 

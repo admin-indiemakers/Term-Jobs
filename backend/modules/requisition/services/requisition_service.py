@@ -271,6 +271,8 @@ class RequisitionService:
                     "Your ceiling is above the agreed rate card. HR must approve "
                     "the variance before this requisition can be published."
                 )
+            if req.status == RequisitionStatus.PUBLISHED.value:
+                return req
             sm = StateMachine(RequisitionStatus(req.status))
             sm.transition(RequisitionStatus.PUBLISHED)
             req.status = sm.status.value
