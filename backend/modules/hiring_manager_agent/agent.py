@@ -303,7 +303,8 @@ def get_unique_predefined_roles(tenant_id: str = "") -> List[Dict[str, Any]]:
         except Exception as e:
             logger.warning(f"Error querying tenant role templates for {tenant_id}: {e}")
 
-    if tenant_roles:
+    if tenant_id:
+        # Strict multi-tenant isolation: only return roles assigned to this specific tenant
         return tenant_roles
 
     seen = set()
@@ -3608,7 +3609,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 matched_role = r_entry
                 break
 
-        if not matched_role:
+        if not matched_role and not tenant_id:
             for key, role_data in PREDEFINED_ROLE_DICT.items():
                 if key in prompt_lower or role_data["title"].lower() in prompt_lower:
                     matched_role = role_data
@@ -3677,12 +3678,22 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             }
         else:
             unique_roles = get_unique_predefined_roles(tenant_id)
+            if not unique_roles:
+                reply_text = (
+                    f"No standardized role templates have been assigned by your Director for **{company_name}** yet.\n\n"
+                    f"You can tell me the role title and required skills (e.g. _\"Hire a Senior Backend Engineer with Python and Docker\"_) to draft it directly, "
+                    f"or ask your Director to upload approved role templates in the Director Console."
+                )
+                return {
+                    "reply": reply_text,
+                    "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": []}}]
+                }
             role_lines = []
             for idx, r in enumerate(unique_roles[:8], 1):
                 role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
             roles_text = "\n\n".join(role_lines)
             reply_text = (
-                f"Which role would you like to create for **{company_name}**? Select a role from the options below to autofill all details, or tell me a custom role:\n\n"
+                f"Which role would you like to create for **{company_name}**? Select an approved role from the options below to autofill all details, or tell me a custom role:\n\n"
                 f"{roles_text}\n\n"
                 f"_Click any role option below or reply with a role title to instantly draft it!_"
             )
@@ -4066,12 +4077,22 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     roles_inquiry_pattern = r"\b(where\s+(are\s+)?(the\s+)?roles?|show\s+(available\s+)?roles?|what\s+roles?(\s+are\s+there)?|which\s+roles?|available\s+roles?|list\s+roles?|role\s+options?|select\s+role)\b"
     if re.search(roles_inquiry_pattern, prompt_lower):
         unique_roles = get_unique_predefined_roles(tenant_id)
+        if not unique_roles:
+            reply_text = (
+                f"There are currently no standardized role templates uploaded for **{company_name}**.\n\n"
+                f"Your Director can assign and upload company templates via the Director Console. "
+                f"In the meantime, you can draft any custom role by telling me what you need (e.g. _\"I want to hire a Senior Backend Engineer\"_)!"
+            )
+            return {
+                "reply": reply_text,
+                "executed_actions": [{"tool": "show_role_selection_dropdown", "result": {"roles": []}}]
+            }
         role_lines = []
         for idx, r in enumerate(unique_roles[:8], 1):
             role_lines.append(f"{idx}️⃣ **{r['title']}** ({r.get('experience_level', 'Mid-Level')})\n• *Dept:* {r.get('department', 'Engineering')} | 💰 *Budget:* {r.get('salary_range', 'Competitive')}\n• *Skills:* `{r.get('skills', '')}`")
         roles_text = "\n\n".join(role_lines)
         reply_text = (
-            f"Here are the available role templates for **{company_name}**:\n\n"
+            f"Here are the Director-approved role templates for **{company_name}**:\n\n"
             f"{roles_text}\n\n"
             f"_Click any role card below or reply with a role title to instantly draft it!_"
         )
