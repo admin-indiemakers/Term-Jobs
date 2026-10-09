@@ -3265,9 +3265,12 @@ def approve_requisition(requisition_id: str, body: ApproveIn | None = None, curr
             if edited:
                 db_req.structured_role = edited.model_dump()
             if current_user.role in ("Director", "Admin", "Super Admin"):
+                now_dt = _utcnow()
                 db_req.director_approved = True
                 db_req.director_approved_by = current_user.name or current_user.email or "Director"
-                db_req.director_approved_at = _utcnow()
+                db_req.director_approved_at = now_dt
+                db_req.approved_by = current_user.name or current_user.email or "Director"
+                db_req.approved_at = now_dt
             else:
                 db_req.director_approved = False
                 db_req.director_approved_by = None
@@ -3323,10 +3326,13 @@ def director_approve_requisition(
     with get_session() as session:
         db_req = session.get(models.Requisition, requisition_id)
         if db_req:
+            now_dt = _utcnow()
             db_req.status = schemas.RequisitionStatus.PUBLISHED.value
             db_req.director_approved = True
             db_req.director_approved_by = current_user.name or current_user.email or "Director"
-            db_req.director_approved_at = _utcnow()
+            db_req.director_approved_at = now_dt
+            db_req.approved_by = current_user.name or current_user.email or "Director"
+            db_req.approved_at = now_dt
             db_req.rejection_reason = None
             db_req.rejected_by = None
             db_req.rejected_at = None
@@ -3348,6 +3354,8 @@ def director_approve_requisition(
                 "director_approved": True,
                 "director_approved_by": current_user.name or current_user.email or "Director",
                 "director_approved_at": now_iso,
+                "approved_by": current_user.name or current_user.email or "Director",
+                "approved_at": now_iso,
                 "rejection_reason": None,
                 "rejected_by": None,
                 "rejected_at": None,
@@ -3490,9 +3498,12 @@ def publish_requisition(
         with get_session() as session:
             s_req = session.get(models.Requisition, requisition_id)
             if s_req:
+                now_dt = _utcnow()
                 s_req.director_approved = True
                 s_req.director_approved_by = current_user.name or current_user.email or "Director"
-                s_req.director_approved_at = _utcnow()
+                s_req.director_approved_at = now_dt
+                s_req.approved_by = current_user.name or current_user.email or "Director"
+                s_req.approved_at = now_dt
                 session.commit()
 
     by = body.by if body else (current_user.name or current_user.email)

@@ -375,6 +375,8 @@ export default function RequisitionDetail() {
   const titleDisplay = editForm.title || req.title || structuredRole?.title || 'DevSecOps Engineer';
   const deptDisplay = editForm.department || req.department || structuredRole?.department || 'Engineering';
   const createdDateDisplay = formatCustomDate(req.created_at, '25 Sept 2026, 6:19 am');
+  const approvalDateRaw = req.director_approved_at || req.approved_at || (req.director_approved ? req.updated_at : null);
+  const approvedDateDisplay = approvalDateRaw ? formatCustomDate(approvalDateRaw, '') : null;
 
   return (
     <div
@@ -403,8 +405,18 @@ export default function RequisitionDetail() {
             </div>
 
             {/* Subtitle */}
-            <p className="text-xs text-gray-500 font-normal mt-1">
-              {deptDisplay} • Created {createdDateDisplay}
+            <p className="text-xs text-gray-500 font-normal mt-1 flex items-center gap-2 flex-wrap">
+              <span>{deptDisplay}</span>
+              <span>•</span>
+              <span>Created {createdDateDisplay}</span>
+              {approvedDateDisplay && (
+                <>
+                  <span>•</span>
+                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                    Approved {approvedDateDisplay}
+                  </span>
+                </>
+              )}
             </p>
           </div>
 
@@ -559,8 +571,8 @@ export default function RequisitionDetail() {
               </button>
             </div>
 
-            {/* Metrics Row Grid: Job Title, Department, Experience, Work Mode, Duration, Open Positions, Deadline */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 pt-1">
+            {/* Metrics Row Grid: Job Title, Department, Experience, Work Mode, Duration, Open Positions, Deadline, Approval Date */}
+            <div className={`grid grid-cols-2 sm:grid-cols-3 ${approvedDateDisplay ? 'lg:grid-cols-4 xl:grid-cols-8' : 'lg:grid-cols-7'} gap-3 pt-1`}>
               <div>
                 <div className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">
                   Job Title
@@ -623,6 +635,17 @@ export default function RequisitionDetail() {
                   {editForm.deadline || '28 Sept 2026, 6:00 pm'}
                 </div>
               </div>
+
+              {approvedDateDisplay && (
+                <div className="bg-emerald-50/50 p-1.5 rounded-lg border border-emerald-100">
+                  <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">
+                    Approval Date
+                  </div>
+                  <div className="text-xs sm:text-[13px] font-extrabold text-emerald-950 leading-tight truncate">
+                    {approvedDateDisplay}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -730,12 +753,14 @@ export default function RequisitionDetail() {
 
               {/* Approval */}
               <div className="flex items-start gap-3.5 relative">
-                <div className="w-6 h-6 rounded-full bg-white border border-gray-300 flex items-center justify-center text-gray-700 shrink-0 mt-0.5 shadow-3xs z-10">
+                <div className={`w-6 h-6 rounded-full ${approvedDateDisplay ? 'bg-emerald-50 border border-emerald-400 text-emerald-600' : 'bg-white border border-gray-300 text-gray-700'} flex items-center justify-center shrink-0 mt-0.5 shadow-3xs z-10`}>
                   <Check size={13} strokeWidth={2.5} />
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-gray-900 leading-tight">Approval</div>
-                  <div className="text-xs text-gray-400 mt-0.5">26 Sept 2026, 11:21 am</div>
+                  <div className="text-sm font-bold text-gray-900 leading-tight">Director Approval</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {approvedDateDisplay || (req.director_approved ? 'Approved' : 'Pending Approval')}
+                  </div>
                 </div>
                 <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />
               </div>

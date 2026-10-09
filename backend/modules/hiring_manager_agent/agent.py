@@ -3174,6 +3174,34 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     prompt_clean = re.sub(r"[\]\[\)\(\}\{\"';,.]+$", "", prompt.strip()).strip()
     prompt_lower = prompt_clean.lower()
 
+    # Hiring Manager Onboarding & Playbook Intent (e.g. "how do i use this as hiring manager", "guide me", "what can you do")
+    help_guide_pattern = (
+        r"\b("
+        r"how\s+(do\s+i|can\s+i|to|should\s+i)\s+(use|navigate|operate|work\s+with|start\s+with)\s*(this|termjobs|the\s+platform|the\s+system|the\s+portal)?|"
+        r"how\s+do\s+i\s+use\s+this(\s+as\s+(a\s+)?(hiring\s+manager|hm))?|"
+        r"how\s+to\s+use\s*(this\s*)?(as\s+(a\s+)?(hiring\s+manager|hm))?|"
+        r"how\s+can\s+i\s+use\s*(this|it)(\s+as\s+(a\s+)?(hiring\s+manager|hm))?|"
+        r"how\s+does\s+(this|it)\s+work|"
+        r"what\s+can\s+(i|you)\s+do(\s+here)?|"
+        r"what\s+(can|should)\s+i\s+do\s+as\s+(a\s+)?(hiring\s+manager|hm)|"
+        r"what\s+do\s+i\s+do\s+as\s+(a\s+)?(hiring\s+manager|hm)|"
+        r"what\s+are\s+my\s+(roles?|permissions?|capabilities|features|tasks|powers|responsibilities)|"
+        r"guide\s+me|help\s+me\s+get\s+started|user\s+guide|hiring\s+manager\s+guide|quick\s+start(\s+guide)?|"
+        r"explain\s+(this|my\s+role|how\s+to\s+use|the\s+features)|"
+        r"walk\s+me\s+through(\s+this)?|"
+        r"how\s+should\s+i\s+proceed|"
+        r"how\s+(do\s+i|to)\s+start|"
+        r"where\s+do\s+i\s+start|"
+        r"what\s+is\s+my\s+role(\s+as\s+(a\s+)?(hiring\s+manager|hm))?"
+        r")\b"
+    )
+    if re.search(help_guide_pattern, prompt_lower) or re.fullmatch(r"help(?:\s+me)?[.!?]*", prompt_lower):
+        guide_res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
+        return {
+            "reply": guide_res["markdown"],
+            "executed_actions": [{"tool": "get_hiring_manager_guide", "result": guide_res}]
+        }
+
     # Intercept explicit confirmation commands
     if prompt_clean.startswith("CONFIRM_EXECUTE_REQUISITION:"):
         try:
@@ -3431,6 +3459,28 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 "executed_actions": [{"tool": "list_hiring_requisitions", "result": [target_req]}]
             }
 
+    # Handle closed-status queries before the general directory and LLM fallbacks.
+    if (
+        re.search(r"\b(closed|completed|filled)\b", prompt_lower)
+        and re.search(r"\b(requisitions?|requsitions?|urequsitions?|reqs?|jobs?|roles?|positions?)\b", prompt_lower)
+    ):
+        closed_reqs = list_hiring_requisitions(user_id, tenant_id, "closed")
+        if closed_reqs:
+            lines = [
+                f"• **{r.get('title')}** — `{r.get('status')}`"
+                for r in closed_reqs
+            ]
+            reply_text = (
+                f"**CLOSED REQUISITIONS ({len(closed_reqs)}) — {company_name}:**\n\n"
+                + "\n".join(lines)
+            )
+        else:
+            reply_text = f"There are currently **no closed requisitions** for **{company_name}**."
+        return {
+            "reply": reply_text,
+            "executed_actions": [{"tool": "list_hiring_requisitions", "result": closed_reqs}],
+        }
+
     direct_req_pattern = r"^(can\s+u\s+)?(show|list|view|display|get|tell\s+me\s+about)\s+(me\s+)?(all\s+)?(the\s+)?(active\s+|live\s+|open\s+|published\s+|draft\s+)?(requsitions?|requisitions?|reqs?|jobs?|roles?)"
     if re.search(direct_req_pattern, prompt_lower):
         is_active_only = bool(re.search(r"\b(active|live|open|published)\b", prompt_lower))
@@ -3595,8 +3645,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
 
     # Intercept Requisition Creation / Drafting intent (handles "create a new requsition", "create a req", role templates, etc.)
     create_req_pattern = (
-        r"\b(create|draft|new|add|make|build|post|setup|start)\s+(?:a\s+)?(?:new\s+)?(requisitions?|requsitions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|opening|openings|job\s*posts?|job\s*postings?|contract\s*roles?)\b|"
-        r"\b(?:can\s+(?:u|you)\s+)?(?:could\s+you\s+)?(create|draft|make|build|post)\s+(?:a\s+)?(?:new\s+)?(requisitions?|requsitions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|openings?)\b|"
+        r"\b(create|draft|new|add|make|build|post|setup|start)\s+(?:a\s+)?(?:new\s+)?(requisitions?|urequsitions?|requsitions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|opening|openings|job\s*posts?|job\s*postings?|contract\s*roles?)\b|"
+        r"\b(?:can\s+(?:u|you)\s+)?(?:could\s+you\s+)?(create|draft|make|build|post)\s+(?:a\s+)?(?:new\s+)?(requisitions?|urequsitions?|requsitions?|requsions?|reqisitions?|requstions?|recquisitions?|req|reqs|job|jobs|role|roles|position|positions|openings?)\b|"
         r"\b(?:i\s+)?(?:need|nned|want|looking\s+for|require)\s+(?:to\s+)?(?:hire|create|draft|post|add)\b|"
         r"\b(?:hire|hiring)\s+(?:a\s+|an\s+)?([a-z0-9\s/]+)\b"
     )
@@ -4044,34 +4094,6 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     shortlist_pattern = r"(shortlist|shortlisted|shotlist|shotlisted|shrtlist|shrtlisted|sortlist|sortlisted|shorted|list shortlisted|show shortlisted|short candidates)"
     onboard_pattern = r"(onboard|onbord|obord|ombord|omboard|hired|accepted|joining|joined|onb|obor|onbording|onbordd|obordd)"
     expense_pattern = r"(expense|expenses|expence|expences|claim|claims|reimbursement|reimbursements)"
-
-    # Hiring Manager Onboarding & Playbook Intent (e.g. "how do i use this as hiring manager", "guide me", "what can you do")
-    help_guide_pattern = (
-        r"\b("
-        r"how\s+(do\s+i|can\s+i|to|should\s+i)\s+(use|navigate|operate|work\s+with|start\s+with)\s*(this|termjobs|the\s+platform|the\s+system|the\s+portal)?|"
-        r"how\s+do\s+i\s+use\s+this(\s+as\s+(a\s+)?(hiring\s+manager|hm))?|"
-        r"how\s+to\s+use\s*(this\s*)?(as\s+(a\s+)?(hiring\s+manager|hm))?|"
-        r"how\s+can\s+i\s+use\s*(this|it)(\s+as\s+(a\s+)?(hiring\s+manager|hm))?|"
-        r"how\s+does\s+(this|it)\s+work|"
-        r"what\s+can\s+(i|you)\s+do(\s+here)?|"
-        r"what\s+(can|should)\s+i\s+do\s+as\s+(a\s+)?(hiring\s+manager|hm)|"
-        r"what\s+do\s+i\s+do\s+as\s+(a\s+)?(hiring\s+manager|hm)|"
-        r"what\s+are\s+my\s+(roles?|permissions?|capabilities|features|tasks|powers|responsibilities)|"
-        r"guide\s+me|help\s+me(\s+get\s+started)?|user\s+guide|hiring\s+manager\s+guide|quick\s+start(\s+guide)?|"
-        r"explain\s+(this|my\s+role|how\s+to\s+use|the\s+features)|"
-        r"walk\s+me\s+through(\s+this)?|"
-        r"how\s+should\s+i\s+proceed|"
-        r"how\s+(do\s+i|to)\s+start|"
-        r"where\s+do\s+i\s+start|"
-        r"what\s+is\s+my\s+role(\s+as\s+(a\s+)?(hiring\s+manager|hm))?"
-        r")\b"
-    )
-    if re.search(help_guide_pattern, prompt_lower):
-        guide_res = get_hiring_manager_guide(user_name=user_name, company_name=company_name, director_name=director_name)
-        return {
-            "reply": guide_res["markdown"],
-            "executed_actions": [{"tool": "get_hiring_manager_guide", "result": guide_res}]
-        }
 
     # Available Predefined Roles Intent (e.g. "where are the roles", "show roles", "available roles", "which roles", "list roles")
     roles_inquiry_pattern = r"\b(where\s+(are\s+)?(the\s+)?roles?|show\s+(available\s+)?roles?|what\s+roles?(\s+are\s+there)?|which\s+roles?|available\s+roles?|list\s+roles?|role\s+options?|select\s+role)\b"

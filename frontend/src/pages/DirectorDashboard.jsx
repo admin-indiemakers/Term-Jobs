@@ -50,11 +50,14 @@ export function getRequisitionDisplayInfo(r) {
   // Approved: Director sign-off should show Approved, and the requisition status should change to Published.
   const isApproved = (Boolean(r.director_approved) || r.status === 'Published') && r.status !== 'Closed';
   if (isApproved) {
+    const approvalDate = r.director_approved_at || r.approved_at || (r.director_approved ? r.updated_at : null);
     return {
       status: 'Published',
       statusBadge: 'Published',
       signOffType: 'approved',
       signOffText: r.director_approved_by ? `Approved (${r.director_approved_by})` : 'Approved',
+      approvedBy: r.director_approved_by || r.approved_by || 'Director',
+      approvedAt: approvalDate,
       isApproved: true,
       isRejected: false,
       isPending: false,
@@ -441,8 +444,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
         token,
       });
       setTemplateMsg('Requisition approved successfully!');
-      const approverName = updatedReq?.director_approved_by || user?.name || user?.email || 'Director';
-      const approvedAt = updatedReq?.director_approved_at || new Date().toISOString();
+      const approverName = updatedReq?.director_approved_by || updatedReq?.approved_by || user?.name || user?.email || 'Director';
+      const approvedAt = updatedReq?.director_approved_at || updatedReq?.approved_at || new Date().toISOString();
       setRequisitions((prev) =>
         (Array.isArray(prev) ? prev : []).map((r) =>
           r.id === reqId
@@ -452,6 +455,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 director_approved: true,
                 director_approved_by: approverName,
                 director_approved_at: approvedAt,
+                approved_by: approverName,
+                approved_at: approvedAt,
                 rejection_reason: null,
                 rejected_by: null,
                 rejected_at: null,
@@ -467,6 +472,8 @@ export default function DirectorDashboard({ view = 'overview' }) {
               director_approved: true,
               director_approved_by: approverName,
               director_approved_at: approvedAt,
+              approved_by: approverName,
+              approved_at: approvedAt,
               rejection_reason: null,
               rejected_by: null,
               rejected_at: null,
@@ -1322,7 +1329,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   <th className="pb-3">Status</th>
                   <th className="pb-3">Director Sign-off</th>
                   <th className="pb-3">Candidates</th>
-                  <th className="pb-3">Created</th>
+                  <th className="pb-3">Timeline (Created / Approved)</th>
                   <th className="pb-3 text-right">Action</th>
                 </tr>
               </thead>
@@ -1330,6 +1337,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 {filteredRequisitions.map((r) => {
                   const disp = getRequisitionDisplayInfo(r);
                   const isDeletedByHm = disp.isDeleted;
+                  const approvalDate = disp.approvedAt || r.director_approved_at || r.approved_at || (r.director_approved ? r.updated_at : null);
                   return (
                     <tr
                       key={r.id}
@@ -1375,10 +1383,17 @@ export default function DirectorDashboard({ view = 'overview' }) {
                             )}
                           </div>
                         ) : disp.isApproved ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                            <CheckCircle2 size={12} className="text-emerald-600" />
-                            <span>Approved{r.director_approved_by ? ` (${r.director_approved_by})` : ''}</span>
-                          </span>
+                          <div className="space-y-0.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              <CheckCircle2 size={12} className="text-emerald-600" />
+                              <span>Approved{r.director_approved_by ? ` (${r.director_approved_by})` : ''}</span>
+                            </span>
+                            {approvalDate && (
+                              <div className="text-[10px] text-gray-400 font-medium">
+                                on {formatDate(approvalDate)}
+                              </div>
+                            )}
+                          </div>
                         ) : disp.isRejected ? (
                           <div className="space-y-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1412,7 +1427,18 @@ export default function DirectorDashboard({ view = 'overview' }) {
                       <td className="py-3.5 font-semibold text-gray-700">
                         {isDeletedByHm ? '—' : `${candidatesByRequisition[r.id] || 0} candidates`}
                       </td>
-                      <td className="py-3.5 text-gray-400 font-medium">{formatDate(r.created_at)}</td>
+                      <td className="py-3.5">
+                        <div className="text-gray-900 font-semibold text-xs flex items-center gap-1">
+                          <span className="text-gray-400 font-medium">Created:</span>
+                          <span>{formatDate(r.created_at)}</span>
+                        </div>
+                        {disp.isApproved && approvalDate && (
+                          <div className="text-emerald-700 font-bold text-[11px] mt-0.5 flex items-center gap-1">
+                            <CheckCircle2 size={11} className="text-emerald-600 shrink-0" />
+                            <span>Approved: {formatDate(approvalDate)}</span>
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
                         {isDeletedByHm ? (
                           <div className="flex items-center justify-end gap-1.5">
@@ -1497,6 +1523,21 @@ export default function DirectorDashboard({ view = 'overview' }) {
                   <span className="text-xs text-gray-500">
                     Created {formatDate(selectedRequisitionForView.created_at)}
                   </span>
+                  {(() => {
+                    const disp = getRequisitionDisplayInfo(selectedRequisitionForView);
+                    const appDate = selectedRequisitionForView.director_approved_at || selectedRequisitionForView.approved_at || disp.approvedAt;
+                    if (disp.isApproved && appDate) {
+                      return (
+                        <>
+                          <span className="text-gray-300">•</span>
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-2 py-0.5 rounded-md">
+                            Approval Date: {formatDate(appDate)}
+                          </span>
+                        </>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
                 <h2 className="text-xl sm:text-2xl font-black text-gray-900">
                   {selectedRequisitionForView.title || selectedRequisitionForView.structured_role?.title || 'Untitled Requisition'}
@@ -1539,6 +1580,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
                 }
 
                 if (disp.isApproved) {
+                  const approvalDate = selectedRequisitionForView.director_approved_at || selectedRequisitionForView.approved_at || disp.approvedAt || selectedRequisitionForView.updated_at;
                   return (
                     <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                       <div className="space-y-0.5">
@@ -1549,13 +1591,18 @@ export default function DirectorDashboard({ view = 'overview' }) {
                           </span>
                         </div>
                         <p className="text-xs text-emerald-800 font-medium">
-                          Approved by {selectedRequisitionForView.director_approved_by || 'Director'} on {formatDate(selectedRequisitionForView.director_approved_at || selectedRequisitionForView.updated_at)}. Active for vendor submissions.
+                          Approved by {selectedRequisitionForView.director_approved_by || selectedRequisitionForView.approved_by || 'Director'} on {formatDate(approvalDate)}. Active for vendor submissions.
                         </p>
                       </div>
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-2xs shrink-0">
-                        <Check size={13} className="text-emerald-600" />
-                        <span>Published & Live</span>
-                      </span>
+                      <div className="flex flex-col sm:items-end gap-1 shrink-0">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-white text-emerald-800 border border-emerald-300 shadow-2xs">
+                          <Check size={13} className="text-emerald-600" />
+                          <span>Published & Live</span>
+                        </span>
+                        <span className="text-[11px] font-bold text-emerald-800">
+                          Approval Date: {formatDate(approvalDate)}
+                        </span>
+                      </div>
                     </div>
                   );
                 }
@@ -1637,6 +1684,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
               {/* Grid: Role Specs & Commercials */}
               {(() => {
+                const disp = getRequisitionDisplayInfo(selectedRequisitionForView);
                 const sr = selectedRequisitionForView.structured_role || {};
                 const skillsList = (() => {
                   if (Array.isArray(sr.primary_skills)) return sr.primary_skills;
@@ -1656,6 +1704,44 @@ export default function DirectorDashboard({ view = 'overview' }) {
 
                 return (
                   <div className="space-y-4">
+                    {/* Timeline & Approval History Card */}
+                    <div className="bg-gray-50/70 border border-gray-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
+                      <div className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">
+                        <Clock size={14} className="text-gray-700" />
+                        <span>Timeline & Approval History</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                        <div className="bg-white p-3 rounded-xl border border-gray-200/60 shadow-2xs">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Created Date</div>
+                          <div className="font-extrabold text-gray-900 mt-0.5">
+                            {formatDate(selectedRequisitionForView.created_at)}
+                          </div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">Submitted by Hiring Manager</div>
+                        </div>
+                        <div className={`p-3 rounded-xl border shadow-2xs ${disp.isApproved ? 'bg-emerald-50/60 border-emerald-200' : 'bg-white border-gray-200/60'}`}>
+                          <div className={`text-[10px] font-bold uppercase ${disp.isApproved ? 'text-emerald-700' : 'text-gray-400'}`}>
+                            Approval Date
+                          </div>
+                          <div className={`font-extrabold mt-0.5 ${disp.isApproved ? 'text-emerald-900 text-sm' : 'text-gray-500'}`}>
+                            {disp.isApproved
+                              ? formatDate(selectedRequisitionForView.director_approved_at || selectedRequisitionForView.approved_at || disp.approvedAt || selectedRequisitionForView.updated_at)
+                              : (disp.isRejected ? 'Rejected (Revision Required)' : 'Pending Director Approval')}
+                          </div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">
+                            {disp.isApproved ? `Signed off by ${selectedRequisitionForView.director_approved_by || selectedRequisitionForView.approved_by || 'Director'}` : 'Director executive sign-off'}
+                          </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-xl border border-gray-200/60 shadow-2xs">
+                          <div className="text-[10px] text-gray-400 font-bold uppercase">Workflow Status</div>
+                          <div className="font-extrabold text-gray-900 mt-0.5">
+                            {disp.status}
+                          </div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">
+                            Director Sign-off: {disp.signOffText}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                     {/* Role Specifications Card */}
                     <div className="bg-gray-50/70 border border-gray-200/80 rounded-2xl p-4 sm:p-5 space-y-3">
                       <div className="text-[11px] font-extrabold uppercase tracking-wider text-gray-500 flex items-center gap-1.5">

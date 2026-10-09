@@ -613,7 +613,7 @@ export default function RequisitionOverview({ section }) {
                   <th className="py-3 px-3">TITLE & ROLE</th>
                   <th className="py-3 px-3">DEPARTMENT</th>
                   <th className="py-3 px-3">STATUS</th>
-                  <th className="py-3 px-3">CREATED</th>
+                  <th className="py-3 px-3">TIMELINE</th>
                   <th className="py-3 px-3 text-right">ACTIONS</th>
                 </tr>
               </thead>
@@ -655,14 +655,19 @@ export default function RequisitionOverview({ section }) {
                         <RequisitionStatusBadge status={r.status || 'Published'} />
                       </td>
 
-                      {/* Created Column */}
+                      {/* Timeline (Created / Approved) Column */}
                       <td className="py-3 px-3">
                         <div className="text-xs font-semibold text-gray-700 leading-tight">
-                          {formatDate(r.created_at)}
+                          Created: {formatDate(r.created_at)}
                         </div>
                         <div className="text-[10px] text-gray-400 mt-0.5">
                           {timeAgo(r.created_at)}
                         </div>
+                        {(r.director_approved_at || r.approved_at) && (
+                          <div className="text-[10px] font-bold text-emerald-800 mt-1 inline-flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            Approved: {formatDate(r.director_approved_at || r.approved_at)}
+                          </div>
+                        )}
                       </td>
 
                       {/* Actions Column */}

@@ -1334,9 +1334,6 @@ export default function HiringManagerDashboard() {
             tenant_name: user.tenant_name,
           } : null,
         },
-      }).catch((err) => {
-        console.warn('AI Agent chat API request warning:', err);
-        return null;
       });
 
       let replyContent = response?.reply || response?.message || '';
@@ -1416,10 +1413,10 @@ export default function HiringManagerDashboard() {
       // Check if user is updating draft openings
       let explicitOpenings = null;
       const openMatch =
-        prompt.match(/(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i) ||
-        prompt.match(/(?:to|as|is|be)\s+(\d+)\s*(?:openings?|headcount|positions?|seats?)/i) ||
-        prompt.match(/(?:change|set|update|make)\s+(?:the\s+)?(?:number\s+of\s+)?openings?\s+(?:to|as|is|be)?\s*(\d+)/i) ||
-        prompt.match(/number\s+of\s+openings?\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i);
+        text.match(/(?:openings?|headcount|positions?|seats?)\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i) ||
+        text.match(/(?:to|as|is|be)\s+(\d+)\s*(?:openings?|headcount|positions?|seats?)/i) ||
+        text.match(/(?:change|set|update|make)\s+(?:the\s+)?(?:number\s+of\s+)?openings?\s+(?:to|as|is|be)?\s*(\d+)/i) ||
+        text.match(/number\s+of\s+openings?\s*(?:to|as|is|be)?\s*[:=]?\s*(\d+)/i);
       if (openMatch && openMatch[1]) {
         explicitOpenings = parseInt(openMatch[1], 10);
       }
@@ -1472,13 +1469,13 @@ export default function HiringManagerDashboard() {
         if (isSkillUpdate) {
           let skillText = '';
           const m =
-            prompt.match(/(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
-            prompt.match(/(?:key\s*skills?)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
-            prompt.match(/want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)/i);
+            text.match(/(?:skills?|tech\s*stack)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
+            text.match(/(?:key\s*skills?)\s*(?:as|to|should\s*be|are|is|:)?\s*[:=]?\s*([^.!?\n]+)/i) ||
+            text.match(/want\s+(?:key\s*)?skills?\s*(?:as|to|is|are)?\s*([^.!?\n]+)/i);
           if (m && m[1]) {
             skillText = m[1].replace(/\bonly\b/gi, '').trim();
           } else if (textLower.includes('python') || textLower.includes('react')) {
-            skillText = prompt;
+            skillText = text;
           }
 
           if (skillText) {
@@ -1494,7 +1491,7 @@ export default function HiringManagerDashboard() {
         }
 
         if (isSummaryUpdate) {
-          const m = prompt.match(/(?:role\s*summary|summary|job\s*description|description)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)/i);
+          const m = text.match(/(?:role\s*summary|summary|job\s*description|description)\s*(?:to|as|is|should\s*be|:)?\s*[:=]?\s*(.+)/i);
           if (m && m[1] && m[1].trim()) {
             updatedSummary = m[1].trim();
           }
@@ -1556,7 +1553,7 @@ export default function HiringManagerDashboard() {
       // CRITICAL: If we have an active draft card, NEVER attach or display published requisitions!
       if (!reqDraft) {
         const listAction = executedActions.find((a) => a.tool === 'list_hiring_requisitions');
-        if (listAction && Array.isArray(listAction.result) && listAction.result.length > 0) {
+        if (listAction && Array.isArray(listAction.result)) {
           reqList = listAction.result;
         }
 
@@ -1573,7 +1570,9 @@ export default function HiringManagerDashboard() {
             replyContent.toLowerCase().includes('live requisition') ||
             replyContent.toLowerCase().includes('total requisitions'))
         ) {
-          reqList = requisitions.length > 0 ? requisitions : null;
+          reqList = /\b(closed|completed|filled)\b/i.test(textLower)
+            ? requisitions.filter((r) => ['closed', 'completed', 'filled'].includes((r.status || '').toLowerCase()))
+            : (requisitions.length > 0 ? requisitions : null);
         }
 
         // If user specifically asked for requisitions and we have cards, ensure reply text is informative
@@ -1622,7 +1621,7 @@ export default function HiringManagerDashboard() {
       const errorMsg = {
         id: `err-${Date.now()}`,
         sender: 'ai',
-        text: 'I am here to help you manage your hiring pipeline. Feel free to draft a requisition, review candidates, or schedule an interview.',
+        text: 'I couldn’t complete your request. Please try again. If this keeps happening, refresh the page and check your connection.',
         isError: true,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };

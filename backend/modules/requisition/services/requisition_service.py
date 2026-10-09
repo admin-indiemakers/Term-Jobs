@@ -278,6 +278,11 @@ class RequisitionService:
             req.status = sm.status.value
             req.approved_by = by
             req.approved_at = _utcnow()
+            if getattr(req, "director_approved", False):
+                if not getattr(req, "director_approved_at", None):
+                    req.director_approved_at = req.approved_at
+                if not getattr(req, "director_approved_by", None):
+                    req.director_approved_by = by
             role = req.structured_role
             session.commit()
         events.emit_requisition_published(requisition_id, structured_role=role)
