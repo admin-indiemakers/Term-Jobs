@@ -5,6 +5,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, Response
@@ -42,6 +43,12 @@ RESUME_UPLOAD_DIRS = [
     os.path.join(os.path.dirname(__file__), "..", "..", "uploads"),
     "uploads",
 ]
+
+
+def _resume_disposition(filename: str) -> str:
+    safe_name = os.path.basename(filename.replace("\\", "/")) or "resume.pdf"
+    ascii_name = safe_name.encode("ascii", "ignore").decode("ascii").replace('"', "") or "resume.pdf"
+    return f"inline; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(safe_name)}"
 
 
 def _tenant_requisition_ids(session, tenant_id: str, user_id: str | None = None, user_role: str | None = None) -> set[str]:
@@ -583,19 +590,21 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
             match_q.append({"candidate_name": cand_name})
         if match_q:
             alt_doc = db["candidates"].find_one({"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}})
+            if not alt_doc:
+                alt_doc = db["candidate_submissions"].find_one({"$or": match_q, "resume_pdf": {"$exists": True, "$ne": None}})
             if alt_doc and alt_doc.get("resume_pdf"):
                 doc = alt_doc
 
     if doc and doc.get("resume_pdf"):
         try:
-            pdf_bytes = base64.b64decode(doc["resume_pdf"])
+            resume_bytes = base64.b64decode(doc["resume_pdf"])
             filename = doc.get("filename") or f"{doc.get('candidate_name', 'resume')}.pdf"
+            media_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if filename.lower().endswith(".docx") else "application/pdf"
             return Response(
-                content=pdf_bytes,
-                media_type="application/pdf",
+                content=resume_bytes,
+                media_type=media_type,
                 headers={
-                    "Content-Disposition": f'inline; filename="{filename}"',
-                    "Content-Type": "application/pdf",
+                    "Content-Disposition": _resume_disposition(filename),
                 }
             )
         except Exception as e:
@@ -611,7 +620,7 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
             if os.path.exists(path):
                 return FileResponse(
                     path,
-                    media_type="application/pdf",
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document" if fname.lower().endswith(".docx") else "application/pdf",
                     filename=fname,
                 )
 
@@ -707,7 +716,7 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
                 content=gen_bytes,
                 media_type="application/pdf",
                 headers={
-                    "Content-Disposition": f'inline; filename="{safe_name}_Resume.pdf"',
+                    "Content-Disposition": _resume_disposition(f"{safe_name}_Resume.pdf"),
                     "Content-Type": "application/pdf",
                 }
             )

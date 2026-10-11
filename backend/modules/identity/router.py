@@ -310,7 +310,9 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
 
     user_id = payload["sub"]
     cached_user = _cache.get(f"auth_user:{user_id}")
-    if cached_user is not None:
+    # Finance access must reflect approval or deactivation immediately, even
+    # when an older token has a cached active account object.
+    if cached_user is not None and cached_user.role not in ("Finance", "Finance Team"):
         user = cached_user
     else:
         user = db.query(User).filter(User.id == user_id).first()
@@ -321,7 +323,8 @@ def get_current_user(authorization: str | None = Header(default=None), db: Sessi
             )
         if getattr(user, 'is_deleted', False):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-        _cache.set(f"auth_user:{user_id}", user, ttl=60)
+        if user.role not in ("Finance", "Finance Team"):
+            _cache.set(f"auth_user:{user_id}", user, ttl=60)
 
     # Check candidate offboarding access expiration
     if getattr(user, "role", "") == "Candidate":
@@ -379,6 +382,7 @@ def _tenant_type(tenant_id: str, db: Session) -> str:
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     return tenant.tenant_type if tenant else "client"
 
+
 @router.post("/login", response_model=TokenResponse)
 def login_user(body: UserLogin, db: Session = Depends(get_db)):
     lookup = (body.username or body.email or "").strip()
@@ -399,17 +403,13 @@ def login_user(body: UserLogin, db: Session = Depends(get_db)):
             # 1. Primary lookup: exact email address
             user = db.query(User).filter(User.email == lookup).first()
             
-            # 2. Case-insensitive fallback across all users
+            # 2. Case-insensitive email fallback; display names are not login identifiers.
             if not user:
                 all_users = db.query(User).all()
                 for u in all_users:
-                    if u.email and u.email.lower() == lookup.lower():
+                    if u.email and u.email.casefold() == lookup.casefold():
                         user = u
                         break
-                    if u.name and u.name.lower() == lookup.lower():
-                        user = u
-                        break
-
             # 3. Candidate / Work order ID fallback (with normalization and Mongo work_orders cross-reference)
             if not user and (hasattr(User, "candidate_id") or hasattr(User, "workorder_id")):
                 cid_clean = lookup.replace("SDC-", "").replace("SDC -", "").replace("BEAR-", "").replace("sdc-", "").replace("bear-", "").strip()
@@ -691,20 +691,24 @@ def update_company_profile(
             detail="Tenant not found",
         )
 
-    # 1. Update company name if provided
+    # 1. Check uniqueness only when the company name actually changes. Profile
+    # edits send the current name as well, and legacy duplicate tenant records
+    # must not block unrelated updates such as headquarters.
     if body.name is not None and body.name.strip():
         new_name = body.name.strip()
-        existing = db.query(Tenant).filter(
-            func.lower(Tenant.name) == new_name.lower(),
-            Tenant.id != tenant.id,
-            Tenant.is_deleted == False
-        ).first()
-        if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"A company named '{new_name}' already exists",
-            )
-        tenant.name = new_name
+        if new_name.casefold() != (tenant.name or "").strip().casefold():
+            existing = db.query(Tenant).filter(
+                func.lower(Tenant.name) == new_name.lower(),
+                Tenant.id != tenant.id,
+                Tenant.is_deleted == False
+            ).first()
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"A company named '{new_name}' already exists",
+                )
+        if new_name != tenant.name:
+            tenant.name = new_name
 
     # 2. Update company logo if provided
     if body.logo_url is not None:
@@ -1207,6 +1211,7 @@ def update_user(
     db.commit()
     db.refresh(target)
     _cache.invalidate_prefix("users:")
+    _cache.invalidate(f"auth_user:{target.id}")
 
     comp = _get_company_profile(target.tenant_id, db)
     return UserResponse(
@@ -2235,6 +2240,7 @@ def resend_portal_user_credentials(
     db.commit()
     db.refresh(target)
     _cache.invalidate_prefix("users:")
+    _cache.invalidate_prefix(f"auth_user:{target.id}")
 
     cid = target.candidate_id or getattr(target, 'workorder_id', '')
     _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
@@ -2631,6 +2637,7 @@ def approve_user(
     db.commit()
     db.refresh(target)
     _cache.invalidate_prefix("users:")
+    _cache.invalidate(f"auth_user:{target.id}")
 
 
     return UserResponse(
@@ -2772,7 +2779,7 @@ def register_procurement(
         name=body.name.strip(),
         password_hash=hash_password(body.password),
         role="Procurement Team",
-        department=body.department.strip() or "Procurement & Commercials",
+        department="Procurement & Commercials",
         created_by="self_invite",
         is_active=False,
     )
@@ -2841,7 +2848,7 @@ def register_finance(
         name=body.name.strip(),
         password_hash=hash_password(body.password),
         role="Finance Team",
-        department=body.department.strip() or "Finance & Accounts",
+        department="Finance & Accounts",
         created_by="self_invite",
         is_active=False,
     )

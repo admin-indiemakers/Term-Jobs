@@ -201,6 +201,7 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
 
 
           <form id="onboard-vendor-modal-form" onSubmit={handleSubmit} className="space-y-3.5" autoComplete="off">
+            <p className="text-[11px] text-gray-500">Fields marked <span className="font-bold text-red-600">*</span> are required.</p>
             {/* Hidden trap inputs to prevent browser autofill of saved admin credentials */}
             <input type="text" name="prevent_autofill_name" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="off" readOnly />
             <input type="password" name="prevent_autofill_pwd" tabIndex={-1} aria-hidden="true" style={{ position: 'absolute', opacity: 0, height: 0, width: 0, pointerEvents: 'none' }} autoComplete="new-password" readOnly />
@@ -252,7 +253,7 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Industry
+                  Industry <span className="font-normal text-gray-500 normal-case">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -266,7 +267,7 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
 
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Company Size
+                  Company Size <span className="font-normal text-gray-500 normal-case">(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -282,7 +283,7 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
             {/* Location */}
             <div>
               <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                Location
+                Location <span className="font-normal text-gray-500 normal-case">(optional)</span>
               </label>
               <input
                 type="text"
@@ -297,7 +298,7 @@ export default function OnboardVendorModal({ isOpen, onClose, onSuccess }) {
             {/* Specializations */}
             <div>
               <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                Specializations
+                Specializations <span className="font-normal text-gray-500 normal-case">(optional)</span>
               </label>
               <input
                 type="text"

@@ -38,6 +38,7 @@ import {
 } from 'lucide-react';
 import TeamChatDrawer from '../components/TeamChatDrawer';
 import { validatePhone } from '../utils/phoneValidation';
+import { buildCompanyProfilePayload } from '../utils/companyProfilePayload';
 
 const INDUSTRY_OPTIONS = [
   'Information Technology',
@@ -82,6 +83,7 @@ export default function CompanyAdminProfile() {
   const { user, token, refreshUser } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const savedCompanyNameRef = useRef(null);
 
   const [activeTab, setActiveTab] = useState('company'); // 'company' | 'admin' | 'security'
   const [loading, setLoading] = useState(true);
@@ -349,8 +351,9 @@ export default function CompanyAdminProfile() {
     setError('');
     try {
       const data = await request('/api/auth/company/profile', { token });
+      savedCompanyNameRef.current = data.name || user?.tenant_name || 'TCS';
       setCompanyForm({
-        name: data.name || user?.tenant_name || 'TCS',
+        name: savedCompanyNameRef.current,
         industry: data.industry || 'Information Technology',
         size: data.size || '201-500 employees',
         location: data.location || 'Bangalore, India',
@@ -544,19 +547,13 @@ export default function CompanyAdminProfile() {
   };
 
   const handleRemoveLogo = async () => {
-    setCompanyForm((prev) => ({ ...prev, logo_url: '' }));
     try {
       await request('/api/auth/company/profile', {
         method: 'PUT',
         token,
-        body: {
-          ...companyForm,
-          logo_url: '',
-          admin_name: adminForm.admin_name,
-          admin_email: adminForm.admin_email,
-          admin_phone: adminForm.admin_phone,
-        },
+        body: { logo_url: '' },
       });
+      setCompanyForm((prev) => ({ ...prev, logo_url: '' }));
       setSuccess('Logo removed.');
       if (refreshUser) await refreshUser();
     } catch (err) {
@@ -591,24 +588,15 @@ export default function CompanyAdminProfile() {
     setSuccess('');
 
     try {
-      const payload = {
-        name: updatedCompany.name.trim(),
-        industry: updatedCompany.industry,
-        size: updatedCompany.size,
-        location: updatedCompany.location.trim(),
-        notes: updatedCompany.notes.trim(),
-        logo_url: updatedCompany.logo_url,
-        tech_stack: updatedCompany.tech_stack,
-        admin_name: updatedAdmin.admin_name.trim(),
-        admin_email: updatedAdmin.admin_email.trim(),
-        admin_phone: updatedAdmin.admin_phone.trim(),
-      };
+      const nextName = updatedCompany.name.trim();
+      const payload = buildCompanyProfilePayload(updatedCompany, updatedAdmin, savedCompanyNameRef.current);
 
-      await request('/api/auth/company/profile', {
+      const savedProfile = await request('/api/auth/company/profile', {
         method: 'PUT',
         token,
         body: payload,
       });
+      savedCompanyNameRef.current = savedProfile?.name || nextName;
 
       setSuccess('Changes saved successfully!');
       if (refreshUser) await refreshUser();

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { request } from '../api/client';
+import { API_BASE_URL, request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import {
   Users,
@@ -83,24 +83,27 @@ export default function SuperAdminCandidatePool() {
     resumeFile: null,
   });
   const [addSubmitting, setAddSubmitting] = useState(false);
+  const [addError, setAddError] = useState('');
 
-  const fetchPoolData = () => {
+  const fetchPoolData = async (forceRefresh = false) => {
     setLoading(true);
-    request('/api/superadmin/candidate-pool', { token })
-      .then((res) => {
-        setCandidates(res.candidates || []);
-        setVendorsList(res.vendors || []);
-        if (res.stats) {
-          setStats(res.stats);
-        }
-        setError('');
-      })
-      .catch((err) => setError(err.message || 'Failed to load Candidate Pool'))
-      .finally(() => setLoading(false));
+    try {
+      const res = await request('/api/superadmin/candidate-pool', { token, forceRefresh });
+      setCandidates(res.candidates || []);
+      setVendorsList(res.vendors || []);
+      if (res.stats) setStats(res.stats);
+      setError('');
+      return res;
+    } catch (err) {
+      setError(err.message || 'Failed to load Candidate Pool');
+      throw err;
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchPoolData();
+    fetchPoolData().catch(() => {});
   }, [token]);
 
   // Clean up PDF blob URL when modal closes
@@ -122,15 +125,22 @@ export default function SuperAdminCandidatePool() {
   // Handle viewing resume in modal
   const handleViewResume = async (cand) => {
     setSelectedCandidateForModal(cand);
-    setPdfLoading(true);
+    setPdfLoading(false);
     setPdfError('');
     if (pdfBlobUrl) {
       URL.revokeObjectURL(pdfBlobUrl);
       setPdfBlobUrl(null);
     }
 
+    if (cand.filename?.toLowerCase().endsWith('.docx')) {
+      setPdfError('DOCX files cannot be previewed here. Use Download to open the original file.');
+      return;
+    }
+
+    setPdfLoading(true);
+
     try {
-      const res = await fetch(`/api/candidates/${cand.id}/resume`, {
+      const res = await fetch(`${API_BASE_URL}/api/candidates/${encodeURIComponent(cand.id)}/resume`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -152,24 +162,32 @@ export default function SuperAdminCandidatePool() {
 
   // Handle direct resume download
   const handleDownloadResume = async (cand) => {
+    if (!cand?.has_resume) {
+      setError('No resume has been uploaded for this candidate.');
+      return;
+    }
     try {
-      const res = await fetch(`/api/candidates/${cand.id}/resume`, {
+      const res = await fetch(`${API_BASE_URL}/api/candidates/${encodeURIComponent(cand.id)}/resume`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
-      if (!res.ok) throw new Error('Download failed');
+      if (!res.ok) {
+        const details = await res.json().catch(() => null);
+        throw new Error(typeof details?.detail === 'string' ? details.detail : `Resume download failed (${res.status}).`);
+      }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${cand.candidate_name.replace(/\s+/g, '_')}_Resume.pdf`;
+      const extension = cand.filename?.toLowerCase().endsWith('.docx') ? 'docx' : 'pdf';
+      a.download = `${(cand.candidate_name || 'Candidate').replace(/[^a-z0-9_-]+/gi, '_')}_Resume.${extension}`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
-      alert(`Could not download resume: ${err.message}`);
+      setError(`Could not download resume: ${err.message}`);
     }
   };
 
@@ -186,7 +204,7 @@ export default function SuperAdminCandidatePool() {
       if (inspectCandidate?.id === deleteCandidateTarget.id) {
         setInspectCandidate(null);
       }
-      fetchPoolData();
+      fetchPoolData(true).catch(() => {});
     } catch (err) {
       setError(err.message || 'Failed to remove candidate');
     }
@@ -196,18 +214,19 @@ export default function SuperAdminCandidatePool() {
   const handleAddSubmit = async (e) => {
     e.preventDefault();
     if (!addForm.name || !addForm.email) {
-      alert('Name and email are required.');
+      setAddError('Name and email are required.');
       return;
     }
     if (addForm.phone && addForm.phone.trim()) {
       const phoneErr = validatePhone(addForm.phone, { required: false });
       if (phoneErr) {
-        alert(phoneErr);
+        setAddError(phoneErr);
         return;
       }
     }
 
     setAddSubmitting(true);
+    setAddError('');
     try {
       const formData = new FormData();
       formData.append('name', addForm.name);
@@ -221,19 +240,18 @@ export default function SuperAdminCandidatePool() {
         formData.append('resume', addForm.resumeFile);
       }
 
-      const res = await fetch('/api/superadmin/candidate-pool', {
+      const res = await request('/api/superadmin/candidate-pool', {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+        token,
         body: formData,
+        timeout: 90000,
       });
-
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || 'Failed to add candidate');
-      }
-
+      if (!res?.candidate_id) throw new Error('The upload completed without a candidate ID. Please refresh the pool before trying again.');
+      setSearchTerm('');
+      setSelectedSource('all');
+      setSelectedVendor('all');
+      setSelectedSkill('all');
+      await fetchPoolData(true).catch(() => {});
       setSuccess('Candidate successfully added to the pool!');
       setShowAddModal(false);
       setAddForm({
@@ -246,9 +264,8 @@ export default function SuperAdminCandidatePool() {
         summary: '',
         resumeFile: null,
       });
-      fetchPoolData();
     } catch (err) {
-      alert(err.message);
+      setAddError(err.message || 'Failed to add candidate. Please try again.');
     } finally {
       setAddSubmitting(false);
     }
@@ -360,7 +377,7 @@ export default function SuperAdminCandidatePool() {
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <button
             type="button"
-            onClick={fetchPoolData}
+            onClick={() => fetchPoolData(true).catch(() => {})}
             title="Refresh candidate roster"
             className="p-2.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-xs font-semibold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
           >
@@ -377,7 +394,7 @@ export default function SuperAdminCandidatePool() {
           </button>
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={() => { setAddError(''); setShowAddModal(true); }}
             className="px-4 py-2.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Plus size={14} />
@@ -748,8 +765,9 @@ export default function SuperAdminCandidatePool() {
                           <button
                             type="button"
                             onClick={() => handleViewResume(cand)}
-                            className="px-2.5 py-1.5 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
-                            title="View Resume PDF in modal"
+                            disabled={!cand.has_resume}
+                            className="px-2.5 py-1.5 rounded-lg bg-black hover:bg-gray-800 text-white text-[11px] font-bold shadow-2xs transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={cand.has_resume ? 'View resume' : 'No uploaded resume'}
                           >
                             <FileText size={12} />
                             Resume
@@ -758,8 +776,9 @@ export default function SuperAdminCandidatePool() {
                           <button
                             type="button"
                             onClick={() => handleDownloadResume(cand)}
-                            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs transition-colors cursor-pointer"
-                            title="Download PDF"
+                            disabled={!cand.has_resume}
+                            className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            title={cand.has_resume ? 'Download resume' : 'No uploaded resume'}
                           >
                             <Download size={13} />
                           </button>
@@ -1070,17 +1089,19 @@ export default function SuperAdminCandidatePool() {
                 <button
                   type="button"
                   onClick={() => handleDownloadResume(inspectCandidate)}
-                  className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 text-gray-800 text-xs font-bold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5"
+                  disabled={!inspectCandidate.has_resume}
+                  className="px-3.5 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-100 text-gray-800 text-xs font-bold shadow-2xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Download size={13} />
-                  Download PDF
+                  Download Resume
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     handleViewResume(inspectCandidate);
                   }}
-                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  disabled={!inspectCandidate.has_resume}
+                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <FileText size={13} />
                   View Resume
@@ -1109,33 +1130,35 @@ export default function SuperAdminCandidatePool() {
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} className="p-6 space-y-4 text-xs">
+            <form onSubmit={handleAddSubmit} className="p-6 space-y-4 text-xs overflow-y-auto">
+              <p className="text-gray-500">Fields marked <span className="font-bold text-red-600">*</span> are required.</p>
+              {addError && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">{addError}</div>}
               <div>
-                <label className="block text-gray-700 font-bold mb-1">Candidate Name *</label>
+                <label className="block text-gray-700 font-bold mb-1">Candidate Name <span className="text-red-600">*</span></label>
                 <input
                   type="text"
                   required
                   value={addForm.name}
                   onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
                   placeholder="e.g. Priya Sharma"
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-black"
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Email *</label>
+                  <label className="block text-gray-700 font-bold mb-1">Email <span className="text-red-600">*</span></label>
                   <input
                     type="email"
                     required
                     value={addForm.email}
                     onChange={(e) => setAddForm({ ...addForm, email: e.target.value })}
                     placeholder="priya@example.com"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-black"
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Phone</label>
+                  <label className="block text-gray-700 font-bold mb-1">Phone <span className="font-normal text-gray-500">(optional)</span></label>
                   <input
                     type="tel"
                     value={addForm.phone}
@@ -1145,7 +1168,7 @@ export default function SuperAdminCandidatePool() {
                       addForm.phone && validatePhone(addForm.phone, { required: false })
                         ? 'border-rose-400 focus:border-rose-500'
                         : 'border-gray-200 focus:border-black'
-                    } rounded-xl text-xs focus:bg-white focus:outline-none`}
+                    } rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none`}
                   />
                   {addForm.phone && validatePhone(addForm.phone, { required: false }) && (
                     <p className="mt-1 text-[11px] text-rose-600 font-medium">
@@ -1157,56 +1180,56 @@ export default function SuperAdminCandidatePool() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Title / Headline</label>
+                  <label className="block text-gray-700 font-bold mb-1">Title / Headline <span className="font-normal text-gray-500">(optional)</span></label>
                   <input
                     type="text"
                     value={addForm.title}
                     onChange={(e) => setAddForm({ ...addForm, title: e.target.value })}
                     placeholder="Senior Backend Engineer"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-black"
                   />
                 </div>
                 <div>
-                  <label className="block text-gray-700 font-bold mb-1">Channel / Vendor</label>
+                  <label className="block text-gray-700 font-bold mb-1">Channel / Vendor <span className="font-normal text-gray-500">(optional)</span></label>
                   <input
                     type="text"
                     value={addForm.vendor_name}
                     onChange={(e) => setAddForm({ ...addForm, vendor_name: e.target.value })}
                     placeholder="Direct Applicant or Vendor Name"
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-black"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-gray-700 font-bold mb-1">Skills (comma-separated)</label>
+                <label className="block text-gray-700 font-bold mb-1">Skills (comma-separated) <span className="font-normal text-gray-500">(optional)</span></label>
                 <input
                   type="text"
                   value={addForm.skills}
                   onChange={(e) => setAddForm({ ...addForm, skills: e.target.value })}
                   placeholder="Python, React, FastAPI, Docker, PostgreSQL"
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-black"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-bold mb-1">Resume File (PDF / DOCX)</label>
+                <label className="block text-gray-700 font-bold mb-1">Resume File (PDF / DOCX) <span className="font-normal text-gray-500">(optional)</span></label>
                 <input
                   type="file"
                   accept=".pdf,.docx"
                   onChange={(e) => setAddForm({ ...addForm, resumeFile: e.target.files[0] })}
-                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-black file:text-white"
+                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 file:mr-3 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-black file:text-white"
                 />
               </div>
 
               <div>
-                <label className="block text-gray-700 font-bold mb-1">Professional Summary</label>
+                <label className="block text-gray-700 font-bold mb-1">Professional Summary <span className="font-normal text-gray-500">(optional)</span></label>
                 <textarea
                   rows={2}
                   value={addForm.summary}
                   onChange={(e) => setAddForm({ ...addForm, summary: e.target.value })}
                   placeholder="Brief overview of the candidate's background and achievements..."
-                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:bg-white focus:outline-none focus:border-black"
+                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-none focus:border-black"
                 />
               </div>
 

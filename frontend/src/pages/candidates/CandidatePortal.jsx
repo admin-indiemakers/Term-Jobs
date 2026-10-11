@@ -3191,6 +3191,7 @@ export default function CandidatePortal() {
                           <input
                             type="number"
                             placeholder="0"
+                            required
                             value={expenseForm.amount}
                             onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
                             style={{

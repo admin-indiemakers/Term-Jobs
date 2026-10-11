@@ -964,6 +964,7 @@ export default function AdminDashboard() {
             </div>
 
             <form onSubmit={handleInviteSubmit} className="space-y-3.5" autoComplete="off">
+              <p className="text-[11px] text-gray-500">Fields marked <span className="font-bold text-red-600">*</span> are required.</p>
               {/* Role Select */}
               <div>
                 <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
@@ -1067,7 +1068,7 @@ export default function AdminDashboard() {
               {(inviteForm.role === 'Hiring Manager' || inviteForm.role === 'Finance Team' || inviteForm.role === 'Finance') && (
                 <div>
                   <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                    Department {inviteForm.role === 'Hiring Manager' ? '(Optional)' : ''}
+                    Department <span className="font-normal text-gray-500 normal-case">(optional)</span>
                   </label>
                   <input
                     type="text"

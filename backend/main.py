@@ -2204,6 +2204,18 @@ def get_superadmin_candidate_pool(
     # 2. Fetch candidate submissions
     submissions = list(db["candidate_submissions"].find({}, {"resume_pdf": 0, "resume_text": 0}).sort("created_at", -1))
 
+    # Keep large resume blobs out of the pool response while reporting which
+    # candidates actually have an uploaded document.
+    resume_filter = {"resume_pdf": {"$exists": True, "$nin": [None, ""]}}
+    bank_resume_ids = {
+        str(row.get("id") or row.get("_id"))
+        for row in db["candidates"].find(resume_filter, {"id": 1})
+    }
+    submission_resume_ids = {
+        str(row.get("id") or row.get("_id"))
+        for row in db["candidate_submissions"].find(resume_filter, {"id": 1})
+    }
+
     # Pre-cache requisitions for metadata
     req_ids = list({s.get("requisition_id") for s in submissions if s.get("requisition_id")})
     req_map = {}
@@ -2242,6 +2254,10 @@ def get_superadmin_candidate_pool(
         cid = c.get("id") or str(c.get("_id"))
         email = (c.get("candidate_email") or "").strip().lower()
         key = email if email else cid
+        # The query is newest-first. Keep the latest profile and uploaded resume
+        # when an email already has an older bank record.
+        if key in cand_dict:
+            continue
         v_name = (c.get("vendor_company_name") or c.get("vendor_name") or "GlobalStaff Partners").strip()
         is_direct = v_name.lower() in ["direct applicant", "portal registration", "portal applicant"]
         if not is_direct and v_name:
@@ -2262,7 +2278,7 @@ def get_superadmin_candidate_pool(
             "summary": c.get("summary") or "",
             "details": c.get("details") or {},
             "filename": c.get("filename") or f"{c.get('candidate_name', 'resume')}.pdf",
-            "has_resume": True,
+            "has_resume": cid in bank_resume_ids,
             "applications": [],
             "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         }
@@ -2300,6 +2316,8 @@ def get_superadmin_candidate_pool(
                 cand_dict[key]["skills"] = _clean_skills(s.get("matched_skills"))
             if not cand_dict[key]["candidate_phone"]:
                 cand_dict[key]["candidate_phone"] = (s.get("details") or {}).get("candidate_phone") or ""
+            if sub_id in submission_resume_ids:
+                cand_dict[key]["has_resume"] = True
         else:
             cand_dict[key] = {
                 "id": sub_id,
@@ -2315,7 +2333,7 @@ def get_superadmin_candidate_pool(
                 "summary": s.get("summary") or "",
                 "details": s.get("details") or {},
                 "filename": s.get("filename") or f"{s.get('candidate_name', 'resume')}.pdf",
-                "has_resume": True,
+                "has_resume": sub_id in submission_resume_ids,
                 "applications": [app_entry] if s.get("requisition_id") else [],
                 "created_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
             }
@@ -2326,7 +2344,7 @@ def get_superadmin_candidate_pool(
     total_count = len(all_candidates)
     portal_count = sum(1 for c in all_candidates if c["is_direct_applicant"])
     vendor_count = total_count - portal_count
-    resumes_count = total_count
+    resumes_count = sum(1 for candidate in all_candidates if candidate["has_resume"])
 
     # Apply filters
     filtered = all_candidates
@@ -2519,6 +2537,14 @@ def get_superadmin_candidate_management(
 
     from modules.shared.db import db
     from datetime import datetime, timezone
+    from modules.notifications.services.selection_feed import deduplicate_selections
+
+    def recorded_match_score(value):
+        try:
+            score = float(value)
+            return score if 0 <= score <= 100 else None
+        except (TypeError, ValueError):
+            return None
 
     # 1. Fetch recorded selections from candidate_selections collection
     recorded_selections = list(db["candidate_selections"].find({}, {"_id": 0}).sort("selected_at", -1))
@@ -2560,8 +2586,8 @@ def get_superadmin_candidate_management(
                 "hiring_manager_name": r.get("created_by_name") or "Hiring Manager",
             }
 
-    # Consolidated index
-    consolidated: dict[str, dict] = {}
+    # Collect both sources; the same selection can appear in each one.
+    consolidated: list[dict] = []
     distinct_companies = set()
 
     for rec in recorded_selections:
@@ -2575,6 +2601,8 @@ def get_superadmin_candidate_management(
         entry = {
             "id": rec_id,
             "selection_id": rec_id,
+            "submission_id": rec.get("submission_id") or "",
+            "candidate_id": rec.get("candidate_id") or "",
             "candidate_name": cand_name,
             "candidate_email": rec.get("candidate_email") or "",
             "candidate_phone": rec.get("candidate_phone") or "",
@@ -2585,19 +2613,16 @@ def get_superadmin_candidate_management(
             "requisition_ref": rec.get("requisition_ref") or req_info.get("ref") or "REQ-GENERAL",
             "hiring_manager_name": rec.get("hiring_manager_name") or req_info.get("hiring_manager_name") or "Hiring Manager",
             "hiring_manager_email": rec.get("hiring_manager_email") or "",
-            "match_score": float(rec.get("match_score")) if rec.get("match_score") is not None else 92.0,
+            "match_score": recorded_match_score(rec.get("match_score")),
             "status": rec.get("status") or "Selected",
             "notes": rec.get("notes") or "",
             "selected_at": rec.get("selected_at") or rec.get("created_at") or datetime.now(timezone.utc).isoformat(),
             "notification_message": f"Candidate {cand_name} has been selected by {comp}",
         }
-        consolidated[rec_id] = entry
+        consolidated.append(entry)
 
     for sub in accepted_submissions:
         sub_id = sub.get("id") or str(sub.get("_id"))
-        # Check if already captured by submission_id
-        if any(v.get("submission_id") == sub_id for v in consolidated.values()):
-            continue
         req_info = req_map.get(sub.get("requisition_id"), {})
         comp = (sub.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
         if comp and comp.lower() != "enterprise partner":
@@ -2610,6 +2635,7 @@ def get_superadmin_candidate_management(
             "id": sub_id,
             "selection_id": sub_id,
             "submission_id": sub_id,
+            "candidate_id": sub.get("candidate_id") or "",
             "candidate_name": cand_name,
             "candidate_email": sub.get("candidate_email") or "",
             "candidate_phone": (sub.get("details") or {}).get("candidate_phone") or "",
@@ -2620,15 +2646,16 @@ def get_superadmin_candidate_management(
             "requisition_ref": req_info.get("ref") or f"REQ-{(sub.get('requisition_id') or '')[:6].upper()}",
             "hiring_manager_name": req_info.get("hiring_manager_name") or "Hiring Manager",
             "hiring_manager_email": "",
-            "match_score": float(sub.get("match_score")) if sub.get("match_score") is not None else 90.0,
+            "match_score": recorded_match_score(sub.get("match_score")),
             "status": "Selected",
             "notes": sub.get("hiring_manager_notes") or sub.get("summary") or "",
             "selected_at": iso_str,
             "notification_message": f"Candidate {cand_name} has been selected by {comp}",
         }
-        consolidated[sub_id] = entry
+        consolidated.append(entry)
 
-    all_selections = list(consolidated.values())
+    all_selections = deduplicate_selections(consolidated)
+    scored_selections = [s["match_score"] for s in all_selections if s["match_score"] is not None]
 
     # Add default companies from tenants for filter options if available
     for t in db["tenants"].find({"tenant_type": "client"}, {"name": 1}):
@@ -2681,7 +2708,8 @@ def get_superadmin_candidate_management(
         "stats": {
             "total_selected": len(all_selections),
             "companies_count": len(distinct_companies),
-            "avg_match_score": round(sum(float(s.get("match_score") or 0) for s in all_selections) / max(len(all_selections), 1), 1),
+            "avg_match_score": round(sum(scored_selections) / len(scored_selections), 1) if scored_selections else None,
+            "scored_candidates_count": len(scored_selections),
         },
     }
     _cache.set(cache_key, res, ttl=30)
@@ -2709,14 +2737,16 @@ def simulate_candidate_selection(
     req_id = body.get("requisition_id") or "sim-req-" + str(uuid.uuid4())[:8]
     hm_name = (body.get("hiring_manager_name") or current_user.name or "").strip()
     cand_email = (body.get("candidate_email") or "").strip()
-    score = float(body.get("match_score") or 0)
+    raw_score = body.get("match_score")
+    score = float(raw_score) if raw_score not in (None, "") else None
     notes = (body.get("notes") or "").strip()
 
-    if not cand_name or not company_name or not req_title or not cand_email:
-        raise HTTPException(status_code=400, detail="candidate_name, company_name, requisition_title, and candidate_email are all required.")
+    if not cand_name or not company_name or not req_title:
+        raise HTTPException(status_code=400, detail="Candidate name, company name, and requisition / role are required.")
 
     res = notify_candidate_selected_by_hm(
         requisition_id=req_id,
+        requisition_title=req_title,
         candidate_name=cand_name,
         company_name=company_name,
         hiring_manager_name=hm_name,

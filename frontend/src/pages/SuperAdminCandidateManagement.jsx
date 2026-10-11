@@ -30,6 +30,13 @@ import {
   Zap
 } from 'lucide-react';
 
+const formatMatchScore = (score) => {
+  const value = Number(score);
+  return score !== null && score !== undefined && score !== '' && Number.isFinite(value)
+    ? `${Math.round(value)}%`
+    : '—';
+};
+
 export default function SuperAdminCandidateManagement() {
   const { token, user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -50,7 +57,7 @@ export default function SuperAdminCandidateManagement() {
 
   const [selections, setSelections] = useState([]);
   const [companies, setCompanies] = useState([]);
-  const [stats, setStats] = useState({ total_selected: 0, companies_count: 0, avg_match_score: 0 });
+  const [stats, setStats] = useState({ total_selected: 0, companies_count: 0, avg_match_score: null, scored_candidates_count: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -482,7 +489,7 @@ export default function SuperAdminCandidateManagement() {
 
                       <div className="pt-2 border-t border-gray-100 flex items-center justify-between gap-3">
                         <div className="text-xs font-black text-emerald-700">
-                          {Math.round(cand.match_score || 92)}% Match Fit
+                          {formatMatchScore(cand.match_score)} Match Fit
                         </div>
 
                         <button
@@ -558,14 +565,14 @@ export default function SuperAdminCandidateManagement() {
         <div className="bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-5 shadow-xs flex items-center justify-between">
           <div>
             <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-              Hiring Companies
+              Partner Companies
             </div>
             <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 mt-1">
               {companies.length}
             </div>
             <div className="text-[11px] text-blue-600 font-semibold mt-0.5 flex items-center gap-1">
               <Building2 size={12} />
-              <span>With active selections</span>
+              <span>Available to filter</span>
             </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
@@ -579,11 +586,11 @@ export default function SuperAdminCandidateManagement() {
               Avg Candidate Fit
             </div>
             <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 mt-1">
-              {stats.avg_match_score || 92}%
+              {stats.avg_match_score == null ? '—' : `${stats.avg_match_score}%`}
             </div>
             <div className="text-[11px] text-amber-600 font-semibold mt-0.5 flex items-center gap-1">
               <TrendingUp size={12} />
-              <span>AI Evaluation Score</span>
+              <span>{stats.scored_candidates_count ? `Based on ${stats.scored_candidates_count} scored candidate${stats.scored_candidates_count === 1 ? '' : 's'}` : 'No scored candidates yet'}</span>
             </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
@@ -812,7 +819,7 @@ export default function SuperAdminCandidateManagement() {
                 <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0">
                   <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-xs font-black shadow-2xs">
                     <Award size={13} className="text-amber-400" />
-                    <span>{Math.round(cand.match_score || 92)}% Fit</span>
+                    <span>{formatMatchScore(cand.match_score)} Fit</span>
                   </div>
 
                   <div className="flex items-center gap-1.5 pt-1 opacity-90 group-hover:opacity-100 transition-opacity">
@@ -903,7 +910,7 @@ export default function SuperAdminCandidateManagement() {
                     </td>
                     <td className="py-3.5 px-4">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-200">
-                        {Math.round(cand.match_score || 92)}%
+                        {formatMatchScore(cand.match_score)}
                       </span>
                     </td>
                     <td className="py-3.5 px-4 text-gray-500 whitespace-nowrap">
@@ -985,7 +992,7 @@ export default function SuperAdminCandidateManagement() {
 
                 <div className="p-3 rounded-xl border border-gray-100 bg-gray-50/50">
                   <div className="text-[10px] font-bold text-gray-400 uppercase">Match Score</div>
-                  <div className="font-extrabold text-emerald-700 mt-0.5">{Math.round(activeCandidateDetail.match_score || 92)}% Match Fit</div>
+                  <div className="font-extrabold text-emerald-700 mt-0.5">{formatMatchScore(activeCandidateDetail.match_score)} Match Fit</div>
                 </div>
 
                 <div className="p-3 rounded-xl border border-gray-100 bg-gray-50/50">
@@ -1067,8 +1074,9 @@ export default function SuperAdminCandidateManagement() {
             </div>
 
             <form onSubmit={handleSimulateSubmit} className="space-y-3 text-xs">
+              <p className="text-gray-500">Fields marked <span className="font-bold text-red-600">*</span> are required.</p>
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Candidate Name</label>
+                <label className="block font-bold text-gray-700 mb-1">Candidate Name <span className="text-red-600">*</span></label>
                 <input
                   type="text"
                   required
@@ -1079,7 +1087,7 @@ export default function SuperAdminCandidateManagement() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Company Name</label>
+                <label className="block font-bold text-gray-700 mb-1">Company Name <span className="text-red-600">*</span></label>
                 <input
                   type="text"
                   required
@@ -1090,7 +1098,7 @@ export default function SuperAdminCandidateManagement() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Requisition / Role</label>
+                <label className="block font-bold text-gray-700 mb-1">Requisition / Role <span className="text-red-600">*</span></label>
                 <input
                   type="text"
                   required
@@ -1101,10 +1109,9 @@ export default function SuperAdminCandidateManagement() {
               </div>
 
               <div>
-                <label className="block font-bold text-gray-700 mb-1">Hiring Manager Name</label>
+                <label className="block font-bold text-gray-700 mb-1">Hiring Manager Name <span className="font-normal text-gray-500">(optional)</span></label>
                 <input
                   type="text"
-                  required
                   value={simulateForm.hiring_manager_name}
                   onChange={(e) => setSimulateForm({ ...simulateForm, hiring_manager_name: e.target.value })}
                   className="w-full border border-gray-300 rounded-xl px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-black"

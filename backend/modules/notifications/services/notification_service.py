@@ -293,6 +293,7 @@ def notify_candidate_selected_by_hm(
     submission_id: str | None = None,
     match_score: float | None = None,
     notes: str | None = None,
+    requisition_title: str | None = None,
 ) -> dict:
     """Notify all Super Admins when a candidate is shortlisted and selected by the Hiring Manager.
 
@@ -307,12 +308,24 @@ def notify_candidate_selected_by_hm(
         with get_session() as session:
             ctx = _requisition_context(session, requisition_id) or {}
             resolved_company = (company_name or ctx.get("company_name") or "Enterprise Partner").strip()
-            req_title = ctx.get("title") or "Open Requisition"
+            req_title = ctx.get("title") or requisition_title or "Open Requisition"
             req_ref = ctx.get("ref") or f"REQ-{(requisition_id or '')[:6].upper()}"
             tenant_id = ctx.get("company_tenant_id") or ""
 
             # 1. Record selection in MongoDB candidate_selections collection
-            selection_id = str(uuid.uuid4())
+            selection_filters = []
+            if submission_id:
+                selection_filters.append({"submission_id": submission_id, "requisition_id": requisition_id})
+            if candidate_id:
+                selection_filters.append({"candidate_id": candidate_id, "requisition_id": requisition_id})
+            if candidate_email:
+                selection_filters.append({"candidate_email": candidate_email, "requisition_id": requisition_id})
+            elif candidate_name and requisition_id:
+                selection_filters.append({"candidate_name": candidate_name, "requisition_id": requisition_id})
+            existing = db["candidate_selections"].find_one(
+                {"$or": selection_filters}
+            ) if selection_filters else None
+            selection_id = (existing or {}).get("id") or (existing or {}).get("selection_id") or str(uuid.uuid4())
             now_iso = datetime.now(timezone.utc).isoformat()
             notification_msg = f"Candidate {candidate_name} has been selected by {resolved_company}"
 
@@ -333,19 +346,19 @@ def notify_candidate_selected_by_hm(
                 "match_score": match_score,
                 "notes": notes or "",
                 "status": "Selected",
-                "selected_at": now_iso,
-                "created_at": now_iso,
+                "selected_at": (existing or {}).get("selected_at") or now_iso,
+                "created_at": (existing or {}).get("created_at") or now_iso,
                 "message": notification_msg,
             }
+            if existing:
+                for field in ("candidate_email", "candidate_id", "submission_id", "company_tenant_id",
+                              "hiring_manager_email", "notes", "match_score"):
+                    if selection_doc[field] in (None, "") and existing.get(field) not in (None, ""):
+                        selection_doc[field] = existing[field]
 
             try:
                 db["candidate_selections"].update_one(
-                    {
-                        "$or": [
-                            {"submission_id": submission_id},
-                            {"candidate_name": candidate_name, "requisition_id": requisition_id},
-                        ]
-                    } if (submission_id or (candidate_name and requisition_id)) else {"id": selection_id},
+                    {"_id": existing["_id"]} if existing else {"id": selection_id},
                     {"$set": selection_doc},
                     upsert=True,
                 )
@@ -353,7 +366,7 @@ def notify_candidate_selected_by_hm(
                 logger.warning(f"Failed to persist candidate_selections doc: {db_err}")
 
             # 2. Dispatch notifications to all Super Admin accounts
-            super_admins = _super_admin_users(session)
+            super_admins = _super_admin_users(session) if not existing else []
             title = "Candidate Selected"
             body = notification_msg
             data = {

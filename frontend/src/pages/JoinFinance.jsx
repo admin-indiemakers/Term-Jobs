@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { request } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import {
   CheckCircle2, AlertCircle, Eye, EyeOff, ArrowRight, ShieldCheck,
   Building2, Lock, User, Mail, Briefcase, DollarSign, Receipt
@@ -8,6 +9,7 @@ import {
 
 export default function JoinFinance() {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [searchParams] = useSearchParams();
 
   const companyParam = searchParams.get('company') || searchParams.get('company_name') || 'Bearitt';
@@ -18,7 +20,6 @@ export default function JoinFinance() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [department, setDepartment] = useState('Finance & Accounts');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -68,7 +69,6 @@ export default function JoinFinance() {
       const payload = {
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        department: department.trim() || 'Finance & Accounts',
         password,
         company_name: companyName,
         tenant_id: tenantId || undefined,
@@ -115,10 +115,10 @@ export default function JoinFinance() {
                 Your Finance account for <strong>{email}</strong> has been created and sent to your company administrator for authorization.
               </p>
               <button
-                onClick={() => navigate('/login')}
+                onClick={() => { logout(); navigate('/login'); }}
                 className="w-full py-3 bg-[#0A0A0A] text-white font-extrabold text-xs rounded-xl hover:bg-[#262626] transition-colors cursor-pointer border-none"
               >
-                Proceed to Login →
+                Sign in after approval →
               </button>
             </div>
           ) : (
@@ -175,9 +175,10 @@ export default function JoinFinance() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] mb-1">Department</label>
                 <input
                   type="text"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#E2E2DC] rounded-xl text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
+                  value="Finance & Accounts"
+                  readOnly
+                  aria-readonly="true"
+                  className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 cursor-default"
                 />
               </div>
 

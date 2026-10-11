@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
+import ResumePreviewModal from '../components/ResumePreviewModal';
 import {
   Mail,
   Send,
@@ -68,6 +69,7 @@ export default function SuperAdminOutreachControl() {
   const [searchCandidate, setSearchCandidate] = useState('');
   const [notification, setNotification] = useState({ type: '', message: '' });
   const [previewCandidateModal, setPreviewCandidateModal] = useState(null);
+  const [resumeCandidate, setResumeCandidate] = useState(null);
 
   // Helper notification toaster
   const showToast = (message, type = 'success') => {
@@ -800,15 +802,14 @@ export default function SuperAdminOutreachControl() {
                           <td className="py-3 px-4 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {c.resume_url && (
-                                <a
-                                  href={c.resume_url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
+                                <button
+                                  type="button"
+                                  onClick={() => setResumeCandidate(c)}
                                   className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-100 text-gray-700 transition-colors"
                                   title="View Resume"
                                 >
                                   <FileText size={13} />
-                                </a>
+                                </button>
                               )}
                               <button
                                 type="button"
@@ -1146,19 +1147,26 @@ export default function SuperAdminOutreachControl() {
 
               {previewCandidateModal.resume_url && (
                 <div className="pt-2">
-                  <a
-                    href={previewCandidateModal.resume_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setResumeCandidate(previewCandidateModal)}
                     className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-black text-white font-bold text-xs hover:bg-gray-900 transition-colors"
                   >
                     <ExternalLink size={14} /> View Stored Resume
-                  </a>
+                  </button>
                 </div>
               )}
             </div>
           </div>
         </div>
+      )}
+      {resumeCandidate && (
+        <ResumePreviewModal
+          token={token}
+          candidateId={resumeCandidate.id || resumeCandidate.candidate_id}
+          filename={resumeCandidate.filename || `${resumeCandidate.name || resumeCandidate.candidate_name || 'Candidate'}_Resume.pdf`}
+          onClose={() => setResumeCandidate(null)}
+        />
       )}
     </div>
   );

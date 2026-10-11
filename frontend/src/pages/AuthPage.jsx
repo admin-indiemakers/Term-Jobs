@@ -85,7 +85,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="clp">
+    <div className="clp" data-no-field-requirements>
       <SEOHead
         title="Sign In | Term Jobs Portal"
         description="Sign in to your Term Jobs portal to manage contractor requisitions, talent onboarding, timesheets, and automated workforce billing."
@@ -167,7 +167,7 @@ export default function AuthPage() {
               )}
 
               <label className="clp-field">
-                <span className="clp-label">Email, username, or Work Order ID</span>
+                <span className="clp-label">Email, Candidate ID, or Work Order ID</span>
                 <div className="clp-input">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="3" y="5" width="18" height="14" rx="2.5" />
@@ -182,7 +182,7 @@ export default function AuthPage() {
                     onClick={(e) => { e.target.readOnly = false; }}
                     value={formData.email}
                     onChange={handleInputChange}
-                    placeholder="name@company.com or Work Order ID"
+                    placeholder="name@company.com, Candidate ID, or Work Order ID"
                     required
                     disabled={loading}
                     className="cursor-text"

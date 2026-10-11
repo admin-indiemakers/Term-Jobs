@@ -103,7 +103,7 @@ export default function ManageFinance() {
     try {
       await request(`/api/auth/users/${finUser.id}/approve`, { method: 'POST', token });
       setSuccess(`Finance Team member "${finUser.name || finUser.email}" approved successfully.`);
-      load();
+      load(true);
     } catch (err) {
       setError(err.message || 'Failed to approve finance account');
     } finally { setApprovingId(null); }

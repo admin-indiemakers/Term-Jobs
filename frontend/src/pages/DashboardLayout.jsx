@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from '../components/NotificationBell';
 import AssistantWidget from '../components/AssistantWidget';
@@ -573,8 +573,14 @@ export default function DashboardLayout() {
             <nav className="flex flex-col items-center gap-1.5 pb-2 w-full">
               {navItems.map((item) => {
                 const IconComp = item.icon;
+                const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
+                const isBillingTab = new URLSearchParams(location.search).get('tab') === 'billing';
                 const isItemActive = item.to === '/dashboard/requisitions'
                   ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
+                  : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
+                    ? isCandidateMgmtPath && isBillingTab
+                    : item.to === '/dashboard/superadmin/candidate-management'
+                      ? isCandidateMgmtPath && !isBillingTab
                   : item.end
                     ? location.pathname === item.to
                     : item.to ? location.pathname.startsWith(item.to) : false;
@@ -594,9 +600,8 @@ export default function DashboardLayout() {
                         {IconComp && <IconComp size={15} />}
                       </button>
                     ) : (
-                      <NavLink
+                      <Link
                         to={item.to}
-                        end={item.end}
                         onClick={onLinkClick}
                         title={item.label}
                         className={`w-8.5 h-8.5 rounded-xl flex items-center justify-center transition-all relative ${
@@ -609,7 +614,7 @@ export default function DashboardLayout() {
                         {item.badge > 0 && (
                           <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-red-500 ring-2 ring-[#0c0f17]" />
                         )}
-                      </NavLink>
+                      </Link>
                     )}
 
                     {/* Sleek Dark Tooltip matching Image 2 */}
@@ -776,13 +781,14 @@ export default function DashboardLayout() {
               const IconComp = item.icon;
 
               const isCandidateMgmtPath = location.pathname.startsWith('/dashboard/superadmin/candidate-management') || location.pathname.startsWith('/dashboard/candidate-management');
+              const isBillingTab = new URLSearchParams(location.search).get('tab') === 'billing';
 
               const isItemActive = item.to === '/dashboard/requisitions'
                 ? location.pathname.startsWith('/dashboard/requisitions') && location.pathname !== '/dashboard/requisitions/new'
                 : item.to === '/dashboard/superadmin/candidate-management?tab=billing'
-                  ? isCandidateMgmtPath && location.search.includes('tab=billing')
+                  ? isCandidateMgmtPath && isBillingTab
                   : item.to === '/dashboard/superadmin/candidate-management'
-                    ? isCandidateMgmtPath && !location.search.includes('tab=billing')
+                    ? isCandidateMgmtPath && !isBillingTab
                     : (item.to === '/dashboard/candidates' || item.to === '/dashboard/superadmin/candidates')
                       ? ((location.pathname.startsWith('/dashboard/candidates') || location.pathname.startsWith('/dashboard/superadmin/candidates') || location.pathname.includes('candidate-pool') || location.pathname.includes('candidatepool')) && !isCandidateMgmtPath)
                       : item.to === '/dashboard/director'
@@ -814,9 +820,8 @@ export default function DashboardLayout() {
                       </div>
                     </button>
                   ) : item.to ? (
-                    <NavLink
+                    <Link
                       to={item.to}
-                      end={item.end}
                       onClick={onLinkClick}
                       className={`nav-link ${isItemActive ? 'active-nav-tab' : 'sidebar-nav-btn'}`}
                     >
@@ -836,7 +841,7 @@ export default function DashboardLayout() {
                           {item.count}
                         </span>
                       )}
-                    </NavLink>
+                    </Link>
                   ) : (
                     <span className="nav-link sidebar-nav-btn">
                       <div className="flex items-center gap-2.5">

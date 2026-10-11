@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { API_BASE_URL } from '../api/client';
 
-export default function ResumePreviewModal({ token, filename, extractedText, onClose }) {
+export default function ResumePreviewModal({ token, filename, extractedText, candidateId, onClose }) {
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState('');
 
@@ -11,11 +11,17 @@ export default function ResumePreviewModal({ token, filename, extractedText, onC
     let objectUrl;
     async function loadResume() {
       try {
-        const response = await fetch(`${API_BASE_URL}/api/candidate-profile/resume`, {
+        const path = candidateId
+          ? `/api/candidates/${encodeURIComponent(candidateId)}/resume`
+          : '/api/candidate-profile/resume';
+        const response = await fetch(`${API_BASE_URL}${path}`, {
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error('Could not load your uploaded resume. Please try again.');
+        if (!response.ok) {
+          const details = await response.json().catch(() => null);
+          throw new Error(typeof details?.detail === 'string' ? details.detail : 'Could not load the uploaded resume. Please try again.');
+        }
         const blob = await response.blob();
         if (controller.signal.aborted) return;
         objectUrl = URL.createObjectURL(blob);
@@ -29,7 +35,7 @@ export default function ResumePreviewModal({ token, filename, extractedText, onC
       controller.abort();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [token, filename]);
+  }, [token, filename, candidateId]);
 
   useEffect(() => {
     const closeOnEscape = (event) => { if (event.key === 'Escape') onClose(); };

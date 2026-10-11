@@ -18,7 +18,6 @@ export default function JoinProcurement() {
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [department, setDepartment] = useState('Procurement & Vendor Commercials');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -68,7 +67,6 @@ export default function JoinProcurement() {
       const payload = {
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        department: department.trim() || 'Procurement & Commercials',
         password,
         company_name: companyName,
         tenant_id: tenantId || undefined,
@@ -175,9 +173,10 @@ export default function JoinProcurement() {
                 <label className="block text-[11px] font-bold uppercase tracking-wider text-[#8A8A85] mb-1">Department</label>
                 <input
                   type="text"
-                  value={department}
-                  onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-[#E2E2DC] rounded-xl text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A]"
+                  value="Procurement & Commercials"
+                  readOnly
+                  aria-readonly="true"
+                  className="w-full px-3.5 py-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 cursor-default"
                 />
               </div>
 

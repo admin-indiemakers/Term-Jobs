@@ -8,6 +8,7 @@ import LandingPage from './pages/LandingPage';
 import OpenRolesPage from './pages/OpenRolesPage';
 import DashboardLayout from './pages/DashboardLayout';
 import { directorRedirect } from './utils/directorAccess';
+import FieldRequirementIndicators from './components/FieldRequirementIndicators';
 
 // Lazy-loaded routes for code splitting (reduces initial bundle from 4.15MB down to ~250KB)
 const InterviewRequests = lazy(() => import('./pages/recruiter/InterviewRequests'));
@@ -233,6 +234,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <CandidateAuthProvider>
+        <FieldRequirementIndicators />
         <Suspense fallback={<FullScreenLoader />}>
           <Routes>
           <Route path="/join/hiring-manager" element={<JoinHiringManager />} />

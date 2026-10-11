@@ -6023,4 +6023,35 @@ html, body, #root {
   padding: 0 !important;
 }
 
+/* Consistent requirement hints for labelled fields across portal forms. */
+label[data-field-requirement='required'][data-field-requirement-placement='after']::after {
+  content: ' *';
+  color: #dc2626;
+  font-weight: 700;
+}
+
+label[data-field-requirement='optional'][data-field-requirement-placement='after']::after {
+  content: ' (optional)';
+  color: #64748b;
+  font-size: 0.85em;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+label[data-field-requirement='required'][data-field-requirement-placement='before']::before {
+  content: '* ';
+  color: #dc2626;
+  font-weight: 700;
+}
+
+label[data-field-requirement='optional'][data-field-requirement-placement='before']::before {
+  content: '(optional) ';
+  color: #64748b;
+  font-size: 0.85em;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 

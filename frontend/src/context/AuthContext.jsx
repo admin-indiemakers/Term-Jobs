@@ -25,8 +25,8 @@ export function AuthProvider({ children }) {
   });
   const [initializing, setInitializing] = useState(() => {
     const hasToken = Boolean(localStorage.getItem(TOKEN_KEY));
-    const hasUser = Boolean(localStorage.getItem(USER_KEY));
-    return hasToken && !hasUser;
+    // Verify stored sessions with /me before rendering protected routes.
+    return hasToken;
   });
 
   const logout = useCallback(() => {
@@ -79,11 +79,8 @@ export function AuthProvider({ children }) {
       return;
     }
     let cancelled = false;
-    const maxTimer = setTimeout(() => {
-      if (!cancelled) setInitializing(false);
-    }, 3500);
 
-    request('/api/auth/me', { token, timeout: 5000 })
+    request('/api/auth/me', { token, timeout: 5000, noCache: true })
       .then((data) => {
         if (!cancelled && data) {
           setUser(data);
@@ -96,13 +93,11 @@ export function AuthProvider({ children }) {
         if (!cancelled) logout();
       })
       .finally(() => {
-        clearTimeout(maxTimer);
         if (!cancelled) setInitializing(false);
       });
 
     return () => {
       cancelled = true;
-      clearTimeout(maxTimer);
     };
   }, [token, logout]);
 
