@@ -116,105 +116,126 @@ export default function TimesheetApprovals() {
   ];
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5]">
-      {/* Hero */}
-      <div className="bg-[#1a1a1a] text-white px-8 py-6">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] tracking-[0.18em] text-[#a0a09a] mb-1">
-              <span>WORKFORCE</span>
-              <span>›</span>
-              <span className="text-white">Timesheets</span>
-            </div>
-            <h1 className="text-[1.35rem] font-bold tracking-tight">Timesheet Approvals</h1>
-            <p className="text-[0.82rem] text-[#a0a09a] mt-0.5">
-              Review and approve weekly timesheets submitted by your team
-            </p>
+    <div
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1 font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      <style>{`
+        .custom-cand-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-cand-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-cand-scroll::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 4px; }
+        .custom-cand-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+      `}</style>
+
+      {/* ── 1. MODERN TOP HEADER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 shrink-0">
+        <div>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • ATTENDANCE & BILLING
           </div>
-          <div className="flex gap-3">
-            <button onClick={loadTimesheets} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 text-white text-[0.82rem] font-medium hover:bg-white/15 transition">
-              <RefreshCw size={14} />
-              Refresh
-            </button>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            Timesheet Approvals
+          </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Review, audit, and approve weekly timesheets submitted by your workforce.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={loadTimesheets}
+            className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ── 2. TOP 3 GLASSMORHPIC METRIC CARDS ── */}
+      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">PENDING APPROVAL</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1">{pendingCount}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center shadow-xs">
+            <Clock size={18} />
+          </div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">APPROVED TIMESHEETS</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{approvedCount}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shadow-xs">
+            <CheckCircle size={18} />
+          </div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">HOURS THIS WEEK</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{totalHoursThisWeek.toFixed(1)}h</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center shadow-xs">
+            <FileText size={18} />
           </div>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-8 py-6">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-[#eaeae6] p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-[#f59e0b] flex items-center justify-center">
-                <Clock size={17} className="text-white" />
-              </div>
-              <span className="text-[0.72rem] tracking-[0.14em] text-[#8a8a85] font-semibold uppercase">Pending Approval</span>
-            </div>
-            <div className="text-[1.8rem] font-bold text-[#1a1a1a]">{pendingCount}</div>
-          </div>
-          <div className="bg-white rounded-xl border border-[#eaeae6] p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-[#16a34a] flex items-center justify-center">
-                <CheckCircle size={17} className="text-white" />
-              </div>
-              <span className="text-[0.72rem] tracking-[0.14em] text-[#8a8a85] font-semibold uppercase">Approved</span>
-            </div>
-            <div className="text-[1.8rem] font-bold text-[#1a1a1a]">{approvedCount}</div>
-          </div>
-          <div className="bg-white rounded-xl border border-[#eaeae6] p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-[#2563eb] flex items-center justify-center">
-                <FileText size={17} className="text-white" />
-              </div>
-              <span className="text-[0.72rem] tracking-[0.14em] text-[#8a8a85] font-semibold uppercase">Hours This Week</span>
-            </div>
-            <div className="text-[1.8rem] font-bold text-[#1a1a1a]">{totalHoursThisWeek.toFixed(1)}h</div>
-          </div>
-        </div>
+      {/* ── 3. FILTER PILL TABS ── */}
+      <div className="shrink-0 flex items-center gap-2">
+        {filterTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setFilter(tab.key)}
+            className={`px-4 py-1.5 rounded-full text-xs font-bold transition shadow-3xs cursor-pointer flex items-center gap-1.5 ${
+              filter === tab.key
+                ? 'bg-black text-white shadow-xs'
+                : 'bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md'
+            }`}
+          >
+            <span>{tab.label}</span>
+            {tab.count > 0 && (
+              <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                filter === tab.key ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-700'
+              }`}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-        {/* Filter Tabs */}
-        <div className="flex gap-2 mb-4">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setFilter(tab.key)}
-              className={`px-4 py-2 rounded-full text-[0.82rem] font-semibold transition ${
-                filter === tab.key
-                  ? 'bg-[#1a1a1a] text-white'
-                  : 'bg-white border border-[#eaeae6] text-[#4a4a45] hover:bg-[#f0f0ec]'
-              }`}
-            >
-              {tab.label}
-              {tab.count > 0 && (
-                <span className={`ml-1.5 text-[0.72rem] ${filter === tab.key ? 'text-white/70' : 'text-[#8a8a85]'}`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
+      {/* ── 4. MAIN GLASSMORHPIC CONTAINER ── */}
+      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
 
         {/* Timesheet Cards */}
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto custom-cand-scroll pr-1 space-y-3">
           {loading ? (
-            <div className="bg-white rounded-xl border border-[#eaeae6] p-12 text-center text-[0.88rem] text-[#8a8a85]">
-              Loading timesheets...
+            <div className="py-20 text-center text-gray-400 text-xs font-medium flex items-center justify-center gap-2">
+              <RefreshCw size={14} className="animate-spin text-gray-400" />
+              <span>Loading timesheets...</span>
             </div>
           ) : error ? (
-            <div className="bg-white rounded-xl border border-[#eaeae6] p-12 text-center">
-              <AlertTriangle size={28} className="mx-auto mb-2 text-[#dc2626]" />
-              <div className="text-[0.92rem] text-[#dc2626] font-medium">{error}</div>
-              <button onClick={loadTimesheets} className="mt-2 px-3 py-1.5 bg-[#1a1a1a] text-white text-[0.82rem] rounded-lg">Retry</button>
+            <div className="py-16 text-center">
+              <AlertTriangle size={28} className="mx-auto mb-2 text-red-500" />
+              <div className="text-xs text-red-600 font-medium">{error}</div>
+              <button onClick={loadTimesheets} className="mt-2.5 px-3.5 py-1.5 bg-black text-white text-xs font-bold rounded-xl cursor-pointer">Retry</button>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="bg-white rounded-xl border border-[#eaeae6] p-12 text-center">
-              <CheckCircle size={32} className="mx-auto mb-3 text-[#16a34a]" />
-              <div className="text-[0.92rem] text-[#4a4a45] font-medium">
+            <div className="py-16 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/80 max-w-md mx-auto my-auto">
+              <CheckCircle size={32} className="mx-auto mb-3 text-emerald-500" />
+              <div className="text-sm font-extrabold text-gray-900">
                 {filter === 'SUBMITTED' ? 'No pending timesheets to review' : 'No timesheets found'}
               </div>
-              <div className="text-[0.78rem] text-[#8a8a85] mt-1">
+              <p className="text-xs text-gray-500 mt-1">
                 {filter === 'SUBMITTED' ? 'All caught up! Timesheets submitted by your team will appear here.' : 'Timesheets will appear here once submitted.'}
-              </div>
+              </p>
             </div>
           ) : (
             filtered.map((ts) => {
@@ -224,38 +245,41 @@ export default function TimesheetApprovals() {
               const hasExceptions = ts.has_exceptions || (ts.exception_flags || []).length > 0;
 
               return (
-                <div key={ts.id} className="bg-white rounded-xl border border-[#eaeae6] overflow-hidden">
-                  {/* Header */}
-                  <div className="px-5 py-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div>
-                        <div className="text-[0.92rem] font-semibold text-[#1a1a1a]">
-                          {ts.candidate_name || 'Unknown'}
-                        </div>
-                        <div className="text-[0.72rem] text-[#8a8a85] font-mono">{ts.candidate_id}</div>
+                <div key={ts.id} className="bg-white/70 backdrop-blur-md border border-white/80 rounded-2xl overflow-hidden shadow-3xs hover:border-black/20 transition-all">
+                  {/* Header Row */}
+                  <div className="px-4 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-black text-white flex items-center justify-center text-xs font-bold shadow-3xs">
+                        {(ts.candidate_name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
                       </div>
-                      <div className="text-[0.82rem] text-[#4a4a45]">
-                        <span className="font-medium">{ts.week_start_date}</span>
+                      <div>
+                        <div className="text-xs sm:text-[13px] font-extrabold text-gray-900">
+                          {ts.candidate_name || 'Candidate'}
+                        </div>
+                        <div className="text-[10.5px] text-gray-400 font-mono">{ts.candidate_id}</div>
+                      </div>
+                      <div className="hidden md:block pl-2 text-xs text-gray-600 font-medium border-l border-gray-200">
+                        <span>{ts.week_start_date}</span>
                         <span className="mx-1">–</span>
                         <span>{ts.week_end_date}</span>
                       </div>
-                      <div className="text-[0.82rem] text-[#8a8a85]">
+                      <div className="hidden lg:block text-xs text-gray-400">
                         {ts.requisition_title}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      {/* Hours */}
-                      <div className="text-right">
-                        <div className="text-[1.1rem] font-bold text-[#1a1a1a]">{ts.total_hours || 0}h</div>
-                        <div className="text-[0.68rem] text-[#8a8a85]">/ {ts.expected_hours || 40}h</div>
+                    <div className="flex items-center gap-2.5 flex-wrap sm:flex-nowrap justify-between sm:justify-end">
+                      {/* Hours pill */}
+                      <div className="text-right px-2.5 py-1 bg-white/80 rounded-xl border border-gray-100 shadow-3xs">
+                        <span className="text-xs font-extrabold text-gray-900">{ts.total_hours || 0}h</span>
+                        <span className="text-[10px] text-gray-400 ml-1">/ {ts.expected_hours || 40}h</span>
                       </div>
 
                       {/* Exception flag */}
                       {hasExceptions && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-[#fef3c7] rounded-lg">
-                          <AlertTriangle size={13} className="text-[#f59e0b]" />
-                          <span className="text-[0.72rem] font-semibold text-[#92400e]">
+                        <div className="flex items-center gap-1 px-2.5 py-1 bg-amber-50 rounded-xl border border-amber-200">
+                          <AlertTriangle size={12} className="text-amber-600" />
+                          <span className="text-[10px] font-bold text-amber-800">
                             {(ts.exception_flags || []).length} issue{(ts.exception_flags || []).length > 1 ? 's' : ''}
                           </span>
                         </div>
@@ -263,27 +287,29 @@ export default function TimesheetApprovals() {
 
                       {/* Status badge */}
                       <span
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.75rem] font-semibold"
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10.5px] font-bold"
                         style={{ backgroundColor: sc.bg, color: sc.text }}
                       >
                         {sc.icon}
-                        {ts.status}
+                        <span>{ts.status}</span>
                       </span>
 
                       {/* Action buttons */}
                       {ts.status === 'SUBMITTED' && (
-                        <div className="flex gap-2">
+                        <div className="flex gap-1.5">
                           <button
+                            type="button"
                             onClick={(e) => { e.stopPropagation(); handleApprove(ts.id); }}
                             disabled={actionLoading === ts.id}
-                            className="px-4 py-2 rounded-lg bg-[#16a34a] text-white text-[0.82rem] font-semibold hover:bg-[#15803d] transition disabled:opacity-50"
+                            className="px-3.5 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition shadow-xs disabled:opacity-50 cursor-pointer"
                           >
                             {actionLoading === ts.id ? '...' : 'Approve'}
                           </button>
                           <button
+                            type="button"
                             onClick={(e) => { e.stopPropagation(); setRejectModal(ts.id); }}
                             disabled={actionLoading === ts.id}
-                            className="px-4 py-2 rounded-lg bg-white border border-[#e5e7eb] text-[#dc2626] text-[0.82rem] font-semibold hover:bg-[#fee2e2] transition disabled:opacity-50"
+                            className="px-3.5 py-1.5 rounded-xl bg-white border border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold transition shadow-3xs disabled:opacity-50 cursor-pointer"
                           >
                             Reject
                           </button>
@@ -292,75 +318,70 @@ export default function TimesheetApprovals() {
 
                       {/* Expand toggle */}
                       <button
+                        type="button"
                         onClick={() => setExpandedId(isExpanded ? null : ts.id)}
-                        className="p-2 rounded-lg hover:bg-[#f0f0ec] transition"
+                        className="p-1.5 rounded-xl bg-white/60 hover:bg-white border border-white/80 text-gray-600 transition cursor-pointer"
                       >
-                        {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                       </button>
                     </div>
                   </div>
 
-                  {/* Expanded daily breakdown */}
+                  {/* Expanded Daily Breakdown */}
                   {isExpanded && (
-                    <div className="border-t border-[#eaeae6] bg-[#fafaf8] px-5 py-4">
+                    <div className="border-t border-black/[0.04] bg-white/40 px-4 py-3.5 space-y-3">
                       {/* Exception flags */}
                       {hasExceptions && (
-                        <div className="mb-4 p-3 bg-[#fef3c7] rounded-lg border border-[#fde68a]">
-                          <div className="flex items-center gap-2 mb-1">
-                            <AlertTriangle size={14} className="text-[#f59e0b]" />
-                            <span className="text-[0.78rem] font-semibold text-[#92400e]">AI Flagged Issues</span>
+                        <div className="p-3 bg-amber-50/90 rounded-xl border border-amber-200">
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <AlertTriangle size={13} className="text-amber-600" />
+                            <span className="text-xs font-bold text-amber-900">AI Flagged Discrepancies</span>
                           </div>
                           {(ts.exception_flags || []).map((flag, i) => (
-                            <div key={i} className="text-[0.78rem] text-[#92400e] ml-5">• {flag}</div>
+                            <div key={i} className="text-xs text-amber-800 ml-4">• {flag}</div>
                           ))}
                         </div>
                       )}
 
                       {/* Daily grid */}
-                      <div className="grid grid-cols-7 gap-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
                         {entries.map((entry, i) => (
                           <div
                             key={i}
-                            className={`p-3 rounded-lg border text-center ${
+                            className={`p-2.5 rounded-xl border text-center transition-all ${
                               entry.hours > 0
-                                ? 'bg-white border-[#d1d5cc]'
-                                : 'bg-[#f0f0ec] border-transparent'
+                                ? 'bg-white border-white/90 shadow-3xs'
+                                : 'bg-gray-100/60 border-transparent text-gray-400'
                             }`}
                           >
-                            <div className="text-[0.68rem] text-[#8a8a85] font-semibold uppercase mb-1">
-                              {entry.day}
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-0.5">
+                              {entry.day || `Day ${i + 1}`}
                             </div>
-                            <div className="text-[0.72rem] text-[#b0b0aa] mb-1">{entry.day_number || entry.date?.slice(-2)}</div>
-                            <div className={`text-[1.1rem] font-bold ${entry.hours > 0 ? 'text-[#1a1a1a]' : 'text-[#d1d5cc]'}`}>
-                              {entry.hours || 0}h
-                            </div>
-                            {entry.task && (
-                              <div className="text-[0.65rem] text-[#8a8a85] mt-1 truncate" title={entry.task}>
-                                {entry.task}
-                              </div>
-                            )}
+                            <div className="text-xs font-extrabold text-gray-900">{entry.hours || 0}h</div>
                           </div>
                         ))}
                       </div>
 
                       {/* Notes */}
                       {ts.notes && (
-                        <div className="mt-3 p-3 bg-white rounded-lg border border-[#eaeae6]">
-                          <div className="text-[0.72rem] text-[#8a8a85] font-semibold uppercase mb-1">Notes</div>
-                          <div className="text-[0.82rem] text-[#4a4a45]">{ts.notes}</div>
+                        <div className="p-3 bg-white/80 rounded-xl border border-white/90 text-xs text-gray-700">
+                          <strong className="block text-gray-900 mb-0.5">Employee Notes:</strong>
+                          {ts.notes}
                         </div>
                       )}
 
-                      {/* Approval info */}
+                      {/* Approval Info */}
                       {ts.status === 'APPROVED' && ts.approved_by && (
-                        <div className="mt-3 text-[0.78rem] text-[#16a34a]">
-                          ✓ Approved by {ts.approved_by} on {ts.approved_at_human || ts.approved_at}
+                        <div className="text-xs text-emerald-700 font-medium flex items-center gap-1">
+                          <CheckCircle size={13} className="text-emerald-600" />
+                          <span>Approved by {ts.approved_by} on {ts.approved_at_human || ts.approved_at}</span>
                         </div>
                       )}
+
                       {ts.status === 'REJECTED' && ts.rejection_reason && (
-                        <div className="mt-3 p-3 bg-[#fee2e2] rounded-lg">
-                          <div className="text-[0.78rem] text-[#991b1b] font-semibold">Rejection reason:</div>
-                          <div className="text-[0.82rem] text-[#991b1b]">{ts.rejection_reason}</div>
+                        <div className="p-3 bg-red-50/90 rounded-xl border border-red-200 text-xs text-red-700">
+                          <strong className="block text-red-900 mb-0.5">Rejection reason:</strong>
+                          {ts.rejection_reason}
                         </div>
                       )}
                     </div>
@@ -374,31 +395,33 @@ export default function TimesheetApprovals() {
 
       {/* Reject Modal */}
       {rejectModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setRejectModal(null)}>
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-[1.1rem] font-bold text-[#1a1a1a] mb-2">Reject Timesheet</h3>
-            <p className="text-[0.82rem] text-[#8a8a85] mb-4">
-              Please provide a reason for rejecting this timesheet. The candidate will be notified.
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-md flex items-center justify-center z-50 p-4" onClick={() => setRejectModal(null)}>
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-white/80" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-base font-extrabold text-gray-900 mb-1">Reject Timesheet</h3>
+            <p className="text-xs text-gray-500 mb-3.5">
+              Please specify the audit reason for rejecting this timesheet submission.
             </p>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="e.g. Hours don't match project logs, missing task descriptions..."
-              className="w-full px-3 py-2.5 text-[0.88rem] bg-[#f7f7f5] border border-[#eaeae6] rounded-lg focus:outline-none focus:border-[#1a1a1a] resize-none h-24"
+              placeholder="e.g. Hours do not match project sprint logs, missing task breakdown..."
+              className="w-full px-3.5 py-2.5 text-xs text-gray-900 bg-gray-50 border border-gray-200 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black resize-none h-24"
             />
-            <div className="flex gap-3 mt-4 justify-end">
+            <div className="flex gap-2.5 mt-4 justify-end">
               <button
+                type="button"
                 onClick={() => { setRejectModal(null); setRejectReason(''); }}
-                className="px-4 py-2 rounded-lg bg-white border border-[#eaeae6] text-[#4a4a45] text-[0.85rem] font-medium hover:bg-[#f0f0ec] transition"
+                className="px-4 py-2 rounded-xl bg-white border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-50 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleReject}
                 disabled={!rejectReason.trim() || actionLoading === rejectModal}
-                className="px-4 py-2 rounded-lg bg-[#dc2626] text-white text-[0.85rem] font-semibold hover:bg-[#b91c1c] transition disabled:opacity-50"
+                className="px-4 py-2 rounded-xl bg-red-600 text-white text-xs font-bold hover:bg-red-700 transition disabled:opacity-50 cursor-pointer shadow-xs"
               >
-                {actionLoading === rejectModal ? 'Rejecting...' : 'Reject Timesheet'}
+                {actionLoading === rejectModal ? 'Rejecting...' : 'Confirm Rejection'}
               </button>
             </div>
           </div>

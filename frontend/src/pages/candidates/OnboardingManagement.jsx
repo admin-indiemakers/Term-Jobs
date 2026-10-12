@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
   Flag, Check, ArrowRight, AlertCircle, Laptop, BookOpen, CheckCircle2, RefreshCw,
-  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X, LogOut, Clock, Mail, Key
+  FileText, Plus, ExternalLink, Shield, Lock, Unlock, X, LogOut, Clock, Mail, Key, Search
 } from 'lucide-react';
 import ActivationGatesModal from '../../components/ActivationGatesModal';
 
@@ -37,6 +37,7 @@ export default function OnboardingManagement() {
   const [successInfo, setSuccessInfo] = useState('');
   const [creatingWO, setCreatingWO] = useState('');
   const [sendingCredsId, setSendingCredsId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Setup Modal State
   const [editingCandidate, setEditingCandidate] = useState(null);
@@ -216,10 +217,18 @@ export default function OnboardingManagement() {
     });
   };
 
-  // Display Table Rows (strictly real candidates from DB)
+  // Display Table Rows (strictly real candidates from DB, filtered by search query)
   const displayRows = useMemo(() => {
-    return candidates;
-  }, [candidates]);
+    if (!searchQuery.trim()) return candidates;
+    const q = searchQuery.toLowerCase();
+    return candidates.filter((c) => {
+      const name = (c.candidate_name || c.full_name || c.name || '').toLowerCase();
+      const code = (c.candidate_id || c.id || '').toLowerCase();
+      const vendor = (c.vendor_name || '').toLowerCase();
+      const req = (c.requisition_ref || c.requisition_title || '').toLowerCase();
+      return name.includes(q) || code.includes(q) || vendor.includes(q) || req.includes(q);
+    });
+  }, [candidates, searchQuery]);
 
   // Open Onboarding Setup Modal
   const handleOpenSetup = (cand) => {
@@ -420,268 +429,197 @@ export default function OnboardingManagement() {
 
   return (
     <div
-      className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0"
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1 font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
       <style>{`
         .custom-cand-scroll::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
+          width: 5px;
+          height: 5px;
         }
         .custom-cand-scroll::-webkit-scrollbar-track {
-          background: #FFFFFF;
+          background: transparent;
         }
         .custom-cand-scroll::-webkit-scrollbar-thumb {
-          background: #E2E2DC;
+          background: rgba(0, 0, 0, 0.12);
           border-radius: 4px;
         }
         .custom-cand-scroll::-webkit-scrollbar-thumb:hover {
-          background: #A3A39F;
+          background: rgba(0, 0, 0, 0.25);
         }
       `}</style>
 
-      {/* ========================================================
-          1. DARK HERO BANNER (MATCHES IMAGE 3 EXACTLY)
-         ======================================================== */}
-      <div
-        style={{
-          backgroundColor: '#0A0A0A',
-          borderRadius: 22,
-          boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
-        }}
-        className="shrink-0 p-4 sm:p-6 text-white space-y-2 relative overflow-hidden rounded-[20px] sm:rounded-[22px]"
-      >
-        <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#A3A3A3]">
-          {greetingText}, {userName}
-        </div>
-        <h1 className="text-[1.8rem] sm:text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
-          Candidate Onboarding Management
-        </h1>
-        <p className="text-[13px] text-[#A3A3A3] font-medium pt-0.5">
-          Configure onboarding checklists and resolve candidate-reported issues.
-        </p>
-
-        <div className="flex items-center gap-2 pt-1">
-          <span
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.12)',
-            }}
-            className="px-3 py-1 text-[11px] font-bold text-white rounded-full flex items-center gap-1.5"
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            <span>Hiring Manager</span>
-          </span>
-          <span
-            style={{
-              backgroundColor: 'rgba(255, 255, 255, 0.12)',
-            }}
-            className="px-3 py-1 text-[11px] font-bold text-white rounded-full"
-          >
-            {tenantName}
-          </span>
-        </div>
-      </div>
-
-      {/* ========================================================
-          2. TOP 4 BENTO METRIC CARDS (MATCHES IMAGE 3)
-         ======================================================== */}
-      <div className="shrink-0 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* 1. ACCEPTED HIRES */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.accepted}
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0066FF] bg-blue-50/80 px-2.5 py-0.5 rounded-full border border-blue-100/60 shadow-2xs">
+              TERM JOBS • ONBOARDING
+            </span>
           </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            ACCEPTED HIRES
-          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+            Candidate Onboarding Management
+          </h1>
+          <p className="text-xs text-gray-500 font-medium mt-0.5">
+            Configure provisioning checklists, clearance gates, and candidate resolution workflows
+          </p>
         </div>
 
-        {/* 2. ONBOARDING IN PROGRESS */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.inProgress}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            ONBOARDING IN PROGRESS
-          </div>
-        </div>
-
-        {/* 3. ONBOARDING COMPLETE */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.completed}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            ONBOARDING COMPLETE
-          </div>
-        </div>
-
-        {/* 4. OPEN CANDIDATE ISSUES */}
-        <div
-          style={{
-            backgroundColor: '#FFFFFF',
-            borderRadius: 22,
-            border: '1px solid #E2E2DC',
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)',
-          }}
-          className="p-3.5 sm:p-5 space-y-1 sm:space-y-1.5"
-        >
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">
-            {metrics.openIssues}
-          </div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            OPEN CANDIDATE ISSUES
-          </div>
-        </div>
-      </div>
-
-      {/* ========================================================
-          3. NAVIGATION PILL TABS (MATCHES IMAGE 3)
-         ======================================================== */}
-      <div className="shrink-0 flex items-center gap-2 pt-0.5">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates')}
-          style={{
-            backgroundColor: '#FFFFFF',
-            color: '#0A0A0A',
-            borderRadius: 9999,
-            border: '1px solid #E2E2DC',
-          }}
-          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
-        >
-          Shortlisted
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates/accepted')}
-          style={{
-            backgroundColor: '#FFFFFF',
-            color: '#0A0A0A',
-            borderRadius: 9999,
-            border: '1px solid #E2E2DC',
-          }}
-          className="px-4 py-1.5 text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
-        >
-          Accepted
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates/onboarding')}
-          style={{
-            backgroundColor: '#0A0A0A',
-            color: '#FFFFFF',
-            borderRadius: 9999,
-          }}
-          className="px-4 py-1.5 text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs"
-        >
-          Onboarding
-        </button>
-      </div>
-
-      {/* ========================================================
-          4. MAIN CARD CONTAINER (ONBOARDING MANAGEMENT DATA TABLE)
-         ======================================================== */}
-      <div
-        style={{
-          backgroundColor: '#FFFFFF',
-          borderRadius: 22,
-          border: '1px solid #E2E2DC',
-          boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)',
-        }}
-        className="flex-1 min-h-[360px] md:min-h-0 flex flex-col p-4 sm:p-6 md:overflow-hidden"
-      >
-        {/* Header inside card */}
-        <div className="shrink-0 flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-[1.25rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight">
-              Accepted Candidate Onboarding
-            </h2>
-          </div>
-
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setShowIssuesModal(true)}
-            style={{
-              backgroundColor: '#FFFFFF',
-              borderRadius: 12,
-              border: '1px solid #E2E2DC',
-            }}
-            className="px-4 py-2 text-[12.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white text-gray-700 text-xs font-semibold border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer"
           >
-            <Flag size={13} strokeWidth={2.2} />
-            <span>Candidate Reported Issues</span>
+            <Flag size={13} className="text-rose-500" />
+            <span>Reported Issues</span>
             {metrics.openIssues > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 bg-[#DC2626] text-white text-[10px] font-extrabold rounded-full">
+              <span className="px-1.5 py-0.2 bg-rose-600 text-white text-[10px] font-extrabold rounded-full">
                 {metrics.openIssues}
               </span>
             )}
           </button>
+          <button
+            type="button"
+            onClick={loadData}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white text-gray-700 text-xs font-semibold border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* 4 Bento Metric Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 flex-shrink-0">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Accepted Hires</div>
+            <div className="text-xl font-black text-gray-900 mt-0.5">{metrics.accepted}</div>
+            <div className="text-[10px] text-gray-400">Ready to onboard</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-[#0066FF] shadow-2xs">
+            <CheckCircle2 size={19} />
+          </div>
         </div>
 
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">In Progress</div>
+            <div className="text-xl font-black text-amber-600 mt-0.5">{metrics.inProgress}</div>
+            <div className="text-[10px] text-gray-400">Checklist pending</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-100/80 flex items-center justify-center text-amber-600 shadow-2xs">
+            <Clock size={19} />
+          </div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Completed</div>
+            <div className="text-xl font-black text-emerald-600 mt-0.5">{metrics.completed}</div>
+            <div className="text-[10px] text-gray-400">Ready for workforce</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-emerald-600 shadow-2xs">
+            <Shield size={19} />
+          </div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Open Issues</div>
+            <div className="text-xl font-black text-rose-600 mt-0.5">{metrics.openIssues}</div>
+            <div className="text-[10px] text-gray-400">Candidate escalations</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-rose-50 border border-rose-100/80 flex items-center justify-center text-rose-600 shadow-2xs">
+            <Flag size={19} />
+          </div>
+        </div>
+      </div>
+
+      {/* Navigation Pills & Search Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 flex-shrink-0">
+        <div className="flex items-center gap-1.5 p-1 bg-white/40 backdrop-blur-xl border border-white/70 rounded-2xl shadow-2xs">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/candidates')}
+            className="px-4 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:text-black hover:bg-white/60 transition cursor-pointer"
+          >
+            Shortlisted
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/candidates/accepted')}
+            className="px-4 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:text-black hover:bg-white/60 transition cursor-pointer"
+          >
+            Accepted
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/candidates/onboarding')}
+            className="px-4 py-1.5 rounded-xl text-xs font-bold bg-black text-white shadow-xs transition cursor-pointer"
+          >
+            Onboarding
+          </button>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            placeholder="Search candidate, requisition, vendor..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3.5 py-1.5 bg-white/50 backdrop-blur-xl border border-white/80 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black shadow-2xs transition"
+          />
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col overflow-hidden">
         {error && (
-          <div className="shrink-0 mb-3 p-3 bg-[#FEF2F2] border border-[#FECACA] rounded-xl text-[12.5px] text-[#DC2626] font-medium flex items-center gap-2">
+          <div className="m-3 p-3 bg-rose-50 border border-rose-200/80 rounded-xl text-xs text-rose-700 font-medium flex items-center gap-2">
             <AlertCircle size={15} />
             <span>{error}</span>
           </div>
         )}
         {successInfo && (
-          <div className="shrink-0 mb-3 p-3 bg-[#F0FDF4] border border-[#DCFCE7] rounded-xl text-[12.5px] text-[#16A34A] font-medium flex items-center gap-2">
+          <div className="m-3 p-3 bg-emerald-50 border border-emerald-200/80 rounded-xl text-xs text-emerald-700 font-medium flex items-center gap-2">
             <Check size={15} />
             <span>{successInfo}</span>
           </div>
         )}
 
-        {/* Data Table (Scrollable inside card) */}
+        {/* Data Table */}
         <div className="flex-1 overflow-x-auto overflow-y-auto custom-cand-scroll">
-          <table className="w-full text-left border-collapse min-w-[620px]">
-            <thead className="sticky top-0 bg-[#FFFFFF] z-10 shadow-2xs">
-              <tr className="border-b border-[#F2F2EE] text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85] bg-[#FFFFFF]">
-                <th className="py-3.5 pl-4 pr-3 font-extrabold">CANDIDATE</th>
-                <th className="py-3.5 px-3 font-extrabold">VENDOR</th>
-                <th className="py-3.5 px-3 font-extrabold">REQUISITION</th>
-                <th className="py-3.5 px-3 font-extrabold text-center">MATCH</th>
-                <th className="py-3.5 px-3 font-extrabold text-center">STATUS</th>
-                <th className="py-3.5 px-3 font-extrabold text-center">WORK ORDER</th>
-                <th className="py-3.5 pr-4 pl-3 font-extrabold text-right">ACTION</th>
+          <table className="w-full text-left border-collapse min-w-[760px]">
+            <thead className="sticky top-0 bg-white/80 backdrop-blur-md z-10 border-b border-gray-100">
+              <tr className="text-[10.5px] font-extrabold uppercase tracking-wider text-gray-400">
+                <th className="py-3 pl-4 pr-3">Candidate</th>
+                <th className="py-3 px-3">Vendor</th>
+                <th className="py-3 px-3">Requisition</th>
+                <th className="py-3 px-3 text-center">Match</th>
+                <th className="py-3 px-3 text-center">Status</th>
+                <th className="py-3 px-3 text-center">Work Order</th>
+                <th className="py-3 pr-4 pl-3 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F2F2EE]">
+            <tbody className="divide-y divide-gray-100/70 text-xs">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
-                    Loading onboarding records...
+                  <td colSpan={7} className="py-16 text-center text-gray-400">
+                    <div className="w-8 h-8 border-2 border-black/20 border-t-black rounded-full animate-spin mx-auto mb-2" />
+                    <div className="font-medium text-xs">Loading onboarding records...</div>
                   </td>
                 </tr>
               ) : displayRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-[13px] font-medium">
-                    No onboarding records found.
+                  <td colSpan={7} className="py-16 text-center text-gray-400">
+                    <CheckCircle2 size={32} className="mx-auto mb-2 text-gray-300" />
+                    <div className="font-bold text-gray-700">No onboarding records found</div>
+                    <div className="text-[11px] text-gray-400 mt-0.5">
+                      {searchQuery ? 'Try adjusting your search criteria' : 'Accepted candidates ready for onboarding will appear here'}
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -690,7 +628,7 @@ export default function OnboardingManagement() {
                   const rawId = cand.candidate_id || cand.id || `${idx}7fa08`;
                   const candCode = String(rawId).startsWith('BEAR-') ? String(rawId) : `BEAR-${String(rawId).slice(0, 6)}`;
                   const candName = cand.candidate_name || cand.full_name || cand.name || 'Candidate';
-                  const vendorName = cand.vendor_name || '';
+                  const vendorName = cand.vendor_name || 'Direct';
                   const reqRef = cand.requisition_ref || '';
                   const reqTitle = cand.requisition_title || '';
 
@@ -699,7 +637,6 @@ export default function OnboardingManagement() {
                   const isCompleted = cand.forceStatus === 'completed' || obDoc?.status === 'completed' || obDoc?.setup_status === 'completed';
                   const isInProgress = cand.forceStatus === 'in_progress' || obDoc?.status === 'in_progress' || obDoc?.setup_status === 'in_progress';
 
-                  // Comprehensive work order lookup
                   const woDoc =
                     workOrders[id] ||
                     workOrders[rawId] ||
@@ -727,73 +664,77 @@ export default function OnboardingManagement() {
                   return (
                     <tr
                       key={id}
-                      className="hover:bg-[#FAFAFA] transition-colors group"
+                      className="hover:bg-white/60 transition-colors group"
                     >
-                      {/* 1. CANDIDATE */}
-                      <td className="py-3.5 pl-4 pr-3 align-middle">
-                        <div className="space-y-0.5">
-                          <div className="text-[13px] font-extrabold text-[#0A0A0A] tracking-tight">
-                            {candName}
+                      {/* Candidate */}
+                      <td className="py-3 pl-4 pr-3 align-middle">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-gray-100 border border-gray-200/60 flex items-center justify-center font-extrabold text-xs text-gray-700">
+                            {candName.slice(0, 2).toUpperCase()}
                           </div>
-                          <div className="text-[11px] text-[#8A8A85] font-medium">
-                            {candCode}
+                          <div>
+                            <div className="text-xs font-extrabold text-gray-900 tracking-tight">
+                              {candName}
+                            </div>
+                            <div className="text-[10px] text-gray-400 font-mono">
+                              {candCode}
+                            </div>
                           </div>
                         </div>
                       </td>
 
-                      {/* 2. VENDOR */}
-                      <td className="py-3.5 px-3 align-middle">
-                        <div className="text-[12.5px] font-medium text-[#0A0A0A]">
+                      {/* Vendor */}
+                      <td className="py-3 px-3 align-middle">
+                        <span className="text-xs font-semibold text-gray-700">
                           {vendorName}
-                        </div>
+                        </span>
                       </td>
 
-                      {/* 3. REQUISITION */}
-                      <td className="py-3.5 px-3 align-middle">
-                        <div className="space-y-0.5">
-                          <div className="text-[12px] font-extrabold text-[#0A0A0A]">
+                      {/* Requisition */}
+                      <td className="py-3 px-3 align-middle">
+                        <div>
+                          <div className="text-xs font-bold text-gray-900">
                             {reqRef}
                           </div>
-                          <div className="text-[11px] text-[#8A8A85] font-medium">
+                          <div className="text-[10.5px] text-gray-500 truncate max-w-[170px]">
                             {reqTitle}
                           </div>
                         </div>
                       </td>
 
-                      {/* 4. MATCH */}
-                      <td className="py-3.5 px-3 align-middle text-center">
+                      {/* Match */}
+                      <td className="py-3 px-3 align-middle text-center">
                         {score != null ? (
-                          <span className="text-[12.5px] font-extrabold text-[#D97706]">
+                          <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-black bg-amber-50 text-amber-700 border border-amber-200/60">
                             {score}%
                           </span>
                         ) : (
-                          <span className="text-[12px] font-bold text-[#D97706]">
-                            —%
-                          </span>
+                          <span className="text-gray-400 font-medium">—</span>
                         )}
                       </td>
 
-                      {/* 5. STATUS */}
-                      <td className="py-3.5 px-3 align-middle text-center">
+                      {/* Status */}
+                      <td className="py-3 px-3 align-middle text-center">
                         <span
-                          style={{
-                            backgroundColor: isCompleted ? '#ECFDF5' : isInProgress ? '#FEF3C7' : '#F1F5F9',
-                            color: isCompleted ? '#059669' : isInProgress ? '#D97706' : '#64748B',
-                            borderRadius: 9999,
-                          }}
-                          className="inline-block px-3 py-0.5 text-[11px] font-bold"
+                          className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                            isCompleted
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
+                              : isInProgress
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200/60'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
                         >
-                          {isCompleted ? 'Completed' : isInProgress ? 'In progress' : 'Not set up'}
+                          {isCompleted ? 'Completed' : isInProgress ? 'In Progress' : 'Not Set Up'}
                         </span>
                       </td>
 
-                      {/* 6. WORK ORDER */}
-                      <td className="py-3.5 px-3 align-middle text-center">
+                      {/* Work Order */}
+                      <td className="py-3 px-3 align-middle text-center">
                         {woActivated ? (
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             <span
                               onClick={() => handleViewGates(cand)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534] cursor-pointer hover:opacity-85 transition"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 cursor-pointer hover:bg-emerald-100 transition"
                               title="Click to view activation gates"
                             >
                               <FileText size={11} />
@@ -802,8 +743,7 @@ export default function OnboardingManagement() {
                             {woNumber && (
                               <span
                                 onClick={() => handleViewGates(cand)}
-                                className="text-[11px] font-mono text-[#4b5563] font-semibold bg-[#f3f4f6] px-2 py-0.5 rounded-md border border-[#e5e7eb] cursor-pointer hover:bg-[#e5e7eb] transition"
-                                title="Work Order ID — Click to view details"
+                                className="text-[10px] font-mono text-gray-600 font-semibold bg-gray-100/80 px-2 py-0.5 rounded-md border border-gray-200/70 cursor-pointer hover:bg-gray-200 transition"
                               >
                                 {woNumber}
                               </span>
@@ -813,7 +753,7 @@ export default function OnboardingManagement() {
                           <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             <span
                               onClick={() => handleViewGates(cand)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#FEF3C7] text-[#92400E] cursor-pointer hover:opacity-85 transition"
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60 cursor-pointer hover:bg-amber-100 transition"
                               title="Click to view activation gates"
                             >
                               <FileText size={11} />
@@ -822,102 +762,77 @@ export default function OnboardingManagement() {
                             {woNumber && (
                               <span
                                 onClick={() => handleViewGates(cand)}
-                                className="text-[11px] font-mono text-[#78350f] font-semibold bg-[#fef3c7] px-2 py-0.5 rounded-md border border-[#fde68a] cursor-pointer hover:opacity-85 transition"
-                                title="Work Order ID — Click to view details"
+                                className="text-[10px] font-mono text-amber-800 font-semibold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60 cursor-pointer hover:bg-amber-100 transition"
                               >
                                 {woNumber}
                               </span>
                             )}
                           </div>
                         ) : (
-                          <span className="text-[12px] font-semibold text-[#8A8A85]">—</span>
+                          <span className="text-gray-400 font-medium">—</span>
                         )}
                       </td>
 
-                      {/* 7. ACTION */}
-                      <td className="py-3.5 pr-4 pl-3 align-middle text-right flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSetup(cand)}
-                          style={{
-                            backgroundColor: '#FFFFFF',
-                            borderRadius: 10,
-                            border: '1px solid #E2E2DC',
-                          }}
-                          className="px-3 py-1 text-[11.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors cursor-pointer shadow-2xs"
-                        >
-                          {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
-                        </button>
-                        {hasWO || woActivated ? (
+                      {/* Action */}
+                      <td className="py-3 pr-4 pl-3 align-middle text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => handleViewGates(cand)}
-                            style={{
-                              backgroundColor: woActivated ? '#F0FDF4' : '#FFFFFF',
-                              color: woActivated ? '#15803D' : '#0A0A0A',
-                              border: `1px solid ${woActivated ? '#BBF7D0' : '#E2E2DC'}`,
-                              borderRadius: 10,
-                            }}
-                            className="px-3 py-1 text-[11.5px] font-bold hover:opacity-85 transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5"
-                            title="Work order active — click to view activation gates and details"
+                            onClick={() => handleOpenSetup(cand)}
+                            className="px-2.5 py-1 rounded-xl bg-white/80 hover:bg-white text-gray-800 text-xs font-bold border border-gray-200/80 hover:border-black transition cursor-pointer shadow-2xs"
                           >
-                            <FileText size={12} className={woActivated ? 'text-[#16A34A]' : 'text-[#8A8A85]'} />
-                            <span>View Work Order</span>
+                            {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
                           </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateWorkOrder(cand)}
-                            style={{
-                              backgroundColor: isCompleted ? '#0A0A0A' : '#1A1A1A',
-                              color: '#FFFFFF',
-                              borderRadius: 10,
-                            }}
-                            className="px-3 py-1 text-[11.5px] font-bold hover:bg-[#262626] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
-                          >
-                            <span>Generate Work Order</span>
-                            <ArrowRight size={12} />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleSendCredentials(cand)}
-                          disabled={sendingCredsId === id}
-                          style={{
-                            backgroundColor: '#FFFFFF',
-                            borderRadius: 10,
-                            border: '1px solid #E2E2DC',
-                          }}
-                          className="px-2.5 py-1 text-[11.5px] font-bold text-[#4338CA] hover:bg-[#EEF2FF] hover:border-[#C7D2FE] transition-colors cursor-pointer shadow-2xs flex items-center gap-1.5 disabled:opacity-50"
-                          title="Dispatch or resend portal login credentials to candidate via email"
-                        >
-                          {sendingCredsId === id ? (
-                            <>
-                              <RefreshCw size={11} className="animate-spin text-[#6366F1]" />
-                              <span>Sending...</span>
-                            </>
+
+                          {hasWO || woActivated ? (
+                            <button
+                              type="button"
+                              onClick={() => handleViewGates(cand)}
+                              className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition cursor-pointer shadow-2xs flex items-center gap-1 ${
+                                woActivated
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100'
+                                  : 'bg-white/80 hover:bg-white text-gray-700 border-gray-200/80'
+                              }`}
+                            >
+                              <FileText size={11} className={woActivated ? 'text-emerald-600' : 'text-gray-400'} />
+                              <span>View WO</span>
+                            </button>
                           ) : (
-                            <>
-                              <Mail size={11} className="text-[#6366F1]" />
-                              <span>{obDoc?.credentials_sent_at ? 'Resend Creds' : 'Send Creds'}</span>
-                            </>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateWorkOrder(cand)}
+                              className="px-2.5 py-1 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                            >
+                              <span>Generate WO</span>
+                              <ArrowRight size={11} />
+                            </button>
                           )}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenOffboarding(cand)}
-                          style={{
-                            backgroundColor: '#FEF2F2',
-                            color: '#DC2626',
-                            border: '1px solid #FECACA',
-                            borderRadius: 10,
-                          }}
-                          className="px-3 py-1 text-[11.5px] font-bold hover:bg-[#FEE2E2] transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
-                          title="Initiate candidate offboarding & exit clearance"
-                        >
-                          <LogOut size={11} />
-                          <span>Offboard</span>
-                        </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleSendCredentials(cand)}
+                            disabled={sendingCredsId === id}
+                            className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/70 text-xs font-bold transition cursor-pointer shadow-2xs flex items-center gap-1 disabled:opacity-50"
+                            title="Dispatch or resend portal login credentials"
+                          >
+                            {sendingCredsId === id ? (
+                              <RefreshCw size={11} className="animate-spin text-indigo-600" />
+                            ) : (
+                              <Mail size={11} className="text-indigo-600" />
+                            )}
+                            <span>{obDoc?.credentials_sent_at ? 'Resend Creds' : 'Send Creds'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenOffboarding(cand)}
+                            className="px-2.5 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/70 text-xs font-bold transition cursor-pointer shadow-2xs flex items-center gap-1"
+                            title="Initiate candidate exit clearance"
+                          >
+                            <LogOut size={11} />
+                            <span>Offboard</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
