@@ -859,12 +859,8 @@ def get_hiring_manager_stats(user_id: str, tenant_id: str, user_name: str = ""):
                    (is_scoped_tenant and c.get("tenant_id") == tenant_id) or
                    (not is_scoped_tenant)]
 
-        shortlisted = [c for c in hm_subs if (c.get("status") or "").lower() in ("shortlisted", "interviewing", "under_review", "screened")]
+        shortlisted = [c for c in hm_subs if (c.get("status") or "").lower() in ("shortlisted", "interviewing", "under_review")]
         onboarding = [c for c in hm_subs if (c.get("status") or "").lower() in ("accepted", "onboarding", "completed", "in_progress")]
-
-        # If submissions had 0 shortlisted for this tenant, check candidates collection
-        if is_scoped_tenant and not shortlisted:
-            shortlisted = list(db["candidates"].find({"tenant_id": tenant_id}))
 
         pending_ts = 0
         pending_exp = 0
@@ -1340,7 +1336,7 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
         filtered = []
         for d in all_subs:
             s_val = (d.get("status") or "").lower()
-            if s_val in ("shortlisted", "interviewing", "under_review", "submitted", "screened"):
+            if s_val in ("shortlisted", "interviewing", "under_review"):
                 r_id = d.get("requisition_id")
                 # Strict scoping: candidate must belong to HM's requisitions or HM's tenant
                 is_scoped = (

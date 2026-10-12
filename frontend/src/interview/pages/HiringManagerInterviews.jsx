@@ -497,18 +497,24 @@ export function HiringManagerInterviews() {
 
           <button
             type="button"
+            disabled={!selectedCandidate && acceptedCandidates.length === 0}
             onClick={() => {
               if (selectedCandidate) {
                 handleScheduleForCandidate(selectedCandidate);
-              } else {
-                setCreateModalInitialData({
-                  interviewer_name: user?.name || 'Hiring Manager',
-                  interviewer_email: user?.email || '',
-                });
-                setIsCreateModalOpen(true);
+              } else if (acceptedCandidates.length > 0) {
+                handleScheduleForCandidate(acceptedCandidates[0]);
               }
             }}
-            className="px-5 py-3 rounded-2xl bg-zinc-950 hover:bg-zinc-800 text-white font-bold text-xs flex items-center gap-2 transition shadow-md cursor-pointer self-start sm:self-auto"
+            title={
+              !selectedCandidate && acceptedCandidates.length === 0
+                ? 'No shortlisted candidates are currently ready for interview scheduling.'
+                : 'Schedule a company interview round for the shortlisted candidate'
+            }
+            className={`px-5 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 transition shadow-md self-start sm:self-auto ${
+              !selectedCandidate && acceptedCandidates.length === 0
+                ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300'
+                : 'bg-zinc-950 hover:bg-zinc-800 text-white cursor-pointer'
+            }`}
           >
             <Plus size={16} />
             <span>Schedule Company Interview</span>

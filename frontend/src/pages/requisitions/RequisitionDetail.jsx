@@ -37,6 +37,13 @@ const STATE_STEPS = [
   { id: 'Published', label: 'Published', num: '5' },
 ];
 
+import {
+  isPendingApprovalStatus,
+  isPublishedStatus,
+  isDraftedStatus,
+  isCompletedStatus,
+} from '../../utils/requisitionStatus';
+
 const NORMALIZED = {
   Draft: 'Draft',
   Intake: 'Intake',
@@ -69,8 +76,7 @@ function formatCustomDate(iso, defaultText = '25 Sept 2026, 6:19 am') {
 }
 
 function StatusPill({ status }) {
-  const s = (status || '').toLowerCase().replace(/[\s_]+/g, '');
-  if (s === 'published' || s === 'active' || s === 'open') {
+  if (isPublishedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -78,7 +84,7 @@ function StatusPill({ status }) {
       </span>
     );
   }
-  if (s === 'pendingapproval' || s === 'pending') {
+  if (isPendingApprovalStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -86,7 +92,7 @@ function StatusPill({ status }) {
       </span>
     );
   }
-  if (s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring') {
+  if (isDraftedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
         <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
@@ -94,7 +100,7 @@ function StatusPill({ status }) {
       </span>
     );
   }
-  if (s === 'closed' || s === 'completed' || s === 'filled') {
+  if (isCompletedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />

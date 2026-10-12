@@ -747,14 +747,67 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
     base_url = _resolve_interview_domain(origin, data.get("origin"))
 
     with get_session() as session:
-        cand_sub_id = data.get("candidate_submission_id", "")
+        cand_sub_id = (data.get("candidate_submission_id") or "").strip()
+        cand_email = (data.get("candidate_email") or "").strip().lower()
+        cand_name = (data.get("candidate_name") or "").strip()
+        req_id = (data.get("requisition_id") or "").strip()
         round_name = (data.get("round_name") or "Technical Round 1").strip()
-        
+
+        # Enforce that interviews can ONLY be scheduled for candidates who have passed the shortlisting stage
+        from modules.candidate.domain.models import CandidateSubmission
+        from modules.shared.db import db as mongo_db
+
+        sub_found = None
+        if cand_sub_id:
+            sub_found = session.get(CandidateSubmission, cand_sub_id)
+        if not sub_found and req_id:
+            if cand_email:
+                sub_found = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == req_id,
+                    CandidateSubmission.candidate_email == cand_email,
+                ).first()
+            if not sub_found and cand_name:
+                sub_found = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == req_id,
+                    CandidateSubmission.candidate_name == cand_name,
+                ).first()
+
+        # Also cross-check mongo candidate_submissions collection
+        mongo_sub = None
+        if not sub_found:
+            m_or = []
+            if cand_sub_id:
+                m_or.extend([{"id": cand_sub_id}, {"submission_id": cand_sub_id}, {"candidate_id": cand_sub_id}])
+            if req_id and cand_email:
+                m_or.append({"requisition_id": req_id, "candidate_email": cand_email})
+            if req_id and cand_name:
+                m_or.append({"requisition_id": req_id, "candidate_name": cand_name})
+            if m_or:
+                mongo_sub = mongo_db["candidate_submissions"].find_one({"$or": m_or})
+
+        status_val = (
+            getattr(sub_found, "status", None)
+            or (mongo_sub.get("status") if mongo_sub else None)
+            or ""
+        )
+
+        # Allowed statuses for interview scheduling
+        allowed_statuses = {"Shortlisted", "Interviewing", "Accepted", "Under Review", "Screened"}
+        if not sub_found and not mongo_sub:
+            raise ValueError(
+                f"Candidate '{cand_name or cand_email or cand_sub_id}' is not in the candidate submissions for this requisition and has not passed the shortlisting stage."
+            )
+
+        if status_val and status_val not in allowed_statuses and status_val.lower() not in [s.lower() for s in allowed_statuses]:
+            raise ValueError(
+                f"Cannot schedule interview: Candidate '{cand_name or cand_email}' has not been shortlisted (current status: '{status_val}')."
+            )
+
         # Check for existing rounds for this candidate to prevent duplicates
         existing_rounds = session.query(InterviewRound).filter(
             InterviewRound.candidate_submission_id == cand_sub_id,
             InterviewRound.status != "Cancelled"
-        ).all()
+        ).all() if cand_sub_id else []
         
         for r in existing_rounds:
             if r.round_name.lower().strip() == round_name.lower().strip():

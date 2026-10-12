@@ -26,6 +26,15 @@ import {
   Loader2,
   AlertTriangle
 } from 'lucide-react';
+import {
+  isPendingApprovalStatus,
+  isPublishedStatus,
+  isDraftedStatus,
+  isCompletedStatus,
+  matchesRequisitionSection,
+  matchesRequisitionStatusFilter,
+  calculateRequisitionCounts,
+} from '../../utils/requisitionStatus';
 
 const SECTION_CONFIG = {
   published: {
@@ -37,7 +46,19 @@ const SECTION_CONFIG = {
   pending_approval: {
     title: 'Pending Approval',
     icon: Hourglass,
-    statuses: ['PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending'],
+    statuses: [
+      'PendingApproval',
+      'Pending_Approval',
+      'Pending Approval',
+      'Pending-Approval',
+      'Pending',
+      'Pending Director Approval',
+      'Pending Director Signoff',
+      'Awaiting Approval',
+      'AwaitingApproval',
+      'Waiting For Approval',
+      'Needs Approval',
+    ],
     to: '/dashboard/requisitions/pending-approval',
   },
   drafted: {
@@ -56,7 +77,12 @@ const SECTION_CONFIG = {
   history: {
     title: 'All History',
     icon: History,
-    statuses: ['Draft', 'Drafted', 'Intake', 'Structuring', 'PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending', 'Published', 'Active', 'Open', 'Closed', 'Completed', 'Filled'],
+    statuses: [
+      'Draft', 'Drafted', 'Intake', 'Structuring',
+      'PendingApproval', 'Pending_Approval', 'Pending Approval', 'Pending-Approval', 'Pending', 'Pending Director Approval', 'Pending Director Signoff', 'Awaiting Approval', 'AwaitingApproval', 'Waiting For Approval', 'Needs Approval',
+      'Published', 'Active', 'Open',
+      'Closed', 'Completed', 'Filled'
+    ],
     to: '/dashboard/requisitions/history',
   },
 };
@@ -90,8 +116,7 @@ function timeAgo(iso) {
 }
 
 function RequisitionStatusBadge({ status }) {
-  const s = (status || '').toLowerCase().replace(/[\s_]+/g, '');
-  if (s === 'published' || s === 'active' || s === 'open') {
+  if (isPublishedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 backdrop-blur-md shadow-3xs">
         <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
@@ -99,7 +124,7 @@ function RequisitionStatusBadge({ status }) {
       </span>
     );
   }
-  if (s === 'pendingapproval' || s === 'pending') {
+  if (isPendingApprovalStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-500/10 text-amber-800 border border-amber-500/25 backdrop-blur-md shadow-3xs">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
@@ -107,7 +132,7 @@ function RequisitionStatusBadge({ status }) {
       </span>
     );
   }
-  if (s === 'draft' || s === 'drafted' || s === 'intake' || s === 'structuring') {
+  if (isDraftedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-gray-500/10 text-gray-700 border border-gray-500/20 backdrop-blur-md shadow-3xs">
         <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
@@ -115,7 +140,7 @@ function RequisitionStatusBadge({ status }) {
       </span>
     );
   }
-  if (s === 'closed' || s === 'completed' || s === 'filled') {
+  if (isCompletedStatus(status)) {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-500/10 text-blue-800 border border-blue-500/25 backdrop-blur-md shadow-3xs">
         <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
@@ -166,6 +191,7 @@ export default function RequisitionOverview({ section }) {
 
   useEffect(() => {
     setActiveTab(initialSection);
+    setSelectedStatus('All Status');
   }, [initialSection]);
 
   const loadData = useCallback(async (force = false) => {
@@ -257,22 +283,7 @@ export default function RequisitionOverview({ section }) {
 
   // Live Section Counts
   const counts = useMemo(() => {
-    const normalize = (s) => (s || '').toLowerCase().replace(/[\s_]+/g, '');
-    const published = requisitions.filter((r) =>
-      ['published', 'active', 'open'].includes(normalize(r.status))
-    ).length;
-    const pending_approval = requisitions.filter((r) =>
-      ['pendingapproval', 'pending'].includes(normalize(r.status))
-    ).length;
-    const drafted = requisitions.filter((r) =>
-      ['draft', 'drafted', 'intake', 'structuring'].includes(normalize(r.status))
-    ).length;
-    const completed = requisitions.filter((r) =>
-      ['closed', 'completed', 'filled'].includes(normalize(r.status))
-    ).length;
-    const history = requisitions.length;
-
-    return { published, pending_approval, drafted, completed, history };
+    return calculateRequisitionCounts(requisitions);
   }, [requisitions]);
 
   const currentConfig = SECTION_CONFIG[activeTab] || SECTION_CONFIG.published;
@@ -287,11 +298,9 @@ export default function RequisitionOverview({ section }) {
   // Filtered Rows
   const filteredRows = useMemo(() => {
     let list = requisitions;
-    const normalize = (s) => (s || '').toLowerCase().replace(/[\s_]+/g, '');
 
     if (activeTab !== 'history') {
-      const allowed = (currentConfig.statuses || []).map((s) => normalize(s));
-      list = list.filter((r) => allowed.includes(normalize(r.status)));
+      list = list.filter((r) => matchesRequisitionSection(r.status, activeTab));
     }
 
     if (selectedDept !== 'All Departments') {
@@ -299,14 +308,7 @@ export default function RequisitionOverview({ section }) {
     }
 
     if (selectedStatus !== 'All Status') {
-      const sMap = {
-        'Published': ['published', 'active', 'open'],
-        'Pending Approval': ['pendingapproval', 'pending'],
-        'Drafted': ['draft', 'drafted', 'intake', 'structuring'],
-        'Completed': ['closed', 'completed', 'filled'],
-      };
-      const allowed = sMap[selectedStatus] || [];
-      list = list.filter((r) => allowed.includes(normalize(r.status)));
+      list = list.filter((r) => matchesRequisitionStatusFilter(r.status, selectedStatus));
     }
 
     if (searchQuery.trim()) {
@@ -320,7 +322,7 @@ export default function RequisitionOverview({ section }) {
     }
 
     return list;
-  }, [requisitions, activeTab, currentConfig, selectedDept, selectedStatus, searchQuery]);
+  }, [requisitions, activeTab, selectedDept, selectedStatus, searchQuery]);
 
   const companyName = user?.tenant_name || 'TCS';
   const currentDateFormatted = new Date().toLocaleDateString('en-US', {
@@ -381,6 +383,7 @@ export default function RequisitionOverview({ section }) {
               key={key}
               onClick={() => {
                 setActiveTab(key);
+                setSelectedStatus('All Status');
                 navigate(config.to);
               }}
               className={`backdrop-blur-2xl rounded-2xl p-3 sm:p-3.5 transition-all duration-300 flex flex-col justify-between group cursor-pointer ${

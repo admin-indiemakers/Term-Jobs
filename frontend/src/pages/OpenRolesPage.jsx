@@ -47,6 +47,7 @@ import { Backdrop } from '../components/landing/Backdrop';
 import logo from '../assets/termjobs-logo.png';
 import { formatDueDate } from '../utils/dateUtils';
 import { validatePhone } from '../utils/phoneValidation';
+import { validateCandidateEmail } from '../utils/candidateEmailValidation';
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
 const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'Termjobs_alertbot';
@@ -480,6 +481,11 @@ export default function OpenRolesPage({ enabled = true }) {
     e.preventDefault();
     if (!regName.trim() || !regEmail.trim() || !regPassword) {
       setAuthError('Full name, email, and password (min 6 chars) are required.');
+      return;
+    }
+    const emailErr = validateCandidateEmail(regEmail);
+    if (emailErr) {
+      setAuthError(emailErr);
       return;
     }
     if (regPassword.length < 6) {
@@ -1136,7 +1142,7 @@ export default function OpenRolesPage({ enabled = true }) {
   };
 
   const selectedJobApp = (selectedJob && isCandidateAuthenticated)
-    ? getJobApplication(selectedJob) || (justAppliedJobIds.has(String(selectedJob.id)) ? { status: 'Screened' } : null)
+    ? getJobApplication(selectedJob) || (justAppliedJobIds.has(String(selectedJob.id)) ? { status: 'Submitted' } : null)
     : null;
   const isSelectedJobApplied = Boolean(selectedJobApp);
 
@@ -2057,7 +2063,7 @@ export default function OpenRolesPage({ enabled = true }) {
                                 </span>
                               </div>
                               <div className="text-xs text-white/50 mt-0.5">
-                                {selectedJobApp?.created_at ? `Submitted on ${selectedJobApp.created_at}` : 'Your application is on file and actively being screened'}
+                                {selectedJobApp?.created_at ? `Submitted on ${selectedJobApp.created_at}` : 'Your application has been received'}
                               </div>
                             </div>
                           </div>
@@ -2070,7 +2076,7 @@ export default function OpenRolesPage({ enabled = true }) {
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
                           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-center">
                             <div className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Review Status</div>
-                            <div className="text-xs font-bold text-white mt-1">{selectedJobApp?.status || 'Screened'}</div>
+                            <div className="text-xs font-bold text-white mt-1">{selectedJobApp?.status || 'Submitted'}</div>
                           </div>
                           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/10 text-center">
                             <div className="text-[10px] text-white/50 uppercase tracking-wider font-semibold">Match Score</div>
@@ -2479,7 +2485,7 @@ export default function OpenRolesPage({ enabled = true }) {
                       <div className="text-[11px] text-neutral-500">{app.company_name || 'Enterprise Client'}</div>
                     </div>
                     <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-neutral-200 text-neutral-800 border border-neutral-300">
-                      {app.status || 'Under Review'}
+                      {app.status || 'Submitted'}
                     </span>
                   </div>
                 ))
@@ -3605,15 +3611,27 @@ export default function OpenRolesPage({ enabled = true }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Email *</label>
+                    <label className="block text-[10px] font-semibold text-neutral-700 uppercase tracking-wider mb-1">Personal Email *</label>
                     <input
                       type="email"
                       required
                       value={regEmail}
-                      onChange={(e) => setRegEmail(e.target.value)}
-                      placeholder="alex@example.com"
-                      className="w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 transition-all"
+                      onChange={(e) => {
+                        setRegEmail(e.target.value);
+                        if (authError) setAuthError(null);
+                      }}
+                      placeholder="alex@gmail.com"
+                      className={`w-full bg-neutral-50 hover:bg-neutral-100/60 focus:bg-white border ${
+                        regEmail && validateCandidateEmail(regEmail, { required: false })
+                          ? 'border-rose-400 focus:border-rose-500 focus:ring-rose-500'
+                          : 'border-neutral-300 focus:border-neutral-900 focus:ring-neutral-900'
+                      } rounded-xl px-3 py-2 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-1 transition-all`}
                     />
+                    {regEmail && validateCandidateEmail(regEmail, { required: false }) && (
+                      <p className="mt-1 text-[10px] text-rose-600 font-medium">
+                        {validateCandidateEmail(regEmail, { required: false })}
+                      </p>
+                    )}
                   </div>
                 </div>
 

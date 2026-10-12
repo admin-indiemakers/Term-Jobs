@@ -31,6 +31,7 @@ import { marked } from 'marked';
 import { useCandidateAuth } from '../context/CandidateAuthContext';
 import { formatDueDate } from '../utils/dateUtils';
 import { validatePhone } from '../utils/phoneValidation';
+import { validateCandidateEmail } from '../utils/candidateEmailValidation';
 
 export default function PublicJobBoard({ onBackToHome, candidateProfile: propCandidate, onCandidateLogout }) {
   const candidateAuth = useCandidateAuth();
@@ -473,6 +474,15 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
     e.preventDefault();
     if (!poolResume) {
       setPoolError('Please upload your resume (PDF or DOCX).');
+      return;
+    }
+    if (!poolForm.email || !poolForm.email.trim()) {
+      setPoolError('Personal email address is required.');
+      return;
+    }
+    const poolEmailErr = validateCandidateEmail(poolForm.email);
+    if (poolEmailErr) {
+      setPoolError(poolEmailErr);
       return;
     }
     if (poolForm.phone.trim()) {
@@ -1483,7 +1493,31 @@ export default function PublicJobBoard({ onBackToHome, candidateProfile: propCan
                         className="w-full px-3.5 py-2.5 rounded-xl border border-[#E5E5E0] bg-[#FAFAF8] text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white"
                       />
                     </div>
-
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[#444440] mb-1">
+                        Personal Email <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="email"
+                        required
+                        value={poolForm.email}
+                        onChange={(e) => {
+                          setPoolForm({ ...poolForm, email: e.target.value });
+                          if (poolError) setPoolError(null);
+                        }}
+                        placeholder="sarah@gmail.com"
+                        className={`w-full px-3.5 py-2.5 rounded-xl border ${
+                          poolForm.email && validateCandidateEmail(poolForm.email, { required: false })
+                            ? 'border-rose-400 bg-rose-50/20'
+                            : 'border-[#E5E5E0] bg-[#FAFAF8]'
+                        } text-xs text-[#0A0A0A] outline-none focus:border-[#0A0A0A] focus:bg-white`}
+                      />
+                      {poolForm.email && validateCandidateEmail(poolForm.email, { required: false }) && (
+                        <p className="mt-1 text-[11px] text-rose-600 font-medium">
+                          {validateCandidateEmail(poolForm.email, { required: false })}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

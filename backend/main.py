@@ -1925,7 +1925,8 @@ async def apply_to_requisition(
         "jd_text": req.generated_jd_markdown or "",
         "match_score": score,
         "recommendation": recommendation,
-        "status": "Screened",
+        # Applying and calculating a preliminary skill match do not complete screening.
+        "status": "Submitted",
         "summary": profile.get("summary") or cover_note or f"Direct application for {req.title}.",
         "details": details,
         "matched_skills": matched,
@@ -2012,6 +2013,9 @@ async def register_public_candidate(
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.shared.db import db
     from modules.shared.phone_validator import validate_phone_number
+
+    from modules.candidate_profile.router import check_candidate_email_allowed
+    check_candidate_email_allowed(email, is_registration=True)
 
     if phone and phone.strip():
         phone_err = validate_phone_number(phone, required=False)
@@ -2298,7 +2302,7 @@ def get_superadmin_candidate_pool(
             "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
             "match_score": float(s.get("match_score")) if s.get("match_score") is not None else None,
             "recommendation": s.get("recommendation"),
-            "status": s.get("status") or "Screened",
+            "status": s.get("status") or "Submitted",
             "applied_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         }
 
@@ -2537,7 +2541,35 @@ def get_superadmin_candidate_management(
 
     from modules.shared.db import db
     from datetime import datetime, timezone
+    import re
     from modules.notifications.services.selection_feed import deduplicate_selections
+
+    def is_valid_company_name(name: str | None) -> bool:
+        if not name:
+            return False
+        clean = name.strip()
+        if len(clean) < 2 or len(clean) > 80:
+            return False
+        lower = clean.lower()
+        # Reject generic placeholder/fallback labels
+        if lower in {"enterprise partner", "direct applicant", "general", "n/a", "none", "unknown", "null"}:
+            return False
+        # Reject test strings (e.g. test, testxcvgb, testing123)
+        if re.search(r"\btest\b", lower) or lower.startswith("test") or lower.endswith("test"):
+            return False
+        # Reject keyboard mash / random consonant sequences (e.g. xcvgb, asdfg, qwerty)
+        keyboard_mashes = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "qwer", "wert", "erty", "rtyu", "tyui", "yuio", "uiop", "zxcv", "xcvb", "cvbn", "vbnm"]
+        if any(p in lower for p in keyboard_mashes):
+            return False
+        if re.match(r"^[bcdfghjklmnpqrstvwxyz]{4,}$", lower):
+            return False
+        # Must contain at least one vowel unless it is a short acronym
+        if not re.search(r"[aeiouy]", lower) and len(clean) > 3:
+            return False
+        # Reject arbitrary non-alphanumeric junk or pure numbers
+        if not re.search(r"[a-zA-Z]", clean):
+            return False
+        return True
 
     def recorded_match_score(value):
         try:
@@ -2592,9 +2624,11 @@ def get_superadmin_candidate_management(
 
     for rec in recorded_selections:
         req_info = req_map.get(rec.get("requisition_id"), {})
-        comp = (rec.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
-        if comp and comp.lower() != "enterprise partner":
+        comp = (rec.get("company_name") or req_info.get("company") or "").strip()
+        if is_valid_company_name(comp):
             distinct_companies.add(comp)
+        else:
+            comp = comp if comp else "Enterprise Partner"
         cand_name = rec.get("candidate_name") or "Candidate"
         rec_id = rec.get("id") or rec.get("selection_id") or rec.get("submission_id") or f"sel_{cand_name}_{rec.get('requisition_id')}"
         
@@ -2624,9 +2658,11 @@ def get_superadmin_candidate_management(
     for sub in accepted_submissions:
         sub_id = sub.get("id") or str(sub.get("_id"))
         req_info = req_map.get(sub.get("requisition_id"), {})
-        comp = (sub.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
-        if comp and comp.lower() != "enterprise partner":
+        comp = (sub.get("company_name") or req_info.get("company") or "").strip()
+        if is_valid_company_name(comp):
             distinct_companies.add(comp)
+        else:
+            comp = comp if comp else "Enterprise Partner"
         cand_name = sub.get("candidate_name") or "Candidate"
         now_dt = sub.get("updated_at") or sub.get("created_at") or datetime.now(timezone.utc)
         iso_str = now_dt.isoformat() if hasattr(now_dt, "isoformat") else str(now_dt)
@@ -2659,8 +2695,9 @@ def get_superadmin_candidate_management(
 
     # Add default companies from tenants for filter options if available
     for t in db["tenants"].find({"tenant_type": "client"}, {"name": 1}):
-        if t.get("name"):
-            distinct_companies.add(t["name"].strip())
+        t_name = (t.get("name") or "").strip()
+        if is_valid_company_name(t_name):
+            distinct_companies.add(t_name)
 
     filtered = all_selections
 
@@ -3207,7 +3244,6 @@ async def telegram_send_test_endpoint(payload: dict, current_user: User = Depend
 @app.get("/api/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _auto_close_expired()
-    _auto_check_shortlists_48h()
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
     is_vendor = str(getattr(current_user, "role", "") or "") == "Recruiter"

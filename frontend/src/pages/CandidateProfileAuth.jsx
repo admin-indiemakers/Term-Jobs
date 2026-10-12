@@ -18,6 +18,7 @@ import { useCandidateAuth } from '../context/CandidateAuthContext';
 import SEOHead from '../components/SEOHead';
 import { Backdrop } from '../components/landing/Backdrop';
 import { validatePhone } from '../utils/phoneValidation';
+import { validateCandidateEmail } from '../utils/candidateEmailValidation';
 
 // Google OAuth Client ID
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '215468136876-3e4icbpr6blejlb9vibvecr6ck2tfm5g.apps.googleusercontent.com';
@@ -184,6 +185,11 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
     e.preventDefault();
     if (!regName.trim() || !regEmail.trim() || !regPassword) {
       setError('Name, email, and password (min 6 characters) are required.');
+      return;
+    }
+    const emailErr = validateCandidateEmail(regEmail);
+    if (emailErr) {
+      setError(emailErr);
       return;
     }
     if (regPassword.length < 6) {
@@ -468,18 +474,26 @@ export default function CandidateProfileAuth({ onLoginSuccess, onBackToHome }) {
                   </label>
 
                   <label className="clp-field">
-                    <span className="clp-label">Email *</span>
+                    <span className="clp-label">Personal Email *</span>
                     <div className="clp-input">
                       <Mail size={18} className="text-[#8A8A85]" />
                       <input
                         type="email"
                         required
                         value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        placeholder="arjun@example.com"
+                        onChange={(e) => {
+                          setRegEmail(e.target.value);
+                          if (error) setError('');
+                        }}
+                        placeholder="arjun@gmail.com"
                         disabled={loading}
                       />
                     </div>
+                    {regEmail && validateCandidateEmail(regEmail, { required: false }) && (
+                      <p className="mt-1 text-[11px] text-rose-500 font-medium">
+                        {validateCandidateEmail(regEmail, { required: false })}
+                      </p>
+                    )}
                   </label>
                 </div>
 

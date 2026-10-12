@@ -32,10 +32,10 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
   const { user, token } = useAuth();
 
   const [candidateSubmissionId, setCandidateSubmissionId] = useState(() => initialData.candidate_submission_id || '');
-  const [candidateName, setCandidateName] = useState(() => initialData.candidate_name || 'Arjun m');
-  const [candidateEmail, setCandidateEmail] = useState(() => initialData.candidate_email || 'candidate@termjobs.in');
+  const [candidateName, setCandidateName] = useState(() => initialData.candidate_name || '');
+  const [candidateEmail, setCandidateEmail] = useState(() => initialData.candidate_email || '');
   const [requisitionId, setRequisitionId] = useState(() => initialData.requisition_id || '');
-  const [requisitionTitle, setRequisitionTitle] = useState(() => initialData.requisition_title || 'DevSecOps Engineer');
+  const [requisitionTitle, setRequisitionTitle] = useState(() => initialData.requisition_title || '');
 
   const [roundType, setRoundType] = useState(() => initialData.round_type || 'Technical_1');
   const [roundName, setRoundName] = useState(() => initialData.round_name || 'Technical Round 1');
@@ -61,11 +61,11 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
   const applyAutofill = useCallback((overrideData = {}) => {
     const data = { ...initialData, ...overrideData };
 
-    setCandidateSubmissionId(data.candidate_submission_id || candidateSubmissionId || '');
-    setCandidateName(data.candidate_name || candidateName || 'Arjun m');
-    setCandidateEmail(data.candidate_email || candidateEmail || 'candidate@termjobs.in');
-    setRequisitionId(data.requisition_id || requisitionId || '');
-    setRequisitionTitle(data.requisition_title || requisitionTitle || 'DevSecOps Engineer');
+    setCandidateSubmissionId(data.candidate_submission_id || '');
+    setCandidateName(data.candidate_name || '');
+    setCandidateEmail(data.candidate_email || '');
+    setRequisitionId(data.requisition_id || '');
+    setRequisitionTitle(data.requisition_title || '');
 
     const targetType = data.round_type || roundType || 'Technical_1';
     setRoundType(targetType);
@@ -93,7 +93,7 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
 
     setAutofilledNotice(true);
     setTimeout(() => setAutofilledNotice(false), 2200);
-  }, [initialData, candidateSubmissionId, candidateName, candidateEmail, requisitionId, requisitionTitle, roundType, roundNumber, user]);
+  }, [initialData, roundType, roundNumber, user]);
 
   // Auto-populate whenever modal is opened
   useEffect(() => {
@@ -121,7 +121,11 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
     setErrorMsg('');
 
     if (!candidateName.trim() || !candidateEmail.trim()) {
-      setErrorMsg('Candidate Name and Candidate Email are required.');
+      setErrorMsg('No shortlisted candidate selected. Please select a shortlisted candidate before scheduling an interview.');
+      return;
+    }
+    if (!requisitionId && !requisitionTitle) {
+      setErrorMsg('Requisition is required to schedule an interview.');
       return;
     }
     if (!interviewerName.trim() || !interviewerEmail.trim()) {

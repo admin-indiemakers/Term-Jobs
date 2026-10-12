@@ -139,9 +139,19 @@ export default function OnboardingManagement() {
   // Derived Real KPI Metrics
   const metrics = useMemo(() => {
     const totalAccepted = candidates.length;
-    const obValues = Object.values(onboardingDocs);
-    const inProgress = obValues.filter((o) => o.status === 'in_progress').length;
-    const completed = obValues.filter((o) => o.status === 'completed' || o.setup_status === 'completed').length;
+    let inProgress = 0;
+    let completed = 0;
+    candidates.forEach((cand) => {
+      const id = cand.id || cand.candidate_id;
+      const ob = id ? onboardingDocs[id] : null;
+      if (ob) {
+        if (ob.status === 'completed' || ob.setup_status === 'completed') {
+          completed += 1;
+        } else if (ob.status === 'in_progress' || ob.status === 'started') {
+          inProgress += 1;
+        }
+      }
+    });
     const openIssues = issues.filter((i) => i.status === 'open').length;
 
     return {

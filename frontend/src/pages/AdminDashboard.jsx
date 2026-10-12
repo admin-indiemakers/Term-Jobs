@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -35,6 +35,7 @@ import {
   User
 } from 'lucide-react';
 import TeamChatDrawer from '../components/TeamChatDrawer';
+import { dashboardList, normalizeDashboardStatus } from '../utils/adminDashboard';
 
 function formatDate(iso) {
   if (!iso) return 'Sep 25, 2026';
@@ -74,7 +75,7 @@ function StatusBadge({ status }) {
       </span>
     );
   }
-  if (s === 'pending_approval' || s === 'pending') {
+  if (normalizeDashboardStatus(s) === 'pendingapproval' || s === 'pending') {
     return (
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
@@ -101,31 +102,14 @@ const EMPTY_INVITE = {
 export default function AdminDashboard() {
   const { user, token } = useAuth();
   const navigate = useNavigate();
+  const activeToken = useRef(token);
+  activeToken.current = token;
 
-  const [users, setUsers] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('tj_cached_admin_users');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [requisitions, setRequisitions] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('tj_cached_admin_reqs');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
-  const [notifications, setNotifications] = useState(() => {
-    try {
-      const cached = sessionStorage.getItem('tj_cached_admin_notifs');
-      return cached ? JSON.parse(cached) : [];
-    } catch (e) {
-      return [];
-    }
-  });
+  const [users, setUsers] = useState([]);
+  const [requisitions, setRequisitions] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [usersError, setUsersError] = useState('');
+  const [requisitionsError, setRequisitionsError] = useState('');
   const [calConfig, setCalConfig] = useState({ provider: null, status: 'disconnected', connected_email: null });
   const [loading, setLoading] = useState(() => users.length === 0 && requisitions.length === 0);
   const [error, setError] = useState('');
@@ -163,53 +147,49 @@ export default function AdminDashboard() {
   const [savingCal, setSavingCal] = useState(false);
 
   const load = () => {
+    if (!token) return;
+    setUsersError('');
+    setRequisitionsError('');
     if (users.length === 0 && requisitions.length === 0) {
       setLoading(true);
     }
     setError('');
 
-    const fetchUsers = request('/api/auth/users?compact=true', { token })
+    const fetchUsers = request('/api/auth/users?compact=true', { token, forceRefresh: true, noCache: true })
       .then((usersRes) => {
-        if (Array.isArray(usersRes)) {
-          setUsers(usersRes);
-          try {
-            sessionStorage.setItem('tj_cached_admin_users', JSON.stringify(usersRes));
-          } catch (e) {}
-        }
+        if (activeToken.current !== token) return;
+        setUsers(dashboardList(usersRes, 'users'));
       })
       .catch((err) => {
-        console.warn('Failed to load users:', err);
+        if (activeToken.current !== token) return;
+        setUsersError(err.message || 'Unable to load hiring managers.');
       });
 
     // The console only renders a small requisition summary. Request the compact
     // representation instead of full JD/intake documents for every role.
-    const fetchReqs = request('/requisitions?dashboard=true', { token })
+    const fetchReqs = request('/requisitions?dashboard=true', { token, forceRefresh: true, noCache: true })
       .then((reqsRes) => {
-        if (Array.isArray(reqsRes)) {
-          setRequisitions(reqsRes);
-          try {
-            sessionStorage.setItem('tj_cached_admin_reqs', JSON.stringify(reqsRes));
-          } catch (e) {}
-        }
+        if (activeToken.current !== token) return;
+        setRequisitions(dashboardList(reqsRes, 'requisitions'));
       })
       .catch((err) => {
-        console.warn('Failed to load requisitions:', err);
+        if (activeToken.current !== token) return;
+        setRequisitionsError(err.message || 'Unable to load requisitions.');
       });
 
     // Activity is supplemental; keep it small and do not make the primary
     // requisitions/team view wait for it.
     const fetchNotifs = request('/api/notifications?compact=true&limit=12', { token })
       .then((notifsRes) => {
+        if (activeToken.current !== token) return;
         const notifList = Array.isArray(notifsRes) ? notifsRes : (notifsRes?.notifications || []);
         setNotifications(notifList);
-        try {
-          sessionStorage.setItem('tj_cached_admin_notifs', JSON.stringify(notifList));
-        } catch (e) {}
+
       })
       .catch(() => {});
 
     Promise.allSettled([fetchUsers, fetchReqs]).finally(() => {
-      setLoading(false);
+      if (activeToken.current === token) setLoading(false);
     });
   };
 
@@ -235,6 +215,10 @@ export default function AdminDashboard() {
   }, [showCalModal, token, calConfig.provider]);
 
   useEffect(() => {
+    setUsers([]);
+    setRequisitions([]);
+    setNotifications([]);
+    setLoading(true);
     load();
   }, [token]);
 
@@ -264,15 +248,15 @@ export default function AdminDashboard() {
     const pollUsers = () => {
       request('/api/auth/users?compact=true', { token, forceRefresh: true, noCache: true })
         .then((usersRes) => {
-          if (!Array.isArray(usersRes)) return;
+        if (activeToken.current !== token) return;
+          usersRes = dashboardList(usersRes, 'users');
+          setUsersError('');
           setUsers((prev) => {
             const prevPending = prev.filter((u) => u.is_active === false).length;
             const nextPending = usersRes.filter((u) => u.is_active === false).length;
             // Only trigger a re-render when the pending count or total has changed
             if (usersRes.length !== prev.length || nextPending !== prevPending) {
-              try {
-                sessionStorage.setItem('tj_cached_admin_users', JSON.stringify(usersRes));
-              } catch (_) {}
+
               return usersRes;
             }
             return prev;
@@ -308,7 +292,7 @@ export default function AdminDashboard() {
   const financeUsers = useMemo(() => users.filter((u) => u.role === 'Finance' || u.role === 'Finance Team'), [users]);
   const teamMembers = useMemo(() => users.filter((u) => u.role !== 'Candidate'), [users]);
   const pendingApprovals = useMemo(
-    () => requisitions.filter((r) => (r.status || '').toLowerCase() === 'pending_approval'),
+    () => requisitions.filter((r) => normalizeDashboardStatus(r.status) === 'pendingapproval'),
     [requisitions]
   );
   const activePublished = useMemo(
@@ -523,6 +507,12 @@ export default function AdminDashboard() {
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
       {/* Toast Alert Messages */}
+      {(usersError || requisitionsError) && (
+        <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          <p>{[usersError, requisitionsError].filter(Boolean).join(' ')}</p>
+          <button type="button" onClick={load} className="mt-2 font-semibold underline">Retry dashboard</button>
+        </div>
+      )}
       {error && (
         <div className="p-3 bg-red-50/90 border border-red-200 rounded-xl text-xs text-red-700 font-semibold flex items-center justify-between gap-2 shadow-xs">
           <div className="flex items-center gap-2">
@@ -617,7 +607,7 @@ export default function AdminDashboard() {
                   <FileText size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {activePublished.length}
+                  {loading ? '…' : requisitionsError ? '—' : activePublished.length}
                 </div>
               </div>
               <div className="text-[10.5px] font-medium text-gray-500 truncate">
@@ -635,7 +625,7 @@ export default function AdminDashboard() {
                   <Users size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {hiringManagers.length}
+                  {loading ? '…' : usersError ? '—' : hiringManagers.length}
                 </div>
               </div>
               <div className="text-[10.5px] font-medium text-gray-500 truncate">
@@ -652,7 +642,7 @@ export default function AdminDashboard() {
                   <FilePlus size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {draftRequisitions.length}
+                  {loading ? '…' : requisitionsError ? '—' : draftRequisitions.length}
                 </div>
               </div>
               <div className="text-[10.5px] font-medium text-gray-500 truncate">
@@ -669,7 +659,7 @@ export default function AdminDashboard() {
                   <Clock size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {pendingApprovals.length}
+                  {loading ? '…' : requisitionsError ? '—' : pendingApprovals.length}
                 </div>
               </div>
               <div className="text-[10.5px] font-medium text-gray-500 truncate">
@@ -693,7 +683,7 @@ export default function AdminDashboard() {
 
               <div className="flex items-center gap-2">
                 <span className="text-[11px] font-semibold text-gray-500">
-                  {requisitions.length} total
+                  {loading ? 'Loading…' : requisitionsError ? 'Unavailable' : `${requisitions.length} total`}
                 </span>
               </div>
             </div>
@@ -728,6 +718,8 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ))
+                  ) : requisitionsError ? (
+                    <tr><td colSpan={4} className="py-8 text-center text-red-600">Unable to load requisitions. Please retry.</td></tr>
                   ) : requisitions.length === 0 ? (
                     <tr>
                       <td colSpan={4} className="py-8 text-center text-gray-400">
