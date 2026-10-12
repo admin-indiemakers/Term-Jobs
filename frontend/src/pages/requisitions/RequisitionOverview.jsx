@@ -462,6 +462,7 @@ export default function RequisitionOverview({ section }) {
                         type="button"
                         onClick={() => {
                           setActiveTab(key);
+                          setSelectedStatus('All Status');
                           setShowSectionDropdown(false);
                           navigate(config.to);
                         }}
@@ -516,6 +517,65 @@ export default function RequisitionOverview({ section }) {
                       >
                         <span>{dept}</span>
                         {selectedDept === dept && <Check size={12} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Filter Dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowStatusDropdown(!showStatusDropdown);
+                    setShowSectionDropdown(false);
+                    setShowDeptDropdown(false);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-white/60 backdrop-blur-md border border-white/80 text-xs font-semibold text-gray-700 hover:text-black hover:bg-white transition-all flex items-center gap-2 shadow-3xs cursor-pointer"
+                >
+                  <span>{selectedStatus}</span>
+                  <ChevronDown size={13} className="text-gray-400" />
+                </button>
+
+                {showStatusDropdown && (
+                  <div
+                    className="absolute right-0 mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 animate-in fade-in zoom-in-95"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {statusOptions.map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatus(st);
+                          setShowStatusDropdown(false);
+                          if (st === 'All Status') {
+                            setActiveTab('history');
+                            navigate('/dashboard/requisitions/history');
+                          } else if (st === 'Published') {
+                            setActiveTab('published');
+                            navigate('/dashboard/requisitions/published');
+                          } else if (st === 'Pending Approval') {
+                            setActiveTab('pending_approval');
+                            navigate('/dashboard/requisitions/pending-approval');
+                          } else if (st === 'Drafted') {
+                            setActiveTab('drafted');
+                            navigate('/dashboard/requisitions/drafted');
+                          } else if (st === 'Completed') {
+                            setActiveTab('completed');
+                            navigate('/dashboard/requisitions/completed');
+                          }
+                        }}
+                        className={`w-full text-left px-3 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center justify-between ${
+                          selectedStatus === st
+                            ? 'bg-black text-white font-bold'
+                            : 'text-gray-700 hover:bg-gray-100/80'
+                        }`}
+                      >
+                        <span>{st}</span>
+                        {selectedStatus === st && <Check size={12} />}
                       </button>
                     ))}
                   </div>
