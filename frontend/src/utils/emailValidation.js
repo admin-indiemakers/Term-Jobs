@@ -20,7 +20,8 @@ const DISPOSABLE_DOMAINS = new Set([
   'gustr.com', 'jourrapide.com', 'rhyta.com', 'superrito.com', 'teleworm.us',
 ]);
 
-const EMAIL_REGEX = /^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$/;
+const EMAIL_REGEX = /^[a-zA-Z0-9_.+\-]+@([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}$/;
+const INVALID_EMAIL_CHARS = /[,;:\s"'\\\/]/;
 
 /**
  * Returns an error string or empty string if valid.
@@ -30,8 +31,20 @@ const EMAIL_REGEX = /^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$/;
 export function validateEmail(email) {
   const trimmed = (email || '').trim().toLowerCase();
   if (!trimmed) return 'Email address is required.';
-  if (!EMAIL_REGEX.test(trimmed)) return 'Please enter a valid email address (e.g. name@company.com).';
-  const domain = trimmed.split('@')[1];
+  if (INVALID_EMAIL_CHARS.test(trimmed)) {
+    return 'Invalid email address format. Email cannot contain commas, spaces, or quotes.';
+  }
+  if (trimmed.includes('..') || trimmed.startsWith('.') || trimmed.endsWith('.')) {
+    return 'Please enter a valid email address (e.g. name@company.com).';
+  }
+  if (!EMAIL_REGEX.test(trimmed)) {
+    return 'Please enter a valid email address (e.g. name@company.com).';
+  }
+  const parts = trimmed.split('@');
+  if (parts.length !== 2) {
+    return 'Please enter a valid email address (e.g. name@company.com).';
+  }
+  const domain = parts[1];
   if (DISPOSABLE_DOMAINS.has(domain)) {
     return `Temporary email addresses (${domain}) are not allowed. Please use a real email.`;
   }
