@@ -177,173 +177,204 @@ export default function CandidatePortalAccess() {
   };
 
   return (
-    <div className="min-h-screen bg-[#f7f7f5]">
-      {/* Hero */}
-      <div className="bg-[#1a1a1a] text-white px-8 py-6">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2 text-[11px] tracking-[0.18em] text-[#a0a09a] mb-1">
-              <span>CANDIDATES</span>
-              <span>›</span>
-              <span className="text-white">Portal Access</span>
-            </div>
-            <h1 className="text-[1.35rem] font-bold tracking-tight">Candidate Portal Access</h1>
-            <p className="text-[0.82rem] text-[#a0a09a] mt-0.5">
-              Create and manage candidate portal login accounts
-            </p>
+    <div
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1 font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      <style>{`
+        .custom-cand-scroll::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
+        }
+        .custom-cand-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-cand-scroll::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.12);
+          border-radius: 4px;
+        }
+        .custom-cand-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.25);
+        }
+      `}</style>
+
+      {/* ── 1. MODERN TOP HEADER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 shrink-0">
+        <div>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • ACCESS CONTROL
           </div>
-          <button onClick={loadCandidates} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/10 text-white text-[0.82rem] font-medium hover:bg-white/15 transition">
-            <RefreshCw size={14} />
-            Refresh
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            Candidate Portal Access
+          </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Provision and manage candidate portal login credentials for onboarding documentation and compliance.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={loadCandidates}
+            className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
           </button>
         </div>
       </div>
 
-      <div className="max-w-6xl mx-auto px-8 py-6">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-[#eaeae6] p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-[#1a1a1a] flex items-center justify-center">
-                <UserPlus size={17} className="text-white" />
-              </div>
-              <span className="text-[0.72rem] tracking-[0.14em] text-[#8a8a85] font-semibold uppercase">All Candidates</span>
-            </div>
-            <div className="text-[1.8rem] font-bold text-[#1a1a1a]">{candidates.length}</div>
+      {/* ── 2. TOP 3 GLASSMORHPIC METRIC CARDS ── */}
+      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">TOTAL CANDIDATES</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{candidates.length}</div>
           </div>
-          <div className="bg-white rounded-xl border border-[#eaeae6] p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-[#16a34a] flex items-center justify-center">
-                <Shield size={17} className="text-white" />
-              </div>
-              <span className="text-[0.72rem] tracking-[0.14em] text-[#8a8a85] font-semibold uppercase">Active Access</span>
-            </div>
-            <div className="text-[1.8rem] font-bold text-[#1a1a1a]">{withAccess}</div>
-          </div>
-          <div className="bg-white rounded-xl border border-[#eaeae6] p-5">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg bg-[#f59e0b] flex items-center justify-center">
-                <Key size={17} className="text-white" />
-              </div>
-              <span className="text-[0.72rem] tracking-[0.14em] text-[#8a8a85] font-semibold uppercase">No Access</span>
-            </div>
-            <div className="text-[1.8rem] font-bold text-[#1a1a1a]">{withoutAccess}</div>
+          <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center shadow-xs">
+            <UserPlus size={18} />
           </div>
         </div>
 
-        {/* Success/Error */}
-        {successMsg && (
-          <div className="mb-4 p-3 bg-[#dcfce7] border border-[#bbf7d0] rounded-xl text-[0.88rem] text-[#166534] flex items-center gap-2">
-            <CheckCircle size={16} /> {successMsg}
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ACTIVE PORTAL ACCESS</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{withAccess}</div>
           </div>
-        )}
-        {error && (
-          <div className="mb-4 p-3 bg-[#fee2e2] border border-[#fecaca] rounded-xl text-[0.88rem] text-[#991b1b] flex items-center gap-2">
-            <AlertCircle size={16} /> {error}
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shadow-xs">
+            <Shield size={18} />
           </div>
-        )}
+        </div>
 
-        {/* Search */}
-        <div className="bg-white rounded-xl border border-[#eaeae6] mb-6">
-          <div className="p-4 border-b border-[#eaeae6]">
-            <div className="relative">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#737373]" />
-              <input
-                type="text"
-                placeholder="Search candidate, email, ID..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                className="w-full pl-10 pr-3.5 py-2.5 text-[0.9rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 placeholder:text-[#a3a3a3] placeholder:font-normal transition-all"
-              />
-            </div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">PENDING CREDENTIALS</div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1">{withoutAccess}</div>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center shadow-xs">
+            <Key size={18} />
+          </div>
+        </div>
+      </div>
+
+      {/* Alerts */}
+      {successMsg && (
+        <div className="shrink-0 p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-medium flex items-center gap-2 shadow-2xs">
+          <CheckCircle size={15} className="text-emerald-600 shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+      {error && (
+        <div className="shrink-0 p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 font-medium flex items-center gap-2 shadow-2xs">
+          <AlertCircle size={15} className="text-red-500 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* ── 3. MAIN GLASSMORHPIC TABLE CONTAINER ── */}
+      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+        {/* Top Controls: Search Bar + Count */}
+        <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-black/[0.04]">
+          <div className="relative w-full sm:w-80">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search candidate, email, ID..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-4 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+            />
           </div>
 
-          {/* Table */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="text-[0.68rem] tracking-[0.14em] text-[#8a8a85] uppercase font-semibold">
-                  <th className="px-5 py-3 font-semibold">Candidate</th>
-                  <th className="px-5 py-3 font-semibold">Work Order ID</th>
-                  <th className="px-5 py-3 font-semibold">Requisition & Role</th>
-                  <th className="px-5 py-3 font-semibold">Portal Status</th>
-                  <th className="px-5 py-3 font-semibold text-right">Actions</th>
+          <div className="text-xs text-gray-500 font-medium">
+            Showing <span className="font-bold text-gray-900">{filtered.length}</span> portal users
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="flex-1 overflow-y-auto custom-cand-scroll pt-2">
+          <table className="w-full text-left border-collapse min-w-[750px]">
+            <thead>
+              <tr className="border-b border-black/[0.04] text-[10.5px] font-extrabold uppercase tracking-wider text-gray-400">
+                <th className="py-3 pl-3 pr-3">Candidate</th>
+                <th className="py-3 px-3">Work Order ID</th>
+                <th className="py-3 px-3">Requisition & Role</th>
+                <th className="py-3 px-3">Portal Status</th>
+                <th className="py-3 pr-3 pl-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-black/[0.03]">
+              {loading ? (
+                <>
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <tr key={i} className="animate-pulse">
+                      <td className="py-3 pl-3 pr-3"><div className="h-4 w-28 bg-gray-200/80 rounded" /></td>
+                      <td className="py-3 px-3"><div className="h-4 w-32 bg-gray-200/80 rounded" /></td>
+                      <td className="py-3 px-3"><div className="h-4 w-40 bg-gray-200/80 rounded" /></td>
+                      <td className="py-3 px-3"><div className="h-5 w-20 bg-gray-200/80 rounded-full" /></td>
+                      <td className="py-3 pr-3 pl-3"><div className="h-7 w-24 bg-gray-200/80 rounded-xl ml-auto" /></td>
+                    </tr>
+                  ))}
+                </>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-16 text-center text-gray-400 text-xs">
+                    <AlertCircle size={24} className="mx-auto mb-2 text-gray-300" />
+                    <div>{candidates.length === 0 ? 'No accepted candidates found' : 'No candidates match your search query'}</div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <>
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <tr key={i} className="animate-pulse">
-                        <td className="px-5 py-3"><div className="h-4 w-28 bg-gray-200 rounded" /></td>
-                        <td className="px-5 py-3"><div className="h-4 w-32 bg-gray-200 rounded" /></td>
-                        <td className="px-5 py-3"><div className="h-4 w-40 bg-gray-200 rounded" /></td>
-                        <td className="px-5 py-3"><div className="h-5 w-20 bg-gray-200 rounded-full" /></td>
-                        <td className="px-5 py-3"><div className="h-8 w-28 bg-gray-200 rounded-lg ml-auto" /></td>
-                      </tr>
-                    ))}
-                  </>
-                ) : filtered.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-12 text-center">
-                      <AlertCircle size={28} className="mx-auto mb-2 text-[#d1d5cc]" />
-                      <div className="text-[0.92rem] text-[#8a8a85] font-medium">
-                        {candidates.length === 0 ? 'No accepted candidates found' : 'No candidates match your search'}
+              ) : (
+                filtered.map((cand) => (
+                  <tr key={cand.workorder_id || cand.candidate_id} className="hover:bg-white/60 transition-colors">
+                    <td className="py-3 pl-3 pr-3">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-3xs">
+                          {(cand.candidate_name || 'U').split(' ').map((n) => n[0]).join('').slice(0, 2)}
+                        </div>
+                        <div>
+                          <div className="text-xs sm:text-[13px] font-extrabold text-gray-900">{cand.candidate_name}</div>
+                          <div className="text-[11px] text-gray-400 font-medium">{cand.candidate_email}</div>
+                        </div>
                       </div>
                     </td>
+                    <td className="py-3 px-3">
+                      <span className="text-[11px] font-mono font-semibold text-gray-500 bg-gray-100/80 px-2 py-0.5 rounded-md border border-gray-200/60">
+                        {cand.workorder_id || cand.candidate_id}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <div className="text-xs font-bold text-gray-900">{cand.requisition_title || '—'}</div>
+                      <div className="text-[10.5px] text-gray-400 font-normal">{cand.vendor_name || 'Direct'}</div>
+                    </td>
+                    <td className="py-3 px-3">{statusBadge(cand.has_portal_access)}</td>
+                    <td className="py-3 pr-3 pl-3 text-right">
+                      {!cand.has_portal_access ? (
+                        <button
+                          type="button"
+                          onClick={() => handleCreateAccess(cand)}
+                          disabled={creatingId === (cand.candidate_id || cand.workorder_id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition shadow-xs disabled:opacity-50 cursor-pointer"
+                        >
+                          <UserPlus size={12} />
+                          <span>{creatingId === (cand.candidate_id || cand.workorder_id) ? 'Creating...' : 'Create Access'}</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleEditAccess(cand)}
+                          disabled={updatingId === (cand.candidate_id || cand.workorder_id)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-gray-800 text-xs font-bold transition shadow-3xs disabled:opacity-50 cursor-pointer"
+                        >
+                          <Edit3 size={12} />
+                          <span>Edit Access</span>
+                        </button>
+                      )}
+                    </td>
                   </tr>
-                ) : (
-                  filtered.map((cand) => (
-                    <tr key={cand.workorder_id || cand.candidate_id} className="border-t border-[#f0f0ec] hover:bg-[#fafaf8] transition">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[#1a1a1a] text-white flex items-center justify-center text-[0.72rem] font-bold">
-                            {(cand.candidate_name || 'U').split(' ').map(n => n[0]).join('').slice(0, 2)}
-                          </div>
-                          <div>
-                            <div className="text-[0.88rem] font-semibold text-[#1a1a1a]">{cand.candidate_name}</div>
-                            <div className="text-[0.75rem] text-[#8a8a85]">{cand.candidate_email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="text-[0.78rem] font-mono text-[#8a8a85]">{cand.workorder_id || cand.candidate_id}</span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="text-[0.85rem] font-medium text-[#1a1a1a]">{cand.requisition_title || '—'}</div>
-                        <div className="text-[0.72rem] text-[#8a8a85]">{cand.vendor_name || '—'}</div>
-                      </td>
-                      <td className="px-5 py-3.5">{statusBadge(cand.has_portal_access)}</td>
-                      <td className="px-5 py-3.5 text-right">
-                        {!cand.has_portal_access ? (
-                          <button
-                            onClick={() => handleCreateAccess(cand)}
-                            disabled={creatingId === (cand.candidate_id || cand.workorder_id)}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#1a1a1a] text-white text-[0.78rem] font-bold hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer shadow-2xs"
-                          >
-                            <UserPlus size={13} />
-                            {creatingId === (cand.candidate_id || cand.workorder_id) ? 'Creating...' : 'Create Access'}
-                          </button>
-                        ) : (
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => handleEditAccess(cand)}
-                              disabled={updatingId === (cand.candidate_id || cand.workorder_id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#eaeae6] text-[#1a1a1a] text-[0.78rem] font-bold hover:bg-[#f7f7f5] hover:border-[#1a1a1a] transition cursor-pointer shadow-2xs disabled:opacity-50"
-                            >
-                              <Edit3 size={13} />
-                              Edit Access
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
 

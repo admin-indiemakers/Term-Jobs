@@ -478,23 +478,34 @@ export function HiringManagerInterviews() {
   );
 
   return (
-    <div className="space-y-6 max-w-7xl w-full mx-auto pb-12 font-sans">
-      {/* Header Banner */}
-      <div className="bg-white rounded-3xl border border-zinc-200/80 p-6 sm:p-8 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60 mb-2">
-              <Video size={13} className="text-emerald-600" />
-              <span>Company Live Interview Hub · LiveKit</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-zinc-950 tracking-tight">
-              Company Interviews & AI Scores
-            </h1>
-            <p className="text-xs text-zinc-500 mt-1">
-              Candidates who cleared AI screening with accepted scores. Review AI results, schedule multi-round live company interviews (Technical, Managerial, HR, Final), and join encrypted LiveKit meeting rooms.
-            </p>
-          </div>
+    <div
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-y-auto pb-6 font-sans custom-interview-scroll"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      <style>{`
+        .custom-interview-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-interview-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-interview-scroll::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 4px; }
+        .custom-interview-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
+      `}</style>
 
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-shrink-0">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0066FF] bg-blue-50/80 px-2.5 py-0.5 rounded-full border border-blue-100/60 shadow-2xs">
+              TERM JOBS • INTERVIEWS & AI SCORES
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+            Company Interviews & AI Scores
+          </h1>
+          <p className="text-xs text-gray-500 font-medium mt-0.5">
+            Review AI scoring results, schedule multi-round LiveKit interviews, and manage hiring decisions
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
           <button
             type="button"
             disabled={!selectedCandidate && acceptedCandidates.length === 0}
@@ -510,42 +521,51 @@ export function HiringManagerInterviews() {
                 ? 'No shortlisted candidates are currently ready for interview scheduling.'
                 : 'Schedule a company interview round for the shortlisted candidate'
             }
-            className={`px-5 py-3 rounded-2xl font-bold text-xs flex items-center gap-2 transition shadow-md self-start sm:self-auto ${
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition active:scale-95 ${
               !selectedCandidate && acceptedCandidates.length === 0
                 ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300'
-                : 'bg-zinc-950 hover:bg-zinc-800 text-white cursor-pointer'
+                : 'bg-black hover:bg-gray-800 text-white cursor-pointer'
             }`}
           >
-            <Plus size={16} />
-            <span>Schedule Company Interview</span>
+            <Plus size={14} />
+            <span>Schedule Interview</span>
           </button>
         </div>
+      </div>
 
-        {/* Metrics Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-6 pt-6 border-t border-zinc-100">
-          <div className="p-3.5 bg-zinc-50 rounded-2xl border border-zinc-200/80">
-            <div className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">AI Cleared Pipeline</div>
-            <div className="text-xl font-black text-zinc-950 mt-1">{totalAcceptedCandidates}</div>
+      {/* 5 Glassmorphic Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 flex-shrink-0">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">AI Cleared Pipeline</div>
+          <div className="text-xl font-black text-gray-900 mt-0.5">{totalAcceptedCandidates}</div>
+          <div className="text-[10px] text-gray-400">Total qualified</div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10.5px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-1">
+            <CheckCircle2 size={12} className="text-emerald-600" />
+            <span>Accepted</span>
           </div>
-          <div className="p-3.5 bg-emerald-50/80 rounded-2xl border border-emerald-300 shadow-2xs">
-            <div className="text-[11px] font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1">
-              <CheckCircle2 size={12} className="text-emerald-600" />
-              <span>Accepted Candidates</span>
-            </div>
-            <div className="text-xl font-black text-emerald-950 mt-1">{acceptedHiredCount}</div>
-          </div>
-          <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200/80">
-            <div className="text-[11px] font-semibold text-amber-700 uppercase tracking-wider">Ready to Schedule</div>
-            <div className="text-xl font-black text-amber-900 mt-1">{readyToScheduleCount}</div>
-          </div>
-          <div className="p-3.5 bg-blue-50/60 rounded-2xl border border-blue-200/80">
-            <div className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider">In Progress Live</div>
-            <div className="text-xl font-black text-blue-900 mt-1">{inProgressCount}</div>
-          </div>
-          <div className="p-3.5 bg-purple-50/60 rounded-2xl border border-purple-200/80">
-            <div className="text-[11px] font-semibold text-purple-700 uppercase tracking-wider">Completed Rounds</div>
-            <div className="text-xl font-black text-purple-900 mt-1">{completedCount}</div>
-          </div>
+          <div className="text-xl font-black text-emerald-600 mt-0.5">{acceptedHiredCount}</div>
+          <div className="text-[10px] text-emerald-600/70">Selected hires</div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10.5px] font-bold text-amber-700 uppercase tracking-wider">Ready to Schedule</div>
+          <div className="text-xl font-black text-amber-600 mt-0.5">{readyToScheduleCount}</div>
+          <div className="text-[10px] text-amber-600/70">Awaiting slot</div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10.5px] font-bold text-blue-700 uppercase tracking-wider">In Progress Live</div>
+          <div className="text-xl font-black text-blue-600 mt-0.5">{inProgressCount}</div>
+          <div className="text-[10px] text-blue-600/70">Active rounds</div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)]">
+          <div className="text-[10.5px] font-bold text-purple-700 uppercase tracking-wider">Completed</div>
+          <div className="text-xl font-black text-purple-600 mt-0.5">{completedCount}</div>
+          <div className="text-[10px] text-purple-600/70">Rounds scored</div>
         </div>
       </div>
 

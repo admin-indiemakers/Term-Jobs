@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
-import { Flag, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Flag, CheckCircle2, AlertCircle, Loader2, RefreshCw, Search } from 'lucide-react';
 
 export default function ReportedIssues() {
   const { user, token } = useAuth();
@@ -9,6 +9,7 @@ export default function ReportedIssues() {
   const [issues, setIssues] = useState([]);
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const greetingText = useMemo(() => {
     const hr = new Date().getHours();
@@ -49,7 +50,7 @@ export default function ReportedIssues() {
         method: 'POST',
         token,
       });
-      setIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, status: 'fixed' } : i)));
+      setIssues((prev) => prev.map((i) => (i.id === issueId ? { ...i, status: 'fixed', resolved_at: new Date().toISOString() } : i)));
     } catch (err) {
       // ignore
     } finally {
@@ -60,138 +61,172 @@ export default function ReportedIssues() {
   const openCount = useMemo(() => issues.filter((i) => i.status === 'open').length, [issues]);
   const resolvedCount = useMemo(() => issues.filter((i) => i.status !== 'open').length, [issues]);
 
+  const filteredIssues = useMemo(() => {
+    if (!searchQuery.trim()) return issues;
+    const q = searchQuery.toLowerCase().trim();
+    return issues.filter((i) => {
+      const cat = (i.category_label || i.category || '').toLowerCase();
+      const cand = (i.candidate_name || i.candidate_id || '').toLowerCase();
+      const desc = (i.description || '').toLowerCase();
+      return cat.includes(q) || cand.includes(q) || desc.includes(q);
+    });
+  }, [issues, searchQuery]);
+
   return (
-    <div className="flex flex-col space-y-4 md:h-[calc(100vh-86px)] md:max-h-[calc(100vh-86px)] md:overflow-hidden min-h-0">
+    <div
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1 font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
       <style>{`
-        .custom-cand-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
-        .custom-cand-scroll::-webkit-scrollbar-track { background: #FFFFFF; }
-        .custom-cand-scroll::-webkit-scrollbar-thumb { background: #E2E2DC; border-radius: 4px; }
-        .custom-cand-scroll::-webkit-scrollbar-thumb:hover { background: #A3A39F; }
+        .custom-cand-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-cand-scroll::-webkit-scrollbar-track { background: transparent; }
+        .custom-cand-scroll::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 4px; }
+        .custom-cand-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
       `}</style>
 
-      {/* Hero Banner */}
-      <div style={{ backgroundColor: '#0A0A0A', borderRadius: 22, boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)' }}
-        className="shrink-0 p-4 sm:p-6 text-white space-y-2 relative overflow-hidden rounded-[20px] sm:rounded-[22px]">
-        <div className="text-[11px] font-extrabold uppercase tracking-widest text-[#A3A3A3]">
-          {greetingText}, {userName}
-        </div>
-        <h1 className="text-[1.8rem] sm:text-[2.2rem] font-extrabold text-white tracking-tight leading-none">
-          Candidate Reported Issues
-        </h1>
-        <p className="text-[13px] text-[#A3A3A3] font-medium pt-0.5">
-          Review and resolve issues raised by onboarding hires.
-        </p>
-        <div className="flex items-center gap-2 pt-1">
-          <span style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}
-            className="px-3 py-1 text-[11px] font-bold text-white rounded-full flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            <span>Hiring Manager</span>
-          </span>
-          <span style={{ backgroundColor: 'rgba(255, 255, 255, 0.12)' }}
-            className="px-3 py-1 text-[11px] font-bold text-white rounded-full">
-            {tenantName}
-          </span>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="shrink-0 grid grid-cols-3 gap-3 sm:gap-4">
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 22, border: '1px solid #E2E2DC', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}
-          className="p-3.5 sm:p-5 space-y-1">
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#0A0A0A] tracking-tight leading-none">{issues.length}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">TOTAL ISSUES</div>
-        </div>
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 22, border: '1px solid #E2E2DC', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}
-          className="p-3.5 sm:p-5 space-y-1">
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#DC2626] tracking-tight leading-none">{openCount}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">OPEN</div>
-        </div>
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 22, border: '1px solid #E2E2DC', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.02)' }}
-          className="p-3.5 sm:p-5 space-y-1">
-          <div className="text-[1.6rem] sm:text-[2.1rem] font-extrabold text-[#10B981] tracking-tight leading-none">{resolvedCount}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">RESOLVED</div>
-        </div>
-      </div>
-
-      {/* Issues List */}
-      <div style={{ backgroundColor: '#FFFFFF', borderRadius: 22, border: '1px solid #E2E2DC', boxShadow: '0 2px 10px rgba(0, 0, 0, 0.02)' }}
-        className="flex-1 min-h-[360px] md:min-h-0 flex flex-col p-4 sm:p-6 md:overflow-hidden">
-        <div className="shrink-0 flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-[1.25rem] font-extrabold text-[#0A0A0A] tracking-tight leading-tight flex items-center gap-2">
-              <Flag size={16} />
-              All Issues
-            </h2>
-            <p className="text-[12px] text-[#737373] font-medium mt-0.5">
-              {openCount > 0 ? `${openCount} open issue${openCount > 1 ? 's' : ''} need attention` : 'All issues resolved'}
-            </p>
+      {/* ── 1. MODERN TOP HEADER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 shrink-0">
+        <div>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • ONBOARDING SUPPORT
           </div>
-          <button onClick={loadIssues}
-            className="px-4 py-1.5 text-[12.5px] font-bold text-[#0A0A0A] hover:bg-[#F5F5F2] transition-colors flex items-center gap-1.5 cursor-pointer rounded-xl border border-[#E2E2DC] shadow-2xs">
-            Refresh
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            Candidate Reported Issues
+          </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Review and resolve access or onboarding blockers submitted by candidates in their portal.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={loadIssues}
+            className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
           </button>
         </div>
+      </div>
 
-        <div className="flex-1 overflow-y-auto custom-cand-scroll pr-1">
+      {/* ── 2. TOP 3 GLASSMORHPIC METRIC CARDS ── */}
+      <div className="shrink-0 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">TOTAL REPORTED</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{issues.length}</div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ACTION REQUIRED (OPEN)</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-red-600 tracking-tight mt-1">{openCount}</div>
+        </div>
+
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">RESOLVED ISSUES</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{resolvedCount}</div>
+        </div>
+      </div>
+
+      {/* ── 3. MAIN GLASSMORHPIC ISSUES CONTAINER ── */}
+      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+        {/* Top Controls: Search Bar + Count */}
+        <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-black/[0.04]">
+          <div className="relative w-full sm:w-80">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search category, candidate, or description..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+            />
+          </div>
+
+          <div className="text-xs text-gray-500 font-medium">
+            Showing <span className="font-bold text-gray-900">{filteredIssues.length}</span> issues
+          </div>
+        </div>
+
+        {/* Issues List */}
+        <div className="flex-1 overflow-y-auto custom-cand-scroll pr-1 pt-2">
           {loading ? (
-            <div className="py-16 text-center text-[#8A8A85] text-[13px] font-medium flex items-center justify-center gap-2">
-              <Loader2 size={16} className="animate-spin" />
-              Loading issues...
+            <div className="py-20 text-center text-gray-400 text-xs font-medium flex items-center justify-center gap-2">
+              <RefreshCw size={14} className="animate-spin text-gray-400" />
+              <span>Loading issues...</span>
             </div>
-          ) : issues.length === 0 ? (
-            <div className="py-16 px-4 text-center bg-[#FBFBFA] rounded-2xl border border-[#EAEAE6] my-auto">
-              <CheckCircle2 size={32} className="mx-auto text-[#10B981] mb-2" />
-              <div className="text-[15px] font-extrabold text-[#0A0A0A] mb-1">All resolved!</div>
-              <p className="text-[12.5px] text-[#8A8A85] max-w-md mx-auto">
-                No candidate onboarding issues have been reported yet.
+          ) : filteredIssues.length === 0 ? (
+            <div className="py-16 px-4 text-center bg-white/50 backdrop-blur-md rounded-2xl border border-white/80 max-w-md mx-auto my-auto">
+              <CheckCircle2 size={32} className="mx-auto text-emerald-500 mb-2" />
+              <div className="text-sm font-extrabold text-gray-900 mb-1">
+                {searchQuery ? 'No Matching Issues' : 'All Issues Resolved!'}
+              </div>
+              <p className="text-xs text-gray-500">
+                {searchQuery
+                  ? 'No issues match your current search query.'
+                  : 'There are currently no outstanding issues reported by onboarding hires.'}
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {issues.map((issue) => (
-                <div key={issue.id}
-                  className="p-4 rounded-2xl border space-y-2.5 transition-all"
-                  style={{
-                    backgroundColor: issue.status === 'open' ? '#FFFBFB' : '#F8FDF8',
-                    borderColor: issue.status === 'open' ? '#FECACA' : '#BBF7D0',
-                  }}>
+            <div className="space-y-3 pb-2">
+              {filteredIssues.map((issue) => (
+                <div
+                  key={issue.id}
+                  className={`p-4 rounded-2xl border transition-all ${
+                    issue.status === 'open'
+                      ? 'bg-white/80 border-red-200/80 shadow-[0_4px_16px_rgba(239,68,68,0.06)]'
+                      : 'bg-white/50 border-white/80 shadow-3xs opacity-85'
+                  }`}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1 min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[13px] font-extrabold text-[#0A0A0A]">
+                        <span className="text-xs sm:text-[13px] font-extrabold text-gray-900">
                           {issue.category_label || issue.category || 'Issue'}
                         </span>
                         <span
-                          style={{
-                            backgroundColor: issue.status === 'open' ? '#FEF2F2' : '#F0FDF4',
-                            color: issue.status === 'open' ? '#DC2626' : '#16A34A',
-                          }}
-                          className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0"
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            issue.status === 'open'
+                              ? 'bg-red-50 text-red-700 border border-red-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
                         >
                           {issue.status === 'open' ? 'Open' : 'Resolved'}
                         </span>
                       </div>
-                      <div className="text-[11.5px] text-[#737373] font-medium">
-                        {issue.candidate_name || issue.candidate_id || 'Candidate'}
-                        {issue.vendor_name && <span> · {issue.vendor_name}</span>}
+                      <div className="text-xs text-gray-500 font-medium">
+                        <strong className="text-gray-800">{issue.candidate_name || issue.candidate_id || 'Candidate'}</strong>
+                        {issue.vendor_name && <span> · via {issue.vendor_name}</span>}
                       </div>
                     </div>
+
                     {issue.status === 'open' && (
                       <button
+                        type="button"
                         disabled={resolvingId === issue.id}
                         onClick={() => handleResolveIssue(issue.id)}
-                        className="px-3.5 py-1.5 text-[11px] font-bold bg-[#0A0A0A] text-white rounded-lg hover:bg-[#262626] transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                        className="px-3.5 py-1.5 text-xs font-bold bg-black hover:bg-gray-900 text-white rounded-xl transition shadow-xs cursor-pointer shrink-0 disabled:opacity-50 flex items-center gap-1.5"
                       >
-                        {resolvingId === issue.id ? 'Resolving...' : 'Mark Resolved'}
+                        {resolvingId === issue.id ? (
+                          <>
+                            <RefreshCw size={11} className="animate-spin" />
+                            <span>Resolving...</span>
+                          </>
+                        ) : (
+                          <span>Mark Resolved</span>
+                        )}
                       </button>
                     )}
                   </div>
-                  <p className="text-[12px] text-[#52524E] bg-white p-3 rounded-xl border border-[#F2F2EE] leading-relaxed">
+
+                  <p className="text-xs text-gray-700 bg-white/70 p-3 rounded-xl border border-white/90 leading-relaxed mt-2.5">
                     {issue.description || 'Candidate reported an issue.'}
                   </p>
+
                   {issue.resolved_at && (
-                    <div className="text-[10.5px] text-[#16A34A] font-medium">
-                      ✓ Resolved {issue.resolved_at ? new Date(issue.resolved_at).toLocaleDateString() : ''}
+                    <div className="text-[10.5px] text-emerald-700 font-medium mt-2 flex items-center gap-1">
+                      <CheckCircle2 size={12} className="text-emerald-600" />
+                      <span>Resolved on {new Date(issue.resolved_at).toLocaleDateString()}</span>
                     </div>
                   )}
                 </div>

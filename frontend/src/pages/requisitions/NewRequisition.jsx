@@ -459,31 +459,29 @@ export default function NewRequisition() {
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
       {/* Top Header Card */}
-      <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
-            <Link to="/dashboard/requisitions" className="hover:text-black transition-colors">
-              Requisitions
-            </Link>
-            <span>•</span>
-            <span>CONTRACT ROLE DRAFTING</span>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0066FF] bg-blue-50/80 px-2.5 py-0.5 rounded-full border border-blue-100/60 shadow-2xs">
+              TERM JOBS • CREATE REQUISITION
+            </span>
           </div>
-          <h1 className="text-2xl sm:text-[1.65rem] font-extrabold text-gray-900 tracking-tight">
+          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
             New Contract Requirement
           </h1>
-          <p className="text-xs text-gray-500 font-normal mt-0.5 max-w-2xl">
-            Define role parameters, skills, and budget ceilings for your contract requirement.
+          <p className="text-xs text-gray-500 font-medium mt-0.5 max-w-2xl">
+            Define role parameters, skills, and budget ceilings for your contract requirement
           </p>
 
           {/* Workflow Step Indicator */}
-          <div className="flex items-center gap-1.5 mt-3.5 flex-wrap">
+          <div className="flex items-center gap-1.5 mt-3 flex-wrap">
             {WORKFLOW_STEPS.map((st, i) => (
               <div key={st.id} className="flex items-center gap-1.5">
                 <span
                   className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
                     st.active
                       ? 'bg-black text-white shadow-2xs'
-                      : 'bg-white border border-gray-200 text-gray-400'
+                      : 'bg-white/70 border border-white/90 text-gray-500'
                   }`}
                 >
                   <span className="text-[10px]">{st.num}.</span>
@@ -501,7 +499,7 @@ export default function NewRequisition() {
           <button
             type="button"
             onClick={() => navigate('/dashboard/requisitions')}
-            className="px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 border border-gray-200 text-gray-700 text-xs font-bold transition-colors cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-white/70 hover:bg-white border border-white/90 text-gray-700 text-xs font-bold transition cursor-pointer shadow-2xs"
           >
             Back to list
           </button>
@@ -509,7 +507,7 @@ export default function NewRequisition() {
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !canSubmit}
-            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer"
           >
             <Sparkles size={13} />
             <span>{submitting ? 'Creating...' : 'Create Requisition →'}</span>
@@ -592,9 +590,9 @@ export default function NewRequisition() {
           </div>
 
           {/* Core Requisition Builder Card */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 sm:p-6 shadow-xs space-y-5">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-5">
             {/* Tab Bar */}
-            <div className="flex items-center gap-1.5 p-1 bg-gray-100/80 rounded-xl overflow-x-auto">
+            <div className="flex items-center gap-1.5 p-1 bg-white/50 backdrop-blur-xl border border-white/80 rounded-2xl overflow-x-auto shadow-2xs">
               {TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -1133,7 +1131,7 @@ export default function NewRequisition() {
         {/* Right Column: Interactive Copilot & Live Assistant Side Tab (4 cols) */}
         <div className="lg:col-span-4 space-y-3.5">
           {/* Main Assistant Card */}
-          <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3.5 sticky top-4">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-3.5 sticky top-4">
             <div className="flex items-center justify-between pb-3 border-b border-gray-100">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-black text-white flex items-center justify-center shrink-0">

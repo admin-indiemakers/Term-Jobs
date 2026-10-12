@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 import {
   Check, ArrowRight, AlertCircle, X, Shield, Laptop, BookOpen, CheckCircle2,
-  FileText, Sparkles, Send, Upload, DollarSign, Calendar, MessageSquare
+  FileText, Sparkles, Send, Upload, DollarSign, Calendar, MessageSquare, RefreshCw, Search
 } from 'lucide-react';
 
 const DEFAULT_SOFTWARE = [
@@ -119,6 +119,8 @@ export default function AcceptedCandidates() {
     return map;
   }, [workOrders]);
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Derived Real KPI Metrics
   const metrics = useMemo(() => {
     const totalAccepted = candidates.length;
@@ -146,8 +148,16 @@ export default function AcceptedCandidates() {
 
   // Display Table Rows
   const displayRows = useMemo(() => {
-    return candidates;
-  }, [candidates]);
+    if (!searchQuery.trim()) return candidates;
+    const q = searchQuery.toLowerCase().trim();
+    return candidates.filter((c) => {
+      const name = (c.candidate_name || c.full_name || c.name || '').toLowerCase();
+      const vendor = (c.vendor_name || '').toLowerCase();
+      const role = (c.requisition_title || '').toLowerCase();
+      const ref = (c.requisition_ref || '').toLowerCase();
+      return name.includes(q) || vendor.includes(q) || role.includes(q) || ref.includes(q);
+    });
+  }, [candidates, searchQuery]);
 
   // Open Onboarding Setup Modal
   const handleOpenSetup = (cand) => {
@@ -283,103 +293,151 @@ export default function AcceptedCandidates() {
   };
 
   return (
-    <div className="p-4 sm:p-6 md:p-8 max-w-[1400px] mx-auto space-y-6 font-sans">
-      {/* 1. HEADER SECTION */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-hidden pb-1 font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
+      <style>{`
+        .custom-cand-scroll::-webkit-scrollbar {
+          width: 5px;
+          height: 5px;
+        }
+        .custom-cand-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .custom-cand-scroll::-webkit-scrollbar-thumb {
+          background: rgba(0, 0, 0, 0.12);
+          border-radius: 4px;
+        }
+        .custom-cand-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 0, 0, 0.25);
+        }
+      `}</style>
+
+      {/* ── 1. MODERN TOP HEADER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 shrink-0">
         <div>
-          <div className="text-[11px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-            {greetingText}, {userName.toUpperCase()} • {tenantName.toUpperCase()}
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • TALENT ACQUISITION
           </div>
-          <h1 className="text-xl sm:text-2xl font-extrabold text-[#0A0A0A] tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
             Accepted Candidates & Work Orders
           </h1>
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Manage contract offers, review Master Services Agreements (MSAs), and track hire onboarding.
+          </p>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates/onboarding')}
-          className="px-4 py-2 bg-[#0A0A0A] hover:bg-[#262626] text-white text-[12.5px] font-bold rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs self-start sm:self-auto border-none"
-        >
-          <span>Onboarding Hub</span>
-          <ArrowRight size={14} />
-        </button>
-      </div>
 
-      {/* 2. KPI METRICS CARDS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
-          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.accepted}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">ACCEPTED</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
-          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.started}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">ONBOARDING STARTED</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
-          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.completed}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">ONBOARDING COMPLETE</div>
-        </div>
-        <div className="bg-white rounded-2xl border border-[#E2E2DC] p-4 space-y-1 shadow-2xs">
-          <div className="text-2xl font-extrabold text-[#0A0A0A]">{metrics.openIssues}</div>
-          <div className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">OPEN ISSUES</div>
+        <div className="flex items-center gap-2.5 shrink-0">
+          <button
+            type="button"
+            onClick={loadData}
+            className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+            <span>Refresh</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/candidates/onboarding')}
+            className="px-4 py-2 bg-black hover:bg-gray-900 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>Onboarding Hub</span>
+            <ArrowRight size={13} />
+          </button>
         </div>
       </div>
 
-      {/* 3. NAVIGATION PILL TABS */}
-      <div className="flex items-center gap-2 pt-0.5">
+      {/* ── 2. TOP 4 GLASSMORHPIC METRIC CARDS ── */}
+      <div className="shrink-0 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ACCEPTED</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{metrics.accepted}</div>
+        </div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ONBOARDING STARTED</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1">{metrics.started}</div>
+        </div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">ONBOARDING COMPLETE</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{metrics.completed}</div>
+        </div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">OPEN ISSUES</div>
+          <div className={`text-2xl sm:text-3xl font-extrabold tracking-tight mt-1 ${metrics.openIssues > 0 ? 'text-red-600' : 'text-gray-900'}`}>{metrics.openIssues}</div>
+        </div>
+      </div>
+
+      {/* ── 3. NAVIGATION PILL TABS ── */}
+      <div className="shrink-0 flex items-center gap-2">
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates')}
-          className="px-4 py-1.5 bg-white text-[#0A0A0A] border border-[#E2E2DC] rounded-full text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
+          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer"
         >
           Shortlisted
         </button>
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/accepted')}
-          className="px-4 py-1.5 bg-[#0A0A0A] text-white rounded-full text-[12.5px] font-bold cursor-pointer transition-colors shadow-2xs border-none"
+          className="px-4 py-1.5 rounded-full text-xs font-bold bg-black text-white shadow-xs transition-all cursor-pointer"
         >
           Accepted
         </button>
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/onboarding')}
-          className="px-4 py-1.5 bg-white text-[#0A0A0A] border border-[#E2E2DC] rounded-full text-[12.5px] font-bold hover:border-[#0A0A0A] cursor-pointer transition-colors shadow-2xs"
+          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer"
         >
           Onboarding
         </button>
       </div>
 
-      {/* 4. MAIN DATA TABLE */}
-      <div className="bg-white rounded-2xl border border-[#E2E2DC] shadow-2xs p-4 sm:p-6 overflow-hidden">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-extrabold text-[#0A0A0A]">Accepted Candidates & Work Orders</h2>
+      {/* ── 4. MAIN GLASSMORHPIC DATA TABLE CONTAINER ── */}
+      <div className="flex-1 min-h-[360px] md:min-h-0 bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+        {/* Top Controls: Search + Count */}
+        <div className="shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-3 border-b border-black/[0.04]">
+          <div className="relative w-full sm:w-80">
+            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search candidate, vendor, or role..."
+              className="w-full pl-9 pr-4 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+            />
+          </div>
+
+          <div className="text-xs text-gray-500 font-medium">
+            Showing <span className="font-bold text-gray-900">{displayRows.length}</span> accepted hires
+          </div>
         </div>
 
         {error && (
-          <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-medium flex items-center gap-2">
-            <AlertCircle size={15} /> <span>{error}</span>
+          <div className="shrink-0 my-2.5 p-3 bg-red-50/90 border border-red-200/80 rounded-2xl text-xs text-red-700 flex items-center gap-2 shadow-2xs">
+            <AlertCircle size={15} className="text-red-500 shrink-0" /> <span>{error}</span>
           </div>
         )}
         {successInfo && (
-          <div className="mb-3 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-700 font-medium flex items-center gap-2">
-            <Check size={15} /> <span>{successInfo}</span>
+          <div className="shrink-0 my-2.5 p-3 bg-emerald-50/90 border border-emerald-200/80 rounded-2xl text-xs text-emerald-700 font-medium flex items-center gap-2 shadow-2xs">
+            <Check size={15} className="text-emerald-600 shrink-0" /> <span>{successInfo}</span>
           </div>
         )}
 
-        <div className="overflow-x-auto">
+        <div className="flex-1 overflow-y-auto custom-cand-scroll pt-2">
           <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
-              <tr className="border-b border-[#F2F2EE] text-[10.5px] font-extrabold uppercase tracking-wider text-[#8A8A85]">
-                <th className="py-3.5 pl-4 pr-3">CANDIDATE</th>
-                <th className="py-3.5 px-3">VENDOR</th>
-                <th className="py-3.5 px-3">REQUISITION</th>
-                <th className="py-3.5 px-3 text-center">MATCH</th>
-                <th className="py-3.5 px-3 text-center">WORK ORDER</th>
-                <th className="py-3.5 px-3 text-center">ONBOARDING</th>
-                <th className="py-3.5 pr-4 pl-3 text-right">ACTION</th>
+              <tr className="border-b border-black/[0.04] text-[10.5px] font-extrabold uppercase tracking-wider text-gray-400">
+                <th className="py-3 pl-3 pr-3">CANDIDATE</th>
+                <th className="py-3 px-3">VENDOR</th>
+                <th className="py-3 px-3">REQUISITION</th>
+                <th className="py-3 px-3 text-center">MATCH</th>
+                <th className="py-3 px-3 text-center">WORK ORDER</th>
+                <th className="py-3 px-3 text-center">ONBOARDING</th>
+                <th className="py-3 pr-3 pl-3 text-right">ACTION</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#F2F2EE]">
+            <tbody className="divide-y divide-black/[0.03]">
               {loading ? (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-[#8A8A85] text-xs font-medium">
@@ -441,45 +499,45 @@ export default function AcceptedCandidates() {
                   }
 
                   return (
-                    <tr key={id} className="hover:bg-[#FAFAFA] transition-colors">
-                      <td className="py-3.5 pl-4 pr-3 align-middle">
-                        <div className="text-[13px] font-extrabold text-[#0A0A0A]">{candName}</div>
-                        <div className="text-[11px] text-[#8A8A85] font-medium">{candCode}</div>
+                    <tr key={id} className="hover:bg-white/60 transition-colors">
+                      <td className="py-3 pl-3 pr-3 align-middle">
+                        <div className="text-xs sm:text-[13px] font-extrabold text-gray-900">{candName}</div>
+                        <div className="text-[10px] text-gray-400 font-medium">{candCode}</div>
                       </td>
-                      <td className="py-3.5 px-3 align-middle text-[12.5px] font-medium text-[#0A0A0A]">
+                      <td className="py-3 px-3 align-middle text-xs font-medium text-gray-700">
                         {vendorName}
                       </td>
-                      <td className="py-3.5 px-3 align-middle">
-                        <div className="text-[12px] font-extrabold text-[#0A0A0A]">{reqRef}</div>
-                        <div className="text-[11px] text-[#8A8A85] font-medium">{reqTitle}</div>
+                      <td className="py-3 px-3 align-middle">
+                        <div className="text-xs font-bold text-gray-900">{reqRef}</div>
+                        <div className="text-[10.5px] text-gray-500 font-normal">{reqTitle}</div>
                       </td>
-                      <td className="py-3.5 px-3 align-middle text-center font-bold text-[#D97706] text-xs">
-                        {score != null ? `${score}%` : '?%'}
+                      <td className="py-3 px-3 align-middle text-center font-bold text-amber-600 text-xs">
+                        {score != null ? `${score}%` : '—'}
                       </td>
-                      <td className="py-3.5 px-3 align-middle text-center">{woBadge}</td>
-                      <td className="py-3.5 px-3 align-middle text-center">
+                      <td className="py-3 px-3 align-middle text-center">{woBadge}</td>
+                      <td className="py-3 px-3 align-middle text-center">
                         <span
-                          className={`inline-block px-3 py-0.5 text-[11px] font-bold rounded-full ${
-                            isCompleted ? 'bg-emerald-50 text-emerald-700' : isInProgress ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'
+                          className={`inline-block px-2.5 py-0.5 text-[10px] font-bold rounded-full ${
+                            isCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : isInProgress ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-gray-100 text-gray-600'
                           }`}
                         >
                           {isCompleted ? 'Completed' : isInProgress ? 'In progress' : 'Not set up'}
                         </span>
                       </td>
-                      <td className="py-3.5 pr-4 pl-3 align-middle text-right space-x-2">
+                      <td className="py-3 pr-3 pl-3 align-middle text-right space-x-1.5">
                         {wo ? (
                           <button
                             type="button"
                             onClick={() => handleOpenReviewWo(cand)}
-                            className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-[11.5px] rounded-lg border border-indigo-200 transition-colors cursor-pointer"
+                            className="px-2.5 py-1.5 bg-white/70 hover:bg-white text-indigo-700 hover:text-indigo-900 font-bold text-xs rounded-xl border border-indigo-200/80 shadow-3xs transition-all cursor-pointer"
                           >
-                            View MSA Approval Status
+                            View MSA Status
                           </button>
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleOpenSetup(cand)}
-                            className="px-3 py-1 bg-white hover:bg-[#F5F5F2] text-[#0A0A0A] font-bold text-[11.5px] rounded-lg border border-[#E2E2DC] transition-colors cursor-pointer"
+                            className="px-2.5 py-1.5 bg-white/70 hover:bg-white text-gray-800 hover:text-black font-bold text-xs rounded-xl border border-white/90 shadow-3xs transition-all cursor-pointer"
                           >
                             {isCompleted ? 'Edit Setup' : 'Setup Onboarding'}
                           </button>
