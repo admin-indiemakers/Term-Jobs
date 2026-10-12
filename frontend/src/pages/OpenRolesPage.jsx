@@ -13,7 +13,6 @@ import {
   ArrowRight,
   Zap,
   Users,
-  Bookmark,
   Rocket,
   X,
   Upload,
@@ -110,27 +109,6 @@ export default function OpenRolesPage({ enabled = true }) {
   const [selectedWorkMode, setSelectedWorkMode] = useState('ALL');
   const [selectedFamily, setSelectedFamily] = useState('ALL');
   const [selectedLocation, setSelectedLocation] = useState('ALL');
-  const [bookmarkedIds, setBookmarkedIds] = useState(() => {
-    try {
-      const saved = localStorage.getItem('tj_saved_jobs');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const toggleBookmark = (e, jobId) => {
-    e.stopPropagation();
-    setBookmarkedIds((prev) => {
-      const next = prev.includes(jobId) ? prev.filter((id) => id !== jobId) : [...prev, jobId];
-      try {
-        localStorage.setItem('tj_saved_jobs', JSON.stringify(next));
-      } catch (err) {
-        // ignore
-      }
-      return next;
-    });
-  };
 
   // Modal states
   const [selectedJob, setSelectedJob] = useState(null);
@@ -1571,7 +1549,6 @@ export default function OpenRolesPage({ enabled = true }) {
                   const dueDateVal = job.due_date || job.submission_deadline || job.application_due_date || role.submission_deadline;
                   const dueInfo = formatDueDate(dueDateVal);
                   const companyInitial = (job.company_name || 'E').slice(0, 1).toUpperCase();
-                  const isSaved = bookmarkedIds.includes(job.id);
                   const locDisplay = getLocationDisplay(job);
                   const existingApp = getJobApplication(job);
                   const isApplied = Boolean(
@@ -1589,16 +1566,16 @@ export default function OpenRolesPage({ enabled = true }) {
                       className="group relative rounded-xl sm:rounded-2xl bg-paper/[0.04] hover:bg-paper/[0.08] border border-paper/10 hover:border-white/25 hover:shadow-[0_4px_24px_rgba(255,255,255,0.06)] p-3.5 sm:p-4 flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 shadow-md backdrop-blur-md cursor-pointer"
                     >
                       <div>
-                        {/* Top Row: Company Initial, Name, Work Mode Badge, Bookmark */}
+                        {/* Top Row: Company Initial, Name, Work Mode Badge */}
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 min-w-0 flex-wrap">
                             <div className="w-6 h-6 rounded-md bg-white text-black font-extrabold flex items-center justify-center text-[10px] shadow-sm shrink-0">
                               {companyInitial}
                             </div>
                             <span className="text-[10.5px] font-bold text-paper tracking-wider uppercase truncate max-w-[130px]">
                               {job.company_name || 'Enterprise'}
                             </span>
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-semibold bg-paper/10 text-paper/90 border border-paper/15">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-semibold bg-paper/10 text-paper/90 border border-paper/15 shrink-0">
                               {isRemote ? (
                                 <>
                                   <span className="w-1.5 h-1.5 rounded-full bg-white/70" />
@@ -1617,21 +1594,12 @@ export default function OpenRolesPage({ enabled = true }) {
                               )}
                             </span>
                             {isApplied && (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-semibold bg-white/10 text-white border border-white/20">
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[8.5px] font-semibold bg-white/10 text-white border border-white/20 shrink-0">
                                 <Check size={9} className="text-white" />
                                 <span>Applied</span>
                               </span>
                             )}
                           </div>
-
-                          <button
-                            type="button"
-                            onClick={(e) => toggleBookmark(e, job.id)}
-                            className="p-1 text-paper/40 hover:text-white transition cursor-pointer"
-                            title={isSaved ? 'Remove Bookmark' : 'Save Role'}
-                          >
-                            <Bookmark size={13} className={isSaved ? 'text-white fill-white' : ''} />
-                          </button>
                         </div>
 
                         {/* Role Title */}
