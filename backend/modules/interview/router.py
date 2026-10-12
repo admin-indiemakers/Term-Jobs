@@ -142,9 +142,7 @@ def get_company_interviews(
 
         round_query = session.query(InterviewRound)
         if current_user.tenant_id and current_user.role != "Super Admin":
-            round_query = round_query.filter(
-                (InterviewRound.tenant_id == current_user.tenant_id) | (InterviewRound.tenant_id == None)
-            )
+            round_query = round_query.filter(InterviewRound.tenant_id == current_user.tenant_id)
         if req_id_val:
             round_query = round_query.filter(InterviewRound.requisition_id == req_id_val)
 

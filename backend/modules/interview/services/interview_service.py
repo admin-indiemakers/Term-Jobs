@@ -947,7 +947,7 @@ def get_hiring_manager_rounds(
     with get_session() as session:
         q = session.query(InterviewRound)
         if tenant_id:
-            q = q.filter((InterviewRound.tenant_id == tenant_id) | (InterviewRound.tenant_id == None))
+            q = q.filter(InterviewRound.tenant_id == tenant_id)
         if requisition_id:
             q = q.filter(InterviewRound.requisition_id == requisition_id)
         if candidate_id:
@@ -1544,8 +1544,8 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
         # Lookup tenant requisitions for title mapping and filtering
         req_filters = [Requisition.tenant_id == tenant_id] if tenant_id else []
         req_rows = session.query(Requisition).only("id", "title", "tenant_id").filter(*req_filters).all()
-        if not req_rows:
-            # Fallback to all requisitions for local / multi-tenant demo
+        if not req_rows and not tenant_id:
+            # Fallback to all requisitions only for Super Admin / unscoped
             req_rows = session.query(Requisition).only("id", "title", "tenant_id").all()
         req_title_map = {r.id: (r.title or "Position") for r in req_rows}
 
