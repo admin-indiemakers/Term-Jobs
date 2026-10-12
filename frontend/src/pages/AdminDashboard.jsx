@@ -291,9 +291,17 @@ export default function AdminDashboard() {
   const procurementUsers = useMemo(() => users.filter((u) => u.role === 'Procurement' || u.role === 'Procurement Team'), [users]);
   const financeUsers = useMemo(() => users.filter((u) => u.role === 'Finance' || u.role === 'Finance Team'), [users]);
   const teamMembers = useMemo(() => users.filter((u) => u.role !== 'Candidate'), [users]);
+  const pendingTeamMembers = useMemo(
+    () => users.filter((u) => u.role !== 'Candidate' && u.is_active === false),
+    [users]
+  );
   const pendingApprovals = useMemo(
     () => requisitions.filter((r) => normalizeDashboardStatus(r.status) === 'pendingapproval'),
     [requisitions]
+  );
+  const totalPendingApprovals = useMemo(
+    () => pendingApprovals.length + pendingTeamMembers.length,
+    [pendingApprovals.length, pendingTeamMembers.length]
   );
   const activePublished = useMemo(
     () =>
@@ -352,16 +360,17 @@ export default function AdminDashboard() {
 
     // 3. Team Members
     (teamMembers || []).forEach((u) => {
+      const isPending = u.is_active === false;
       list.push({
         id: `user-${u.id}`,
         type: 'team',
         category: 'team',
-        title: `${u.name || u.email} provisioned`,
-        description: `Role: ${u.role} ${u.department ? `(${u.department})` : ''} • Status: Active`,
+        title: `${u.name || u.email} ${isPending ? 'requested access' : 'provisioned'}`,
+        description: `Role: ${u.role} ${u.department ? `(${u.department})` : ''} • Status: ${isPending ? 'Pending Approval' : 'Active'}`,
         timestamp: u.created_at,
         link: `/dashboard/admin/team`,
         icon: UserPlus,
-        color: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
+        color: isPending ? 'text-amber-600 bg-amber-500/10 border-amber-500/20' : 'text-purple-600 bg-purple-500/10 border-purple-500/20',
         badge: 'Team',
       });
     });
@@ -652,18 +661,33 @@ export default function AdminDashboard() {
 
             {/* Stat Card 4: Pending Approvals */}
             <div
-              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group"
+              onClick={() => {
+                if (pendingTeamMembers.length > 0) {
+                  navigate('/dashboard/admin/team');
+                }
+              }}
+              title={
+                pendingTeamMembers.length > 0
+                  ? `${pendingTeamMembers.length} team member(s) & ${pendingApprovals.length} requisition(s) pending approval`
+                  : undefined
+              }
+              className={`bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group ${pendingTeamMembers.length > 0 ? 'cursor-pointer' : ''}`}
             >
               <div className="flex items-center justify-between mb-1.5">
-                <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
+                <div className={`w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center shadow-3xs group-hover:scale-105 transition-transform ${totalPendingApprovals > 0 ? 'text-amber-600' : 'text-gray-700'}`}>
                   <Clock size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {loading ? '…' : requisitionsError ? '—' : pendingApprovals.length}
+                  {loading ? '…' : (requisitionsError && usersError) ? '—' : totalPendingApprovals}
                 </div>
               </div>
-              <div className="text-[10.5px] font-medium text-gray-500 truncate">
-                Pending Approvals
+              <div className="text-[10.5px] font-medium text-gray-500 truncate flex items-center justify-between">
+                <span>Pending Approvals</span>
+                {pendingTeamMembers.length > 0 && (
+                  <span className="text-[9px] font-bold text-amber-600 bg-amber-50 px-1.5 py-0.2 rounded-full border border-amber-200/60">
+                    {pendingTeamMembers.length} team
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -833,10 +857,17 @@ export default function AdminDashboard() {
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-bold bg-gray-100/90 text-gray-700 border border-gray-200/70">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
-                        Active
-                      </span>
+                      {u.is_active !== false ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[9.5px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Pending
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => navigate('/dashboard/admin/team')}

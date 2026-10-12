@@ -48,11 +48,22 @@ export default function AdminTeamMembers() {
         : error ? <p role="alert" className="py-6 text-sm text-red-700">{error}</p>
         : filtered.length === 0 ? <p className="py-6 text-sm text-gray-500">No team members found.</p>
         : <div className="mt-4 divide-y divide-gray-100">
-            {filtered.map((member) => <div key={member.id} className="grid gap-2 py-3 text-sm sm:grid-cols-4">
+            {filtered.map((member) => <div key={member.id} className="grid gap-2 py-3 text-sm sm:grid-cols-5 items-center">
               <div className="font-semibold">{member.name || 'Unnamed member'}</div>
               <div className="break-all text-gray-600">{member.email}</div>
               <div className="text-gray-600">{member.role}</div>
               <div className="text-gray-600">{member.department || '—'}</div>
+              <div>
+                {member.is_active !== false ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" /> Pending
+                  </span>
+                )}
+              </div>
             </div>)}
           </div>}
     </section>
