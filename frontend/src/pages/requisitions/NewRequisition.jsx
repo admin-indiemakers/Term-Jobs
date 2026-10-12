@@ -123,12 +123,44 @@ const addDuration = (duration, startDate) => {
   const n = parseInt(m[1], 10);
   const unit = m[2].toLowerCase();
   const base = startDate ? new Date(startDate) : new Date();
+  if (isNaN(base.getTime())) return null;
   const d = new Date(base);
   if (unit === 'day') d.setDate(d.getDate() + n);
   else if (unit === 'week') d.setDate(d.getDate() + n * 7);
   else if (unit === 'month') d.setMonth(d.getMonth() + n);
   else if (unit === 'year') d.setFullYear(d.getFullYear() + n);
   return toISODate(d);
+};
+
+export const computeDurationFromDates = (startDate, endDate) => {
+  if (!startDate || !endDate) return '';
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end < start) return '';
+
+  const diffMs = end.getTime() - start.getTime();
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays <= 0) return '';
+
+  // Approximate months
+  const totalMonths = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + (end.getDate() - start.getDate()) / 30;
+  const roundedMonths = Math.round(totalMonths);
+
+  if (diffDays < 14) {
+    return `${diffDays} ${diffDays === 1 ? 'day' : 'days'}`;
+  }
+  if (diffDays < 30) {
+    const weeks = Math.round(diffDays / 7);
+    return `${weeks} ${weeks === 1 ? 'week' : 'weeks'}`;
+  }
+  if (roundedMonths >= 12 && roundedMonths % 12 === 0) {
+    const years = roundedMonths / 12;
+    return `${years} ${years === 1 ? 'year' : 'years'}`;
+  }
+  if (roundedMonths >= 1) {
+    return `${roundedMonths} ${roundedMonths === 1 ? 'month' : 'months'}`;
+  }
+  return `${diffDays} days`;
 };
 
 const WORKFLOW_STEPS = [
@@ -239,11 +271,22 @@ export default function NewRequisition() {
   const handlePrefillChange = (section, field, value) => {
     setPrefill((prev) => {
       const next = { ...prev, [field]: value };
-      if (field === 'duration' || field === 'start_date') {
-        const newDur = field === 'duration' ? value : prev.duration;
-        const newStart = field === 'start_date' ? value : prev.start_date;
-        const ends = addDuration(newDur, newStart);
+      if (field === 'duration') {
+        const newStart = prev.start_date;
+        const ends = addDuration(value, newStart);
         if (ends) next.ends_on = ends;
+      } else if (field === 'ends_on') {
+        const newStart = prev.start_date;
+        const calculatedDur = computeDurationFromDates(newStart, value);
+        if (calculatedDur) next.duration = calculatedDur;
+      } else if (field === 'start_date') {
+        if (prev.duration) {
+          const ends = addDuration(prev.duration, value);
+          if (ends) next.ends_on = ends;
+        } else if (prev.ends_on) {
+          const calculatedDur = computeDurationFromDates(value, prev.ends_on);
+          if (calculatedDur) next.duration = calculatedDur;
+        }
       }
       return next;
     });
@@ -314,9 +357,9 @@ export default function NewRequisition() {
       nice_to_have_skills: Array.isArray(sr.nice_to_have_skills) ? sr.nice_to_have_skills : [],
       certifications: Array.isArray(sr.certifications) ? sr.certifications : [],
       engagement_type: sr.engagement_type || '',
-      duration: sr.duration || sr.contract_duration || '',
+      duration: (sr.start_date && sr.ends_on && computeDurationFromDates(sr.start_date, sr.ends_on)) || sr.duration || sr.contract_duration || '',
       start_date: sr.start_date || '',
-      ends_on: sr.ends_on || '',
+      ends_on: sr.ends_on || (sr.start_date && (sr.duration || sr.contract_duration) ? addDuration(sr.duration || sr.contract_duration, sr.start_date) : '') || '',
       extension_likely: sr.extension_likely || '',
       rate_basis: sr.rate_basis || '',
       ceiling_internal: sr.ceiling_internal || sr.rate_card_cap || '',
@@ -467,6 +510,11 @@ export default function NewRequisition() {
     if (!prefill.submission_deadline) {
       setError('Please provide a Submission Deadline in the Process tab.');
       setActiveTab('process');
+      return;
+    }
+    if (prefill.start_date && prefill.ends_on && new Date(prefill.ends_on) < new Date(prefill.start_date)) {
+      setError('Estimated End Date cannot be earlier than Start Date.');
+      setActiveTab('engagement');
       return;
     }
 
@@ -932,6 +980,7 @@ export default function NewRequisition() {
                     <input
                       type="date"
                       value={prefill.ends_on}
+                      min={prefill.start_date || undefined}
                       onChange={(e) => handlePrefillChange('engagement', 'ends_on', e.target.value)}
                       className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
                       required
@@ -956,6 +1005,20 @@ export default function NewRequisition() {
                     </select>
                   </div>
                 </div>
+
+                {prefill.start_date && prefill.ends_on && (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-gray-50 border border-gray-200/80 text-[11px] text-gray-600">
+                    <Clock size={13} className="text-gray-500 shrink-0" />
+                    <span>
+                      Selected tenure: <strong className="text-gray-900">{computeDurationFromDates(prefill.start_date, prefill.ends_on) || 'Custom'}</strong>
+                      {prefill.duration && prefill.duration !== computeDurationFromDates(prefill.start_date, prefill.ends_on) && (
+                        <span className="text-gray-500 ml-1">
+                          (contract duration field: <span className="font-semibold text-gray-700">{prefill.duration}</span>)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
 
