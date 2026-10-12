@@ -41,6 +41,73 @@ const SENIORITY_OPTIONS = ['Junior', 'Mid', 'Senior', 'Lead', 'Principal'];
 const PRIORITY_OPTIONS = ['High', 'Normal', 'Low'];
 const BOOL_OPTIONS = ['Yes', 'No'];
 
+const TIMEZONE_OPTIONS = [
+  { label: 'IST (UTC+05:30) - India Standard Time', value: 'IST', tz: 'IST (UTC+05:30)' },
+  { label: 'EST (UTC-05:00) - Eastern Standard Time', value: 'EST', tz: 'EST (UTC-05:00)' },
+  { label: 'PST (UTC-08:00) - Pacific Standard Time', value: 'PST', tz: 'PST (UTC-08:00)' },
+  { label: 'CST (UTC-06:00) - Central Standard Time', value: 'CST', tz: 'CST (UTC-06:00)' },
+  { label: 'GMT/BST (UTC+00:00/+01:00) - London', value: 'GMT', tz: 'GMT (UTC+00:00)' },
+  { label: 'CET (UTC+01:00) - Central Europe', value: 'CET', tz: 'CET (UTC+01:00)' },
+  { label: 'SGT (UTC+08:00) - Singapore / HK', value: 'SGT', tz: 'SGT (UTC+08:00)' },
+  { label: 'AEST (UTC+10:00) - Sydney, Australia', value: 'AEST', tz: 'AEST (UTC+10:00)' },
+  { label: 'UTC (Universal Coordinated Time)', value: 'UTC', tz: 'UTC' },
+];
+
+const SHIFT_PRESETS = [
+  { label: 'Standard Day (9:30 AM – 6:30 PM)', start: '09:30', end: '18:30' },
+  { label: 'Morning Shift (9:00 AM – 5:00 PM)', start: '09:00', end: '17:00' },
+  { label: 'Early Shift (8:00 AM – 4:00 PM)', start: '08:00', end: '16:00' },
+  { label: 'Mid / Afternoon Shift (1:00 PM – 9:00 PM)', start: '13:00', end: '21:00' },
+  { label: 'US Overlay / Night (6:30 PM – 3:30 AM)', start: '18:30', end: '03:30' },
+  { label: 'Flexible / Core Overlap', start: '', end: '' },
+];
+
+function format24to12(timeStr) {
+  if (!timeStr) return '';
+  const [hStr, mStr] = timeStr.split(':');
+  let h = parseInt(hStr, 10);
+  const m = mStr || '00';
+  if (isNaN(h)) return '';
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12;
+  h = h ? h : 12;
+  return `${h}:${m.padStart(2, '0')} ${ampm}`;
+}
+
+function parseShiftComponents(shiftString, fallbackTimezone = 'IST') {
+  const str = String(shiftString || '').trim();
+  let startTime = '09:30';
+  let endTime = '18:30';
+  let tz = fallbackTimezone || 'IST';
+
+  // Check if string contains known timezone
+  for (const opt of TIMEZONE_OPTIONS) {
+    if (str.includes(opt.value) || str.includes(opt.tz)) {
+      tz = opt.value;
+      break;
+    }
+  }
+
+  // Regex to extract times e.g. 9:30 AM – 6:30 PM or 09:30 - 18:30
+  const match12 = str.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?\s*(?:–|-|to)\s*(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+  if (match12) {
+    const parseHour = (h, m, ampm) => {
+      let hr = parseInt(h, 10);
+      const min = m || '00';
+      if (ampm) {
+        const isPM = ampm.toLowerCase() === 'pm';
+        if (isPM && hr < 12) hr += 12;
+        if (!isPM && hr === 12) hr = 0;
+      }
+      return `${String(hr).padStart(2, '0')}:${min.padStart(2, '0')}`;
+    };
+    startTime = parseHour(match12[1], match12[2], match12[3]);
+    endTime = parseHour(match12[4], match12[5], match12[6] || match12[3]);
+  }
+
+  return { startTime, endTime, tz };
+}
+
 const toISODate = (d) => {
   const dt = d instanceof Date ? d : new Date(d);
   if (Number.isNaN(dt.getTime())) return '';
@@ -989,20 +1056,135 @@ export default function NewRequisition() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  <div className="space-y-1">
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
-                      Timezone & Shift Hours
-                    </label>
-                    <input
-                      type="text"
-                      value={prefill.shift_hours}
-                      onChange={(e) => handlePrefillChange('work_setup', 'shift_hours', e.target.value)}
-                      placeholder="e.g. 9:30 AM – 6:30 PM IST"
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3.5 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all"
-                    />
+                {/* Timezone & Working Shift Hours Component */}
+                <div className="bg-gray-50/80 border border-gray-200/90 rounded-2xl p-4 space-y-3.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-200/60 pb-2.5">
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-800 uppercase tracking-wider">
+                        Timezone & Working Shift Hours
+                      </label>
+                      <p className="text-[11px] text-gray-500 font-normal">
+                        Select a standard shift preset or choose custom working hours and primary timezone.
+                      </p>
+                    </div>
+                    {prefill.shift_hours && (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold text-gray-900 bg-white border border-gray-200 shadow-2xs">
+                        <Clock size={11} className="text-gray-500" />
+                        <span>{prefill.shift_hours}</span>
+                      </span>
+                    )}
                   </div>
 
+                  {/* Preset Pills */}
+                  <div>
+                    <span className="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                      Quick Shift Presets
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SHIFT_PRESETS.map((preset) => {
+                        const parsed = parseShiftComponents(prefill.shift_hours, prefill.timezone || 'IST');
+                        const isSelected = Boolean(
+                          preset.start &&
+                          preset.end &&
+                          parsed.startTime === preset.start &&
+                          parsed.endTime === preset.end
+                        );
+                        return (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => {
+                              if (!preset.start) {
+                                handlePrefillChange('work_setup', 'shift_hours', 'Flexible / Core Overlap');
+                                return;
+                              }
+                              const tz = prefill.timezone || parsed.tz || 'IST';
+                              const formatted = `${format24to12(preset.start)} – ${format24to12(preset.end)} ${tz}`;
+                              handlePrefillChange('work_setup', 'shift_hours', formatted);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-black text-white border-black shadow-xs'
+                                : 'bg-white text-gray-700 border-gray-200 hover:border-gray-400 hover:bg-gray-100/60'
+                            }`}
+                          >
+                            {preset.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Custom Time Pickers & Timezone */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    {(() => {
+                      const parsed = parseShiftComponents(prefill.shift_hours, prefill.timezone || 'IST');
+                      return (
+                        <>
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider">
+                              Shift Start Time
+                            </label>
+                            <input
+                              type="time"
+                              value={parsed.startTime}
+                              onChange={(e) => {
+                                const newStart = e.target.value;
+                                const tz = prefill.timezone || parsed.tz || 'IST';
+                                const formatted = `${format24to12(newStart)} – ${format24to12(parsed.endTime)} ${tz}`;
+                                handlePrefillChange('work_setup', 'shift_hours', formatted);
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all shadow-2xs"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider">
+                              Shift End Time
+                            </label>
+                            <input
+                              type="time"
+                              value={parsed.endTime}
+                              onChange={(e) => {
+                                const newEnd = e.target.value;
+                                const tz = prefill.timezone || parsed.tz || 'IST';
+                                const formatted = `${format24to12(parsed.startTime)} – ${format24to12(newEnd)} ${tz}`;
+                                handlePrefillChange('work_setup', 'shift_hours', formatted);
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all shadow-2xs"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="block text-[10px] font-bold text-gray-600 uppercase tracking-wider">
+                              Timezone
+                            </label>
+                            <select
+                              value={prefill.timezone || parsed.tz || 'IST'}
+                              onChange={(e) => {
+                                const newTz = e.target.value;
+                                handlePrefillChange('work_setup', 'timezone', newTz);
+                                if (parsed.startTime && parsed.endTime) {
+                                  const formatted = `${format24to12(parsed.startTime)} – ${format24to12(parsed.endTime)} ${newTz}`;
+                                  handlePrefillChange('work_setup', 'shift_hours', formatted);
+                                }
+                              }}
+                              className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-semibold text-gray-900 focus:outline-none focus:border-black transition-all shadow-2xs"
+                            >
+                              {TIMEZONE_OPTIONS.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1">
                     <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider">
                       Equipment Provision
