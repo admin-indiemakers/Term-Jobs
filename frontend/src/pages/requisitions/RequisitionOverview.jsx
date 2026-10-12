@@ -149,6 +149,14 @@ function RequisitionStatusBadge({ status }) {
       </span>
     );
   }
+  if (status === 'Deleted by HM' || status === 'Deleted' || status === 'Archived') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+        {status}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-50 text-gray-600 border border-gray-200">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />
@@ -730,19 +738,23 @@ export default function RequisitionOverview({ section }) {
                                 <span>Candidates</span>
                               </button>
 
-                              <div className="h-px bg-black/[0.04] my-1" />
+                              {!r.is_deleted && (
+                                <>
+                                  <div className="h-px bg-black/[0.04] my-1" />
 
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setConfirmDelete(r);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
-                              >
-                                <Trash2 size={13} className="text-red-500" />
-                                <span>Delete</span>
-                              </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setConfirmDelete(r);
+                                      setActiveMenuId(null);
+                                    }}
+                                    className="w-full px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl transition-colors flex items-center gap-2 font-semibold cursor-pointer"
+                                  >
+                                    <Trash2 size={13} className="text-red-500" />
+                                    <span>Delete</span>
+                                  </button>
+                                </>
+                              )}
                             </div>
                           )}
                         </td>

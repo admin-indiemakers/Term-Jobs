@@ -418,6 +418,12 @@ export class LiveKitService {
     if (this.room && this.isLiveKitConnected) {
       return await this.room.localParticipant.setCameraEnabled(enabled);
     }
+    if (enabled && !this.fallbackLocalStream?.getVideoTracks().some(track => track.readyState === 'live')) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const audioTracks = this.fallbackLocalStream?.getAudioTracks() || [];
+      this.fallbackLocalStream?.getVideoTracks().forEach(track => track.stop());
+      this.fallbackLocalStream = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
+    }
     if (this.fallbackLocalStream) {
       const videoTrack = this.fallbackLocalStream.getVideoTracks()[0];
       if (videoTrack) {

@@ -169,6 +169,7 @@ class InterviewRound(Model):
         "transcript": list,                     # list of {speaker, text, timestamp, duration_seconds}
         "communication_metrics": dict,          # deterministic linguistic heuristics (WPM, fillers, diversity)
         "communication_analysis": dict,         # structured AI communication evaluation
+        "interview_questions": list,
         "recording_url": "",                    # streaming/download URL for interview video recording
         "recording_metadata": dict,             # {size_bytes, duration_seconds, format, uploaded_at}
         "expires_at": None,                     # Link expiration timestamp (10 hours from creation)
@@ -204,6 +205,7 @@ class InterviewRound(Model):
     transcript = Column("transcript")
     communication_metrics = Column("communication_metrics")
     communication_analysis = Column("communication_analysis")
+    interview_questions = Column("interview_questions")
     recording_url = Column("recording_url")
     recording_metadata = Column("recording_metadata")
     expires_at = Column("expires_at")
@@ -299,6 +301,7 @@ class TranscriptTurn(BaseModel):
 
 
 class AnalyzeCommunicationRequest(BaseModel):
+    interview_token: Optional[str] = None
     transcript_turns: Optional[List[Dict[str, Any]]] = None
     call_duration_seconds: Optional[int] = 0
     candidate_name: Optional[str] = None

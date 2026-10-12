@@ -54,12 +54,11 @@ def _resume_disposition(filename: str) -> str:
 def _tenant_requisition_ids(session, tenant_id: str, user_id: str | None = None, user_role: str | None = None) -> set[str]:
     """IDs of all requisitions belonging to a tenant.
     
-    When user_role is 'Hiring Manager', prioritizes requisitions created by that user, falling back to company tenant requisitions.
+    When user_role is 'Hiring Manager', strictly scopes to requisitions created by that user.
     """
     if user_role == "Hiring Manager" and user_id:
         user_rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id, Requisition.created_by == user_id).all()
-        if user_rows:
-            return {r.id for r in user_rows}
+        return {r.id for r in user_rows}
     rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
     return {r.id for r in rows}
 
@@ -135,13 +134,19 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
             tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
             vendor_name = (tenant.name or "").lower().strip() if tenant else None
 
-        or_conditions = [
-            {"tenant_id": current_user.tenant_id},
-        ]
-        if tenant_reqs:
-            or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
-        if vendor_name:
-            or_conditions.append({"vendor_name": {"$regex": f"^{vendor_name}$", "$options": "i"}})
+        if current_user.role == "Hiring Manager":
+            if not tenant_reqs:
+                # Hiring Manager has no requisitions yet; return no submissions
+                return []
+            or_conditions = [{"requisition_id": {"$in": tenant_reqs}}]
+        else:
+            or_conditions = [
+                {"tenant_id": current_user.tenant_id},
+            ]
+            if tenant_reqs:
+                or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
+            if vendor_name:
+                or_conditions.append({"vendor_name": {"$regex": f"^{vendor_name}$", "$options": "i"}})
         
         if "$or" in query_filter:
             query_filter = {"$and": [query_filter, {"$or": or_conditions}]}

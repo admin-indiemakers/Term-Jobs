@@ -2,6 +2,7 @@
 to users of that company (Super Admin sees all).
 """
 import mongomock
+import importlib
 import pytest
 from fastapi import HTTPException
 
@@ -20,8 +21,12 @@ def db_session_factory(monkeypatch):
         return Session(database)
 
     monkeypatch.setattr(app_main, "get_session", factory)
-    monkeypatch.setattr("modules.shared.db.get_session", factory)
-    monkeypatch.setattr("modules.shared.db.db", database)
+    db_module = importlib.import_module("modules.shared.db")
+    monkeypatch.setattr(db_module, "get_session", factory)
+    monkeypatch.setattr(db_module, "db", database)
+    # Some notification paths import the package attribute as a module.
+    shared_package = importlib.import_module("modules.shared")
+    monkeypatch.setattr(shared_package, "db", db_module)
     return factory
 
 
@@ -400,9 +405,12 @@ def test_hiring_manager_delete_published_requisition_notifies_director(db_sessio
         assert deleted_match["status"] == "Deleted by HM"
         assert deleted_match["is_deleted"] is True
 
-        # 4. Hiring manager listing does NOT show the deleted requisition
+        # 4. Hiring manager listing includes the deleted requisition marked as is_deleted in history archive
         hm_reqs = app_main.list_requisitions(current_user=hm)
-        assert not any(r["id"] == str(req.id) for r in hm_reqs)
+        hm_deleted_match = next((r for r in hm_reqs if r["id"] == str(req.id)), None)
+        assert hm_deleted_match is not None
+        assert hm_deleted_match["status"] == "Deleted by HM"
+        assert hm_deleted_match["is_deleted"] is True
 
 
 def test_create_template_from_form_tenant_isolation(db_session_factory):

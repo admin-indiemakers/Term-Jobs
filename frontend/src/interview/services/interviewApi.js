@@ -113,7 +113,12 @@ export const interviewApi = {
     return request(`/api/interviews/rounds/${roundId}/analyze-communication`, {
       method: 'POST',
       body: payload,
+      timeout: 60000,
     });
+  },
+
+  async getAssessmentQuestions(roundId, token) {
+    return request(`/api/interviews/rounds/${roundId}/questions?token=${encodeURIComponent(token || '')}`, { noCache: true });
   },
 
   async saveTranscript(roundId, transcriptTurns) {
@@ -146,6 +151,7 @@ export const interviewApi = {
     return request(`/api/interviews/rounds/${roundId}/recording`, {
       method: 'POST',
       body: formData,
+      timeout: 60000,
     });
   },
 

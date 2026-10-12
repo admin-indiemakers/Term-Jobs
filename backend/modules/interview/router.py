@@ -291,6 +291,8 @@ def list_rounds_endpoint(
         tenant_id=effective_tenant,
         requisition_id=requisition_id,
         candidate_id=candidate_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 
@@ -301,11 +303,15 @@ def get_interview_summary_endpoint(
     """Get aggregated interview progression per candidate for Hiring Manager, or all for Super Admin."""
     effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
     from modules.shared.cache import cache as _cache
-    cache_key = f"interview_summary:{effective_tenant or 'all'}"
+    cache_key = f"interview_summary:{current_user.id}:{current_user.role}:{effective_tenant or 'all'}"
     cached_val = _cache.get(cache_key)
     if cached_val is not None:
         return cached_val
-    res = get_hiring_manager_summary(tenant_id=effective_tenant)
+    res = get_hiring_manager_summary(
+        tenant_id=effective_tenant,
+        user_id=current_user.id,
+        user_role=current_user.role,
+    )
     _cache.set(cache_key, res, ttl=30)
     return res
 
@@ -450,16 +456,36 @@ async def analyze_communication_endpoint(
     Evaluates candidate spoken communication skills using zero-token linguistic heuristics
     and single-pass token-minimized LLM analysis on the recorded speech transcript.
     """
-    analysis_result = await analyze_round_communication(
-        round_id=round_id,
-        transcript_turns=body.transcript_turns,
-        duration_seconds=body.call_duration_seconds or 0,
-        candidate_name=body.candidate_name,
-        role_title=body.role_title,
-    )
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or not body.interview_token or body.interview_token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail="Interview not found")
+    try:
+        analysis_result = await analyze_round_communication(
+            round_id=round_id,
+            transcript_turns=body.transcript_turns,
+            duration_seconds=body.call_duration_seconds or 0,
+            candidate_name=body.candidate_name,
+            role_title=body.role_title,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not analysis_result:
         raise HTTPException(status_code=404, detail="Interview round not found")
     return analysis_result
+
+
+@router.get("/rounds/{round_id}/questions")
+def get_assessment_questions(round_id: str, token: str = Query(...)):
+    from modules.interview.services.assessment import load_questions, RUBRIC_VERSION
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail="Interview not found")
+        try:
+            return {"questions": load_questions(session, interview), "rubric_version": RUBRIC_VERSION}
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/rounds/{round_id}/communication-analysis")
@@ -484,6 +510,8 @@ async def upload_round_recording_endpoint(
     contents = await file.read()
     if not contents:
         raise HTTPException(status_code=400, detail="Empty video recording file provided")
+    if not str(file.content_type or "").startswith("video/"):
+        raise HTTPException(status_code=415, detail="A camera video recording is required; audio-only uploads are not accepted.")
 
     updated = save_round_recording(
         round_id=round_id,

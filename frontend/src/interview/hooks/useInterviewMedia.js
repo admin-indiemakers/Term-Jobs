@@ -41,6 +41,16 @@ export function useInterviewMedia() {
     }
   }, [isCameraOn]);
 
+  const enableCamera = useCallback(async () => {
+    try {
+      await livekitService.toggleCamera(true);
+      setIsCameraOn(true);
+      setPermissionError(null);
+    } catch (err) {
+      setPermissionError('Camera access is required. Allow camera permission and reconnect your camera, then retry.');
+    }
+  }, []);
+
   const toggleMicrophone = useCallback(async () => {
     try {
       const nextState = !isMicOn;
@@ -81,6 +91,7 @@ export function useInterviewMedia() {
     screenStream,
     permissionError,
     toggleCamera,
+    enableCamera,
     toggleMicrophone,
     toggleScreenShare,
   };

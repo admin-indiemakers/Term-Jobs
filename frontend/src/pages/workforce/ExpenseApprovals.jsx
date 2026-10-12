@@ -166,27 +166,25 @@ export default function ExpenseApprovals() {
         .custom-exp-scroll::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.25); }
       `}</style>
 
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-shrink-0">
+      {/* ── 1. MODERN TOP HEADER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#0066FF] bg-blue-50/80 px-2.5 py-0.5 rounded-full border border-blue-100/60 shadow-2xs">
-              TERM JOBS • WORKFORCE
-            </span>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • WORKFORCE
           </div>
-          <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
             Expense Approvals
           </h1>
-          <p className="text-xs text-gray-500 font-medium mt-0.5">
-            Audit and approve reimbursement claims and receipt vouchers submitted by your team
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
+            Audit and approve reimbursement claims and receipt vouchers submitted by your team.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             type="button"
             onClick={loadExpenses}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white text-gray-700 text-xs font-semibold border border-white/90 shadow-2xs transition active:scale-95 cursor-pointer"
+            className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span>Refresh</span>

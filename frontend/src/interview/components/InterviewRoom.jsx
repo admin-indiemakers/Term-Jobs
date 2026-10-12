@@ -106,6 +106,8 @@ export function InterviewRoom({
     localStream,
     screenStream,
     toggleCamera,
+    enableCamera,
+    permissionError,
     toggleMicrophone,
     toggleScreenShare,
   } = useInterviewMedia();
@@ -114,7 +116,7 @@ export function InterviewRoom({
   useEffect(() => {
     if (round?.status === 'Completed') return;
     if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return;
-    if (!localStream || localStream.getTracks().length === 0) return;
+    if (!localStream || !localStream.getVideoTracks().some(track => track.readyState === 'live' && track.enabled)) return;
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') return;
 
     try {
@@ -203,7 +205,7 @@ export function InterviewRoom({
           try {
             const uploadPromise = interviewApi.uploadRecording(round.id, recordedBlob, durationSec);
             const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Upload timeout after 5s')), 5000)
+              setTimeout(() => reject(new Error('Video upload timed out. Retry submission.')), 60000)
             );
             const res = await Promise.race([uploadPromise, timeoutPromise]);
             console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
@@ -250,10 +252,11 @@ export function InterviewRoom({
 
   // Zero-cost Browser Speech Transcription hook for communication analysis
   const {
-    isSupported: isSpeechSupported,
     isListening: isSpeechListening,
     liveTranscript,
     transcriptTurns,
+    speechError,
+    clearLiveTranscript,
     startListening: startSpeechRecognition,
     stopListening: stopSpeechRecognition,
   } = useSpeechTranscription({
@@ -263,13 +266,6 @@ export function InterviewRoom({
     isMicMuted: !isMicOn,
     isAiSpeaking: isAiSpeakingInRoom,
   });
-
-  // Auto-start speech recognition when microphone is active
-  useEffect(() => {
-    if (isSpeechSupported && isMicOn) {
-      startSpeechRecognition();
-    }
-  }, [isSpeechSupported, isMicOn, startSpeechRecognition]);
 
   const hasActiveScreenShare = isScreenSharing || isRemoteScreenSharing;
   const remoteParticipantName =
@@ -367,7 +363,7 @@ export function InterviewRoom({
   };
 
   return (
-    <div className="relative w-full h-screen bg-[#0A0A0A] text-white flex flex-col select-none overflow-hidden font-sans">
+    <div className="relative w-full h-dvh bg-[#0A0A0A] text-white flex flex-col select-none overflow-hidden font-sans">
       {/* Top Floating Control Bar */}
       <header className="h-16 px-6 flex items-center justify-between z-20 bg-gradient-to-b from-black/80 to-transparent">
         <div className="flex items-center gap-3">
@@ -393,6 +389,7 @@ export function InterviewRoom({
           <button
             type="button"
             onClick={() => setAiInterviewMode(!aiInterviewMode)}
+            disabled={currentUserRole === 'candidate'}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
               aiInterviewMode
                 ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-sm'
@@ -424,7 +421,7 @@ export function InterviewRoom({
       </header>
 
       {/* Main Video & Stage Area */}
-      <div className="flex-1 relative flex items-center justify-center p-4 min-h-0 overflow-hidden">
+      <div className="flex-1 relative flex items-start md:items-center justify-center p-3 sm:p-4 min-h-0 overflow-y-auto">
         {hasActiveScreenShare ? (
           /* ============================================================ */
           /* SCREEN SHARE MODE: BIG MAIN STAGE (~75%) + SIDEBAR CAMERAS   */
@@ -534,9 +531,9 @@ export function InterviewRoom({
           /* ============================================================ */
           /* NORMAL 2-PARTICIPANT GRID (Local & Remote camera side-by-side)*/
           /* ============================================================ */
-          <div className="w-full h-full max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="w-full md:h-full max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-3 sm:gap-4">
             {/* Local Participant Tile */}
-            <div className="relative rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 flex items-center justify-center shadow-lg group">
+            <div className="relative min-w-0 min-h-[220px] md:min-h-0 rounded-3xl overflow-hidden bg-zinc-900 border border-zinc-800/80 flex items-center justify-center shadow-lg group">
               {isCameraOn ? (
                 <video
                   ref={localVideoRef}
@@ -564,15 +561,21 @@ export function InterviewRoom({
 
             {/* AI Interviewer or Remote Participant Tile */}
             {aiInterviewMode ? (
-              <div className="relative rounded-3xl overflow-hidden shadow-lg h-full">
+              <div className="relative min-w-0 rounded-3xl overflow-hidden shadow-lg min-h-[560px] md:min-h-0 md:h-full">
                 <AiInterviewStage
                   round={round}
                   candidateName={round?.candidate_name || currentUserName}
                   requisitionTitle={round?.requisition_title || 'Position'}
                   companyName={round?.company_name || 'Hiring Partner'}
                   userRole={currentUserRole}
+                  isCameraOn={isCameraOn}
+                  onEnableCamera={enableCamera}
+                  cameraError={permissionError}
                   isMicOn={isMicOn}
                   localStream={localStream}
+                  isSpeechListening={isSpeechListening}
+                  speechError={speechError}
+                  clearLiveTranscript={clearLiveTranscript}
                   liveTranscript={liveTranscript}
                   transcriptTurns={transcriptTurns}
                   startSpeechRecognition={startSpeechRecognition}
@@ -811,7 +814,9 @@ export function InterviewRoom({
           <button
             type="button"
             onClick={toggleCamera}
-            title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
+            disabled={aiInterviewMode && isCameraOn}
+            aria-label={aiInterviewMode ? 'Camera required for AI interview' : 'Toggle camera'}
+            title={aiInterviewMode && isCameraOn ? 'Camera is required during the AI interview' : isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
             className={`w-11 h-11 rounded-full flex items-center justify-center transition cursor-pointer ${
               isCameraOn
                 ? 'bg-zinc-800 hover:bg-zinc-700 text-white'

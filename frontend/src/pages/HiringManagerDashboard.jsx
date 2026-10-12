@@ -1,3 +1,4 @@
+import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { request } from '../api/client';
@@ -522,8 +523,9 @@ export default function HiringManagerDashboard() {
 
   // Real Upcoming Interviews mapped from backend interview rounds & summary
   const upcomingInterviews = useMemo(() => {
-    if (interviewRounds.length > 0) {
-      return interviewRounds.map((r) => {
+    const scheduledRounds = upcomingInterviewRounds(interviewRounds, requisitions);
+    if (scheduledRounds.length > 0) {
+      return scheduledRounds.map((r) => {
         const name = r.candidate_name || 'Candidate';
         const initials = name
           .split(' ')
@@ -553,7 +555,7 @@ export default function HiringManagerDashboard() {
           role: r.requisition_title || 'Position',
           round: r.interview_round || r.round_name || 'Technical Round 1',
           time: timeStr,
-          status: r.status || 'SCHEDULED',
+          status: r.status,
           candidate_id: r.candidate_submission_id,
           requisition_id: r.requisition_id,
         };
@@ -572,21 +574,23 @@ export default function HiringManagerDashboard() {
           .toUpperCase() || 'C';
 
         fromSummary.push({
-          id: r.id || r.round_id || `${cand.candidate_id || cand.candidate_email}-${idx}`,
+          id: r.id || r.round_id,
           name,
           initials,
           role: cand.requisition_title || r.requisition_title || 'Position',
           round: r.round_name || r.interview_round || 'AI Technical Interview',
           time: r.scheduled_time || 'Scheduled',
-          status: r.status || 'SCHEDULED',
+          scheduled_date: r.scheduled_date,
+          scheduled_time: r.scheduled_time,
+          status: r.status,
           candidate_id: cand.candidate_id || cand.candidate_submission_id,
           requisition_id: cand.requisition_id,
         });
       });
     });
 
-    return fromSummary;
-  }, [interviewRounds, interviewSummary]);
+    return upcomingInterviewRounds(fromSummary, requisitions);
+  }, [interviewRounds, interviewSummary, requisitions]);
 
   // Exact real data counts
   const liveRolesCount = liveRequisitions.length;
