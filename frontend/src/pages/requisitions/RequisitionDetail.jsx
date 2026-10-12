@@ -156,24 +156,31 @@ export default function RequisitionDetail() {
         const structured = data.structured_role || {};
         
         let skillsStr = '';
-        if (Array.isArray(structured.primary_skills)) {
-          skillsStr = structured.primary_skills.join(', ');
-        } else if (Array.isArray(structured.required_skills)) {
-          skillsStr = structured.required_skills.join(', ');
-        } else if (Array.isArray(data.skills)) {
-          skillsStr = data.skills.join(', ');
-        } else if (typeof structured.primary_skills === 'string') {
-          skillsStr = structured.primary_skills;
-        } else {
-          skillsStr = 'Kubernetes, Terraform, AWS, CI/CD, Docker, Vault';
+        const rawSkillsList =
+          structured.must_have_skills ||
+          structured.primary_skills ||
+          structured.required_skills ||
+          structured.skills ||
+          data.skills ||
+          (data.intent && data.intent.tech_stack_hint) ||
+          [];
+
+        if (Array.isArray(rawSkillsList) && rawSkillsList.length > 0) {
+          skillsStr = rawSkillsList.join(', ');
+        } else if (typeof rawSkillsList === 'string' && rawSkillsList.trim()) {
+          skillsStr = rawSkillsList.trim();
         }
 
+        const roleTitle = data.title || structured.title || 'Untitled Role';
+        const roleDept = data.department || structured.department || structured.job_family || 'Engineering';
+        const defaultDesc = `We are looking for a ${roleTitle} to join our ${roleDept} team and drive high-impact deliverables.`;
+
         setEditForm({
-          title: data.title || structured.title || 'DevSecOps Engineer',
-          department: data.department || structured.department || 'Engineering',
-          experience: structured.experience_level || structured.experience_years || '5–8 years',
+          title: roleTitle,
+          department: roleDept,
+          experience: structured.experience || structured.experience_level || structured.experience_years || '3–5 years',
           work_mode: structured.work_mode || data.work_mode || 'Hybrid',
-          duration: structured.duration || data.duration || '6 Months',
+          duration: structured.duration || structured.contract_duration || data.duration || '6 Months',
           headcount: structured.headcount || data.headcount || 1,
           skills: skillsStr,
           deadline:
@@ -186,7 +193,8 @@ export default function RequisitionDetail() {
             structured.summary ||
             structured.role_overview ||
             data.description ||
-            'We are looking for a DevSecOps Engineer to build and maintain secure, scalable infrastructure and deployment pipelines. You will work closely with engineering teams to improve release velocity, security, and reliability across our platforms.',
+            (data.intent && data.intent.description) ||
+            defaultDesc,
         });
 
         setError('');
@@ -222,12 +230,16 @@ export default function RequisitionDetail() {
         .filter(Boolean);
     }
     const raw =
+      structuredRole?.must_have_skills ||
       structuredRole?.primary_skills ||
       structuredRole?.required_skills ||
+      structuredRole?.skills ||
       req?.skills ||
+      (req?.intent && req?.intent?.tech_stack_hint) ||
       [];
-    if (Array.isArray(raw) && raw.length > 0) return raw;
-    return ['Kubernetes', 'Terraform', 'AWS', 'CI/CD', 'Docker', 'Vault'];
+    if (Array.isArray(raw) && raw.length > 0) return raw.map((s) => String(s).trim()).filter(Boolean);
+    if (typeof raw === 'string' && raw.trim()) return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    return [];
   }, [editForm.skills, structuredRole, req]);
 
   // Handle Save Edit Form
@@ -247,7 +259,9 @@ export default function RequisitionDetail() {
         duration: editForm.duration,
         headcount: parseInt(editForm.headcount, 10) || 1,
         submission_deadline: editForm.deadline,
+        must_have_skills: skillsArr,
         primary_skills: skillsArr,
+        required_skills: skillsArr,
         summary: editForm.description,
         role_overview: editForm.description,
       };
@@ -675,14 +689,18 @@ export default function RequisitionDetail() {
 
             {/* Pill Tags Row */}
             <div className="flex items-center gap-2 flex-wrap pt-1">
-              {skillsList.map((skill, idx) => (
-                <span
-                  key={idx}
-                  className="px-4 py-1.5 rounded-full text-xs font-bold text-gray-800 bg-white/90 hover:bg-white border border-gray-200/80 shadow-3xs transition-all"
-                >
-                  {skill}
-                </span>
-              ))}
+              {skillsList.length > 0 ? (
+                skillsList.map((skill, idx) => (
+                  <span
+                    key={idx}
+                    className="px-4 py-1.5 rounded-full text-xs font-bold text-gray-800 bg-white/90 hover:bg-white border border-gray-200/80 shadow-3xs transition-all"
+                  >
+                    {skill}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs text-gray-400 italic">No specific skills listed for this requisition.</span>
+              )}
             </div>
           </div>
 
@@ -703,8 +721,9 @@ export default function RequisitionDetail() {
             </div>
 
             <div className="text-xs sm:text-[13px] text-gray-600 leading-relaxed font-normal pt-1 whitespace-pre-line">
-              {editForm.description ||
-                'We are looking for a DevSecOps Engineer to build and maintain secure, scalable infrastructure and deployment pipelines. You will work closely with engineering teams to improve release velocity, security, and reliability across our platforms.'}
+              {editForm.description || (
+                <span className="text-gray-400 italic">No detailed role description provided.</span>
+              )}
             </div>
           </div>
         </div>

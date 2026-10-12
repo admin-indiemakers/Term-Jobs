@@ -548,6 +548,8 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "company": company,
             "status": req.status,
             "title": req.title,
+            "skills": getattr(req, "skills", None) or sr.get("must_have_skills") or sr.get("primary_skills") or [],
+            "description": getattr(req, "description", None) or sr.get("summary") or sr.get("role_overview") or (req.intent or {}).get("description") or "",
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
