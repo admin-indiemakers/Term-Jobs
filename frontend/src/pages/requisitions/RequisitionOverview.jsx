@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
+import { getSearchShortcutKey } from '../../utils/keyboardShortcuts';
 import {
   Plus,
   Search,
@@ -416,7 +417,7 @@ export default function RequisitionOverview({ section }) {
         <div className="flex-1 min-w-0 h-full min-h-[calc(100vh-260px)] bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
           {/* Table Top Controls Row: Search Bar + Section / Department Filters */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-black/[0.04] shrink-0">
-            {/* Search Input Bar with ⌘K Badge */}
+            {/* Search Input Bar with OS-aware shortcut badge or clear button */}
             <div className="relative w-full sm:w-80">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -425,13 +426,32 @@ export default function RequisitionOverview({ section }) {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search by title, role, or department..."
-                className="w-full pl-9 pr-12 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
+                className="w-full pl-9 pr-14 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all"
               />
-              <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none">
-                <span className="text-[10px] font-bold text-gray-400 px-1.5 py-0.5 rounded-md bg-white/80 border border-gray-200/80 shadow-3xs">
-                  ⌘ K
-                </span>
-              </div>
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    searchInputRef.current?.focus();
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-md text-gray-400 hover:text-gray-700 hover:bg-black/5 transition-colors cursor-pointer"
+                  title="Clear search"
+                  aria-label="Clear search"
+                >
+                  <X size={13} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => searchInputRef.current?.focus()}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-400 px-1.5 py-0.5 rounded-md bg-white/80 border border-gray-200/80 shadow-3xs hover:text-gray-600 hover:bg-white transition-colors cursor-pointer"
+                  title={`Focus search (${getSearchShortcutKey()})`}
+                  aria-label={`Focus search (${getSearchShortcutKey()})`}
+                >
+                  {getSearchShortcutKey()}
+                </button>
+              )}
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap sm:flex-nowrap">
