@@ -13,6 +13,33 @@ from modules.shared.db import get_session
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
 
 
+@router.get("/google/status")
+def google_calendar_status(current_user: User = Depends(get_current_user)):
+    from .services.google_calendar import connection_status
+    return connection_status(current_user)
+
+
+@router.post("/google/connect")
+def google_calendar_connect(return_origin: str = "", current_user: User = Depends(get_current_user)):
+    from .services.google_calendar import begin_connection
+    if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
+        raise HTTPException(status_code=403, detail="Calendar integration is available to company hiring staff.")
+    try:
+        return {"authorization_url": begin_connection(current_user, return_origin)}
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.get("/callback/google")
+def google_calendar_callback(state: str, code: str = "", error: str = ""):
+    from fastapi.responses import RedirectResponse
+    from .services.google_calendar import finish_connection
+    try:
+        return RedirectResponse(finish_connection(state, code, error), status_code=303)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 def _response(config: CalendarConfig | None, tenant_id: str) -> CalendarConfigResponse:
     return CalendarConfigResponse(
         tenant_id=tenant_id,

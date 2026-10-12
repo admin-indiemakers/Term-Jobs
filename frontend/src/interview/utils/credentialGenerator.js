@@ -1,5 +1,5 @@
 export function getCandidateInterviewLink(round) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const origin = 'https://termjobs.in';
   const emailParam = encodeURIComponent(round.candidate_email || '');
   const tokenParam = round.candidate_token || '';
   const passcodeParam = round.candidate_passcode || '';
@@ -7,13 +7,13 @@ export function getCandidateInterviewLink(round) {
 }
 
 export function getInterviewerStaffLink(round) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const origin = 'https://termjobs.in';
   const tokenParam = round.interviewer_token || '';
   return `${origin}/interview/staff?token=${tokenParam}`;
 }
 
 export function getMeetingRoomLink(roundId) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  const origin = 'https://termjobs.in';
   return `${origin}/interview/room/${roundId}`;
 }
 
@@ -26,7 +26,7 @@ Hi ${round.candidate_name || 'Candidate'},
 You have been scheduled for ${round.round_name || 'an interview round'} with our team for the ${round.requisition_title || 'role'} position.
 
 📅 Date: ${round.scheduled_date || 'TBD'}
-⏰ Time: ${round.scheduled_time || 'TBD'} (${round.duration_minutes || 45} minutes)
+⏰ Time: ${round.scheduled_time || 'TBD'} ${round.scheduled_timezone || 'Asia/Kolkata'} (${round.duration_minutes || 45} minutes)
 👤 Interviewer: ${round.interviewer_name || 'Hiring Team'} (${round.interviewer_role || 'Interviewer'})
 
 🔗 Secure Interview Portal Link:
@@ -57,7 +57,7 @@ Hi ${round.interviewer_name || 'Interviewer'},
 You have been assigned to conduct an interview with ${round.candidate_name} for the position: ${round.requisition_title}.
 
 📅 Scheduled Date: ${round.scheduled_date || 'TBD'}
-⏰ Scheduled Time: ${round.scheduled_time || 'TBD'} (${round.duration_minutes || 45} mins)
+⏰ Scheduled Time: ${round.scheduled_time || 'TBD'} ${round.scheduled_timezone || 'Asia/Kolkata'} (${round.duration_minutes || 45} mins)
 👤 Candidate Name: ${round.candidate_name} (${round.candidate_email})
 
 🔗 Interviewer Direct Access Link:

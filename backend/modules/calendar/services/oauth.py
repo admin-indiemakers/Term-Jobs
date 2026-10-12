@@ -43,7 +43,7 @@ def _build_providers() -> dict[str, OAuthProvider]:
             auth_url="https://accounts.google.com/o/oauth2/v2/auth",
             token_url="https://oauth2.googleapis.com/token",
             scopes=[
-                "https://www.googleapis.com/auth/calendar",
+                "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
                 "https://www.googleapis.com/auth/calendar.events",
                 "https://www.googleapis.com/auth/userinfo.email",
             ],

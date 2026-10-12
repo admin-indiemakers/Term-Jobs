@@ -1,3 +1,4 @@
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
@@ -377,6 +378,7 @@ export default function HiringManagerChat() {
           </p>
         </div>
 
+        <GoogleCalendarConnect />
         {/* Date Stamp */}
         <div className="text-left sm:text-right text-[11px] font-semibold text-gray-400 pt-1 sm:pt-2 shrink-0 pr-1">
           {currentDateFormatted}

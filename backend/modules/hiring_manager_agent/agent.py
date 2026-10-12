@@ -1531,8 +1531,8 @@ def reject_shortlisted_candidate(candidate_identifier: str, reason: str = "", us
 
 
 def schedule_candidate_interview(candidate_identifier: str, req_title: str = "Senior Full Stack Developer", proposed_date: str = "", proposed_time: str = "", interview_type: str = "Technical Round", meeting_notes: str = ""):
-    dt = proposed_date or "2026-09-12"
-    tm = proposed_time or "02:00 PM EST"
+    dt = proposed_date or ""
+    tm = proposed_time or ""
     typ = interview_type or "Technical Round"
 
     return {
@@ -1557,84 +1557,8 @@ def confirm_and_dispatch_interview_invitation(
     tenant_id: str = "local",
     company_name: str = "TermJobs"
 ) -> Dict[str, Any]:
-    """Find candidate, create interview proposal in DB, and dispatch email invitation via Gmail SMTP."""
-    from modules.interview.services.interview_service import create_interview_proposal
-    from modules.shared.db import db
-    import re
-
-    c_clean = candidate_identifier.strip()
-    cand_doc = None
-    try:
-        cand_doc = db["candidate_submissions"].find_one({
-            "$or": [
-                {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
-                {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
-                {"email": {"$regex": re.escape(c_clean), "$options": "i"}},
-                {"id": c_clean}
-            ]
-        })
-        if not cand_doc:
-            cand_doc = db["candidates"].find_one({
-                "$or": [
-                    {"candidate_name": {"$regex": re.escape(c_clean), "$options": "i"}},
-                    {"name": {"$regex": re.escape(c_clean), "$options": "i"}},
-                    {"email": {"$regex": re.escape(c_clean), "$options": "i"}}
-                ]
-            })
-    except Exception as e:
-        print("[INTERVIEW DISPATCH DB LOOKUP ERROR]", e)
-
-    cand_name = (cand_doc.get("candidate_name") or cand_doc.get("name") if cand_doc else c_clean) or c_clean
-    cand_email = (cand_doc.get("email") or cand_doc.get("candidate_email") if cand_doc else "") or "arjunmheartitude@gmail.com"
-    cand_sub_id = str(cand_doc.get("id") or cand_doc.get("_id") if cand_doc else "cand-sub-1")
-    req_id = cand_doc.get("requisition_id") or "req-1" if cand_doc else "req-1"
-    req_title = cand_doc.get("requisition_title") or requisition_title if cand_doc else requisition_title
-
-    payload = {
-        "candidate_submission_id": cand_sub_id,
-        "candidate_name": cand_name,
-        "candidate_email": cand_email,
-        "requisition_id": req_id,
-        "requisition_title": req_title,
-        "interview_round": interview_type,
-        "proposed_slots": [{"date": proposed_date, "start_time": proposed_time, "end_time": "03:45 PM"}],
-        "duration_minutes": 45,
-        "notes": meeting_notes or "Technical evaluation focusing on system design & backend APIs.",
-        "origin": "https://termjobs.in"
-    }
-
-    meeting_link = "https://termjobs.in/interview/room"
-    passcode = "TJ-INT-2026"
-    res = {}
-    try:
-        res = create_interview_proposal(payload, tenant_id, company_name, origin="https://termjobs.in")
-        if isinstance(res, dict):
-            meeting_link = res.get("meeting_link", meeting_link)
-            passcode = res.get("candidate_passcode", passcode)
-        elif hasattr(res, "meeting_link"):
-            meeting_link = getattr(res, "meeting_link", meeting_link)
-            passcode = getattr(res, "candidate_passcode", passcode)
-        if "localhost" in meeting_link or "127.0.0.1" in meeting_link:
-            meeting_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", "https://termjobs.in", meeting_link)
-    except Exception as err:
-        print(f"[INTERVIEW INVITATION DISPATCH] Fallback dispatch: {err}")
-        
-    msg = f"Interview invitation successfully dispatched to {cand_name} ({req_title}) for {proposed_date} at {proposed_time}. Calendar invite and email confirmation sent."
-    if isinstance(res, dict) and res.get("message"):
-        msg = res["message"]
-
-    return {
-        "status": "success",
-        "candidate_name": cand_name,
-        "candidate_email": cand_email,
-        "requisition_title": req_title,
-        "round": interview_type,
-        "date": proposed_date,
-        "time": proposed_time,
-        "meeting_link": meeting_link,
-        "passcode": passcode,
-        "message": msg
-    }
+    """Dispatch requires the authenticated editable scheduling form."""
+    return {"status": "requires_schedule_form", "message": "Choose the date, time, timezone and duration in the interview card, then click Dispatch Invitation. No invitation has been sent yet."}
 
 
 def generate_tailored_interview_questions(role_title: str = "DevSecOps Engineer", tech_stack: str = "Kubernetes, AWS, Terraform, CI/CD", seniority: str = "Mid-Senior") -> Dict[str, Any]:
@@ -3124,6 +3048,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     company_name = current_user.get("company_name") or current_user.get("tenant_name") or "Client Workspace"
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
+    calendar_context = current_user.get("google_calendar") or {}
 
     # If user_name is generic, resolve from Mongo by user_id, email, or tenant
     if not user_name or user_name == "Hiring Manager":
@@ -3299,8 +3224,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             sched_res = schedule_candidate_interview(
                 candidate_identifier=cand_name,
                 req_title="Senior Backend Engineer",
-                proposed_date="2026-09-12",
-                proposed_time="02:00 PM EST"
+                proposed_date="",
+                proposed_time=""
             )
             return {
                 "reply": (
@@ -3759,6 +3684,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
             sys_msg = {
                 "role": "system",
                 "content": (
+                    f"Google Calendar connection for this manager: {json.dumps(calendar_context)}. Use only this status; do not claim a connection or event exists unless confirmed. Scheduling proposals are drafts; instruct the user to edit date/time/timezone and dispatch using the card.\n"
                     f"You are the TermJobs AI Hiring Assistant exclusively dedicated to {company_name} for {user_name} ({user_email}).\n"
                     f"CRITICAL IDENTITY & USER RECOGNITION RULES:\n"
                     f"- The specific Hiring Manager you are talking to is {user_name}.\n"
@@ -3792,7 +3718,7 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                     "- When the user asks for 'candidates under me', 'who is working under me', 'my team', or 'all working candidates', ALWAYS call `list_accepted_candidates`.\n"
                     "- When the user asks about a specific candidate by name, call `get_candidate_profile_details`.\n"
                     "- When the user asks 'pending works', 'my tasks', 'what needs attention', call `get_hiring_manager_pending_works`.\n"
-                    "- When the user asks to schedule an interview with a candidate (e.g. 'schedule interview with Arjun'), ALWAYS call the `schedule_candidate_interview` tool directly with candidate_identifier, default date '2026-09-12', time '02:00 PM EST', and round 'Technical Round'. DO NOT ask the user questions or request details before proposing.\n"
+                    "- When the user asks to schedule an interview with a candidate (e.g. 'schedule interview with Arjun'), ALWAYS call the `schedule_candidate_interview` tool directly with candidate_identifier, empty date and time unless the user supplied them; the user chooses and edits these in the scheduling card, and round 'Technical Round'. DO NOT ask the user questions or request details before proposing.\n"
                     "- When the user asks 'how do i use this', 'how to use this as hiring manager', 'how do i use this as a hiring manager', 'what can i do', 'what are my permissions', 'what do i do here', 'guide me', 'explain my role', or asks for help/instructions, ALWAYS call the `get_hiring_manager_guide` tool to provide the complete hiring manager onboarding and feature playbook.\n"
                     "- CRITICAL FORMATTING GUIDELINE FOR CHAT CLIENTS: NEVER output markdown pipe tables (| col | col |). Telegram and Zoho Cliq CANNOT render pipe tables and they display as broken text. Always format data as clean, beautifully spaced numbered or bulleted item cards using emojis (e.g. 1️⃣, 2️⃣, •) and shortened 8-char IDs in backticks (e.g. `23548610`).\n"
                 )
@@ -4250,8 +4176,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                 sched_res = schedule_candidate_interview(
                     candidate_identifier=c_name,
                     req_title=role,
-                    proposed_date="2026-09-12",
-                    proposed_time="02:00 PM EST"
+                    proposed_date="",
+                    proposed_time=""
                 )
                 return {
                     "reply": (
@@ -4277,8 +4203,8 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         sched_res = schedule_candidate_interview(
             candidate_identifier=cand_name,
             req_title="Senior Backend Engineer",
-            proposed_date="2026-09-12",
-            proposed_time="02:00 PM EST"
+            proposed_date="",
+            proposed_time=""
         )
         return {
             "reply": (

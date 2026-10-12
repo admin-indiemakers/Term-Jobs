@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { isAiInterviewRound } from '../src/interview/utils/interviewMode.js';
+
+test('company LiveKit rounds do not activate the AI interviewer', () => {
+  assert.equal(isAiInterviewRound({ round_name: 'Technical Round', round_type: 'Technical' }), false);
+  assert.equal(isAiInterviewRound({ round_name: 'Recruiter Screening' }), false);
+  assert.equal(isAiInterviewRound(null), false);
+});
+test('AI fast-track rounds retain their AI interviewer', () => {
+  assert.equal(isAiInterviewRound({ round_name: 'AI Fast-Track Technical Interview' }), true);
+  assert.equal(isAiInterviewRound({ round_type: 'AI' }), true);
+});

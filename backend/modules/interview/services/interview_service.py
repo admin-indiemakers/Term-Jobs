@@ -123,10 +123,11 @@ def _resolve_interview_domain(origin: Optional[str] = None, data_origin: Optiona
     Can be configured via INTERVIEW_PUBLIC_DOMAIN env variable.
     """
     domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
-    candidate = (origin or data_origin or domain).strip().rstrip("/")
-    if not candidate or "localhost" in candidate or "127.0.0.1" in candidate:
-        return domain
-    return candidate
+    from urllib.parse import urlparse
+    parsed = urlparse(domain)
+    if parsed.scheme != "https" or parsed.hostname not in ("termjobs.in", "www.termjobs.in"):
+        return "https://termjobs.in"
+    return domain
 
 
 def send_interview_invitation_email(
@@ -538,7 +539,7 @@ def create_interview_proposal(
     # Automatically dispatch notification to candidate
     try:
         if cand_email:
-            send_interview_invitation_email(
+            doc['email_delivery'] = send_interview_invitation_email(
                 candidate_name=cand_name,
                 candidate_email=cand_email,
                 requisition_title=data.get("requisition_title", "Untitled Role"),
@@ -824,6 +825,12 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
         
         now_utc = datetime.now(timezone.utc)
         expires_at_val = now_utc + timedelta(hours=LINK_EXPIRATION_HOURS)
+
+        if not round_name.startswith('AI') and data.get('scheduled_date') and data.get('scheduled_time'):
+            from modules.calendar.services.google_calendar import schedule_window
+            _, scheduled_end = schedule_window(data['scheduled_date'], data['scheduled_time'],
+                data.get('scheduled_timezone') or 'Asia/Kolkata', int(data.get('duration_minutes', 45)))
+            expires_at_val = scheduled_end + timedelta(hours=LINK_EXPIRATION_HOURS)
         
         round_obj = InterviewRound(
             tenant_id=tenant_id,
@@ -837,6 +844,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
             round_type=data.get("round_type", "Technical"),
             scheduled_date=data.get("scheduled_date", ""),
             scheduled_time=data.get("scheduled_time", ""),
+            scheduled_timezone=data.get("scheduled_timezone", "Asia/Kolkata"),
             duration_minutes=int(data.get("duration_minutes", 45)),
             interviewer_name=data.get("interviewer_name", ""),
             interviewer_email=data.get("interviewer_email", ""),
@@ -872,16 +880,16 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
     # Automatically dispatch notification to candidate
     cand_email = (doc.get("candidate_email") or "").strip()
     cand_name = doc.get("candidate_name") or "Candidate"
-    if cand_email:
+    if cand_email and not data.get("suppress_email"):
         try:
-            send_interview_invitation_email(
+            doc['email_delivery'] = send_interview_invitation_email(
                 candidate_name=cand_name,
                 candidate_email=cand_email,
                 requisition_title=doc.get("requisition_title", "Position"),
                 company_name=created_by or "Hiring Team",
                 round_name=round_name,
                 scheduled_date=doc.get("scheduled_date", ""),
-                scheduled_time=doc.get("scheduled_time", ""),
+                scheduled_time=f"{doc.get('scheduled_time', '')} ({doc.get('scheduled_timezone', 'Asia/Kolkata')})",
                 duration_minutes=int(doc.get("duration_minutes", 45)),
                 meeting_link=hosted_meeting_link,
                 candidate_portal_link=cand_portal_link,
@@ -889,6 +897,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
                 instructions=doc.get("instructions", ""),
             )
         except Exception as em_err:
+            doc['email_delivery'] = {'status': 'failed', 'reason': 'Email could not be delivered.'}
             print(f"[ROUND EMAIL DISPATCH ERROR] {em_err}")
 
     # Automatically notify Telegram if connected
@@ -1566,7 +1575,7 @@ def get_hiring_manager_summary(
             "id", "tenant_id", "requisition_id", "requisition_title",
             "candidate_submission_id", "candidate_name", "candidate_email",
             "round_number", "round_name", "round_type", "scheduled_date",
-            "scheduled_time", "duration_minutes", "interviewer_name",
+            "scheduled_timezone", "google_event_id", "calendar_sync", "email_delivery", "scheduled_time", "duration_minutes", "interviewer_name",
             "interviewer_email", "interviewer_role", "instructions",
             "internal_notes", "candidate_passcode", "candidate_token",
             "interviewer_token", "room_id", "status", "evaluation",

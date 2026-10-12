@@ -1,3 +1,4 @@
+import CompanyInterviewScheduleCard from '../components/CompanyInterviewScheduleCard';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -1290,6 +1291,11 @@ export function HiringManagerInterviews() {
                     </div>
                   )}
 
+                  {selectedRoundForDetails.status !== 'Completed' && selectedRoundForDetails.status !== 'Cancelled' && !(selectedRoundForDetails.round_name || '').startsWith('AI') && (
+                    <details className="rounded-2xl border border-zinc-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">Edit interview date, time & duration</summary>
+                      <CompanyInterviewScheduleCard key={selectedRoundForDetails.id} proposal={selectedRoundForDetails} onSaved={result => { setSelectedRoundForDetails(result); loadData(); }} />
+                    </details>
+                  )}
                   <InterviewReviewPanel
                     key={selectedRoundForDetails.id}
                     round={selectedRoundForDetails}

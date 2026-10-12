@@ -154,6 +154,10 @@ class InterviewRound(Model):
         "round_type": "Technical",
         "scheduled_date": "",
         "scheduled_time": "",
+        "scheduled_timezone": "Asia/Kolkata",
+        "google_event_id": "",
+        "calendar_sync": dict,
+        "email_delivery": dict,
         "duration_minutes": 45,
         "interviewer_name": "",
         "interviewer_email": "",
@@ -190,6 +194,10 @@ class InterviewRound(Model):
     round_type = Column("round_type")
     scheduled_date = Column("scheduled_date")
     scheduled_time = Column("scheduled_time")
+    scheduled_timezone = Column("scheduled_timezone")
+    google_event_id = Column("google_event_id")
+    calendar_sync = Column("calendar_sync")
+    email_delivery = Column("email_delivery")
     duration_minutes = Column("duration_minutes")
     interviewer_name = Column("interviewer_name")
     interviewer_email = Column("interviewer_email")
@@ -249,6 +257,7 @@ class CreateInterviewRoundRequest(BaseModel):
     round_type: Optional[str] = "Technical"
     scheduled_date: str
     scheduled_time: str
+    scheduled_timezone: str = "Asia/Kolkata"
     duration_minutes: Optional[int] = 45
     interviewer_name: str
     interviewer_email: str
@@ -306,6 +315,17 @@ class AnalyzeCommunicationRequest(BaseModel):
     call_duration_seconds: Optional[int] = 0
     candidate_name: Optional[str] = None
     role_title: Optional[str] = None
+
+
+class CompanyInterviewRequest(BaseModel):
+    candidate_identifier: str
+    requisition_id: Optional[str] = None
+    round_id: Optional[str] = None
+    round_name: str = "Technical Round"
+    scheduled_date: str
+    scheduled_time: str
+    scheduled_timezone: str = "Asia/Kolkata"
+    duration_minutes: int = 45
 
 
 class SaveTranscriptRequest(BaseModel):

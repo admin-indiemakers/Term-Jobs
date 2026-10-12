@@ -1,3 +1,5 @@
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
+import CompanyInterviewScheduleCard from '../interview/components/CompanyInterviewScheduleCard';
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -161,6 +163,7 @@ const PREDEFINED_ROLES = [];
 export default function HiringManagerDashboard() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+  const [googleCalendar, setGoogleCalendar] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2262,6 +2265,7 @@ export default function HiringManagerDashboard() {
           </div>
         </div>
 
+        <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interview dates, times and durations can now be edited in the interview card and synced on dispatch.` }])} />
         {/* Mobile compact tool buttons */}
         <div className="flex items-center gap-1">
           <button
@@ -2336,6 +2340,7 @@ export default function HiringManagerDashboard() {
 
       {/* Top-Right Icon Toolbar (Desktop only) */}
       <div className="hidden lg:flex absolute top-1.5 sm:top-2 right-2 sm:right-2.5 z-20 items-center gap-1">
+        <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interviews can be scheduled or rescheduled using editable date and time fields.` }])} />
         {/* + Icon: Opens a New Chat */}
         <button
           type="button"
@@ -2967,75 +2972,8 @@ export default function HiringManagerDashboard() {
 
                           {/* Inline Interview Proposal Card */}
                           {msg.interviewProposal && (
-                            <div className="mt-3.5 p-4 rounded-2xl bg-white border border-gray-200/90 shadow-2xs w-full max-w-xl text-left">
-                              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs border border-emerald-100">
-                                    <CalendarCheck size={16} />
-                                  </div>
-                                  <div>
-                                    <h4 className="text-xs font-bold text-gray-900">
-                                      Interview Scheduled: {msg.interviewProposal.round || 'Technical Round'}
-                                    </h4>
-                                    <p className="text-[11px] text-gray-500">
-                                      For {msg.interviewProposal.requisition || 'Active Role'}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  Calendar Ready
-                                </span>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2.5 my-3 text-xs">
-                                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100">
-                                  <span className="text-[10px] text-gray-400 font-medium block">Candidate</span>
-                                  <span className="font-semibold text-gray-800 truncate block mt-0.5">
-                                    {msg.interviewProposal.candidate}
-                                  </span>
-                                  <span className="text-[10.5px] text-gray-500 truncate block">
-                                    {msg.interviewProposal.candidate_email}
-                                  </span>
-                                </div>
-
-                                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100">
-                                  <span className="text-[10px] text-gray-400 font-medium block">Date & Time</span>
-                                  <span className="font-semibold text-gray-800 block mt-0.5">
-                                    {msg.interviewProposal.scheduled_date} at {msg.interviewProposal.scheduled_time}
-                                  </span>
-                                  <span className="text-[10.5px] text-gray-500 block">
-                                    Duration: {msg.interviewProposal.duration || '45 mins'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSendPrompt(
-                                      `Dispatch calendar invitation and meeting link to ${msg.interviewProposal.candidate}`
-                                    )
-                                  }
-                                  className="flex-1 py-2 px-3 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                                >
-                                  <Send size={12} />
-                                  <span>Dispatch Invitation</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSendPrompt(
-                                      `Reschedule interview for ${msg.interviewProposal.candidate} to next week`
-                                    )
-                                  }
-                                  className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  Reschedule
-                                </button>
-                              </div>
-                            </div>
+                            <CompanyInterviewScheduleCard proposal={msg.interviewProposal} timezone={googleCalendar?.timezone}
+                              onSaved={result => setMessages(previous => [...previous, { sender: 'ai', text: `Company interview saved for ${result.candidate_name}: ${result.scheduled_date} at ${result.scheduled_time} (${result.scheduled_timezone}), ${result.duration_minutes} minutes. Google Calendar: ${result.calendar_sync?.status}. Email delivery: ${result.email_delivery?.status}. LiveKit room: ${result.meeting_link}` }])} />
                           )}
 
                           {/* Inline Candidate Suggestions Cards (Exact Image 2 Match) */}

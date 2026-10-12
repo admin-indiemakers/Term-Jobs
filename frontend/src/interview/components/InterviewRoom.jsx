@@ -1,3 +1,4 @@
+import { isAiInterviewRound } from '../utils/interviewMode';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Mic,
@@ -44,7 +45,7 @@ export function InterviewRoom({
   const [showCaptions, setShowCaptions] = useState(true);
   const [communicationAnalysis, setCommunicationAnalysis] = useState(round?.communication_analysis || null);
   const [analyzingSpeech, setAnalyzingSpeech] = useState(false);
-  const [aiInterviewMode, setAiInterviewMode] = useState(true);
+  const aiInterviewMode = isAiInterviewRound(round);
   const [isAiSpeakingInRoom, setIsAiSpeakingInRoom] = useState(false);
   const [isRecordingProof, setIsRecordingProof] = useState(false);
   const [isSavingProofVideo, setIsSavingProofVideo] = useState(false);
@@ -325,29 +326,11 @@ export function InterviewRoom({
       // 1. Finalize & upload the interview conversation proof video before exit
       updatedRound = await stopAndUploadProofVideo(callDuration);
 
-      // 2. Automatically trigger communication analysis if candidate turns were captured
-      if (transcriptTurns.length > 0 && round?.id) {
-        setAnalyzingSpeech(true);
-        try {
-          const res = await interviewApi.analyzeCommunication(round.id, {
-            transcript_turns: transcriptTurns,
-            call_duration_seconds: callDuration,
-            candidate_name: round?.candidate_name,
-            role_title: round?.requisition_title,
-          });
-          if (res && res.analysis) {
-            setCommunicationAnalysis(res.analysis);
-          }
-        } catch (err) {
-          console.warn('Spoken communication analysis notice:', err);
-        } finally {
-          setAnalyzingSpeech(false);
-        }
+      // Human company interviews keep their transcript; AI scoring belongs to the AI stage.
+      if (!aiInterviewMode && transcriptTurns.length > 0 && round?.id) {
+        await interviewApi.saveTranscript(round.id, transcriptTurns);
       }
 
-      if (updatedRound && onEvaluationComplete) {
-        onEvaluationComplete(updatedRound);
-      }
     } catch (exitErr) {
       console.warn('Error during exit proof archival:', exitErr);
     } finally {
@@ -388,8 +371,8 @@ export function InterviewRoom({
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setAiInterviewMode(!aiInterviewMode)}
-            disabled={currentUserRole === 'candidate'}
+            disabled
+            title={aiInterviewMode ? 'AI interview round' : 'Company LiveKit interview with your interviewer'}
             className={`px-3 py-1.5 rounded-full text-xs font-semibold border flex items-center gap-1.5 transition cursor-pointer ${
               aiInterviewMode
                 ? 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-sm'
@@ -397,7 +380,7 @@ export function InterviewRoom({
             }`}
           >
             <Sparkles size={13} className={aiInterviewMode ? 'text-cyan-400' : 'text-zinc-500'} />
-            <span>{aiInterviewMode ? 'AI Interviewer Active' : 'Peer Video Mode'}</span>
+            <span>{aiInterviewMode ? 'AI Interviewer Active' : 'Company LiveKit Interview'}</span>
           </button>
 
           {/* Recording Proof Status */}

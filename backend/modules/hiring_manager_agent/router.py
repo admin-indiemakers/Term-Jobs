@@ -61,7 +61,10 @@ def hiring_manager_agent_chat(
                 session = get_session()
                 u = session.query(User).filter(User.id == payload.get("sub")).first()
                 if u:
+                    from modules.calendar.services.google_calendar import connection_status
+                    user_data["google_calendar"] = connection_status(u)
                     user_data["name"] = u.name or user_data["name"]
+                    user_data["email"] = u.email
                     user_data["role"] = u.role or user_data["role"]
                     user_data["tenant_id"] = str(u.tenant_id or "local")
                     user_data["id"] = str(u.id)

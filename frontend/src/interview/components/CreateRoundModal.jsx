@@ -42,6 +42,7 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
   const [roundNumber, setRoundNumber] = useState(() => initialData.nextRoundNumber || 2);
 
   const [scheduledDate, setScheduledDate] = useState(() => initialData.scheduled_date || getDefaultTomorrowDate());
+  const [scheduledTimezone, setScheduledTimezone] = useState(initialData.scheduled_timezone || 'Asia/Kolkata');
   const [scheduledTime, setScheduledTime] = useState(() => initialData.scheduled_time || '11:00');
   const [durationMinutes, setDurationMinutes] = useState(() => initialData.duration_minutes || 45);
 
@@ -76,6 +77,7 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
     setDurationMinutes(data.duration_minutes || preset?.defaultDuration || 45);
 
     setScheduledDate(data.scheduled_date || getDefaultTomorrowDate());
+    setScheduledTimezone(data.scheduled_timezone || 'Asia/Kolkata');
     setScheduledTime(data.scheduled_time || '11:00');
 
     // Use current logged-in user or HM defaults
@@ -150,6 +152,7 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
         round_type: roundType,
         scheduled_date: scheduledDate,
         scheduled_time: scheduledTime,
+        scheduled_timezone: scheduledTimezone,
         duration_minutes: parseInt(durationMinutes, 10) || 45,
         interviewer_name: interviewerName.trim(),
         interviewer_email: interviewerEmail.trim().toLowerCase(),
@@ -350,6 +353,7 @@ export function CreateRoundModal({ isOpen, onClose, onSuccess, initialData = {} 
                 className="w-full px-2.5 py-1.5 bg-white text-zinc-950 font-semibold rounded-xl border border-zinc-300 text-xs focus:outline-none focus:ring-1 focus:ring-zinc-950 focus:border-zinc-950 shadow-xs"
               />
             </div>
+            <div><label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">Timezone</label><input required value={scheduledTimezone} onChange={event => setScheduledTimezone(event.target.value)} placeholder="Asia/Kolkata" className="w-full rounded-xl border border-zinc-300 p-2 text-xs" /></div>
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-zinc-500 mb-1">
                 Start Time

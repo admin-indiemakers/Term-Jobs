@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocke
 from fastapi.encoders import jsonable_encoder
 
 from modules.identity.domain.models import User, Tenant
+from modules.interview.domain.models import CompanyInterviewRequest
 from modules.identity.router import get_current_user
 from modules.shared.db import get_session
 from modules.interview.domain.models import (
@@ -252,6 +253,17 @@ def get_vendor_interviews(
 # MULTI-ROUND INTERVIEW WORKFLOW ENDPOINTS
 # -------------------------------------------------------------
 
+@router.post("/company-round")
+def save_company_round(body: CompanyInterviewRequest, current_user: User = Depends(get_current_user)):
+    from .services.company_schedule import save_company_interview
+    if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
+        raise HTTPException(status_code=403, detail="Only company hiring staff may schedule interviews.")
+    try:
+        return save_company_interview(current_user, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/rounds")
 def create_round_endpoint(
     body: CreateInterviewRoundRequest,
@@ -264,6 +276,10 @@ def create_round_endpoint(
     """
     try:
         data = body.model_dump()
+        from .services.company_schedule import validate_company_requisition
+        from modules.calendar.services.google_calendar import schedule_window, sync_interview_event
+        validate_company_requisition(current_user, data['requisition_id'])
+        schedule_window(data['scheduled_date'], data['scheduled_time'], data['scheduled_timezone'], data['duration_minutes'])
         origin = _extract_origin(request, data.get("origin"))
         data["origin"] = origin
         result = create_interview_round(
@@ -272,6 +288,14 @@ def create_round_endpoint(
             created_by=str(current_user.id),
             origin=origin,
         )
+        calendar = sync_interview_event(current_user, result)
+        result['calendar_sync'] = calendar
+        with get_session() as session:
+            stored = session.get(InterviewRound, result['id'])
+            stored.calendar_sync = calendar
+            stored.email_delivery = result.get('email_delivery') or {'status': 'not_confirmed'}
+            if calendar.get('event_id'): stored.google_event_id = calendar['event_id']
+            session._track(stored); session.commit()
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
