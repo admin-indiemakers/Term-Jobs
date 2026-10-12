@@ -381,7 +381,8 @@ export default function RequisitionDetail() {
   const titleDisplay = editForm.title || req.title || structuredRole?.title || 'DevSecOps Engineer';
   const deptDisplay = editForm.department || req.department || structuredRole?.department || 'Engineering';
   const createdDateDisplay = formatCustomDate(req.created_at, '25 Sept 2026, 6:19 am');
-  const approvalDateRaw = req.director_approved_at || req.approved_at || (req.director_approved ? req.updated_at : null);
+  const isApproved = isPublishedStatus(status) || isCompletedStatus(status) || (Boolean(req.director_approved) && !isPendingApprovalStatus(status) && !isDraftedStatus(status));
+  const approvalDateRaw = isApproved ? (req.director_approved_at || req.approved_at || req.updated_at) : null;
   const approvedDateDisplay = approvalDateRaw ? formatCustomDate(approvalDateRaw, '') : null;
 
   return (
@@ -765,7 +766,7 @@ export default function RequisitionDetail() {
                 <div>
                   <div className="text-sm font-bold text-gray-900 leading-tight">Director Approval</div>
                   <div className="text-xs text-gray-400 mt-0.5">
-                    {approvedDateDisplay || (req.director_approved ? 'Approved' : 'Pending Approval')}
+                    {approvedDateDisplay || (isApproved ? 'Approved' : 'Pending Approval')}
                   </div>
                 </div>
                 <div className="absolute left-3 top-6 w-[1.5px] h-7 bg-gray-200" />

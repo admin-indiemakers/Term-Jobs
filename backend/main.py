@@ -1330,26 +1330,37 @@ def create_requisition(
                 if s_req:
                     s_req.status = "Pending Approval"
                     s_req.director_approved = False
+                    s_req.director_approved_by = None
+                    s_req.director_approved_at = None
+                    s_req.approved_by = None
+                    s_req.approved_at = None
                     session.commit()
+
+        update_fields = {
+            "id": req.id,
+            "title": req.title,
+            "status": final_status,
+            "director_approved": False if is_hm else getattr(req, "director_approved", False),
+            "tenant_id": req.tenant_id,
+            "company_profile_id": req.company_profile_id,
+            "company_name": comp_name,
+            "client_name": comp_name,
+            "description": body.description or body.prompt or "",
+            "structured_role": structured,
+            "skills": req_skills,
+            "created_by": req.created_by,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        if is_hm:
+            update_fields["director_approved_by"] = None
+            update_fields["director_approved_at"] = None
+            update_fields["approved_by"] = None
+            update_fields["approved_at"] = None
 
         db["requisitions"].update_one(
             {"id": req.id},
-            {"$set": {
-                "id": req.id,
-                "title": req.title,
-                "status": final_status,
-                "director_approved": False if is_hm else getattr(req, "director_approved", False),
-                "tenant_id": req.tenant_id,
-                "company_profile_id": req.company_profile_id,
-                "company_name": comp_name,
-                "client_name": comp_name,
-                "description": body.description or body.prompt or "",
-                "structured_role": structured,
-                "skills": req_skills,
-                "created_by": req.created_by,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            }},
+            {"$set": update_fields},
             upsert=True
         )
 
@@ -3518,6 +3529,10 @@ def submit_requisition_for_director_approval_route(
         if db_req:
             db_req.status = "Pending Approval"
             db_req.director_approved = False
+            db_req.director_approved_by = None
+            db_req.director_approved_at = None
+            db_req.approved_by = None
+            db_req.approved_at = None
             session.commit()
 
     try:
@@ -3527,6 +3542,10 @@ def submit_requisition_for_director_approval_route(
             {"$set": {
                 "status": "Pending Approval",
                 "director_approved": False,
+                "director_approved_by": None,
+                "director_approved_at": None,
+                "approved_by": None,
+                "approved_at": None,
                 "updated_at": now_iso
             }}
         )
