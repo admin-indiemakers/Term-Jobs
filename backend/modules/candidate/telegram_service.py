@@ -392,6 +392,31 @@ async def process_telegram_update(update: dict) -> None:
             return
 
         command = text.split()[0].split('@')[0].lower() if text else ''
+        if chat.get('type') != 'private':
+            return
+        link = db['telegram_links'].find_one({'chat_id': str(chat_id)})
+        connected_candidate = db['candidates'].find_one({'telegram_chat_id': str(chat_id), 'candidate_email': link.get('candidate_email')}) if link else None
+        if command in ('/jobs', '/requisitions', '/applied', '/applications', '/test', '/alert', 'test', 'alert'):
+            if not connected_candidate:
+                await process_telegram_update({'message': {**msg, 'text': '/login'}})
+                return
+            if command in ('/applied', '/applications'):
+                rows = list(db['candidate_submissions'].find({'candidate_email': connected_candidate['candidate_email']}).sort('created_at', -1).limit(10))
+                lines = ['Your applications:']
+                for row in rows:
+                    lines.append(f"• {row.get('requisition_title') or 'Job application'} — {row.get('status') or 'Submitted'}")
+                if not rows: lines.append('No applications were found for your connected account.')
+            elif command in ('/test', '/alert', 'test', 'alert'):
+                lines = ['Your candidate account is connected. Job and interview notifications are enabled.', 'Use /jobs for open jobs and /applied for your applications.']
+            else:
+                rows = list(db['requisitions'].find({'status': 'Published'}).sort('created_at', -1).limit(10))
+                lines = ['Open jobs on TermJobs:']
+                for row in rows:
+                    lines.append(f"• {row.get('title') or 'Open role'}")
+                if not rows: lines.append('No published jobs are available right now.')
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(f'{TELEGRAM_API_BASE}/bot{token}/sendMessage', json={'chat_id': chat_id, 'text': '\n'.join(lines), 'reply_markup': {'inline_keyboard': [[{'text': 'View jobs / apply', 'url': 'https://termjobs.in/open-roles'}]]}})
+            return
         if command in ('/logout', '/login', '/start'):
             if chat.get('type') != 'private':
                 return
@@ -401,6 +426,8 @@ async def process_telegram_update(update: dict) -> None:
                 db['telegram_links'].delete_many({'chat_id': {'$in': [str(chat_id), chat_id]}})
                 db['candidate_telegram_login_states'].delete_many({'chat_id': str(chat_id)})
                 payload = {'chat_id': chat_id, 'text': 'You are logged out of the TermJobs candidate bot. Job notifications to this chat are disabled. Use /login to reconnect.'}
+            elif connected_candidate:
+                payload = {'chat_id': chat_id, 'text': f"You are connected as {connected_candidate.get('candidate_name') or 'Candidate'}.\n\n/jobs — View open requisitions\n/applied — View your applications\n/logout — Disconnect notifications", 'reply_markup': {'inline_keyboard': [[{'text': 'Open TermJobs jobs', 'url': 'https://termjobs.in/open-roles'}]]}}
             else:
                 from datetime import timedelta
                 state = secrets.token_urlsafe(32)
@@ -426,39 +453,6 @@ async def process_telegram_update(update: dict) -> None:
 
         target_email = extracted_email or (candidate_param if "@" in candidate_param else "")
         target_id = candidate_param if not target_email else ""
-
-        if command in ('/test', '/alert') and not db['telegram_links'].find_one({'chat_id': str(chat_id)}):
-            await process_telegram_update({'message': {**msg, 'text': '/login'}})
-            return
-
-        # Test command: /test or /alert or test
-        if text.lower() in ["/test", "test", "/alert", "alert"]:
-            req = db["requisitions"].find_one({"status": {"$in": ["Published", "Active", "Open"]}}) or db["requisitions"].find_one({})
-            if req:
-                cand_info = db["candidates"].find_one({"telegram_chat_id": str(chat_id)}) or {
-                    "candidate_name": first_name,
-                    "candidate_email": target_email or "candidate@termjobs.in",
-                    "id": str(uuid.uuid4())
-                }
-                await send_candidate_requisition_alert(
-                    chat_id=chat_id,
-                    requisition=req,
-                    candidate=cand_info,
-                    outreach_token=secrets.token_urlsafe(24),
-                    match_score=95.0,
-                    match_reasons=["Direct test verification", "Telegram alerts active & connected"]
-                )
-            else:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    await client.post(
-                        f"{TELEGRAM_API_BASE}/bot{token}/sendMessage",
-                        json={
-                            "chat_id": chat_id,
-                            "text": "✅ *Telegram Alerts Active!*\n\nYour chat is connected and ready to receive real-time talent matches and interview invitations.",
-                            "parse_mode": "Markdown"
-                        }
-                    )
-            return
 
         # If email or candidate_param was provided:
         if target_email or target_id:
