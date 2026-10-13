@@ -110,7 +110,7 @@ def _save_company_interview(user, data):
                 'round_type': data.get('round_type') or 'Technical', 'suppress_email': True}, user.tenant_id, str(user.id), origin='https://termjobs.in')
     portal = 'https://termjobs.in/interview/candidate/login?' + urlencode({
         'token': doc['candidate_token'], 'email': doc['candidate_email'], 'passcode': doc['candidate_passcode']})
-    meeting = f"https://termjobs.in/interview/room/{doc['id']}"
+    meeting = f"https://termjobs.in/interview/room/{doc['id']}?" + urlencode({'role': 'candidate', 'token': doc['candidate_token']})
     calendar = sync_interview_event(user, doc)
     try:
         delivery = send_interview_invitation_email(candidate_name=doc['candidate_name'], candidate_email=doc['candidate_email'],
@@ -118,8 +118,10 @@ def _save_company_interview(user, data):
             scheduled_date=doc['scheduled_date'], scheduled_time=f"{doc['scheduled_time']} ({doc['scheduled_timezone']})",
             duration_minutes=doc['duration_minutes'], meeting_link=meeting, candidate_portal_link=portal,
             passcode=doc['candidate_passcode'], instructions=doc.get('instructions') or '')
-    except Exception:
-        delivery = {'status': 'failed', 'reason': 'Interview saved but email delivery failed. Retry dispatch.'}
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed sending interview invitation email: {exc}")
+        delivery = {'status': 'failed', 'reason': f"Email delivery error: {str(exc)}"}
     with get_session() as session:
         stored = session.get(InterviewRound, doc['id'])
         stored.calendar_sync = calendar

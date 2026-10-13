@@ -52,7 +52,7 @@ def send_email_via_gmail(
     try:
         server = smtplib.SMTP("smtp.gmail.com", 587, timeout=10)
         server.starttls()
-        server.login(sender_email, clean_password)
+        server.login(sender, clean_password)
         server.send_message(msg)
         server.quit()
         

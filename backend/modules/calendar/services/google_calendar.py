@@ -202,7 +202,7 @@ def sync_interview_event(user, interview):
         event_id = interview.get('google_event_id') or hashlib.sha256(interview['id'].encode()).hexdigest()[:32]
         event = {'summary': f"{interview['round_name']} · {interview['candidate_name']}",
             'description': f"Company interview for {interview['requisition_title']}.\nJoin the TermJobs LiveKit interview: https://termjobs.in/interview/room/{interview['id']}",
-            'location': f"https://termjobs.in/interview/room/{interview['id']}",
+            'location': f"https://termjobs.in/interview/room/{interview['id']}?role=interviewer",
             'start': {'dateTime': start.isoformat(), 'timeZone': interview['scheduled_timezone']},
             'end': {'dateTime': end.isoformat(), 'timeZone': interview['scheduled_timezone']},
             'attendees': [{'email': email} for email in dict.fromkeys([interview.get('candidate_email'), interview.get('interviewer_email')]) if email],

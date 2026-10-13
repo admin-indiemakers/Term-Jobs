@@ -432,6 +432,25 @@ def get_round_detail_endpoint(round_id: str):
     return round_doc
 
 
+@router.get('/rounds/{round_id}/join-identity')
+async def resolve_interview_join_identity(round_id: str, request: Request, token: str = Query('')):
+    from inspect import isawaitable
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview: raise HTTPException(status_code=404, detail='Interview not found')
+        authorization = request.headers.get('authorization')
+        if authorization:
+            actor = get_current_user(authorization, session)
+            if isawaitable(actor): actor = await actor
+            if actor.role in ('Hiring Manager', 'Admin', 'HR', 'Director') and actor.tenant_id == interview.tenant_id and (str(interview.created_by) == str(actor.id) or str(interview.interviewer_email or '').lower() == str(actor.email or '').lower()):
+                return {'role': 'interviewer', 'name': actor.name}
+        if token and token == interview.interviewer_token:
+            return {'role': 'interviewer', 'name': interview.interviewer_name or 'Interviewer'}
+        if token and token == interview.candidate_token:
+            return {'role': 'candidate', 'name': interview.candidate_name or 'Candidate'}
+        raise HTTPException(status_code=403, detail='Sign in with the assigned hiring-manager account or use your personal interview invitation.')
+
+
 @router.post("/rounds/{round_id}/status")
 def update_round_status_endpoint(
     round_id: str,

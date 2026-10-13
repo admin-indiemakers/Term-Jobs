@@ -48,7 +48,7 @@ def test_dispatch_uses_real_candidate_and_official_links_reports_email_failure(s
     result = scheduling.save_company_interview(user, data)
     assert result['email_delivery']['status'] == 'failed'
     assert result['calendar_sync']['status'] == 'synced'
-    assert result['meeting_link'] == 'https://termjobs.in/interview/room/round-1'
+    assert result['meeting_link'] == 'https://termjobs.in/interview/room/round-1?role=candidate&token=candidate-token'
     assert mail.call_args.kwargs['candidate_email'] == 'candidate@example.com'
     assert 'Asia/Kolkata' in mail.call_args.kwargs['scheduled_time']
     assert mail.call_args.kwargs['candidate_portal_link'].startswith('https://termjobs.in/')
