@@ -486,7 +486,7 @@ export function AiInterviewStage({
             console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
           }
           if (recordedBlob && round?.id) {
-            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
+            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds, round.candidate_token || round.interviewer_token);
             setRecordingUploaded(true);
             console.log('✅ [RECORDING] Video successfully uploaded to backend');
           } else { throw new Error('No camera recording was captured.'); }

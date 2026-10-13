@@ -144,7 +144,30 @@ export const interviewApi = {
   },
 
   // Candidate Interview Video Recording
-  async uploadRecording(roundId, videoBlob, durationSeconds = 0) {
+  async uploadRecording(roundId, videoBlob, durationSeconds = 0, interviewToken = '') {
+    if (interviewToken) {
+      const size = 1024 * 1024;
+      const count = Math.ceil(videoBlob.size / size);
+      if (!count || count > 256) throw new Error('Recording is empty or larger than 256 MB. Contact the hiring team.');
+      const uploadId = crypto.randomUUID();
+      const base = `/api/interviews/rounds/${roundId}/recording/chunks/${uploadId}`;
+      const query = `?token=${encodeURIComponent(interviewToken)}`;
+      for (let index = 0; index < count; index++) {
+        const body = new FormData();
+        body.append('file', videoBlob.slice(index * size, (index + 1) * size), 'chunk.bin');
+        let failure;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { await request(`${base}/parts/${index}${query}`, { method: 'POST', body, timeout: 60000 }); failure = null; break; }
+          catch (error) { failure = error; }
+        }
+        if (failure) throw failure;
+      }
+      const body = new FormData();
+      body.append('chunk_count', String(count));
+      body.append('duration_seconds', String(Math.round(durationSeconds)));
+      body.append('content_type', videoBlob.type || 'video/webm');
+      return request(`${base}/complete${query}`, { method: 'POST', body, timeout: 180000 });
+    }
     const formData = new FormData();
     formData.append('file', videoBlob, `recording_${roundId}.webm`);
     formData.append('duration_seconds', String(Math.round(durationSeconds)));

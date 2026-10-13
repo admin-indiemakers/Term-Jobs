@@ -525,6 +525,50 @@ def get_communication_analysis_endpoint(round_id: str):
     return report
 
 
+@router.post('/rounds/{round_id}/recording/chunks/{upload_id}/parts/{chunk_index}')
+async def upload_recording_chunk(round_id: str, upload_id: str, chunk_index: int, token: str = Query(...), file: UploadFile = File(...)):
+    from datetime import datetime, timedelta, timezone
+    from modules.shared.db import db
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or not token or token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail='Interview not found')
+    try: uuid.UUID(upload_id)
+    except ValueError: raise HTTPException(status_code=400, detail='Invalid recording upload ID')
+    if not 0 <= chunk_index < 256:
+        raise HTTPException(status_code=400, detail='Recording exceeds the supported upload size')
+    contents = await file.read(1024 * 1024 + 1)
+    if not contents or len(contents) > 1024 * 1024:
+        raise HTTPException(status_code=413, detail='Recording chunks must be at most 1 MB')
+    chunks = db['interview_recording_chunks']
+    chunks.create_index('expires_at', expireAfterSeconds=0)
+    chunks.replace_one({'_id': f'{round_id}:{upload_id}:{chunk_index}'}, {'_id': f'{round_id}:{upload_id}:{chunk_index}',
+        'round_id': round_id, 'upload_id': upload_id, 'index': chunk_index, 'data': contents,
+        'expires_at': datetime.now(timezone.utc) + timedelta(days=1)}, upsert=True)
+    return {'status': 'uploaded', 'index': chunk_index}
+
+
+@router.post('/rounds/{round_id}/recording/chunks/{upload_id}/complete')
+def complete_recording_upload(round_id: str, upload_id: str, token: str = Query(...), chunk_count: int = Form(...), duration_seconds: int = Form(0), content_type: str = Form('video/webm')):
+    from modules.shared.db import db
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or not token or token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail='Interview not found')
+    if not 1 <= chunk_count <= 256 or content_type.split(';')[0] not in ('video/webm', 'video/mp4'):
+        raise HTTPException(status_code=400, detail='Invalid recording upload metadata')
+    chunks = db['interview_recording_chunks']
+    rows = list(chunks.find({'round_id': round_id, 'upload_id': upload_id}).sort('index', 1))
+    if [row['index'] for row in rows] != list(range(chunk_count)):
+        raise HTTPException(status_code=409, detail='Recording chunks are missing. Retry submission.')
+    contents = b''.join(row['data'] for row in rows)
+    extension = 'mp4' if content_type.startswith('video/mp4') else 'webm'
+    updated = save_round_recording(round_id, contents, f'recording.{extension}', content_type, duration_seconds)
+    if not updated: raise HTTPException(status_code=404, detail='Interview not found')
+    chunks.delete_many({'round_id': round_id, 'upload_id': upload_id})
+    return {'status': 'success', 'recording_url': updated['recording_url'], 'recording_metadata': updated['recording_metadata']}
+
+
 @router.post("/rounds/{round_id}/recording")
 async def upload_round_recording_endpoint(
     round_id: str,

@@ -204,11 +204,7 @@ export function InterviewRoom({
 
         if (recordedBlob && round?.id) {
           try {
-            const uploadPromise = interviewApi.uploadRecording(round.id, recordedBlob, durationSec);
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Video upload timed out. Retry submission.')), 60000)
-            );
-            const res = await Promise.race([uploadPromise, timeoutPromise]);
+            const res = await interviewApi.uploadRecording(round.id, recordedBlob, durationSec, round.candidate_token || round.interviewer_token);
             console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
             setIsRecordingProof(false);
             return res;
