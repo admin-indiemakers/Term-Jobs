@@ -1,4 +1,5 @@
 import { request } from '../../api/client';
+import { uploadParts } from '../utils/uploadPool';
 
 const commAnalysisCache = new Map();
 
@@ -144,7 +145,7 @@ export const interviewApi = {
   },
 
   // Candidate Interview Video Recording
-  async uploadRecording(roundId, videoBlob, durationSeconds = 0, interviewToken = '') {
+  async uploadRecording(roundId, videoBlob, durationSeconds = 0, interviewToken = '', onProgress = () => {}) {
     if (interviewToken) {
       const size = 1024 * 1024;
       const count = Math.ceil(videoBlob.size / size);
@@ -152,7 +153,7 @@ export const interviewApi = {
       const uploadId = crypto.randomUUID();
       const base = `/api/interviews/rounds/${roundId}/recording/chunks/${uploadId}`;
       const query = `?token=${encodeURIComponent(interviewToken)}`;
-      for (let index = 0; index < count; index++) {
+      await uploadParts(count, async index => {
         const body = new FormData();
         body.append('file', videoBlob.slice(index * size, (index + 1) * size), 'chunk.bin');
         let failure;
@@ -161,7 +162,8 @@ export const interviewApi = {
           catch (error) { failure = error; }
         }
         if (failure) throw failure;
-      }
+      }, onProgress);
+      onProgress({ uploaded: count, total: count, phase: 'saving' });
       const body = new FormData();
       body.append('chunk_count', String(count));
       body.append('duration_seconds', String(Math.round(durationSeconds)));

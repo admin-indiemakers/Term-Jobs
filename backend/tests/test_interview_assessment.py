@@ -14,14 +14,15 @@ def questions():
                            {'title': 'DevOps Engineer', 'structured_role': {'must_have_skills': ['Kubernetes', 'Terraform']}})
 
 
-def test_questions_use_original_resume_linked_by_application(monkeypatch):
+@pytest.mark.parametrize('with_candidate_id', [True, False])
+def test_questions_use_original_resume_linked_by_application(monkeypatch, with_candidate_id):
     import importlib
     import mongomock
     from unittest.mock import MagicMock
     from modules.interview.services.assessment import load_questions
     database = mongomock.MongoClient()['assessment-resume']
     monkeypatch.setattr(importlib.import_module('modules.shared.db'), 'db', database)
-    database.candidate_submissions.insert_one({'id': 'app', 'requisition_id': 'req', 'candidate_id': 'person', 'candidate_email': 'candidate@example.com'})
+    database.candidate_submissions.insert_one({'id': 'app', 'requisition_id': 'req', 'candidate_email': 'candidate@example.com', **({'candidate_id': 'person'} if with_candidate_id else {})})
     database.candidates.insert_one({'id': 'person', 'candidate_email': 'candidate@example.com', 'extracted_text': 'Built Kubernetes deployment pipelines.'})
     req = SimpleNamespace(id='req', tenant_id='company', to_doc=lambda: {'title': 'Engineer', 'structured_role': {'must_have_skills': ['Kubernetes']}})
     session = MagicMock()
@@ -36,6 +37,18 @@ def test_questions_use_original_resume_linked_by_application(monkeypatch):
 def test_questions_accept_top_level_parsed_experience():
     result = build_questions({'experience': [{'role': 'Backend engineer', 'company': 'Acme'}]}, {'title': 'Engineer', 'structured_role': {'must_have_skills': ['Python']}})
     assert 'Python' in result[0]['prompt']
+
+
+def test_stored_original_pdf_is_parsed_when_extracted_text_is_missing():
+    import base64
+    import pymupdf
+    from modules.interview.services.assessment import recover_resume_text
+    pdf = pymupdf.open()
+    page = pdf.new_page()
+    page.insert_text((50, 50), 'DevOps engineer. Built Kubernetes deployment pipelines and automated infrastructure.\nOwned incident response and improved monitoring and deployment reliability.')
+    resume = recover_resume_text({'filename': 'resume.pdf', 'resume_pdf': base64.b64encode(pdf.tobytes()).decode()})
+    pdf.close()
+    assert 'Kubernetes' in resume['resume_text']
 
 
 def valid_assessment():

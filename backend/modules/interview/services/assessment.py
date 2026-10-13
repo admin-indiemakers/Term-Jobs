@@ -5,6 +5,34 @@ import re
 QUESTION_STYLE_VERSION = 'concise-v2'
 
 
+def has_resume_evidence(resume):
+    details = resume.get('details') or {}
+    return bool(resume.get('resume_text') or resume.get('extracted_text') or details.get('experience') or details.get('projects') or resume.get('experience') or resume.get('projects'))
+
+
+def recover_resume_text(resume):
+    """Recover evidence from the stored original file, never fabricate profile content."""
+    if has_resume_evidence(resume) or not resume.get('resume_pdf'):
+        return resume
+    import base64
+    import tempfile
+    from pathlib import Path
+    from modules.resume_screener.pipeline.extractor import extract_text
+    try:
+        contents = base64.b64decode(resume['resume_pdf'], validate=True)
+        if len(contents) > 10 * 1024 * 1024: return resume
+        extension = '.docx' if str(resume.get('filename') or '').lower().endswith('.docx') else '.pdf'
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / ('resume' + extension)
+            path.write_bytes(contents)
+            text = extract_text(str(path), extension.lstrip('.'))
+        if text and len(text.strip()) >= 80:
+            return {**resume, 'resume_text': text.strip()}
+    except Exception:
+        pass
+    return resume
+
+
 def spoken_label(value, limit=60):
     """Only short labels enter spoken prompts, never URLs or serialized resume data."""
     if not isinstance(value, str):
@@ -80,17 +108,24 @@ def load_questions(session, round_obj) -> list:
     submission = db["candidate_submissions"].find_one({"requisition_id": req.id, "$or": identity})
     if not submission:
         raise ValueError("A candidate application linked to this requisition is required.")
-    resume = submission
+    if submission.get('tenant_id') not in (None, req.tenant_id):
+        raise ValueError('The candidate application does not belong to this interview company.')
+    resume = recover_resume_text(submission)
     # Portal outreach applications reference the original resume instead of copying it.
-    has_resume = submission.get('resume_text') or submission.get('extracted_text') or (submission.get('details') or {}).get('experience') or (submission.get('details') or {}).get('projects') or submission.get('experience') or submission.get('projects')
-    if not has_resume and submission.get('candidate_id'):
-        linked = db['candidates'].find_one({'id': submission['candidate_id']})
+    if not has_resume_evidence(resume):
+        application_email = str(submission.get('candidate_email') or round_obj.candidate_email or '').strip().lower()
+        linked = db['candidates'].find_one({'id': submission['candidate_id']}) if submission.get('candidate_id') else None
+        if not linked or not (has_resume_evidence(linked) or linked.get('resume_pdf')):
+            # Older applications may omit candidate_id; resolve the exact application email only.
+            sources = list(db['candidates'].find({'candidate_email': application_email})) if application_email else []
+            sources = [source for source in sources if has_resume_evidence(source) or source.get('resume_pdf')]
+            linked = sources[0] if len(sources) == 1 else None
         if linked:
             source_email = str(linked.get('candidate_email') or '').strip().lower()
             application_email = str(submission.get('candidate_email') or '').strip().lower()
             if source_email and application_email and source_email != application_email:
                 raise ValueError('The linked resume does not match this application. Ask the hiring team to correct it.')
-            resume = linked
+            resume = recover_resume_text(linked)
     questions = build_questions(resume, req.to_doc())
     round_obj.interview_questions = questions
     session._track(round_obj)

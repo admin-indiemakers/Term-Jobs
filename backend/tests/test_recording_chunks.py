@@ -23,7 +23,7 @@ def store(monkeypatch):
 
 def test_chunks_are_idempotent_and_reassembled_in_order(store, monkeypatch):
     for index, data in [(1, b'last'), (0, b'first'), (0, b'first')]:
-        asyncio.run(router.upload_recording_chunk('round', UPLOAD, index, 'secret', UploadFile(filename='chunk', file=BytesIO(data))))
+        router.upload_recording_chunk('round', UPLOAD, index, 'secret', UploadFile(filename='chunk', file=BytesIO(data)))
     assert store.interview_recording_chunks.count_documents({}) == 2
     saved = []
     monkeypatch.setattr(router, 'save_round_recording', lambda *args: saved.append(args) or {'recording_url': 'saved', 'recording_metadata': {}})

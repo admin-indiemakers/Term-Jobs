@@ -66,10 +66,10 @@ export default function AcceptedCandidates() {
     setError('');
     try {
       const [candData, obData, issuesData, woData] = await Promise.all([
-        request('/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding', { token }).catch(() => []),
-        request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/work-orders', { token }).catch(() => []),
+        request('/candidates?status=Accepted&refresh=true', { token, noCache: true }),
+        request('/api/onboarding', { token, noCache: true }).catch(() => []),
+        request('/api/onboarding/issues', { token, noCache: true }).catch(() => []),
+        request('/api/work-orders', { token, noCache: true }).catch(() => []),
       ]);
 
       const candList = Array.isArray(candData) ? candData : candData?.candidates || [];

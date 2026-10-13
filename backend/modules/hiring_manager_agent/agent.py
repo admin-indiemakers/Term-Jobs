@@ -1353,7 +1353,7 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
         filtered = []
         for d in all_subs:
             s_val = (d.get("status") or "").lower()
-            if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted"):
+            if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted", "interested - fast track", "fast track", "interested"):
                 r_id = d.get("requisition_id")
                 # Scoping: candidate belongs to HM's requisitions OR matches tenant/fallback
                 is_scoped = (
@@ -1368,7 +1368,7 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
         if not filtered and all_subs:
             for d in all_subs:
                 s_val = (d.get("status") or "").lower()
-                if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted"):
+                if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted", "interested - fast track", "fast track", "interested"):
                     filtered.append(d)
 
         # If role_filter is specified, filter candidates matching requisition title, role, or skills

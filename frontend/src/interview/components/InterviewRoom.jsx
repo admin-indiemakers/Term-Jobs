@@ -139,7 +139,7 @@ export function InterviewRoom({
         }
       }
 
-      const options = chosenMime ? { mimeType: chosenMime } : undefined;
+      const options = { ...(chosenMime ? { mimeType: chosenMime } : {}), videoBitsPerSecond: 1200000, audioBitsPerSecond: 64000 };
       const recorder = new MediaRecorder(recordStream, options);
       recordedChunksRef.current = [];
       recordingStartTimeRef.current = Date.now();
@@ -161,7 +161,7 @@ export function InterviewRoom({
 
   // Guaranteed method to stop recorder and persist conversation video proof to backend and GridFS
   const stopAndUploadProofVideo = useCallback(
-    async (customDuration) => {
+    async (customDuration, onProgress) => {
       if (isUploadingProofRef.current) return null;
       isUploadingProofRef.current = true;
 
@@ -204,7 +204,7 @@ export function InterviewRoom({
 
         if (recordedBlob && round?.id) {
           try {
-            const res = await interviewApi.uploadRecording(round.id, recordedBlob, durationSec, round.candidate_token || round.interviewer_token);
+            const res = await interviewApi.uploadRecording(round.id, recordedBlob, durationSec, round.candidate_token || round.interviewer_token, onProgress);
             console.log('✅ [PROOF RECORDING] Successfully stored interview video proof:', res);
             setIsRecordingProof(false);
             return res;

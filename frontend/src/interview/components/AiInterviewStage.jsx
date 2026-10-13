@@ -75,6 +75,7 @@ export function AiInterviewStage({
   const [isCompleted, setIsCompleted] = useState(round?.status === 'Completed');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [recordingUploaded, setRecordingUploaded] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(round?.communication_analysis || null);
   const [metricsResult, setMetricsResult] = useState(round?.communication_metrics || null);
@@ -133,7 +134,7 @@ export function AiInterviewStage({
           return;
         }
 
-        const options = chosenMime ? { mimeType: chosenMime } : undefined;
+        const options = { ...(chosenMime ? { mimeType: chosenMime } : {}), videoBitsPerSecond: 1200000, audioBitsPerSecond: 64000 };
         const recorder = new MediaRecorder(stream, options);
         recordedChunksRef.current = [];
         recordingStartTimeRef.current = Date.now();
@@ -459,7 +460,7 @@ export function AiInterviewStage({
       try {
         if (onSaveProofRecording) {
           console.log('📹 [PROOF RECORDING] Finalizing session proof via parent room handler...');
-          const saved = recordingUploaded || await onSaveProofRecording(callSeconds);
+          const saved = recordingUploaded || await onSaveProofRecording(callSeconds, setUploadProgress);
           if (!saved) throw new Error('Video recording could not be saved. Please retry submission.');
           setRecordingUploaded(true);
         } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -486,7 +487,7 @@ export function AiInterviewStage({
             console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
           }
           if (recordedBlob && round?.id) {
-            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds, round.candidate_token || round.interviewer_token);
+            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds, round.candidate_token || round.interviewer_token, setUploadProgress);
             setRecordingUploaded(true);
             console.log('✅ [RECORDING] Video successfully uploaded to backend');
           } else { throw new Error('No camera recording was captured.'); }
@@ -571,12 +572,12 @@ export function AiInterviewStage({
         <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300">
           <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mb-4" />
           <div className="text-base font-bold text-white tracking-tight">
-            {isUploadingRecording ? 'Saving Interview Video & Audio...' : 'Submitting Interview Responses...'}
+            {isUploadingRecording ? (uploadProgress?.phase === 'uploading' ? `Uploading video: ${Math.round(uploadProgress.uploaded / uploadProgress.total * 100)}%` : 'Finalizing saved video…') : 'Submitting Interview Responses...'}
           </div>
           <p className="text-xs text-zinc-400 mt-1 max-w-sm">
             {isUploadingRecording
-              ? 'Securely encrypting and archiving your interview video recording for the hiring team...'
-              : 'Encrypting and securely delivering your spoken responses to the hiring team...'}
+              ? 'Uploading your recording. Keep this page open until saving is confirmed.'
+              : 'Saving your answers and preparing the interview assessment…'}
           </p>
 
         </div>

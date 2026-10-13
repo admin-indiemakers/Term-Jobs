@@ -37,11 +37,11 @@ def _utcnow_iso() -> str:
 
 def create_notification(user_id: str, tenant_id: str, ntype: str, title: str, body: str, data: dict | None = None) -> None:
     """Persist a single notification for one recipient."""
-    import modules.shared.db as shared_db
+    from modules.shared.db import get_session
 
     data = data or {}
     try:
-        with shared_db.get_session() as session:
+        with get_session() as session:
             n = Notification(
                 user_id=user_id,
                 tenant_id=tenant_id,

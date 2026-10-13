@@ -526,7 +526,7 @@ def get_communication_analysis_endpoint(round_id: str):
 
 
 @router.post('/rounds/{round_id}/recording/chunks/{upload_id}/parts/{chunk_index}')
-async def upload_recording_chunk(round_id: str, upload_id: str, chunk_index: int, token: str = Query(...), file: UploadFile = File(...)):
+def upload_recording_chunk(round_id: str, upload_id: str, chunk_index: int, token: str = Query(...), file: UploadFile = File(...)):
     from datetime import datetime, timedelta, timezone
     from modules.shared.db import db
     with get_session() as session:
@@ -537,11 +537,12 @@ async def upload_recording_chunk(round_id: str, upload_id: str, chunk_index: int
     except ValueError: raise HTTPException(status_code=400, detail='Invalid recording upload ID')
     if not 0 <= chunk_index < 256:
         raise HTTPException(status_code=400, detail='Recording exceeds the supported upload size')
-    contents = await file.read(1024 * 1024 + 1)
+    contents = file.file.read(1024 * 1024 + 1)
     if not contents or len(contents) > 1024 * 1024:
         raise HTTPException(status_code=413, detail='Recording chunks must be at most 1 MB')
     chunks = db['interview_recording_chunks']
-    chunks.create_index('expires_at', expireAfterSeconds=0)
+    if chunk_index == 0:
+        chunks.create_index('expires_at', expireAfterSeconds=0)
     chunks.replace_one({'_id': f'{round_id}:{upload_id}:{chunk_index}'}, {'_id': f'{round_id}:{upload_id}:{chunk_index}',
         'round_id': round_id, 'upload_id': upload_id, 'index': chunk_index, 'data': contents,
         'expires_at': datetime.now(timezone.utc) + timedelta(days=1)}, upsert=True)

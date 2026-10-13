@@ -284,6 +284,8 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         results.append({
             "id": doc_id,
             "submission_id": doc_id,
+            "manual_shortlist": doc.get('manual_shortlist') is True,
+            "manual_shortlist_reason": doc.get('manual_shortlist_reason') or '',
             "workorder_id": wo_match.get("workorder_id") or doc_id,
             "agreement_status": agr_status,
             "agreement_approved_by": wo_match.get("approved_by") or "",
@@ -411,13 +413,14 @@ def list_candidates(
     status: str | None = None,
     requisition_id: str | None = None,
     include_details: bool = False,
+    refresh: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """List candidate submissions, optionally filtered by status and/or requisition."""
     from modules.shared.cache import cache as _cache
     cache_key = f"cands_list:{current_user.id}:{current_user.role}:{status or 'all'}:{requisition_id or 'all'}:{include_details}"
     cached = _cache.get(cache_key)
-    if cached is not None:
+    if cached is not None and not refresh:
         return cached
 
     query_filter = {}
@@ -448,7 +451,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
     from modules.interview.domain.models import InterviewRound
 
     candidates = _fetch_candidate_submissions_mongo(
-        {"status": {"$in": ["Shortlisted", "Accepted", "Offer Extended", "Offer Accepted", "Under Review", "Hired"]}},
+        {'$or': [{"status": {"$in": ["Shortlisted", "Accepted", "Offer Extended", "Offer Accepted", "Under Review", "Hired"]}}, {'manual_shortlist': True, 'status': {'$in': ['Screened', 'Shortlisted']}}]},
         current_user
     )
 
@@ -494,7 +497,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
             or (c.get("round_status") == "Completed")
         )
 
-        if has_completed_interview:
+        if has_completed_interview or c.get('manual_shortlist') is True:
             verified.append(c)
         else:
             # Candidate was marked Shortlisted without an interview -> auto-correct to Screened

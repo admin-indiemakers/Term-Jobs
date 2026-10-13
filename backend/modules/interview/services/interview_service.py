@@ -793,7 +793,10 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
         )
 
         # Allowed statuses for interview scheduling
-        allowed_statuses = {"Shortlisted", "Interviewing", "Accepted", "Under Review", "Screened"}
+        allowed_statuses = {
+            "Shortlisted", "Interviewing", "Accepted", "Under Review", "Screened",
+            "Interested - Fast Track", "Fast Track", "Interested"
+        }
         if not sub_found and not mongo_sub:
             raise ValueError(
                 f"Candidate '{cand_name or cand_email or cand_sub_id}' is not in the candidate submissions for this requisition and has not passed the shortlisting stage."
