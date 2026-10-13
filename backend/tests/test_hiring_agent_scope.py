@@ -3,6 +3,26 @@ from modules.hiring_manager_agent.scope import ScopedDatabase, authorized_chat
 from modules.hiring_manager_agent import agent
 
 
+def test_workforce_questions_use_owned_work_order_links(monkeypatch):
+    raw = mongomock.MongoClient()['workforce-routing']
+    scoped = ScopedDatabase(raw)
+    monkeypatch.setattr(agent, 'db', scoped)
+    raw.requisitions.insert_one({'id': 'mine', 'tenant_id': 'a', 'created_by': 'manager'})
+    raw.work_orders.insert_one({'id': 'my-order', 'tenant_id': 'a', 'requisition_id': 'mine'})
+    raw.timesheets.insert_many([{'id': 'my-sheet', 'tenant_id': 'a', 'work_order_id': 'my-order', 'status': 'Submitted', 'total_hours': 12}, {'id': 'other-sheet', 'tenant_id': 'a', 'work_order_id': 'other-order', 'status': 'Submitted'}])
+    raw.candidate_expenses.insert_one({'id': 'my-expense', 'tenant_id': 'a', 'work_order_id': 'my-order', 'status': 'Submitted', 'amount': 100})
+    @authorized_chat(raw)
+    def query(prompt, history, current_user):
+        return agent.workforce_chat_reply(prompt)
+    actor = {'id': 'manager', 'tenant_id': 'a'}
+    reply = query('show active timesheets', current_user=actor)['reply']
+    assert 'my-sheet' in reply and 'other-sheet' not in reply
+    reply = query('show expense for approval', current_user=actor)['reply']
+    assert 'my-expense' in reply and '100' in reply
+    reply = query('show reported candidate issues', current_user=actor)['reply']
+    assert 'No matching reported candidate issues' in reply
+
+
 def test_pipeline_counts_only_owned_requisitions(monkeypatch):
     raw = mongomock.MongoClient()['pipeline']
     monkeypatch.setattr(agent, 'db', raw)

@@ -1344,53 +1344,8 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
 
     try:
         cand_ids, cand_names, req_ids = _get_hm_scoped_candidate_pool(user_id, user_name, tenant_id)
-        all_subs = list(db["candidate_submissions"].find(t_filter))
-
-        # If tenant-specific find yielded 0, query without tenant filter as fallback
-        if not all_subs and is_scoped_tenant:
-            all_subs = list(db["candidate_submissions"].find({}))
-
-        filtered = []
-        for d in all_subs:
-            s_val = (d.get("status") or "").lower()
-            if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted", "interested - fast track", "fast track", "interested"):
-                r_id = d.get("requisition_id")
-                # Scoping: candidate belongs to HM's requisitions OR matches tenant/fallback
-                is_scoped = (
-                    bool(r_id and req_ids and r_id in req_ids) or
-                    (is_scoped_tenant and d.get("tenant_id") in (None, tenant_id, "local")) or
-                    (not req_ids)
-                )
-                if is_scoped:
-                    filtered.append(d)
-
-        # Fallback to all submissions if filtered empty
-        if not filtered and all_subs:
-            for d in all_subs:
-                s_val = (d.get("status") or "").lower()
-                if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted", "interested - fast track", "fast track", "interested"):
-                    filtered.append(d)
-
-        # If role_filter is specified, filter candidates matching requisition title, role, or skills
-        rf_clean = (role_filter or "").strip().lower()
-        if rf_clean:
-            role_matches = []
-            for d in filtered:
-                r_id = d.get("requisition_id")
-                r_title = (req_map.get(r_id) or d.get("requisition_title") or "").lower()
-                c_role = (d.get("target_role") or d.get("role") or "").lower()
-                skills_val = d.get("matched_skills") or d.get("skills") or []
-                skills_str = (" ".join(skills_val) if isinstance(skills_val, list) else str(skills_val)).lower()
-                
-                # Check for direct match or word tokens match
-                if rf_clean in r_title or r_title in rf_clean or rf_clean in c_role or rf_clean in skills_str:
-                    role_matches.append(d)
-                else:
-                    rf_tokens = [tok for tok in re.split(r'\s+', rf_clean) if len(tok) > 2]
-                    if any(tok in r_title or tok in c_role or tok in skills_str for tok in rf_tokens):
-                        role_matches.append(d)
-            if role_matches:
-                filtered = role_matches
+        all_subs = list(db['candidate_submissions'].find({'requisition_id': {'$in': list(req_ids)}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': None}, {'tenant_id': {'$exists': False}}]}))
+        filtered = [row for row in all_subs if str(row.get('status') or '').lower() in ('shortlisted', 'interviewing', 'under_review')]
 
         filtered.sort(key=lambda x: float(x.get("match_score") or 0), reverse=True)
         seen = set()
@@ -1399,7 +1354,7 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
             if not c_name or c_name.strip().lower() in ("termjobs", "term jobs", "test", "candidate"):
                 continue
             r_id = d.get("requisition_id")
-            key = (c_name, r_id)
+            key = ((d.get('candidate_email') or d.get('candidate_id') or d.get('id') or c_name).strip().lower(), r_id)
             if key in seen:
                 continue
             seen.add(key)
@@ -1527,7 +1482,7 @@ def reject_shortlisted_candidate(candidate_identifier: str, reason: str = "", us
     }
 
 
-def schedule_candidate_interview(candidate_identifier: str, req_title: str = "Senior Full Stack Developer", proposed_date: str = "", proposed_time: str = "", interview_type: str = "Technical Round", meeting_notes: str = ""):
+def schedule_candidate_interview(candidate_identifier: str, req_title: str = "", proposed_date: str = "", proposed_time: str = "", interview_type: str = "Technical Round", meeting_notes: str = ""):
     dt = proposed_date or ""
     tm = proposed_time or ""
     typ = interview_type or "Technical Round"
@@ -2302,18 +2257,11 @@ def list_onboarding_issues(user_id: str = "", user_name: str = "", tenant_id: st
 # ── CANDIDATE POOL SCOPING ─────────────────────────────────────────────────────
 
 def _get_hm_scoped_candidate_pool(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
-    if not tenant_id or tenant_id in ('local', 'all'):
+    if not user_id or not tenant_id or tenant_id in ('local', 'all'):
         return set(), set(), set()
     reqs = list(db['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}))
-    if not reqs:
-        reqs = list(db['requisitions'].find({'tenant_id': tenant_id}))
     req_ids = {r['id'] for r in reqs if r.get('id')}
-    submissions = list(db['candidate_submissions'].find({
-        '$or': [
-            {'requisition_id': {'$in': list(req_ids)}},
-            {'tenant_id': tenant_id}
-        ]
-    }))
+    submissions = list(db['candidate_submissions'].find({'requisition_id': {'$in': list(req_ids)}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': None}, {'tenant_id': {'$exists': False}}]}))
     ids = {str(c.get('candidate_id') or c.get('id')) for c in submissions if c.get('candidate_id') or c.get('id')}
     names = {c.get('candidate_name') or c.get('name') for c in submissions if c.get('candidate_name') or c.get('name')}
     return ids, names, req_ids
@@ -2887,6 +2835,33 @@ def hiring_pipeline_reply(user_id, tenant_id):
     return {'reply': reply, 'executed_actions': []}
 
 
+def workforce_chat_reply(prompt):
+    text = prompt.lower()
+    if re.search(r'\b(timesheets?|time\s*sheets?)\b', text):
+        collection, label = 'timesheets', 'timesheets'
+    elif re.search(r'\b(expenses?|reimbursements?)\b', text):
+        collection, label = 'candidate_expenses', 'expenses'
+    elif re.search(r'\b(reported|report|onboarding|candidate)\b', text) and re.search(r'\b(issues?|problems?)\b', text):
+        collection, label = 'onboarding_issues', 'reported candidate issues'
+    else:
+        return None
+    # Approval mutations remain in their explicit tools; listing does not perform an approval.
+    if re.search(r'^\s*(approve|reject)\b', text): return None
+    query = {}
+    if re.search(r'\b(pending|approval|active|open)\b', text):
+        statuses = ['submitted', 'pending', 'draft', 'open', 'in_progress', 'in progress']
+        query = {'status': {'$regex': '^(?:' + '|'.join(statuses) + ')$', '$options': 'i'}}
+    rows = list(db[collection].find(query).sort('created_at', -1).limit(25))
+    if not rows:
+        return {'reply': f'No matching {label} were found in your authorized team records.', 'executed_actions': []}
+    reply = f'Your {label}:\n\n| Record | Candidate | Status | Details |\n|---|---|---|---|\n'
+    for row in rows:
+        detail = f"{row.get('total_hours', '')} hours" if collection == 'timesheets' else str(row.get('amount') or '') if collection == 'candidate_expenses' else str(row.get('description') or row.get('title') or row.get('issue') or '')[:180]
+        values = [str(row.get('id') or row.get('_id') or ''), str(row.get('candidate_name') or row.get('worker_name') or ''), str(row.get('status') or 'Unknown'), detail]
+        reply += '| ' + ' | '.join(value.replace('|', '\\|').replace('\n', ' ') for value in values) + ' |\n'
+    return {'reply': reply, 'executed_actions': []}
+
+
 # ── MAIN AGENT ORCHESTRATOR ──────────────────────────────────────────────────
 
 @authorized_chat(raw_db)
@@ -2901,6 +2876,9 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
     calendar_context = current_user.get("google_calendar") or {}
+    workforce_result = workforce_chat_reply(prompt)
+    if workforce_result is not None:
+        return workforce_result
     if re.search(r'\b(pipeline|hiring\s+(?:stats|summary|overview)|dashboard\s+overview)\b', prompt, re.I) and not re.search(r'\b(create|draft|edit|update|delete)\b', prompt, re.I):
         return hiring_pipeline_reply(user_id, tenant_id)
 

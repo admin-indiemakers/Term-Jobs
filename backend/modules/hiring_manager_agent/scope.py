@@ -21,7 +21,11 @@ class ScopedCollection:
             return {**relation, '$or': [tenant, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}
         if self.name == 'candidates':
             return {'id': {'$in': scope['candidate_ids']}, '$or': [tenant, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}
-        if self.name in ('work_orders', 'interview_rounds', 'interview_schedules', 'interview_requests', 'candidate_expenses', 'timesheets'):
+        if self.name in ('candidate_expenses', 'timesheets', 'onboarding_issues'):
+            return {**tenant, '$or': [relation, {'candidate_id': {'$in': scope.get('application_ids', [])}},
+                {'workorder_id': {'$in': scope.get('work_order_ids', [])}}, {'work_order_id': {'$in': scope.get('work_order_ids', [])}},
+                {'hiring_manager': scope['user_id']}]}
+        if self.name in ('work_orders', 'interview_rounds', 'interview_schedules', 'interview_requests'):
             return {**tenant, **relation}
         if self.name == 'tenants':
             return {'id': scope['tenant_id']}
@@ -92,8 +96,11 @@ def authorized_chat(database):
                 return {'reply': 'A verified company and hiring manager account is required.', 'executed_actions': []}
             reqs = list(database['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}, {'id': 1}))
             req_ids = [r['id'] for r in reqs if r.get('id')]
-            submissions = list(database['candidate_submissions'].find({'requisition_id': {'$in': req_ids}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}, {'candidate_id': 1}))
-            scope = {'tenant_id': tenant_id, 'user_id': user_id, 'req_ids': req_ids, 'candidate_ids': [r['candidate_id'] for r in submissions if r.get('candidate_id')]}
+            submissions = list(database['candidate_submissions'].find({'requisition_id': {'$in': req_ids}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}, {'candidate_id': 1, 'id': 1, 'submission_id': 1}))
+            orders = list(database['work_orders'].find({'tenant_id': tenant_id, 'requisition_id': {'$in': req_ids}}))
+            scope = {'tenant_id': tenant_id, 'user_id': user_id, 'req_ids': req_ids, 'candidate_ids': [r['candidate_id'] for r in submissions if r.get('candidate_id')],
+                     'application_ids': [r.get('id') or r.get('submission_id') for r in submissions if r.get('id') or r.get('submission_id')],
+                     'work_order_ids': list({str(r[key]) for r in orders for key in ('id', 'workorder_id', 'work_order_number') if r.get(key)})}
             token = _scope.set(scope)
             try:
                 # Prior assistant messages can contain data from the old unscoped implementation.

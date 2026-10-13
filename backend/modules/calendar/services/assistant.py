@@ -151,7 +151,9 @@ def contextual_candidate(prompt, user, history):
         query = session.query(Requisition).filter(Requisition.tenant_id == user.tenant_id)
         if user.role == 'Hiring Manager':
             query = query.filter(Requisition.created_by == user.id)
-        ids = [req.id for req in query.all()]
+        requisitions = query.all()
+        ids = [req.id for req in requisitions]
+        titles = {req.id: req.title for req in requisitions}
     candidates = list(db['candidate_submissions'].find({'requisition_id': {'$in': ids}}))
     explicit = re.search(r'\b(?:with|for)\s+(.+?)(?=\s+(?:today|tomorrow|on|at|for\s+\d+)\b|[?!]|$)', prompt, re.I)
     requested = explicit.group(1).strip() if explicit else ''
@@ -161,13 +163,13 @@ def contextual_candidate(prompt, user, history):
     for context in contexts:
         matches = [c for c in candidates if c.get('candidate_name') and re.search(r'(?<!\w)' + re.escape(c['candidate_name']) + r'(?!\w)', context, re.I)]
         if len(matches) == 1:
-            return matches[0]
+            return {**matches[0], 'requisition_title': titles.get(matches[0].get('requisition_id'))}
         if len(matches) > 1:
             return None
     if requested and requested.lower() not in ('him', 'her', 'them', 'this candidate'):
         matches = [c for c in candidates if requested.casefold() in (str(c.get('id') or '').casefold(), str(c.get('candidate_email') or '').casefold()) or (c.get('candidate_name') and c['candidate_name'].casefold().startswith(requested.casefold() + ' '))]
         if len(matches) == 1:
-            return matches[0]
+            return {**matches[0], 'requisition_title': titles.get(matches[0].get('requisition_id'))}
         if len(matches) > 1:
             return None
         # A draft may refer to a named portal prospect before an application exists.
@@ -200,6 +202,7 @@ def interview_proposal(prompt, user, history):
     duration = re.search(r'(\d+)\s*(?:minutes|mins)', text)
     minutes = int(duration.group(1)) if duration else 45
     proposal = {'candidate': candidate['candidate_name'], 'candidate_submission_id': candidate.get('id') or candidate.get('submission_id'),
+                'requisition_title': candidate.get('requisition_title') or '',
                 'requisition_id': candidate.get('requisition_id'), 'proposed_date': day, 'proposed_time': time_value,
                 'scheduled_timezone': status['timezone'], 'duration_minutes': minutes, 'interview_type': 'Technical Round'}
     reply = 'Review the interview details below, then dispatch the invitation.'
@@ -217,7 +220,7 @@ def interview_proposal(prompt, user, history):
 def handle_calendar_query(prompt, user, history=None):
     text = prompt.lower()
     # Carry only editable draft fields forward; identity is resolved again in the actor's scope.
-    if re.search(r'\b(make|set|change|move|update)\b', text) and re.search(r'\b(today|tomorrow|\d{4}-\d{2}-\d{2}|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text):
+    if re.search(r'\b(make|set|change|move|update|schedule)\b', text) and re.search(r'\b(today|tomorrow|\d{4}-\d{2}-\d{2}|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text) and not re.search(r'\b(?:with|interview\s+for)\b', text):
         previous = next((item for item in reversed(history or []) if isinstance(item, dict) and item.get('role') == 'assistant'), None)
         draft = (previous or {}).get('interview_proposal')
         if isinstance(draft, dict) and not draft.get('id') and (draft.get('candidate') or draft.get('candidate_name')):

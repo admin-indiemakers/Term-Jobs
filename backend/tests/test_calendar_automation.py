@@ -211,15 +211,16 @@ def test_booking_from_chat_uses_user_time_not_model_invention(monkeypatch):
     assert captured[0]['duration_minutes'] == 60
 
 
-def test_followup_today_preserves_draft_candidate_and_time(monkeypatch):
+@pytest.mark.parametrize('prompt,expected_time', [('make it today', '16:00'), ('schedule for 7 pm today', '19:00')])
+def test_followup_today_preserves_draft_candidate_and_time(monkeypatch, prompt, expected_time):
     monkeypatch.setattr(assistant, 'contextual_candidate', lambda prompt, user, history: {'candidate_name': 'ARJUN', 'id': 'owned-app', 'requisition_id': 'owned-req'})
     monkeypatch.setattr(assistant, 'connection_status', lambda user: {'timezone': 'Asia/Kolkata'})
     monkeypatch.setattr(assistant, 'check_availability', lambda *args: {'available': True})
     history = [{'role': 'assistant', 'content': 'Review your proposal', 'interview_proposal': {'candidate': 'ARJUN', 'proposed_time': '16:00', 'duration_minutes': 45}}]
-    result = assistant.handle_calendar_query('make it today', USER, history)
+    result = assistant.handle_calendar_query(prompt, USER, history)
     draft = result['executed_actions'][0]['result']
     assert draft['proposed_date'] == datetime.now(ZoneInfo('Asia/Kolkata')).date().isoformat()
-    assert draft['proposed_time'] == '16:00'
+    assert draft['proposed_time'] == expected_time
     assert draft['candidate'] == 'ARJUN'
     assert draft['candidate_submission_id'] == 'owned-app'
     assert 'dispatch' in result['reply']

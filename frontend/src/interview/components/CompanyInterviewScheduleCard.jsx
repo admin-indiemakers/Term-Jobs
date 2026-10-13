@@ -53,7 +53,7 @@ export default function CompanyInterviewScheduleCard({ proposal, timezone = 'Asi
       <label className="text-xs font-semibold text-zinc-600 sm:col-span-2">Round name<input required disabled={Boolean(saved)} value={round} onChange={event => setRound(event.target.value)} className="mt-1 w-full rounded-lg border border-zinc-300 p-2 text-sm disabled:bg-zinc-50" /></label>
     </div>
     <p className="mt-3 text-xs text-zinc-500">Booking checks your primary Google Calendar for conflicts, reserves the slot as busy, sends the company LiveKit invitation, and schedules candidate email reminders 60 and 10 minutes before the interview.</p>
-    <button type="button" disabled={checking || !date || !time} onClick={checkSlot} className="mt-3 rounded-lg border border-zinc-300 px-3 py-2 text-xs font-semibold disabled:opacity-50">{checking ? 'Checking Google Calendar…' : 'Check availability'}</button>
+    <button type="button" disabled={checking || !date || !time} onClick={checkSlot} className="mt-3 rounded-lg border border-zinc-300 bg-white text-zinc-900 px-3 py-2 text-xs font-semibold disabled:opacity-50">{checking ? 'Checking Google Calendar…' : 'Check availability'}</button>
     {availability?.checkedSlot === `${date}:${time}:${zone}:${duration}` && <div role="status" className={`mt-2 text-xs ${availability.available ? 'text-emerald-700' : 'text-red-600'}`}>
       {availability.available ? 'This slot is currently free. Availability will be checked again when you book.' : 'This slot overlaps another meeting. Choose a different time.'}
       {availability.conflicts.map((conflict, index) => <p key={index}>{conflict.title} · {conflict.start?.dateTime || conflict.start?.date}</p>)}
