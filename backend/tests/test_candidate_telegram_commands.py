@@ -49,3 +49,22 @@ def test_connected_start_and_jobs_and_applied_use_real_account_data(monkeypatch)
     assert 'Published job' in jobs and 'Private draft' not in jobs
     applied = send('/applied')
     assert 'My application' in applied and 'Other application' not in applied
+
+
+def test_interviews_only_include_rounds_linked_to_candidates_actual_application(monkeypatch):
+    db = mongomock.MongoClient()['interviews']
+    monkeypatch.setattr(service, 'db', db)
+    monkeypatch.setattr(service, 'get_telegram_token', lambda: 'test')
+    client = AsyncMock()
+    client.__aenter__.return_value = client
+    monkeypatch.setattr(service.httpx, 'AsyncClient', lambda **kwargs: client)
+    db.candidates.insert_one({'id': 'me', 'candidate_email': 'me@example.com', 'telegram_chat_id': '123'})
+    db.telegram_links.insert_one({'chat_id': '123', 'candidate_email': 'me@example.com'})
+    db.requisitions.insert_many([{'id': 'devops', 'tenant_id': 'company', 'title': 'DevOps Engineer'}, {'id': 'backend', 'tenant_id': 'other', 'title': 'Backend Engineer'}])
+    db.candidate_submissions.insert_one({'id': 'my-app', 'candidate_email': 'me@example.com', 'requisition_id': 'devops'})
+    db.interview_rounds.insert_many([{'candidate_email': 'me@example.com', 'candidate_submission_id': 'my-app', 'requisition_id': 'devops', 'tenant_id': 'company', 'status': 'Scheduled', 'round_name': 'Technical', 'scheduled_date': '2026-10-14'}, {'candidate_email': 'me@example.com', 'candidate_submission_id': 'not-my-app', 'requisition_id': 'backend', 'tenant_id': 'other', 'status': 'Scheduled'}])
+    asyncio.run(service.process_telegram_update({'message': {'chat': {'id': 123, 'type': 'private'}, 'text': '/interviews', 'from': {}}}))
+    text = client.post.call_args.kwargs['json']['text']
+    assert 'DevOps Engineer' in text
+    assert 'Backend Engineer' not in text
+    assert '95%' not in text

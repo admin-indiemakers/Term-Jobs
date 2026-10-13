@@ -396,18 +396,33 @@ async def process_telegram_update(update: dict) -> None:
             return
         link = db['telegram_links'].find_one({'chat_id': str(chat_id)})
         connected_candidate = db['candidates'].find_one({'telegram_chat_id': str(chat_id), 'candidate_email': link.get('candidate_email')}) if link else None
-        if command in ('/jobs', '/requisitions', '/applied', '/applications', '/test', '/alert', 'test', 'alert'):
+        if command in ('/job', '/jobs', '/requisitions', '/interviews', '/interview', '/applied', '/applications', '/test', '/alert', 'test', 'alert'):
             if not connected_candidate:
                 await process_telegram_update({'message': {**msg, 'text': '/login'}})
                 return
-            if command in ('/applied', '/applications'):
+            if command in ('/interviews', '/interview'):
+                email = connected_candidate['candidate_email']
+                applications = list(db['candidate_submissions'].find({'candidate_email': email}))
+                app_ids = [row.get('id') or row.get('submission_id') for row in applications]
+                rows = list(db['interview_rounds'].find({'candidate_email': email, 'candidate_submission_id': {'$in': [value for value in app_ids if value]}, 'status': {'$nin': ['Cancelled', 'Completed']}}).sort('scheduled_date', 1))
+                lines = ['Your scheduled interviews:']
+                for row in rows[:10]:
+                    application = next((app for app in applications if (app.get('id') or app.get('submission_id')) == row.get('candidate_submission_id') and app.get('requisition_id') == row.get('requisition_id')), None)
+                    if not application: continue
+                    req = db['requisitions'].find_one({'id': row.get('requisition_id'), 'tenant_id': row.get('tenant_id')})
+                    if not req: continue
+                    lines.append(f"• {req.get('title') or 'Interview'} — {row.get('round_name') or 'Company interview'}\n  {row.get('scheduled_date') or 'Date pending'} {row.get('scheduled_time') or ''} {row.get('scheduled_timezone') or ''}")
+                if len(lines) == 1:
+                    lines.append('No scheduled interviews were found for your applications. Applying to a job does not automatically schedule an interview. Use /applied to check your application status.')
+            elif command in ('/applied', '/applications'):
                 rows = list(db['candidate_submissions'].find({'candidate_email': connected_candidate['candidate_email']}).sort('created_at', -1).limit(10))
                 lines = ['Your applications:']
                 for row in rows:
-                    lines.append(f"• {row.get('requisition_title') or 'Job application'} — {row.get('status') or 'Submitted'}")
+                    req = db['requisitions'].find_one({'id': row.get('requisition_id')}) if row.get('requisition_id') else None
+                    lines.append(f"• {row.get('requisition_title') or (req or {}).get('title') or 'Job application'} — {row.get('status') or 'Submitted'}")
                 if not rows: lines.append('No applications were found for your connected account.')
             elif command in ('/test', '/alert', 'test', 'alert'):
-                lines = ['Your candidate account is connected. Job and interview notifications are enabled.', 'Use /jobs for open jobs and /applied for your applications.']
+                lines = ['Your candidate account is connected. Job and interview notifications are enabled.', 'Use /jobs for open jobs, /applied for your applications, and /interviews for scheduled interviews.']
             else:
                 rows = list(db['requisitions'].find({'status': 'Published'}).sort('created_at', -1).limit(10))
                 lines = ['Open jobs on TermJobs:']
