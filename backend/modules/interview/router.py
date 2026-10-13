@@ -280,6 +280,10 @@ def create_round_endpoint(
         from modules.calendar.services.google_calendar import schedule_window, sync_interview_event
         validate_company_requisition(current_user, data['requisition_id'])
         schedule_window(data['scheduled_date'], data['scheduled_time'], data['scheduled_timezone'], data['duration_minutes'])
+        # Company scheduling must use the same availability checks as chat booking.
+        if not data.get('round_name', '').startswith('AI'):
+            from .services.company_schedule import save_company_interview
+            return save_company_interview(current_user, {**data, 'candidate_identifier': data['candidate_submission_id']})
         origin = _extract_origin(request, data.get("origin"))
         data["origin"] = origin
         result = create_interview_round(

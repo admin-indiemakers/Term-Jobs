@@ -704,10 +704,10 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "list_scheduled_interviews",
-            "description": "List all upcoming scheduled meetings and interviews for the Hiring Manager.",
+            "description": "List live Google Calendar meetings for today, tomorrow or the next 7 days for the authenticated Hiring Manager.",
             "parameters": {
                 "type": "object",
-                "properties": {},
+                "properties": {"timeframe": {"type": "string", "enum": ["today", "tomorrow", "upcoming"]}},
                 "required": []
             }
         }
@@ -829,6 +829,15 @@ TOOLS = [
     }
 ]
 
+
+TOOLS.extend([
+    {"type": "function", "function": {"name": "check_calendar_availability",
+        "description": "Read the authenticated manager's live Google Calendar and check a proposed slot for overlap. Never assume a failed read means available.",
+        "parameters": {"type": "object", "properties": {"scheduled_date": {"type": "string"}, "scheduled_time": {"type": "string"}, "duration_minutes": {"type": "integer"}}, "required": ["scheduled_date", "scheduled_time"]}}},
+    {"type": "function", "function": {"name": "book_company_interview",
+        "description": "Reserve a company LiveKit interview only when the user explicitly says book, lock, reserve, confirm or dispatch and supplies a candidate and date/time. Checks calendar conflicts and sends invitation/reminders. Never book for a schedule-listing question.",
+        "parameters": {"type": "object", "properties": {"candidate_identifier": {"type": "string"}, "round_name": {"type": "string"}}, "required": ["candidate_identifier"]}}},
+])
 
 # ── TOOL IMPLEMENTATIONS ─────────────────────────────────────────────────────
 
@@ -2202,116 +2211,11 @@ def confirm_and_execute_candidate_offboarding(
     }
 
 
-def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id: str = "local") -> List[Dict[str, Any]]:
-    """
-    List all upcoming scheduled interviews and meetings for this Hiring Manager.
-    Pulls from SQL InterviewSchedule, MongoDB interview_schedules, and InterviewRound.
-    """
-    from modules.shared.db import db
-    from modules.interview.services.interview_service import get_session, InterviewSchedule, InterviewRound, _resolve_interview_domain
-    from datetime import datetime, timezone
-    import re
-
-    domain = _resolve_interview_domain()
-    results = []
-    seen_ids = set()
-
-    # 1. Pull from MongoDB interview_schedules
-    try:
-        mongo_query = {"status": {"$nin": ["Cancelled", "CANCELLED"]}}
-        if tenant_id and tenant_id not in ("local", "all", ""):
-            mongo_query["$or"] = [{"tenant_id": tenant_id}, {"company_id": tenant_id}]
-        mongo_invs = list(db["interview_schedules"].find(mongo_query).sort("created_at", -1))
-        for doc in mongo_invs:
-            cid = str(doc.get("id") or doc.get("_id") or "")
-            if cid in seen_ids:
-                continue
-            seen_ids.add(cid)
-            
-            c_name = doc.get("candidate_name") or "Candidate"
-            r_title = doc.get("requisition_title") or "Engineering Role"
-            round_name = doc.get("interview_round") or "Technical Round"
-            
-            slots = doc.get("proposed_slots") or []
-            confirmed = doc.get("confirmed_slot") or (slots[0] if slots else {})
-            dt = confirmed.get("date") or doc.get("scheduled_date") or ""
-            tm = confirmed.get("start_time") or doc.get("scheduled_time") or ""
-            
-            m_link = doc.get("meeting_link") or ""
-            if not m_link or "localhost" in m_link:
-                round_id = doc.get("round_id") or doc.get("id") or "room"
-                m_link = f"{domain}/interview/room/{round_id}"
-            else:
-                m_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, m_link)
-                
-            code = doc.get("candidate_passcode") or "TJ-INT-2026"
-            results.append({
-                "id": cid,
-                "candidate_name": c_name,
-                "candidate_email": doc.get("candidate_email", ""),
-                "requisition_title": r_title,
-                "round_name": round_name,
-                "date": dt or "Pending",
-                "time": tm or "Pending",
-                "meeting_link": m_link,
-                "passcode": code,
-                "status": doc.get("status") or "Scheduled",
-                "interviewer": doc.get("interviewer_name") or user_name or "Hiring Manager"
-            })
-    except Exception as e:
-        print("[HM AGENT] Error querying Mongo interview_schedules:", e)
-
-    # 2. Pull from SQL InterviewSchedule & InterviewRound
-    try:
-        with get_session() as session:
-            sql_q = session.query(InterviewSchedule).filter(
-                InterviewSchedule.status != "Cancelled",
-                InterviewSchedule.status != "CANCELLED"
-            )
-            if tenant_id and tenant_id not in ("local", "all", ""):
-                sql_q = sql_q.filter(InterviewSchedule.tenant_id == tenant_id)
-            sql_invs = sql_q.all()
-            for inv in sql_invs:
-                doc = inv.to_doc()
-                cid = str(doc.get("id") or "")
-                if cid in seen_ids:
-                    continue
-                seen_ids.add(cid)
-                
-                c_name = doc.get("candidate_name") or "Candidate"
-                r_title = doc.get("requisition_title") or "Engineering Role"
-                round_name = doc.get("interview_round") or "Technical Round"
-                
-                slots = doc.get("proposed_slots") or []
-                confirmed = doc.get("confirmed_slot") or (slots[0] if slots else {})
-                dt = confirmed.get("date") or ""
-                tm = confirmed.get("start_time") or ""
-                
-                m_link = doc.get("meeting_link") or ""
-                if not m_link or "localhost" in m_link:
-                    round_id = doc.get("round_id") or doc.get("id") or "room"
-                    m_link = f"{domain}/interview/room/{round_id}"
-                else:
-                    m_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, m_link)
-                    
-                code = doc.get("candidate_passcode") or "TJ-INT-2026"
-                results.append({
-                    "id": cid,
-                    "candidate_name": c_name,
-                    "candidate_email": doc.get("candidate_email", ""),
-                    "requisition_title": r_title,
-                    "round_name": round_name,
-                    "date": dt or "Pending",
-                    "time": tm or "Pending",
-                    "meeting_link": m_link,
-                    "passcode": code,
-                    "status": doc.get("status") or "Scheduled",
-                    "interviewer": doc.get("interviewer_name") or user_name or "Hiring Manager"
-                })
-    except Exception as e:
-        print("[HM AGENT] Error querying SQL InterviewSchedule:", e)
-
-    return results
+def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id: str = "local", timeframe: str = "upcoming") -> List[Dict[str, Any]]:
+    from types import SimpleNamespace
+    from modules.calendar.services.assistant import normalized_events
+    rows, _ = normalized_events(SimpleNamespace(id=user_id, tenant_id=tenant_id), timeframe)
+    return rows
 
 
 def list_onboarding_issues(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
@@ -3049,6 +2953,12 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
     calendar_context = current_user.get("google_calendar") or {}
+
+    from types import SimpleNamespace
+    from modules.calendar.services.assistant import handle_calendar_query
+    calendar_query = handle_calendar_query(prompt, SimpleNamespace(id=user_id, tenant_id=tenant_id, name=user_name, email=user_email, role=current_user.get('role') or 'Hiring Manager'), history)
+    if calendar_query is not None:
+        return calendar_query
 
     # If user_name is generic, resolve from Mongo by user_id, email, or tenant
     if not user_name or user_name == "Hiring Manager":
@@ -3911,9 +3821,28 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
                             executed.append({"tool": "initiate_candidate_offboarding", "result": res})
                             reply_buf.append(f"I have prepared the offboarding proposal for **{res.get('candidate_name', c_target)}**:")
                         elif fn_name == "list_scheduled_interviews":
-                            res = list_scheduled_interviews(user_id=user_id, user_name=user_name, tenant_id=tenant_id)
-                            executed.append({"tool": "list_scheduled_interviews", "result": res})
-                            reply_buf.append(f"Here are your upcoming scheduled interviews and meetings for **{company_name}**:")
+                            from types import SimpleNamespace
+                            from modules.calendar.services.assistant import schedule_reply
+                            calendar_reply = schedule_reply(SimpleNamespace(id=user_id, tenant_id=tenant_id), fn_args.get('timeframe', 'upcoming'))
+                            executed.extend(calendar_reply['executed_actions'])
+                            reply_buf.append(calendar_reply['reply'])
+                        elif fn_name == "check_calendar_availability":
+                            from types import SimpleNamespace
+                            from modules.calendar.services.google_calendar import check_availability
+                            actor = SimpleNamespace(id=user_id, tenant_id=tenant_id)
+                            res = check_availability(actor, fn_args['scheduled_date'], fn_args['scheduled_time'], calendar_context.get('timezone') or 'Asia/Kolkata', fn_args.get('duration_minutes', 45))
+                            executed.append({'tool': fn_name, 'result': res})
+                            reply_buf.append('The proposed slot is free.' if res['available'] else 'That slot overlaps another meeting. Choose a different time.')
+                        elif fn_name == "book_company_interview":
+                            from types import SimpleNamespace
+                            from modules.calendar.services.assistant import book_from_chat
+                            actor = SimpleNamespace(id=user_id, tenant_id=tenant_id, name=user_name, email=user_email, role=current_user.get('role') or 'Hiring Manager')
+                            try:
+                                res = book_from_chat(prompt, actor, fn_args)
+                                executed.extend(res['executed_actions'])
+                                reply_buf.append(res['reply'])
+                            except ValueError as exc:
+                                reply_buf.append(str(exc))
                         elif fn_name == "submit_for_director_approval":
                             res = submit_requisition_for_director_approval(**fn_args, user_id=user_id, user_name=user_name, tenant_id=tenant_id)
                             executed.append({"tool": "submit_for_director_approval", "result": res})
@@ -4305,20 +4234,6 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
         return {
             "reply": f"Here are the pending candidate expense claims requiring your review and approval for **{company_name}**:",
             "executed_actions": [{"tool": "list_pending_expenses", "result": exp_res}]
-        }
-
-    # -1. Upcoming Meetings & Scheduled Interviews Intent (e.g. "what all are the sceduled interview", "upcoming meetings", "my meetings", "upcoming interviews")
-    meetings_match_pattern = r"\b(upcoming\s+meetings?|upcoming\s+interviews?|my\s+meetings?|my\s+interviews?|show\s+(me\s+)?(the\s+)?upcoming|what\s+meetings?|scheduled\s+interviews?|scheduled\s+meetings?|sceduled\s+interviews?|schedualed\s+interviews?|sceduled\s+interview|scheduled\s+interview|interview\s+schedule|meeting\s+schedule|my\s+schedule|calendar|show\s+meetings?)\b"
-    if re.search(meetings_match_pattern, prompt_lower):
-        meet_res = list_scheduled_interviews(user_id, user_name, tenant_id)
-        if not meet_res:
-            return {
-                "reply": f"You currently have no scheduled interviews or upcoming meetings for **{company_name}**.",
-                "executed_actions": [{"tool": "list_scheduled_interviews", "result": []}]
-            }
-        return {
-            "reply": f"Here are your upcoming scheduled interviews and meetings for **{company_name}**:",
-            "executed_actions": [{"tool": "list_scheduled_interviews", "result": meet_res}]
         }
 
     # 0. Offboarding Candidates & Exit Clearance Intent (handles 'offboard', 'offbord', 'offobeding', 'exit clearance', etc.)

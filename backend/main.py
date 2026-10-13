@@ -98,6 +98,8 @@ async def lifespan(app: FastAPI):
             while True:
                 try:
                     await asyncio.sleep(60)
+                    from modules.interview.services.reminders import dispatch_due_interview_reminders
+                    await asyncio.to_thread(dispatch_due_interview_reminders)
                     _auto_close_expired()
                     from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
                     auto_check_and_dispatch_48h_shortlists()

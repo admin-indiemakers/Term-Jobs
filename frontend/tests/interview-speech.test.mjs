@@ -9,6 +9,7 @@ function capture({ supported = true, muted = false } = {}) {
   const effects = [];
   const timers = new Map();
   const engines = [];
+  const fallback = [];
   let nextTimer = 0;
   class Recognition {
     constructor() { engines.push(this); }
@@ -18,7 +19,8 @@ function capture({ supported = true, muted = false } = {}) {
   }
   const context = vm.createContext({
     window: supported ? { SpeechRecognition: Recognition } : {},
-    Date, Math, console,
+    Date, Math, console, navigator: {}, API_BASE_URL: '',
+    startSpeechFallback: options => { fallback.push(options); return () => {}; },
     useState(initial) {
       const index = states.length;
       states.push(initial);
@@ -32,18 +34,18 @@ function capture({ supported = true, muted = false } = {}) {
     setInterval: () => 0, clearInterval: () => {},
   });
   const source = readFileSync(new URL('../src/interview/hooks/useSpeechTranscription.js', import.meta.url), 'utf8')
-    .replace(/^import .*?;\n/, '').replace('export function', 'function');
+    .replace(/^import .*?;\n/gm, '').replace('export function', 'function');
   vm.runInContext(`${source}\nglobalThis.hook = useSpeechTranscription;`, context);
   const hook = context.hook({ isMicMuted: muted });
   const cleanups = effects.map(effect => effect()).filter(value => typeof value === 'function');
-  return { states, engines, timers, hook, cleanup: () => cleanups.forEach(fn => fn()), runTimers() {
+  return { states, engines, timers, hook, fallback, context, cleanup: () => cleanups.forEach(fn => fn()), runTimers() {
     const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(fn => fn());
   } };
 }
 
 test('unsupported browsers provide a fallback message', () => {
   const c = capture({ supported: false });
-  assert.match(c.states[2], /unavailable.*type your answer/);
+  assert.match(c.states[2], /type your answer/);
   assert.equal(c.engines.length, 0);
 });
 
@@ -60,15 +62,18 @@ test('permission denial stops automatic retry and supports explicit retry', () =
   assert.equal(c.states[1], true);
 });
 
-test('network failure retries are bounded', () => {
+test('network failure switches to server transcription and preserves returned speech', async () => {
   const c = capture();
-  for (let i = 0; i < 3; i++) {
-    c.engines[i].onerror({ error: 'network' });
-    c.engines[i].onend();
-    c.runTimers();
-  }
-  assert.equal(c.engines.length, 3);
-  assert.match(c.states[2], /lost its connection/);
+  c.context.window.MediaRecorder = {};
+  c.context.navigator.mediaDevices = { getUserMedia: async () => ({ getTracks: () => [] }) };
+  c.engines[0].onerror({ error: 'network' });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(c.fallback.length, 1);
+  assert.equal(c.fallback[0].endpoint, '/api/voice/stt');
+  c.fallback[0].onText('My Windows microphone answer');
+  assert.equal(c.states[4][0].text, 'My Windows microphone answer');
+  c.cleanup(); c.runTimers();
+  assert.equal(c.engines.length, 1);
 });
 
 test('final speech is preserved and cleanup cancels scheduled restart', () => {

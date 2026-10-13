@@ -20,6 +20,7 @@ def setup(monkeypatch):
     monkeypatch.setattr(db_module, 'db', database)
     monkeypatch.setattr(scheduling, 'get_session', factory)
     monkeypatch.setattr(scheduling, 'sync_interview_event', lambda user, doc: {'status': 'synced', 'event_id': 'google-event'})
+    monkeypatch.setattr(scheduling, 'check_availability', lambda *args, **kwargs: {'available': True, 'conflicts': []})
     mail = Mock(return_value={'status': 'failed', 'reason': 'SMTP unavailable'})
     monkeypatch.setattr(interview_service, 'send_interview_invitation_email', mail)
     def create(data, tenant_id, created_by, origin):
@@ -80,5 +81,25 @@ def test_other_company_or_manager_cannot_dispatch(setup):
                          SimpleNamespace(**{**user.__dict__, 'id': 'other-manager'})]:
         with pytest.raises(ValueError, match='authorized requisition'):
             scheduling.save_company_interview(unauthorized, data)
+    mail.assert_not_called()
+    create.assert_not_called()
+
+
+def test_google_conflict_blocks_booking_before_any_email_or_round_is_created(setup, monkeypatch):
+    user, data, factory, mail, create = setup
+    monkeypatch.setattr(scheduling, 'check_availability', lambda *args: {'available': False})
+    with pytest.raises(ValueError, match='already has a meeting'):
+        scheduling.save_company_interview(user, data)
+    mail.assert_not_called()
+    create.assert_not_called()
+
+
+def test_calendar_read_failure_does_not_allow_booking(setup, monkeypatch):
+    from modules.calendar.services.google_calendar import CalendarUnavailable
+    user, data, factory, mail, create = setup
+    def unavailable(*args): raise CalendarUnavailable('Calendar unavailable')
+    monkeypatch.setattr(scheduling, 'check_availability', unavailable)
+    with pytest.raises(ValueError, match='Calendar unavailable'):
+        scheduling.save_company_interview(user, data)
     mail.assert_not_called()
     create.assert_not_called()

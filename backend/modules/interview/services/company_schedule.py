@@ -2,7 +2,7 @@
 import re
 from urllib.parse import urlencode
 from datetime import timedelta
-from modules.calendar.services.google_calendar import schedule_window, sync_interview_event
+from modules.calendar.services.google_calendar import schedule_window, sync_interview_event, check_availability, booking_lock
 from modules.interview.domain.models import InterviewRound
 from modules.requisition.domain.models import Requisition
 from modules.shared.db import get_session
@@ -18,6 +18,48 @@ def validate_company_requisition(user, requisition_id):
 
 
 def save_company_interview(user, data):
+    from hashlib import sha256
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    if str(data.get('round_name') or '').upper().startswith('AI'):
+        raise ValueError('Use the AI screening workflow for AI rounds; this booking is for a company LiveKit interview.')
+    start, end = schedule_window(data['scheduled_date'], data['scheduled_time'], data['scheduled_timezone'], data['duration_minutes'])
+    if data.get('round_id'):
+        with get_session() as session:
+            target = session.get(InterviewRound, data['round_id'])
+            if not target or target.tenant_id != user.tenant_id or target.created_by != str(user.id):
+                raise ValueError('Only the booking manager can reschedule this Google Calendar interview.')
+    with booking_lock(user):
+        with get_session() as session:
+            own_rounds = session.query(InterviewRound).filter(InterviewRound.tenant_id == user.tenant_id).all()
+            own_rounds = [row for row in own_rounds if row.created_by == str(user.id) or row.interviewer_email == user.email]
+            target = next((row for row in own_rounds if row.id == data.get('round_id')), None)
+            if not target and not data.get('round_id'):
+                identifier = str(data.get('candidate_identifier') or '').lower()
+                target = next((row for row in own_rounds if row.round_name == data['round_name'] and identifier in
+                    (str(row.candidate_submission_id).lower(), str(row.candidate_name).lower(), str(row.candidate_email).lower())), None)
+            for row in own_rounds:
+                if row.status not in ('Scheduled', 'Confirmed', 'In Progress') or row.id == getattr(target, 'id', None): continue
+                try:
+                    existing_start = datetime.strptime(f'{row.scheduled_date} {row.scheduled_time}', '%Y-%m-%d %H:%M').replace(tzinfo=ZoneInfo(row.scheduled_timezone or 'Asia/Kolkata'))
+                    existing_end = existing_start + timedelta(minutes=row.duration_minutes)
+                except Exception:
+                    if row.scheduled_date == data['scheduled_date']:
+                        raise ValueError('An existing interview on this date has an unreadable time. Review it before reserving another slot.')
+                    continue
+                if existing_start < end and existing_end > start:
+                    raise ValueError('This slot overlaps an existing TermJobs interview. Choose another time.')
+        exclude = (target.google_event_id or sha256(target.id.encode()).hexdigest()[:32]) if target else None
+        availability = check_availability(user, data['scheduled_date'], data['scheduled_time'], data['scheduled_timezone'], data['duration_minutes'], exclude)
+        if not availability['available']:
+            raise ValueError('Google Calendar already has a meeting in this slot. Choose another time; no invitation has been sent.')
+        result = _save_company_interview(user, data)
+        from .reminders import schedule_interview_reminders
+        result['reminders'] = schedule_interview_reminders(result)
+        return result
+
+
+def _save_company_interview(user, data):
     from modules.shared.db import db
     from .interview_service import create_interview_round, send_interview_invitation_email
     _, scheduled_end = schedule_window(data['scheduled_date'], data['scheduled_time'], data['scheduled_timezone'], data['duration_minutes'])
@@ -63,9 +105,9 @@ def save_company_interview(user, data):
             else:
                 doc = create_interview_round({**data, 'candidate_submission_id': submission_id,
                 'candidate_name': candidate.get('candidate_name'), 'candidate_email': candidate.get('candidate_email'),
-                'requisition_id': req.id, 'requisition_title': req.title, 'interviewer_name': user.name,
-                'interviewer_email': user.email, 'round_name': data.get('round_name') or 'Technical Round',
-                'round_type': 'Technical', 'suppress_email': True}, user.tenant_id, str(user.id), origin='https://termjobs.in')
+                'requisition_id': req.id, 'requisition_title': req.title, 'interviewer_name': data.get('interviewer_name') or user.name,
+                'interviewer_email': data.get('interviewer_email') or user.email, 'round_name': data.get('round_name') or 'Technical Round',
+                'round_type': data.get('round_type') or 'Technical', 'suppress_email': True}, user.tenant_id, str(user.id), origin='https://termjobs.in')
     portal = 'https://termjobs.in/interview/candidate/login?' + urlencode({
         'token': doc['candidate_token'], 'email': doc['candidate_email'], 'passcode': doc['candidate_passcode']})
     meeting = f"https://termjobs.in/interview/room/{doc['id']}"

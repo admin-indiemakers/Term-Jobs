@@ -9,8 +9,48 @@ from modules.calendar.domain.schemas import CalendarConfigResponse, CalendarConf
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.shared.db import get_session
+from pydantic import BaseModel
+from fastapi import Header
 
 router = APIRouter(prefix="/calendar", tags=["Calendar"])
+
+
+class AvailabilityRequest(BaseModel):
+    scheduled_date: str
+    scheduled_time: str
+    scheduled_timezone: str = 'Asia/Kolkata'
+    duration_minutes: int = 45
+    round_id: str | None = None
+
+
+@router.post('/google/availability')
+def google_availability(body: AvailabilityRequest, current_user: User = Depends(get_current_user)):
+    from .services.google_calendar import check_availability
+    from modules.interview.domain.models import InterviewRound
+    exclude = None
+    if body.round_id:
+        with get_session() as session:
+            interview = session.get(InterviewRound, body.round_id)
+            if not interview or interview.tenant_id != current_user.tenant_id or interview.created_by != str(current_user.id):
+                raise HTTPException(status_code=404, detail='Interview not found')
+            import hashlib
+            exclude = interview.google_event_id or hashlib.sha256(interview.id.encode()).hexdigest()[:32]
+    try:
+        return check_availability(current_user, body.scheduled_date, body.scheduled_time, body.scheduled_timezone, body.duration_minutes, exclude)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get('/reminders/run')
+@router.post('/reminders/run')
+def run_interview_reminders(authorization: str = Header(default='')):
+    import os
+    import secrets
+    secret = os.getenv('CRON_SECRET')
+    if not secret or not secrets.compare_digest(authorization, 'Bearer ' + secret):
+        raise HTTPException(status_code=403, detail='Reminder worker authentication required')
+    from modules.interview.services.reminders import dispatch_due_interview_reminders
+    return dispatch_due_interview_reminders()
 
 
 @router.get("/google/status")

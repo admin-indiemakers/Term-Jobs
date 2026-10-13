@@ -1415,6 +1415,9 @@ export default function HiringManagerDashboard() {
         interviewProposal = schedAction.result;
       }
 
+      const bookedInterview = executedActions.find(action => action.tool === 'book_company_interview');
+      if (bookedInterview?.result?.id) interviewProposal = bookedInterview.result;
+
       // 2. Draft requisition cards from backend tool or context
       let reqDraft = null;
       // Check if user is updating draft openings

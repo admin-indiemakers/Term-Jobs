@@ -7,6 +7,9 @@ from urllib.parse import urlencode, urlparse
 from zoneinfo import ZoneInfo
 
 import httpx
+from contextlib import contextmanager
+from pymongo import ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from modules.calendar.services import oauth
 from modules.shared.config import settings
@@ -83,6 +86,106 @@ def schedule_window(date, time_value, timezone_name, duration_minutes, now=None)
     return start, start + timedelta(minutes=duration_minutes)
 
 
+class CalendarUnavailable(ValueError):
+    pass
+
+
+def access_credentials(user):
+    connections, _ = collections()
+    identity = {'user_id': str(user.id), 'tenant_id': user.tenant_id}
+    connection = connections.find_one(identity)
+    if not connection or connection.get('status') != 'connected':
+        raise CalendarUnavailable('Connect Google Calendar before checking or reserving a meeting slot.')
+    try:
+        token = connection['access_token']
+        if (connection.get('expires_at') or 0) <= time.time() + 60:
+            tokens = oauth.refresh_access_token('google', connection['refresh_token'])
+            token = tokens['access_token']
+            connections.update_one(identity, {'$set': {'access_token': token, 'expires_at': oauth.token_expiry_epoch(tokens)}})
+        return connection, token
+    except Exception as exc:
+        raise CalendarUnavailable('Google Calendar access has expired. Reconnect your calendar.') from exc
+
+
+def list_calendar_events(user, start, end):
+    connection, token = access_credentials(user)
+    params = {'timeMin': start.isoformat(), 'timeMax': end.isoformat(), 'singleEvents': 'true',
+              'orderBy': 'startTime', 'showDeleted': 'false', 'maxResults': 250, 'timeZone': connection.get('timezone') or 'Asia/Kolkata'}
+    events = []
+    try:
+        with httpx.Client(timeout=20) as client:
+            while True:
+                response = client.get('https://www.googleapis.com/calendar/v3/calendars/primary/events',
+                                      headers={'Authorization': f'Bearer {token}'}, params=params)
+                response.raise_for_status()
+                page = response.json()
+                events.extend(event for event in page.get('items', []) if event.get('status') != 'cancelled')
+                if not page.get('nextPageToken'): break
+                params['pageToken'] = page['nextPageToken']
+        return events
+    except httpx.HTTPStatusError as exc:
+        try:
+            error = exc.response.json().get('error', {})
+            reasons = {item.get('reason') for item in error.get('errors', []) + error.get('details', [])}
+        except (ValueError, AttributeError, TypeError):
+            reasons = set()
+        if reasons & {'accessNotConfigured', 'SERVICE_DISABLED'}:
+            message = 'Google Calendar API is disabled in the Google Cloud project used by TermJobs. Ask the administrator to enable Google Calendar API, then retry. Reconnecting alone will not fix this.'
+        elif exc.response.status_code == 401 or reasons & {'authError', 'invalidCredentials'}:
+            message = 'Google Calendar authorization is no longer valid. Reconnect your calendar and grant access.'
+        elif reasons & {'insufficientPermissions', 'ACCESS_TOKEN_SCOPE_INSUFFICIENT'}:
+            message = 'Google Calendar permission is missing. Reconnect your calendar and grant permission to read and edit calendar events.'
+        elif exc.response.status_code == 429 or reasons & {'rateLimitExceeded', 'userRateLimitExceeded'}:
+            message = 'Google Calendar is temporarily rate limited. Retry shortly.'
+        else:
+            message = 'Google Calendar rejected the calendar read. Ask the administrator to check calendar access, then retry.'
+        raise CalendarUnavailable(message + ' No slot has been assumed free.') from exc
+    except Exception as exc:
+        raise CalendarUnavailable('Unable to read Google Calendar. No slot has been assumed free; reconnect or retry.') from exc
+
+
+def event_blocks_slot(event, start, end, exclude_event_id=None):
+    if (exclude_event_id and event.get('id') == exclude_event_id) or event.get('status') == 'cancelled' or event.get('transparency') == 'transparent':
+        return False
+    if any(person.get('self') and person.get('responseStatus') == 'declined' for person in event.get('attendees', [])):
+        return False
+    zone = start.tzinfo
+    def parse(part):
+        if part.get('dateTime'):
+            value = datetime.fromisoformat(part['dateTime'].replace('Z', '+00:00'))
+            return value if value.tzinfo else value.replace(tzinfo=zone)
+        return datetime.fromisoformat(part['date']).replace(tzinfo=zone)
+    try:
+        return parse(event['start']) < end and parse(event['end']) > start
+    except Exception as exc:
+        raise CalendarUnavailable('A calendar event has unreadable times. Availability could not be verified.') from exc
+
+
+def check_availability(user, date, time_value, zone, duration, exclude_event_id=None):
+    start, end = schedule_window(date, time_value, zone, duration)
+    conflicts = [event for event in list_calendar_events(user, start, end) if event_blocks_slot(event, start, end, exclude_event_id)]
+    return {'available': not conflicts, 'start': start.isoformat(), 'end': end.isoformat(), 'timezone': zone,
+            'conflicts': [{'title': event.get('summary') or 'Busy', 'start': event.get('start'), 'end': event.get('end')} for event in conflicts]}
+
+
+@contextmanager
+def booking_lock(user):
+    from modules.shared.db import db
+    locks = db['calendar_booking_locks']
+    identity = f'{user.tenant_id}:{user.id}'
+    owner = secrets.token_hex(16)
+    now = datetime.now(timezone.utc)
+    try:
+        locks.find_one_and_update({'_id': identity, 'expires_at': {'$lte': now}},
+            {'$set': {'owner': owner, 'expires_at': now + timedelta(minutes=5)}}, upsert=True, return_document=ReturnDocument.AFTER)
+    except DuplicateKeyError as exc:
+        raise ValueError('Another meeting reservation is being processed. Retry in a moment.') from exc
+    try:
+        yield
+    finally:
+        locks.delete_one({'_id': identity, 'owner': owner})
+
+
 def sync_interview_event(user, interview):
     connections, _ = collections()
     identity = {'user_id': str(user.id), 'tenant_id': user.tenant_id}
@@ -102,7 +205,10 @@ def sync_interview_event(user, interview):
             'location': f"https://termjobs.in/interview/room/{interview['id']}",
             'start': {'dateTime': start.isoformat(), 'timeZone': interview['scheduled_timezone']},
             'end': {'dateTime': end.isoformat(), 'timeZone': interview['scheduled_timezone']},
-            'attendees': [{'email': email} for email in dict.fromkeys([interview.get('candidate_email'), interview.get('interviewer_email')]) if email]}
+            'attendees': [{'email': email} for email in dict.fromkeys([interview.get('candidate_email'), interview.get('interviewer_email')]) if email],
+            'transparency': 'opaque',
+            'extendedProperties': {'private': {'termjobs_round_id': interview['id']}},
+            'reminders': {'useDefault': False, 'overrides': [{'method': 'email', 'minutes': 60}, {'method': 'popup', 'minutes': 10}]}}
         base = 'https://www.googleapis.com/calendar/v3/calendars/primary/events'
         with httpx.Client(timeout=30) as client:
             headers = {'Authorization': f'Bearer {access_token}'}
