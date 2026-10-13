@@ -14,6 +14,30 @@ def questions():
                            {'title': 'DevOps Engineer', 'structured_role': {'must_have_skills': ['Kubernetes', 'Terraform']}})
 
 
+def test_questions_use_original_resume_linked_by_application(monkeypatch):
+    import importlib
+    import mongomock
+    from unittest.mock import MagicMock
+    from modules.interview.services.assessment import load_questions
+    database = mongomock.MongoClient()['assessment-resume']
+    monkeypatch.setattr(importlib.import_module('modules.shared.db'), 'db', database)
+    database.candidate_submissions.insert_one({'id': 'app', 'requisition_id': 'req', 'candidate_id': 'person', 'candidate_email': 'candidate@example.com'})
+    database.candidates.insert_one({'id': 'person', 'candidate_email': 'candidate@example.com', 'extracted_text': 'Built Kubernetes deployment pipelines.'})
+    req = SimpleNamespace(id='req', tenant_id='company', to_doc=lambda: {'title': 'Engineer', 'structured_role': {'must_have_skills': ['Kubernetes']}})
+    session = MagicMock()
+    session.query.return_value.filter.return_value.first.return_value = req
+    round_obj = SimpleNamespace(interview_questions=[], requisition_id='req', tenant_id='company', candidate_submission_id='app', candidate_email='candidate@example.com')
+    result = load_questions(session, round_obj)
+    assert len(result) == 4
+    assert 'Built Kubernetes deployment pipelines.' in result[0]['prompt']
+    session.commit.assert_called_once()
+
+
+def test_questions_accept_top_level_parsed_experience():
+    result = build_questions({'experience': [{'role': 'Backend engineer', 'company': 'Acme'}]}, {'title': 'Engineer', 'structured_role': {'must_have_skills': ['Python']}})
+    assert 'Backend engineer' in result[0]['prompt']
+
+
 def valid_assessment():
     text = 'The service failed. I owned recovery. I fixed deployment retries. Downtime fell by 30 percent.'
     answers = {question['id']: text for question in questions()}

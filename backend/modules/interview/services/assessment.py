@@ -20,8 +20,8 @@ RATING_ANCHORS = {
 def build_questions(resume: dict, requisition: dict) -> list:
     details = resume.get("details") or {}
     resume_text = resume.get("resume_text") or resume.get("extracted_text") or ""
-    experience = details.get("experience") or []
-    projects = details.get("projects") or []
+    experience = details.get("experience") or resume.get("experience") or []
+    projects = details.get("projects") or resume.get("projects") or []
     if not resume_text and not experience and not projects:
         raise ValueError("A parsed candidate resume is required before starting the interview.")
     role = requisition.get("structured_role") or {}
@@ -59,7 +59,18 @@ def load_questions(session, round_obj) -> list:
     submission = db["candidate_submissions"].find_one({"requisition_id": req.id, "$or": identity})
     if not submission:
         raise ValueError("A candidate application linked to this requisition is required.")
-    questions = build_questions(submission, req.to_doc())
+    resume = submission
+    # Portal outreach applications reference the original resume instead of copying it.
+    has_resume = submission.get('resume_text') or submission.get('extracted_text') or (submission.get('details') or {}).get('experience') or (submission.get('details') or {}).get('projects') or submission.get('experience') or submission.get('projects')
+    if not has_resume and submission.get('candidate_id'):
+        linked = db['candidates'].find_one({'id': submission['candidate_id']})
+        if linked:
+            source_email = str(linked.get('candidate_email') or '').strip().lower()
+            application_email = str(submission.get('candidate_email') or '').strip().lower()
+            if source_email and application_email and source_email != application_email:
+                raise ValueError('The linked resume does not match this application. Ask the hiring team to correct it.')
+            resume = linked
+    questions = build_questions(resume, req.to_doc())
     round_obj.interview_questions = questions
     session._track(round_obj)
     session.commit()

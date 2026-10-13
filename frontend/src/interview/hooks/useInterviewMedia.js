@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { livekitService } from '../services/livekitService';
 
 export function useInterviewMedia() {
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [localStream, setLocalStream] = useState(null);
@@ -47,7 +47,14 @@ export function useInterviewMedia() {
       setIsCameraOn(true);
       setPermissionError(null);
     } catch (err) {
-      setPermissionError('Camera access is required. Allow camera permission and reconnect your camera, then retry.');
+      const message = err.name === 'NotAllowedError'
+        ? 'Camera permission was denied. Allow Camera in the browser site permissions and your system privacy settings, then retry.'
+        : err.name === 'NotFoundError'
+        ? 'No camera was found. Connect a camera, then retry.'
+        : err.name === 'NotReadableError'
+        ? 'Your camera is busy or unavailable. Close other apps using it, then retry.'
+        : 'Camera could not start. Check the camera connection and browser permissions, then retry.';
+      setPermissionError(message);
     }
   }, []);
 
