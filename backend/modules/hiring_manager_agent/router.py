@@ -40,7 +40,6 @@ def hiring_manager_agent_chat(
         if tenant: user_data['tenant_name'] = tenant.name
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
-
     from modules.calendar.services.assistant import handle_calendar_query
     calendar_result = handle_calendar_query(data.prompt, current_user, data.history)
     if calendar_result is not None:

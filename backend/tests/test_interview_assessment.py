@@ -182,3 +182,15 @@ def test_recording_survives_unwritable_local_directory(monkeypatch):
     assert result['recording_metadata']['gridfs_id'] == 'saved-video'
     assert result['recording_metadata']['local_path'] is None
     storage.put.assert_called_once()
+
+
+def test_scored_assessment_and_round_can_be_encoded_for_mongodb():
+    from bson import BSON
+    from modules.interview.domain.models import InterviewRound
+    payload, answers = valid_assessment()
+    analysis = validate_assessment(payload, questions(), answers)
+    assert set(analysis['rating_anchors']) == {'1', '2', '3', '4', '5'}
+    assert all(isinstance(row['rating'], int) for row in analysis['competencies'])
+    BSON.encode(analysis)
+    model = InterviewRound.from_doc({'id': 'round', 'communication_analysis': analysis, 'interview_questions': questions()})
+    BSON.encode(model.to_doc())

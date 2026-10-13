@@ -1383,30 +1383,7 @@ export default function HiringManagerDashboard() {
         }
       }
 
-      // If user requested candidates explicitly and backend didn't return cards, fallback to active candidate pool
-      const isCandQuery =
-        textLower.includes('candidate') ||
-        textLower.includes('candiates') ||
-        textLower.includes('suggest 5') ||
-        textLower.includes('shortlist') ||
-        textLower.includes('pool') ||
-        textLower.includes('applicant');
-
-      if (!candCards && isCandQuery) {
-        const sources = [...shortlistedCandidates, ...allCandidates, ...acceptedCandidates].filter(Boolean);
-        const seen = new Set();
-        const fallbackPool = [];
-        for (const c of sources) {
-          const name = (c.candidate_name || c.name || '').trim();
-          if (name && !seen.has(name.toLowerCase())) {
-            seen.add(name.toLowerCase());
-            fallbackPool.push(c);
-          }
-        }
-        if (fallbackPool.length > 0) {
-          candCards = fallbackPool.slice(0, 5).map((c, idx) => formatCandidateCard(c, idx));
-        }
-      }
+      const isCandQuery = /candidate|candiates|shortlist|pool|applicant/i.test(textLower);
 
       // 1b. Interview Proposal extraction from schedule_candidate_interview
       let interviewProposal = null;

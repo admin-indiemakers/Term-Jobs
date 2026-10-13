@@ -13,7 +13,9 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union
 import httpx
 
 from modules.shared.config import settings
-from modules.shared.db import db, Session, get_session
+from modules.shared.db import db as raw_db, Session, get_session
+from .scope import ScopedDatabase, authorized_chat
+db = ScopedDatabase(raw_db)
 from modules.identity.domain.models import User, Tenant
 from modules.requisition.domain.models import Requisition
 from modules.candidate.domain.models import Candidate
@@ -1090,6 +1092,8 @@ def submit_requisition_for_director_approval(
 
     try:
         existing = session.get(Requisition, new_id) if new_id else None
+        if existing and (existing.tenant_id != tenant_id or str(existing.created_by) != str(user_id)):
+            return {'error': 'Requisition is outside your authorized hiring-manager scope.'}
         if existing:
             existing.status = "Pending Approval"
             existing.director_approved = False
@@ -1349,9 +1353,8 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
                 r_id = d.get("requisition_id")
                 # Strict scoping: candidate must belong to HM's requisitions or HM's tenant
                 is_scoped = (
-                    (r_id and r_id in req_ids) or
-                    (is_scoped_tenant and d.get("tenant_id") == tenant_id) or
-                    (not is_scoped_tenant)
+                    bool(r_id and r_id in req_ids) and
+                    d.get("tenant_id") in (None, tenant_id)
                 )
                 if is_scoped:
                     filtered.append(d)
@@ -1393,53 +1396,6 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
     except Exception as e:
         print("Error reading shortlisted candidates from DB:", e)
 
-    # Fallback 1: If strictly scoped submissions returned 0, check candidates collection for this tenant
-    if not results and is_scoped_tenant:
-        try:
-            tenant_cands = list(db["candidates"].find({"tenant_id": tenant_id}))
-            for c in tenant_cands:
-                c_name = c.get("candidate_name") or c.get("name")
-                if not c_name or c_name.strip().lower() in ("termjobs", "term jobs", "test", "candidate"):
-                    continue
-                c_title = c.get("candidate_title") or "Engineering Role"
-                skills_val = c.get("skills") or ["React", "Python"]
-                skills_str = ", ".join(skills_val) if isinstance(skills_val, list) else str(skills_val)
-                c_email = c.get("candidate_email") or f"{c_name.lower().replace(' ', '.')}@example.com"
-                results.append({
-                    "id": str(c.get("id") or c.get("_id")),
-                    "candidate_id": str(c.get("id") or c.get("_id")),
-                    "requisition_id": list(req_ids)[0] if req_ids else "",
-                    "name": c_name,
-                    "candidate_name": c_name,
-                    "email": c_email,
-                    "status": "Shortlisted",
-                    "match_score": "92%",
-                    "requisition_title": c_title,
-                    "vendor_name": c.get("vendor_company_name") or "Direct Applicant",
-                    "skills": skills_str,
-                    "notes": c.get("summary") or f"Candidate ready for screening for {c_title}."
-                })
-        except Exception as e:
-            print("Error reading tenant candidates:", e)
-
-    # Fallback 2: Local demo candidates ONLY if tenant is local / non-tenant testing
-    if not results and not is_scoped_tenant:
-        results = [
-            {
-                "id": "cand_demo_1",
-                "candidate_id": "cand_demo_1",
-                "requisition_id": "req_1",
-                "name": "Alex Taylor",
-                "candidate_name": "Alex Taylor",
-                "email": "alex.taylor@example.com",
-                "status": "Shortlisted",
-                "match_score": "94%",
-                "requisition_title": "Full Stack Developer",
-                "vendor_name": "Apex Staffing",
-                "skills": "React, Python, TypeScript",
-                "notes": "94% AI Match score."
-            }
-        ]
 
     return results
 
@@ -2314,98 +2270,14 @@ def list_onboarding_issues(user_id: str = "", user_name: str = "", tenant_id: st
 # ── CANDIDATE POOL SCOPING ─────────────────────────────────────────────────────
 
 def _get_hm_scoped_candidate_pool(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
-    """
-    Build a strictly scoped candidate pool for a specific Hiring Manager and Company Tenant.
-    Guarantees 100% tenant isolation with zero cross-company leakage.
-    """
-    is_scoped_tenant = bool(tenant_id and tenant_id not in ("local", "all", ""))
-    t_filter = {"tenant_id": tenant_id} if is_scoped_tenant else {}
-
-    all_reqs = list(db["requisitions"].find(t_filter))
-    all_subs = list(db["candidate_submissions"].find(t_filter))
-    all_wos = list(db["work_orders"].find(t_filter))
-    
-    cand_ids = set()
-    cand_names = set()
-
-    # --- Strategy 1: Strict requisition-based scoping by user_id ---
-    if user_id and user_id not in ("local", "hm-user", "") and not user_id.startswith("tg_hm_") and not user_id.startswith("cliq_") and not user_id.startswith("teams_"):
-        req_docs = [r for r in all_reqs if
-                    r.get("created_by") == user_id or
-                    r.get("approved_by") == user_id]
-    elif user_name and user_name not in ("Hiring Manager", ""):
-        req_docs = [r for r in all_reqs if
-                    r.get("created_by") == user_name or
-                    r.get("approved_by") == user_name]
-    else:
-        req_docs = []
-
-    # If no specific reqs matched by user_id, scope to this tenant's requisitions
-    if not req_docs:
-        req_docs = all_reqs
-
-    req_ids = set(r.get("id") for r in req_docs if r.get("id"))
-    
-    # --- Strategy 2: Submissions linked to this HM's requisitions or tenant ---
-    for s in all_subs:
-        if (s.get("requisition_id") in req_ids) or (is_scoped_tenant and s.get("tenant_id") == tenant_id):
-            cid = s.get("candidate_id") or s.get("id")
-            cname = s.get("candidate_name") or s.get("name")
-            if cid:
-                cand_ids.add(str(cid))
-            if cname and cname not in ("Candidate", ""):
-                cand_names.add(cname)
-
-    # --- Strategy 3: Work orders reporting to this manager or tenant ---
-    for w in all_wos:
-        if (w.get("requisition_id") in req_ids or
-                w.get("reporting_manager") in (user_id, user_name) or
-                (is_scoped_tenant and w.get("tenant_id") == tenant_id)):
-            cid = w.get("candidate_id") or w.get("workorder_id") or w.get("id")
-            cname = w.get("candidate_name")
-            if cid:
-                cand_ids.add(str(cid))
-            if cname and cname not in ("Candidate", ""):
-                cand_names.add(cname)
-
-    # --- Strategy 4: Expenses/Timesheets approved_by this HM or tenant ---
-    all_exps = list(db["candidate_expenses"].find(t_filter))
-    all_tss = list(db["timesheets"].find(t_filter))
-
-    for e in all_exps:
-        appr = e.get("approved_by") or ""
-        hm_field = e.get("hiring_manager") or ""
-        if appr in (user_id, user_name) or hm_field in (user_id, user_name) or (is_scoped_tenant and e.get("tenant_id") == tenant_id):
-            cid = e.get("candidate_id")
-            cname = e.get("candidate_name")
-            if cid:
-                cand_ids.add(str(cid))
-            if cname and cname not in ("Candidate", ""):
-                cand_names.add(cname)
-
-    for t in all_tss:
-        appr = t.get("approved_by") or ""
-        hm_field = t.get("hiring_manager") or ""
-        if appr in (user_id, user_name) or hm_field in (user_id, user_name) or (is_scoped_tenant and t.get("tenant_id") == tenant_id):
-            cid = t.get("candidate_id") or t.get("workorder_id")
-            cname = t.get("worker_name") or t.get("candidate_name")
-            if cid:
-                cand_ids.add(str(cid))
-            if cname and cname not in ("Candidate", ""):
-                cand_names.add(cname)
-
-    # --- Strategy 5: Candidates collection directly for this tenant ---
-    if is_scoped_tenant:
-        for c in db["candidates"].find({"tenant_id": tenant_id}):
-            cid = c.get("id") or str(c.get("_id"))
-            cname = c.get("candidate_name") or c.get("name")
-            if cid:
-                cand_ids.add(str(cid))
-            if cname and cname not in ("Candidate", ""):
-                cand_names.add(cname)
-
-    return cand_ids, cand_names, req_ids
-
+    if not user_id or not tenant_id or tenant_id in ('local', 'all'):
+        return set(), set(), set()
+    reqs = list(db['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}))
+    req_ids = {r['id'] for r in reqs if r.get('id')}
+    submissions = list(db['candidate_submissions'].find({'requisition_id': {'$in': list(req_ids)}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}))
+    ids = {str(c.get('candidate_id') or c.get('id')) for c in submissions if c.get('candidate_id') or c.get('id')}
+    names = {c.get('candidate_name') or c.get('name') for c in submissions if c.get('candidate_name') or c.get('name')}
+    return ids, names, req_ids
 
 
 def list_pending_timesheets(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
@@ -2957,6 +2829,7 @@ def find_matched_candidate_in_db(prompt_text: str):
 
 # ── MAIN AGENT ORCHESTRATOR ──────────────────────────────────────────────────
 
+@authorized_chat(raw_db)
 def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = None, current_user: Optional[Dict[str, Any]] = None):
     """Main AI Agent executor for Hiring Manager chat requests with Groq API integration and typo-tolerant fuzzy matching."""
     history = history or []
@@ -2968,6 +2841,13 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
     calendar_context = current_user.get("google_calendar") or {}
+
+    if re.search(r'\b(shortlist|shortlisted)\b', prompt, re.I) and re.search(r'\b(show|list|view|candidates?)\b', prompt, re.I):
+        rows = list_shortlisted_candidates(user_id, user_name, tenant_id)
+        reply = 'No shortlisted candidates were found in requisitions owned by your account.'
+        if rows:
+            reply = 'Shortlisted candidates in your requisitions:\n\n' + '\n'.join(f"- {row['candidate_name']} — {row['requisition_title']} ({row['match_score']})" for row in rows)
+        return {'reply': reply, 'executed_actions': [{'tool': 'list_shortlisted_candidates', 'result': rows}]}
 
     from types import SimpleNamespace
     from modules.calendar.services.assistant import handle_calendar_query

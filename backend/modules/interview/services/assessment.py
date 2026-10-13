@@ -134,7 +134,8 @@ def validate_assessment(payload: dict, questions: list, answers: dict) -> dict:
     # Compute the overall score on the server; do not accept an invented model total.
     overall = round(sum((row["rating"] - 1) / 4 * row["weight"] * 100 for row in validated))
     return {"status": "scored", "rubric_version": RUBRIC_VERSION, "overall_score": overall,
-            "competencies": validated, "competency_dictionary": COMPETENCIES, "rating_anchors": RATING_ANCHORS,
+            "competencies": validated, "competency_dictionary": COMPETENCIES,
+            "rating_anchors": {str(rating): description for rating, description in RATING_ANCHORS.items()},
             "summary": "STAR and competency assessment based on quoted candidate responses. Human review is required.",
             "key_strengths": [COMPETENCIES[row["competency"]]["name"] for row in validated if row["rating"] >= 4],
             "areas_for_improvement": [row["rationale"] for row in validated if row["rating"] <= 2]}
