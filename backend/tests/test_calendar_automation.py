@@ -99,7 +99,8 @@ def test_booking_lock_prevents_concurrent_reservations(monkeypatch):
 
 
 def test_today_reply_contains_live_results_and_timezone(monkeypatch):
-    monkeypatch.setattr(assistant, 'connection_status', lambda user: {'timezone': 'Asia/Kolkata', 'email': 'manager@example.com'})
+    monkeypatch.setattr(assistant, 'get_platform_rounds', lambda *args: [])
+    monkeypatch.setattr(assistant, 'connection_status', lambda user: {'connected': True, 'timezone': 'Asia/Kolkata', 'email': 'manager@example.com'})
     windows = []
     monkeypatch.setattr(assistant, 'list_calendar_events', lambda user, start, end: windows.append((start, end)) or [event()])
     reply = assistant.schedule_reply(USER, 'today', True, now=START)
@@ -109,7 +110,8 @@ def test_today_reply_contains_live_results_and_timezone(monkeypatch):
 
 
 def test_empty_calendar_reply_is_explicit_and_failure_is_not_empty(monkeypatch):
-    monkeypatch.setattr(assistant, 'connection_status', lambda user: {'timezone': 'Asia/Kolkata', 'email': 'manager@example.com'})
+    monkeypatch.setattr(assistant, 'get_platform_rounds', lambda *args: [])
+    monkeypatch.setattr(assistant, 'connection_status', lambda user: {'connected': True, 'timezone': 'Asia/Kolkata', 'email': 'manager@example.com'})
     monkeypatch.setattr(assistant, 'list_calendar_events', lambda *args: [])
     assert 'No interviews found' in assistant.schedule_reply(USER, 'today', True, START)['reply']
     def fail(*args): raise calendar.CalendarUnavailable('Calendar could not be read')
@@ -207,3 +209,21 @@ def test_booking_from_chat_uses_user_time_not_model_invention(monkeypatch):
     assert captured[0]['scheduled_time'] == '15:00'
     assert captured[0]['scheduled_date'] == '2099-01-05'
     assert captured[0]['duration_minutes'] == 60
+
+
+def test_followup_today_preserves_draft_candidate_and_time(monkeypatch):
+    monkeypatch.setattr(assistant, 'contextual_candidate', lambda prompt, user, history: {'candidate_name': 'ARJUN', 'id': 'owned-app', 'requisition_id': 'owned-req'})
+    monkeypatch.setattr(assistant, 'connection_status', lambda user: {'timezone': 'Asia/Kolkata'})
+    monkeypatch.setattr(assistant, 'check_availability', lambda *args: {'available': True})
+    history = [{'role': 'assistant', 'content': 'Review your proposal', 'interview_proposal': {'candidate': 'ARJUN', 'proposed_time': '16:00', 'duration_minutes': 45}}]
+    result = assistant.handle_calendar_query('make it today', USER, history)
+    draft = result['executed_actions'][0]['result']
+    assert draft['proposed_date'] == datetime.now(ZoneInfo('Asia/Kolkata')).date().isoformat()
+    assert draft['proposed_time'] == '16:00'
+    assert draft['candidate'] == 'ARJUN'
+    assert draft['candidate_submission_id'] == 'owned-app'
+    assert 'dispatch' in result['reply']
+
+
+def test_followup_without_proposal_does_not_invent_schedule():
+    assert assistant.handle_calendar_query('make it today', USER, []) is None

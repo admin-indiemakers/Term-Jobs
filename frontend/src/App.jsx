@@ -1,3 +1,4 @@
+import CandidateTelegramLogin from './pages/CandidateTelegramLogin';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from 'react-router-dom';
 import { useRef, useEffect, useState, lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
@@ -258,6 +259,7 @@ export default function App() {
             <Route path="/login" element={null} />
             <Route path="/signin" element={null} />
           </Route>
+          <Route path="/candidate/telegram-login" element={<CandidateTelegramLogin />} />
           <Route path="/interview/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />

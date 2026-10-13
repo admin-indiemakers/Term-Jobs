@@ -3,6 +3,19 @@ from modules.hiring_manager_agent.scope import ScopedDatabase, authorized_chat
 from modules.hiring_manager_agent import agent
 
 
+def test_pipeline_counts_only_owned_requisitions(monkeypatch):
+    raw = mongomock.MongoClient()['pipeline']
+    monkeypatch.setattr(agent, 'db', raw)
+    raw.requisitions.insert_many([{'id': 'mine', 'tenant_id': 'a', 'created_by': 'manager', 'status': 'Published'}, {'id': 'other', 'tenant_id': 'a', 'created_by': 'other-manager'}])
+    raw.candidate_submissions.insert_one({'id': 'foreign', 'tenant_id': 'a', 'requisition_id': 'other', 'status': 'Shortlisted'})
+    result = agent.hiring_pipeline_reply('manager', 'a')
+    assert '| Requisitions | 1 |' in result['reply']
+    assert '| Candidate applications | 0 |' in result['reply']
+    assert '| Shortlisted candidates | 0 |' in result['reply']
+    assert 'No candidate applications' in result['reply']
+    assert result['executed_actions'] == []
+
+
 def test_chat_never_expands_scope():
     raw = mongomock.MongoClient()['scope']
     raw.requisitions.insert_many([{'id': 'mine', 'tenant_id': 'a', 'created_by': 'manager'}, {'id': 'other-manager', 'tenant_id': 'a', 'created_by': 'someone'}, {'id': 'other-company', 'tenant_id': 'b', 'created_by': 'manager'}])

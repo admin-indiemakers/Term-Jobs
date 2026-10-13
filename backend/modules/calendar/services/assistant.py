@@ -126,6 +126,8 @@ def schedule_reply(user, timeframe='upcoming', interviews_only=False, now=None):
             all_rows.append(pr)
 
     if not all_rows:
+        if cal_err:
+            return {'reply': cal_err, 'executed_actions': []}
         if status.get('connected'):
             reply = f"No {label} found for {period} in your connected Google Calendar ({status['email']}, {status['timezone']}) or TermJobs interview pipeline."
         else:
@@ -214,6 +216,19 @@ def interview_proposal(prompt, user, history):
 
 def handle_calendar_query(prompt, user, history=None):
     text = prompt.lower()
+    # Carry only editable draft fields forward; identity is resolved again in the actor's scope.
+    if re.search(r'\b(make|set|change|move|update)\b', text) and re.search(r'\b(today|tomorrow|\d{4}-\d{2}-\d{2}|\d{1,2}(?::\d{2})?\s*(?:am|pm))\b', text):
+        previous = next((item for item in reversed(history or []) if isinstance(item, dict) and item.get('role') == 'assistant'), None)
+        draft = (previous or {}).get('interview_proposal')
+        if isinstance(draft, dict) and not draft.get('id') and (draft.get('candidate') or draft.get('candidate_name')):
+            name = draft.get('candidate') or draft.get('candidate_name')
+            date = re.search(r'\b(today|tomorrow|\d{4}-\d{2}-\d{2})\b', text)
+            clock = re.search(r'\b(?:[01]\d|2[0-3]):[0-5]\d\b|\b(?:1[0-2]|[1-9])(?::[0-5]\d)?\s*(?:am|pm)\b', text)
+            day = date.group() if date else draft.get('proposed_date') or ''
+            time_value = clock.group() if clock else draft.get('proposed_time') or ''
+            minutes = draft.get('duration_minutes') or 45
+            # Draft values are never booking authority. The save endpoint rechecks ownership and conflicts.
+            return interview_proposal(f'schedule interview with {name} {day} at {time_value} for {minutes} minutes', user, history)
     if re.search(r'\b(set\s*up|setup|schedule|arrange|create)\b', text) and re.search(r'\binterview\b', text) and not re.search(r'\b(reschedule|show|list)\b', text):
         return interview_proposal(prompt, user, history)
     # Booking proposals continue through the explicit scheduling workflow.

@@ -3,7 +3,7 @@ import CompanyInterviewScheduleCard from '../interview/components/CompanyIntervi
 import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import termjobsLogo from '../assets/termjobs-logo.png';
 import {
@@ -182,6 +182,8 @@ export default function HiringManagerDashboard() {
   // Inline Card & Modal States (Image 2 Match)
   const [editingDraftData, setEditingDraftData] = useState(null);
   const [selectedCandidateProfile, setSelectedCandidateProfile] = useState(null);
+  const [resumeError, setResumeError] = useState('');
+  const [resumeLoading, setResumeLoading] = useState(false);
 
   // Dynamic Right Panel / AI Connected Output View State
   const [activePanel, setActivePanel] = useState({
@@ -1330,6 +1332,7 @@ export default function HiringManagerDashboard() {
           history: messages.slice(-10).map((m) => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
             content: m.text,
+            ...(m.interviewProposal ? { interview_proposal: m.interviewProposal } : {}),
           })),
           user_name: userName,
           user_role: user?.role || 'Hiring Manager',
@@ -1384,6 +1387,24 @@ export default function HiringManagerDashboard() {
       }
 
       const isCandQuery = /candidate|candiates|shortlist|pool|applicant/i.test(textLower);
+
+      // Fallback candidate extraction from dashboard state if candCards is still empty
+      if (isCandQuery && (!candCards || candCards.length === 0)) {
+        const roleCandidatePool = (shortlistedCandidates.length > 0 ? shortlistedCandidates : allCandidates) || [];
+        if (roleCandidatePool.length > 0) {
+          // Check if specific role is requested
+          const matchedForRole = roleCandidatePool.filter((c) => {
+            const reqTitle = (c.requisition_title || c.role || c.job_title || '').toLowerCase();
+            const candSkills = (Array.isArray(c.skills) ? c.skills.join(' ') : (c.skills || '')).toLowerCase();
+            const words = textLower.replace(/show|list|view|candidates?|for|in|the|me|all|my/g, '').trim().split(/\s+/).filter((w) => w.length > 2);
+            return words.some((w) => reqTitle.includes(w) || candSkills.includes(w));
+          });
+          const poolToDisplay = matchedForRole.length > 0 ? matchedForRole : (textLower.includes('shortlist') ? shortlistedCandidates : roleCandidatePool);
+          if (poolToDisplay.length > 0) {
+            candCards = poolToDisplay.slice(0, 5).map((c, idx) => formatCandidateCard(c, idx));
+          }
+        }
+      }
 
       // 1b. Interview Proposal extraction from schedule_candidate_interview
       let interviewProposal = null;
@@ -3487,6 +3508,21 @@ export default function HiringManagerDashboard() {
             </div>
 
             <div className="flex items-center justify-end gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
+              {resumeError && <p role="alert" className="text-xs text-red-700">{resumeError}</p>}
+              <button type="button" disabled={resumeLoading} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold disabled:opacity-50" onClick={async () => {
+                setResumeError(''); setResumeLoading(true);
+                const tab = window.open('', '_blank');
+                if (tab) tab.opener = null;
+                try {
+                  const response = await fetch(`${API_BASE_URL}/api/candidates/manager/${encodeURIComponent(selectedCandidateProfile.id)}/resume`, { headers: { Authorization: `Bearer ${token}` } });
+                  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.detail || 'Could not open resume.'); }
+                  const url = URL.createObjectURL(await response.blob());
+                  if (tab) tab.location.href = url;
+                  else { const link = document.createElement('a'); link.href = url; link.download = 'resume'; link.click(); }
+                  setTimeout(() => URL.revokeObjectURL(url), 60000);
+                } catch (error) { tab?.close(); setResumeError(error.message); }
+                finally { setResumeLoading(false); }
+              }}>{resumeLoading ? 'Opening…' : 'Open Resume'}</button>
               <button
                 type="button"
                 onClick={() => setEditingDraftData(null)}

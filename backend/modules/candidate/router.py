@@ -554,6 +554,37 @@ def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list
 
 
 @router.get("/bank/{candidate_id}/resume-pdf")
+@router.get('/manager/{candidate_id}/resume')
+def get_manager_candidate_resume(candidate_id: str, current_user: User = Depends(get_current_user)):
+    """Original resume only, authorized through the manager's own requisition application."""
+    from modules.shared.db import db
+    if current_user.role != 'Hiring Manager' or not current_user.tenant_id:
+        raise HTTPException(status_code=403, detail='Hiring manager access required')
+    reqs = list(db['requisitions'].find({'tenant_id': current_user.tenant_id, 'created_by': str(current_user.id)}, {'id': 1}))
+    doc = db['candidate_submissions'].find_one({'requisition_id': {'$in': [req['id'] for req in reqs if req.get('id')]},
+        '$and': [{'$or': [{'id': candidate_id}, {'submission_id': candidate_id}, {'candidate_id': candidate_id}]},
+                 {'$or': [{'tenant_id': current_user.tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}]})
+    if not doc:
+        raise HTTPException(status_code=404, detail='Candidate application not found in your requisitions')
+    if not doc.get('resume_pdf') and not doc.get('resume_text') and not doc.get('extracted_text') and doc.get('candidate_id'):
+        linked = db['candidates'].find_one({'id': doc['candidate_id'], '$or': [{'tenant_id': current_user.tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]})
+        if linked and str(linked.get('candidate_email') or '').lower() == str(doc.get('candidate_email') or '').lower():
+            doc = linked
+    headers = {'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'}
+    if doc.get('resume_pdf'):
+        try:
+            contents = base64.b64decode(doc['resume_pdf'], validate=True)
+        except Exception:
+            raise HTTPException(status_code=422, detail='The stored resume file is unreadable')
+        filename = doc.get('filename') or 'resume.pdf'
+        media_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' if filename.lower().endswith('.docx') else 'application/pdf'
+        return Response(contents, media_type=media_type, headers={**headers, 'Content-Disposition': _resume_disposition(filename)})
+    text = doc.get('resume_text') or doc.get('extracted_text')
+    if text:
+        return Response(text, media_type='text/plain', headers=headers)
+    raise HTTPException(status_code=404, detail='No resume has been uploaded for this candidate')
+
+
 @router.get("/bank/{candidate_id}/resume")
 @router.get("/{candidate_id}/resume-pdf")
 @router.get("/{candidate_id}/resume")
@@ -562,6 +593,8 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
     from fastapi.responses import Response
     from modules.shared.db import db
     from bson import ObjectId
+    if current_user.role == 'Hiring Manager':
+        return get_manager_candidate_resume(candidate_id, current_user)
 
     doc = None
     # 1. Look in candidate_submissions by string ID

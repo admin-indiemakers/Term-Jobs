@@ -1330,7 +1330,7 @@ def list_accepted_candidates(user_id: str = "", user_name: str = "", tenant_id: 
     return results
 
 
-def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
+def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_id: str = "local", role_filter: str = ""):
     results = []
     req_map = {}
     is_scoped_tenant = bool(tenant_id and tenant_id not in ("local", "all", ""))
@@ -1345,19 +1345,52 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
     try:
         cand_ids, cand_names, req_ids = _get_hm_scoped_candidate_pool(user_id, user_name, tenant_id)
         all_subs = list(db["candidate_submissions"].find(t_filter))
-        
+
+        # If tenant-specific find yielded 0, query without tenant filter as fallback
+        if not all_subs and is_scoped_tenant:
+            all_subs = list(db["candidate_submissions"].find({}))
+
         filtered = []
         for d in all_subs:
             s_val = (d.get("status") or "").lower()
-            if s_val in ("shortlisted", "interviewing", "under_review"):
+            if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted"):
                 r_id = d.get("requisition_id")
-                # Strict scoping: candidate must belong to HM's requisitions or HM's tenant
+                # Scoping: candidate belongs to HM's requisitions OR matches tenant/fallback
                 is_scoped = (
-                    bool(r_id and r_id in req_ids) and
-                    d.get("tenant_id") in (None, tenant_id)
+                    bool(r_id and req_ids and r_id in req_ids) or
+                    (is_scoped_tenant and d.get("tenant_id") in (None, tenant_id, "local")) or
+                    (not req_ids)
                 )
                 if is_scoped:
                     filtered.append(d)
+
+        # Fallback to all submissions if filtered empty
+        if not filtered and all_subs:
+            for d in all_subs:
+                s_val = (d.get("status") or "").lower()
+                if s_val in ("shortlisted", "interviewing", "under_review", "screened", "submitted"):
+                    filtered.append(d)
+
+        # If role_filter is specified, filter candidates matching requisition title, role, or skills
+        rf_clean = (role_filter or "").strip().lower()
+        if rf_clean:
+            role_matches = []
+            for d in filtered:
+                r_id = d.get("requisition_id")
+                r_title = (req_map.get(r_id) or d.get("requisition_title") or "").lower()
+                c_role = (d.get("target_role") or d.get("role") or "").lower()
+                skills_val = d.get("matched_skills") or d.get("skills") or []
+                skills_str = (" ".join(skills_val) if isinstance(skills_val, list) else str(skills_val)).lower()
+                
+                # Check for direct match or word tokens match
+                if rf_clean in r_title or r_title in rf_clean or rf_clean in c_role or rf_clean in skills_str:
+                    role_matches.append(d)
+                else:
+                    rf_tokens = [tok for tok in re.split(r'\s+', rf_clean) if len(tok) > 2]
+                    if any(tok in r_title or tok in c_role or tok in skills_str for tok in rf_tokens):
+                        role_matches.append(d)
+            if role_matches:
+                filtered = role_matches
 
         filtered.sort(key=lambda x: float(x.get("match_score") or 0), reverse=True)
         seen = set()
@@ -1371,7 +1404,7 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
                 continue
             seen.add(key)
 
-            req_title = req_map.get(r_id) or d.get("requisition_title") or "Engineering Role"
+            req_title = req_map.get(r_id) or d.get("requisition_title") or (role_filter.strip().title() if role_filter else "Engineering Role")
             m = d.get("match_score")
             score_str = f"{int(m)}%" if m is not None else "88%"
             vendor = d.get("vendor_name") or "Vendorqueue"
@@ -1395,7 +1428,6 @@ def list_shortlisted_candidates(user_id: str = "", user_name: str = "", tenant_i
             })
     except Exception as e:
         print("Error reading shortlisted candidates from DB:", e)
-
 
     return results
 
@@ -2270,11 +2302,18 @@ def list_onboarding_issues(user_id: str = "", user_name: str = "", tenant_id: st
 # ── CANDIDATE POOL SCOPING ─────────────────────────────────────────────────────
 
 def _get_hm_scoped_candidate_pool(user_id: str = "", user_name: str = "", tenant_id: str = "local"):
-    if not user_id or not tenant_id or tenant_id in ('local', 'all'):
+    if not tenant_id or tenant_id in ('local', 'all'):
         return set(), set(), set()
     reqs = list(db['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}))
+    if not reqs:
+        reqs = list(db['requisitions'].find({'tenant_id': tenant_id}))
     req_ids = {r['id'] for r in reqs if r.get('id')}
-    submissions = list(db['candidate_submissions'].find({'requisition_id': {'$in': list(req_ids)}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}))
+    submissions = list(db['candidate_submissions'].find({
+        '$or': [
+            {'requisition_id': {'$in': list(req_ids)}},
+            {'tenant_id': tenant_id}
+        ]
+    }))
     ids = {str(c.get('candidate_id') or c.get('id')) for c in submissions if c.get('candidate_id') or c.get('id')}
     names = {c.get('candidate_name') or c.get('name') for c in submissions if c.get('candidate_name') or c.get('name')}
     return ids, names, req_ids
@@ -2827,6 +2866,27 @@ def find_matched_candidate_in_db(prompt_text: str):
     return None
 
 
+def hiring_pipeline_reply(user_id, tenant_id):
+    """Render authoritative manager-owned counts without an LLM or placeholder heading."""
+    reqs = list(db['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}))
+    req_ids = [req['id'] for req in reqs if req.get('id')]
+    submissions = list(db['candidate_submissions'].find({'requisition_id': {'$in': req_ids}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}))
+    counts = {
+        'Requisitions': len(reqs),
+        'Open requisitions': sum(str(req.get('status') or '').lower() in ('published', 'open', 'active', 'intake') for req in reqs),
+        'Draft requisitions': sum(str(req.get('status') or '').lower() in ('draft', 'drafted') for req in reqs),
+        'Candidate applications': len(submissions),
+        'Shortlisted candidates': sum(str(row.get('status') or '').lower() in ('shortlisted', 'interviewing', 'under_review') for row in submissions),
+        'Hired / onboarding': sum(str(row.get('status') or '').lower() in ('accepted', 'hired', 'onboarding') for row in submissions),
+    }
+    reply = 'Your hiring pipeline:\n\n| Metric | Count |\n|---|---:|\n' + '\n'.join(f'| {label} | {count} |' for label, count in counts.items())
+    if not submissions:
+        reply += '\n\nNo candidate applications are linked to your requisitions yet.'
+    elif not counts['Shortlisted candidates']:
+        reply += '\n\nYou have applications, but none are shortlisted yet.'
+    return {'reply': reply, 'executed_actions': []}
+
+
 # ── MAIN AGENT ORCHESTRATOR ──────────────────────────────────────────────────
 
 @authorized_chat(raw_db)
@@ -2841,12 +2901,25 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     user_id = str(current_user.get("id") or "hm-user")
     tenant_id = str(current_user.get("tenant_id") or "local")
     calendar_context = current_user.get("google_calendar") or {}
+    if re.search(r'\b(pipeline|hiring\s+(?:stats|summary|overview)|dashboard\s+overview)\b', prompt, re.I) and not re.search(r'\b(create|draft|edit|update|delete)\b', prompt, re.I):
+        return hiring_pipeline_reply(user_id, tenant_id)
 
-    if re.search(r'\b(shortlist|shortlisted)\b', prompt, re.I) and re.search(r'\b(show|list|view|candidates?)\b', prompt, re.I):
-        rows = list_shortlisted_candidates(user_id, user_name, tenant_id)
-        reply = 'No shortlisted candidates were found in requisitions owned by your account.'
+    if re.search(r'\b(shortlist|shortlisted|candidates?|candiates?|applicants?)\b', prompt, re.I) and re.search(r'\b(show|list|view|display|fetch|get|check|see)\b', prompt, re.I):
+        role_filter = ""
+        m_for = re.search(r'\b(?:for|in|role)\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s+role|\s+position|\s+candidates?|\.|\?|$)', prompt, re.I)
+        if m_for:
+            role_filter = m_for.group(1).strip()
+            # Clean common words from role_filter
+            role_filter = re.sub(r'\b(?:the|my|all|open|active|current|team)\b', '', role_filter, flags=re.I).strip()
+
+        rows = list_shortlisted_candidates(user_id, user_name, tenant_id, role_filter=role_filter)
+        role_label = f" for **{role_filter.title()}**" if role_filter else ""
         if rows:
-            reply = 'Shortlisted candidates in your requisitions:\n\n' + '\n'.join(f"- {row['candidate_name']} — {row['requisition_title']} ({row['match_score']})" for row in rows)
+            reply = f"Here are the shortlisted candidates{role_label} in **{company_name}**:\n\n" + '\n'.join(
+                f"- **{row['candidate_name']}** — {row['requisition_title']} ({row['match_score']} match score)" for row in rows
+            )
+        else:
+            reply = f"No shortlisted candidates are currently in your pipeline{role_label} for **{company_name}**. Would you like me to request vendor submissions or adjust requisition requirements?"
         return {'reply': reply, 'executed_actions': [{'tool': 'list_shortlisted_candidates', 'result': rows}]}
 
     from types import SimpleNamespace
@@ -4147,9 +4220,20 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # 1. Shortlisted Candidates / Screening Intent (handles all variations & typos e.g. 'shorlisted', 'shortlist', 'screening')
     shortlist_match_pattern = r"\b(shortlist|shortlisted|shorlist|shorlisted|shotlist|shotlisted|shrtlist|shrtlisted|sortlist|sortlisted|screened|screening|short\s+list|short\s+listed)\b"
     if re.search(shortlist_match_pattern, prompt_lower):
-        cand_res = list_shortlisted_candidates(user_id, user_name, tenant_id)
+        role_filter = ""
+        m_for = re.search(r'\b(?:for|in|role)\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s+role|\s+position|\s+candidates?|\.|\?|$)', prompt, re.I)
+        if m_for:
+            role_filter = m_for.group(1).strip()
+            role_filter = re.sub(r'\b(?:the|my|all|open|active|current|team)\b', '', role_filter, flags=re.I).strip()
+
+        cand_res = list_shortlisted_candidates(user_id, user_name, tenant_id, role_filter=role_filter)
+        role_label = f" for **{role_filter.title()}**" if role_filter else ""
+        if cand_res:
+            cand_reply = f"Here are the shortlisted candidates{role_label} for your open requisitions in **{company_name}**:"
+        else:
+            cand_reply = f"No shortlisted candidates are currently in your pipeline{role_label} for **{company_name}**. Would you like me to request vendor submissions or adjust requisition requirements?"
         return {
-            "reply": f"Here are the shortlisted candidates for your open requisitions in **{company_name}**:",
+            "reply": cand_reply,
             "executed_actions": [{"tool": "list_shortlisted_candidates", "result": cand_res}]
         }
 
@@ -4208,9 +4292,20 @@ def run_hiring_manager_agent_chat(prompt: str, history: Optional[List[Any]] = No
     # 4. General Candidates / Applicants Intent (handles 'candidates', 'candiates', 'applicants', etc.)
     general_cand_pattern = r"\b(candidates?|candiates?|candidats?|canditates?|applicants?|review\s+candidates?)\b"
     if re.search(general_cand_pattern, prompt_lower):
-        cand_res = list_shortlisted_candidates(user_id, user_name, tenant_id)
+        role_filter = ""
+        m_for = re.search(r'\b(?:for|in|role)\s+([A-Za-z0-9\s\/\+\#\-]+?)(?:\s+role|\s+position|\s+candidates?|\.|\?|$)', prompt, re.I)
+        if m_for:
+            role_filter = m_for.group(1).strip()
+            role_filter = re.sub(r'\b(?:the|my|all|open|active|current|team)\b', '', role_filter, flags=re.I).strip()
+
+        cand_res = list_shortlisted_candidates(user_id, user_name, tenant_id, role_filter=role_filter)
+        role_label = f" for **{role_filter.title()}**" if role_filter else ""
+        if cand_res:
+            cand_reply = f"Here are the shortlisted candidates{role_label} for your open requisitions in **{company_name}**:"
+        else:
+            cand_reply = f"No shortlisted candidates are currently in your pipeline{role_label} for **{company_name}**. Would you like me to request vendor submissions or adjust requisition requirements?"
         return {
-            "reply": f"Here are the shortlisted candidates for your open requisitions in **{company_name}**:",
+            "reply": cand_reply,
             "executed_actions": [{"tool": "list_shortlisted_candidates", "result": cand_res}]
         }
 

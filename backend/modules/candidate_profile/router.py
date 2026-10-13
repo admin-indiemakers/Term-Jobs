@@ -1276,3 +1276,25 @@ async def update_my_candidate_profile(
         "candidate": sanitize_candidate_doc(updated_doc),
         "message": "Candidate profile updated successfully.",
     }
+
+
+class TelegramCandidateConnection(BaseModel):
+    state: str
+
+
+@router.post('/telegram/connect')
+async def connect_candidate_telegram(body: TelegramCandidateConnection, candidate: dict = Depends(get_current_candidate)):
+    pending = db['candidate_telegram_login_states'].find_one_and_delete({'state': body.state, 'expires_at': {'$gt': datetime.now(timezone.utc)}})
+    if not pending:
+        raise HTTPException(status_code=400, detail='Telegram login link expired or was already used. Send /login to the bot again.')
+    chat_id = pending['chat_id']
+    email = candidate['candidate_email']
+    # One Telegram chat belongs to one authenticated candidate; no pairing by supplied email or name.
+    for collection in ('candidates', 'candidate_submissions', 'users'):
+        db[collection].update_many({'telegram_chat_id': {'$in': [chat_id, int(chat_id)]}}, {'$unset': {'telegram_chat_id': '', 'telegram_username': '', 'telegram_connected_at': '', 'telegram_linked_at': ''}})
+    db['telegram_links'].delete_many({'$or': [{'chat_id': chat_id}, {'candidate_email': email}]})
+    fields = {'telegram_chat_id': chat_id, 'telegram_username': pending.get('username', ''), 'telegram_connected_at': datetime.now(timezone.utc).isoformat()}
+    db['candidates'].update_one({'_id': candidate['_id']}, {'$set': fields})
+    db['candidate_submissions'].update_many({'candidate_email': email}, {'$set': fields})
+    db['telegram_links'].insert_one({'chat_id': chat_id, 'candidate_email': email, 'candidate_id': candidate['id'], 'connected_at': fields['telegram_connected_at']})
+    return {'status': 'connected'}
