@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { InterviewRoom } from '../components/InterviewRoom';
+import { mergeInterviewResult } from '../utils/interviewMode';
 
 export function InterviewMeetingRoomPage() {
   const { roundId } = useParams();
@@ -184,7 +185,7 @@ export function InterviewMeetingRoomPage() {
       currentUserName={queryName}
       onLeave={handleLeave}
       onEvaluationComplete={(updated) => {
-        setRound(updated);
+        setRound(previous => mergeInterviewResult(previous, updated));
       }}
     />
   );
