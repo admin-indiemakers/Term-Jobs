@@ -1,5 +1,17 @@
 """Resume-backed questions and auditable STAR/competency assessment (v1)."""
 import json
+import re
+
+QUESTION_STYLE_VERSION = 'concise-v2'
+
+
+def spoken_label(value, limit=60):
+    """Only short labels enter spoken prompts, never URLs or serialized resume data."""
+    if not isinstance(value, str):
+        return ''
+    value = re.sub(r'https?://\S+|www\.\S+|\b(?:github\.com|linkedin\.com)/\S+', '', value, flags=re.I)
+    value = re.sub(r'[^\w\s+#.\-/]', ' ', value)
+    return ' '.join(value.split())[:limit].strip()
 
 RUBRIC_VERSION = "star-competencies-v1"
 COMPETENCIES = {
@@ -29,24 +41,33 @@ def build_questions(resume: dict, requisition: dict) -> list:
     jd = requisition.get("generated_jd_markdown") or role.get("job_description") or ""
     if not skills and not jd:
         raise ValueError("Requisition requirements are required before starting the interview.")
-    focus = ", ".join(str(item) for item in skills[:3]) or str(jd)[:180]
-    evidence = json.dumps((projects or experience)[0], ensure_ascii=False)[:350] if (projects or experience) else str(resume_text)[:350]
-    title = requisition.get("title") or "this role"
+    labels = [spoken_label(item.get('name') or item.get('skill')) if isinstance(item, dict) else spoken_label(item) for item in skills]
+    labels = [label for label in labels if label]
+    resume_context = json.dumps({'text': resume_text, 'experience': experience, 'projects': projects, 'skills': resume.get('skills') or details.get('skills')}, ensure_ascii=False).casefold()
+    shared_skills = [label for label in labels if re.search(r'(?<!\w)' + re.escape(label.casefold()) + r'(?!\w)', resume_context)]
+    focus = ', '.join((shared_skills or labels)[:2])
+    project_name = ''
+    for project in projects:
+        if isinstance(project, dict):
+            project_name = spoken_label(project.get('name') or project.get('title'), 50)
+            if project_name: break
+    example = f'your {project_name} project' if project_name else 'a project from your experience'
+    focus_clause = f' involving {focus}' if focus else ''
     prompts = [
-        f'Your resume includes: "{evidence}". Choose an example from that experience relevant to {title} and {focus}. Describe the situation, your responsibility, the technical actions you personally took, and the result.',
-        f'For the {title} requirements ({focus}), describe a difficult problem from your resume experience. What was the situation and task, what alternatives and trade-offs did you consider, what did you do, and what was the result?',
-        f'Using an example from your resume relevant to {title}, describe a disagreement or cross-functional challenge. Explain the situation, your task, how you collaborated, and the outcome.',
-        f'Describe an example from your resume where you owned a risk or delivery commitment relevant to {focus}. Explain the situation, task, your actions, measurable result, and what you learned.',
+        f'Tell me about {example}{focus_clause}. What did you personally deliver, and what was the outcome?',
+        f'Describe a difficult technical problem{focus_clause}. What options did you consider, and why did you choose your solution?',
+        'Tell me about a disagreement with a teammate or stakeholder. How did you handle it, and what changed?',
+        'Describe a delivery risk you took responsibility for. What did you do, and how did you measure the result?',
     ]
     return [{"id": f"q{index + 1}_{key}", "competency": key, "category": value["name"],
              "phase": f"Phase {index + 1} of 4", "title": value["name"], "prompt": prompts[index],
              "hint": "Use STAR: Situation, Task, Action, Result. Explain your own contribution and evidence of impact.",
-             "durationGuide": "2 - 3 mins", "rubric_version": RUBRIC_VERSION}
+             "durationGuide": "2 - 3 mins", "rubric_version": RUBRIC_VERSION, "question_style_version": QUESTION_STYLE_VERSION}
             for index, (key, value) in enumerate(COMPETENCIES.items())]
 
 
 def load_questions(session, round_obj) -> list:
-    if round_obj.interview_questions:
+    if round_obj.interview_questions and (getattr(round_obj, 'status', '') == 'Completed' or all(q.get('question_style_version') == QUESTION_STYLE_VERSION for q in round_obj.interview_questions)):
         return round_obj.interview_questions
     from modules.requisition.domain.models import Requisition
     from modules.shared.db import db

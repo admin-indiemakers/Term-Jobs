@@ -2213,9 +2213,24 @@ def confirm_and_execute_candidate_offboarding(
 
 def list_scheduled_interviews(user_id: str = "", user_name: str = "", tenant_id: str = "local", timeframe: str = "upcoming") -> List[Dict[str, Any]]:
     from types import SimpleNamespace
-    from modules.calendar.services.assistant import normalized_events
-    rows, _ = normalized_events(SimpleNamespace(id=user_id, tenant_id=tenant_id), timeframe)
-    return rows
+    from modules.calendar.services.assistant import normalized_events, get_platform_rounds
+    from modules.calendar.services.google_calendar import connection_status
+    user = SimpleNamespace(id=user_id, tenant_id=tenant_id, name=user_name, role="Hiring Manager")
+    status = connection_status(user)
+    cal_rows = []
+    if status.get('connected'):
+        try:
+            cal_rows, _ = normalized_events(user, timeframe)
+        except Exception:
+            cal_rows = []
+    platform_rows = get_platform_rounds(user, timeframe)
+    seen = {(r.get('date'), r.get('time')) for r in cal_rows}
+    merged = list(cal_rows)
+    for pr in platform_rows:
+        if (pr.get('date'), pr.get('time')) not in seen:
+            seen.add((pr.get('date'), pr.get('time')))
+            merged.append(pr)
+    return merged
 
 
 def list_onboarding_issues(user_id: str = "", user_name: str = "", tenant_id: str = "local"):

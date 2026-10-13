@@ -38,21 +38,107 @@ def normalized_events(user, timeframe='upcoming', interviews_only=False, now=Non
     return rows, status
 
 
+def get_platform_rounds(user, timeframe='upcoming', now=None):
+    from modules.shared.db import get_session
+    from modules.interview.domain.models import InterviewRound
+    from modules.interview.services.interview_service import _resolve_interview_domain
+    domain = _resolve_interview_domain()
+    status = connection_status(user)
+    zone = ZoneInfo(status.get('timezone') or 'Asia/Kolkata')
+    now = (now or datetime.now(zone)).astimezone(zone)
+    today_str = now.date().isoformat()
+    tomorrow_str = (now.date() + timedelta(days=1)).isoformat()
+    end_7d_str = (now.date() + timedelta(days=7)).isoformat()
+
+    rounds_list = []
+    try:
+        with get_session() as session:
+            q = session.query(InterviewRound).filter(
+                InterviewRound.status.notin_(['Cancelled', 'CANCELLED'])
+            )
+            if getattr(user, 'tenant_id', None) and user.tenant_id not in ('local', 'all', ''):
+                q = q.filter(InterviewRound.tenant_id == user.tenant_id)
+            if getattr(user, 'role', None) == 'Hiring Manager' and getattr(user, 'id', None):
+                q = q.filter(
+                    (InterviewRound.created_by == str(user.id)) |
+                    (InterviewRound.interviewer_email == getattr(user, 'email', ''))
+                )
+            all_rounds = q.all()
+            for r in all_rounds:
+                dt = r.scheduled_date or ''
+                if not dt:
+                    continue
+                if timeframe == 'today' and dt != today_str:
+                    continue
+                elif timeframe == 'tomorrow' and dt != tomorrow_str:
+                    continue
+                elif re.fullmatch(r'\d{4}-\d{2}-\d{2}', timeframe) and dt != timeframe:
+                    continue
+                elif timeframe == 'upcoming' and (dt < today_str or dt > end_7d_str):
+                    continue
+
+                room_id = r.room_id or r.id or 'room'
+                m_link = f"{domain}/interview/room/{room_id}"
+                c_name = r.candidate_name or "Candidate"
+                round_name = r.round_name or "Technical Interview"
+                r_title = r.requisition_title or "Engineering Role"
+                rounds_list.append({
+                    'id': str(r.id),
+                    'title': f"{round_name} · {c_name} ({r_title})",
+                    'candidate_name': c_name,
+                    'round_name': round_name,
+                    'requisition_title': r_title,
+                    'date': dt,
+                    'time': r.scheduled_time or 'TBD',
+                    'timezone': r.scheduled_timezone or status.get('timezone') or 'Asia/Kolkata',
+                    'meeting_link': m_link,
+                    'passcode': r.candidate_passcode or 'TJ-INT-2026',
+                    'status': r.status or 'Scheduled',
+                    'source': 'TermJobs Interview Room'
+                })
+    except Exception as e:
+        print("[CALENDAR ASSISTANT] Error retrieving platform rounds:", e)
+    return rounds_list
+
+
 def schedule_reply(user, timeframe='upcoming', interviews_only=False, now=None):
     label = 'interviews' if interviews_only else 'meetings'
     period = 'in the next 7 days' if timeframe == 'upcoming' else timeframe
-    try:
-        rows, status = normalized_events(user, timeframe, interviews_only, now)
-    except ValueError as exc:
-        return {'reply': str(exc), 'executed_actions': []}
-    if not rows:
-        reply = f"No {label} found for {period} in your connected Google Calendar ({status['email']}, {status['timezone']})."
+    status = connection_status(user)
+    cal_rows = []
+    cal_err = None
+
+    if status.get('connected'):
+        try:
+            cal_rows, _ = normalized_events(user, timeframe, interviews_only, now)
+        except ValueError as exc:
+            cal_err = str(exc)
+
+    platform_rounds = get_platform_rounds(user, timeframe, now)
+    
+    # Merge and deduplicate by time/date/link
+    all_rows = list(cal_rows)
+    seen_keys = {(r.get('date'), r.get('time')) for r in cal_rows}
+    for pr in platform_rounds:
+        key = (pr.get('date'), pr.get('time'))
+        if key not in seen_keys:
+            seen_keys.add(key)
+            all_rows.append(pr)
+
+    if not all_rows:
+        if status.get('connected'):
+            reply = f"No {label} found for {period} in your connected Google Calendar ({status['email']}, {status['timezone']}) or TermJobs interview pipeline."
+        else:
+            reply = f"You have no scheduled {label} for {period} in your TermJobs interview pipeline. You can also connect your Google Calendar from the top bar to sync external company meetings."
     else:
-        reply = f"Your {label} for {period} — Google Calendar, {status['timezone']}:\n\n| Meeting | Date | Time |\n|---|---|---|\n"
-        for row in rows:
-            title = row['title'].replace('|', '\\|').replace('\n', ' ')
-            reply += f"| {title} | {row['date']} | {row['time']} |\n"
-    return {'reply': reply, 'executed_actions': [{'tool': 'list_scheduled_interviews', 'result': rows}]}
+        tz = status.get('timezone') or 'Asia/Kolkata'
+        source_note = f"Google Calendar ({status.get('email')})" if status.get('connected') else "TermJobs Pipeline"
+        reply = f"Your {label} for {period} — {source_note}, {tz}:\n\n| Meeting | Date | Time | Status |\n|---|---|---|---|\n"
+        for row in all_rows:
+            title = row.get('title', 'Meeting').replace('|', '\\|').replace('\n', ' ')
+            reply += f"| {title} | {row.get('date')} | {row.get('time')} | {row.get('status', 'Scheduled')} |\n"
+
+    return {'reply': reply, 'executed_actions': [{'tool': 'list_scheduled_interviews', 'result': all_rows}]}
 
 
 def contextual_candidate(prompt, user, history):

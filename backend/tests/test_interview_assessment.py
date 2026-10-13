@@ -29,13 +29,13 @@ def test_questions_use_original_resume_linked_by_application(monkeypatch):
     round_obj = SimpleNamespace(interview_questions=[], requisition_id='req', tenant_id='company', candidate_submission_id='app', candidate_email='candidate@example.com')
     result = load_questions(session, round_obj)
     assert len(result) == 4
-    assert 'Built Kubernetes deployment pipelines.' in result[0]['prompt']
+    assert 'Kubernetes' in result[0]['prompt']
     session.commit.assert_called_once()
 
 
 def test_questions_accept_top_level_parsed_experience():
     result = build_questions({'experience': [{'role': 'Backend engineer', 'company': 'Acme'}]}, {'title': 'Engineer', 'structured_role': {'must_have_skills': ['Python']}})
-    assert 'Backend engineer' in result[0]['prompt']
+    assert 'Python' in result[0]['prompt']
 
 
 def valid_assessment():
@@ -51,11 +51,21 @@ def valid_assessment():
 def test_questions_use_actual_resume_and_role_requirements():
     rows = questions()
     assert len(rows) == 4
-    assert 'Built Kubernetes deployment pipelines at Acme.' in rows[0]['prompt']
-    assert 'Terraform' in rows[1]['prompt']
-    assert 'DevOps Engineer' in rows[0]['prompt']
+    assert 'Kubernetes' in rows[0]['prompt']
+    assert 'Kubernetes' in rows[1]['prompt']
+    assert 'Your resume includes' not in rows[0]['prompt']
     assert all('Situation, Task, Action, Result' in row['hint'] for row in rows)
     assert all(row['rubric_version'] == RUBRIC_VERSION for row in rows)
+
+
+def test_spoken_questions_never_read_resume_links_or_json():
+    resume = {'resume_text': 'Email: person@example.com https://linkedin.com/in/person https://github.com/person Python APIs',
+              'projects': [{'name': 'Payments API https://github.com/person/payments', 'description': 'A very long resume description ' * 50}]}
+    rows = build_questions(resume, {'structured_role': {'must_have_skills': ['Python', 'https://github.com/company']}})
+    assert 'Payments API' in rows[0]['prompt']
+    for row in rows:
+        assert len(row['prompt'].split()) < 45
+        assert not any(fragment in row['prompt'] for fragment in ['https:', 'github.com', 'linkedin.com', 'person@example.com', '{', 'description'])
 
 
 def test_missing_resume_or_requisition_requirements_blocks_start():

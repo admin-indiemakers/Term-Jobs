@@ -1418,6 +1418,13 @@ export default function HiringManagerDashboard() {
       const bookedInterview = executedActions.find(action => action.tool === 'book_company_interview');
       if (bookedInterview?.result?.id) interviewProposal = bookedInterview.result;
 
+      // 1c. Scheduled interviews / meetings list from list_scheduled_interviews
+      let scheduledInterviews = null;
+      const meetAction = executedActions.find(a => a.tool === 'list_scheduled_interviews');
+      if (meetAction && Array.isArray(meetAction.result) && meetAction.result.length > 0) {
+        scheduledInterviews = meetAction.result;
+      }
+
       // 2. Draft requisition cards from backend tool or context
       let reqDraft = null;
       // Check if user is updating draft openings
@@ -1622,6 +1629,7 @@ export default function HiringManagerDashboard() {
         requisitionDraft: reqDraft,
         requisitionsList: reqList,
         interviewProposal,
+        scheduledInterviews,
         roleOptions,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
@@ -2977,6 +2985,60 @@ export default function HiringManagerDashboard() {
                           {msg.interviewProposal && (
                             <CompanyInterviewScheduleCard proposal={msg.interviewProposal} timezone={googleCalendar?.timezone}
                               onSaved={result => setMessages(previous => [...previous, { sender: 'ai', text: `Company interview saved for ${result.candidate_name}: ${result.scheduled_date} at ${result.scheduled_time} (${result.scheduled_timezone}), ${result.duration_minutes} minutes. Google Calendar: ${result.calendar_sync?.status}. Email delivery: ${result.email_delivery?.status}. LiveKit room: ${result.meeting_link}` }])} />
+                          )}
+
+                          {/* Inline Scheduled Interviews / Calendar Meetings Card */}
+                          {msg.scheduledInterviews && msg.scheduledInterviews.length > 0 && (
+                            <div className="space-y-2 mt-3 w-full max-w-4xl xl:max-w-5xl text-left">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                {msg.scheduledInterviews.map((meet, mIdx) => (
+                                  <div
+                                    key={meet.id || mIdx}
+                                    className="p-4 rounded-2xl bg-white border border-gray-200/90 shadow-2xs hover:border-gray-300 hover:shadow-xs transition-all flex flex-col justify-between space-y-3 text-left"
+                                  >
+                                    <div>
+                                      <div className="flex items-start justify-between gap-1.5 mb-2">
+                                        <h4 className="font-bold text-xs sm:text-sm text-gray-900 line-clamp-1">
+                                          {meet.title || meet.round_name || 'Scheduled Interview'}
+                                        </h4>
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                          {meet.status || 'Confirmed'}
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1 text-xs text-gray-500">
+                                        <div className="flex items-center gap-2">
+                                          <Calendar size={13} className="text-gray-400 shrink-0" />
+                                          <span>📅 {meet.date} at {meet.time}</span>
+                                        </div>
+                                        {meet.candidate_name && (
+                                          <div className="flex items-center gap-2">
+                                            <Users size={13} className="text-gray-400 shrink-0" />
+                                            <span className="font-medium text-gray-700">{meet.candidate_name}</span>
+                                          </div>
+                                        )}
+                                        {meet.timezone && (
+                                          <div className="text-[10px] text-gray-400">
+                                            Timezone: {meet.timezone}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {meet.meeting_link && (
+                                      <div className="pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
+                                        <a
+                                          href={meet.meeting_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-xs font-semibold hover:bg-black transition-colors w-full text-center"
+                                        >
+                                          Join Interview Room
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
                           )}
 
                           {/* Inline Candidate Suggestions Cards (Exact Image 2 Match) */}
