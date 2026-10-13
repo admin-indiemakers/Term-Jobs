@@ -159,3 +159,26 @@ def test_review_response_contains_same_round_video_transcript_and_criteria():
     assert review['transcript'] == transcript
     assert review['questions'] == questions()
     assert review['analysis']['competency_dictionary'] == analysis['competency_dictionary']
+
+
+def test_recording_survives_unwritable_local_directory(monkeypatch):
+    import importlib
+    import sys
+    from unittest.mock import MagicMock
+    from modules.interview.services import interview_service as service
+    record = SimpleNamespace(id='round', to_doc=lambda: {'recording_url': record.recording_url, 'recording_metadata': record.recording_metadata})
+    session = MagicMock()
+    session.query.return_value.filter.return_value.first.return_value = record
+    monkeypatch.setattr(service, 'get_session', lambda: nullcontext(session))
+    def denied(*args, **kwargs):
+        raise PermissionError('read-only filesystem')
+    monkeypatch.setattr(service.os, 'makedirs', denied)
+    storage = MagicMock()
+    storage.find.return_value = []
+    storage.put.return_value = 'saved-video'
+    monkeypatch.setitem(sys.modules, 'gridfs', SimpleNamespace(GridFS=lambda db: storage))
+    monkeypatch.setattr(importlib.import_module('modules.shared.db'), '_get_client', lambda: MagicMock())
+    result = service.save_round_recording('round', b'video-bytes')
+    assert result['recording_metadata']['gridfs_id'] == 'saved-video'
+    assert result['recording_metadata']['local_path'] is None
+    storage.put.assert_called_once()

@@ -1705,10 +1705,10 @@ def save_round_recording(
         # 1. Local filesystem persistence
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         local_dir = os.path.join(backend_dir, "uploads", "interview_videos")
-        os.makedirs(local_dir, exist_ok=True)
         local_path = os.path.join(local_dir, f"{round_id}.webm")
         local_saved = False
         try:
+            os.makedirs(local_dir, exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(file_bytes)
             local_saved = True
@@ -1722,9 +1722,7 @@ def save_round_recording(
             from modules.shared.db import _get_client, settings
             real_db = _get_client()[settings.mongo_db_name]
             fs = gridfs.GridFS(real_db)
-            # Remove any previous recording for this round to prevent orphaned data
-            for existing in fs.find({"round_id": round_id}):
-                fs.delete(existing._id)
+            previous_ids = [existing._id for existing in fs.find({"round_id": round_id})]
             grid_id = fs.put(
                 file_bytes,
                 filename=filename or f"recording_{round_id}.webm",
@@ -1733,6 +1731,11 @@ def save_round_recording(
                 duration_seconds=duration_seconds,
                 uploaded_at=datetime.now(timezone.utc),
             )
+            for previous_id in previous_ids:
+                try:
+                    fs.delete(previous_id)
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[RECORDING] GridFS storage warning: {e}")
 

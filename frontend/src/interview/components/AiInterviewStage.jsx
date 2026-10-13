@@ -344,22 +344,23 @@ export function AiInterviewStage({
   // =========================================================================
   useEffect(() => {
     if (transcriptTurns.length > 0) {
-      const candidateTurns = transcriptTurns.filter((t) => t.speaker === 'candidate');
+      const candidateTurns = transcriptTurns.filter((t) => String(t.speaker || '').toLowerCase() === 'candidate');
       candidateTurns.forEach((turn) => {
-        if (!turn?.text || processedTurnIdsRef.current.has(turn.id)) return;
+        const turnKey = turn.id || `${turn.timestamp || ''}:${turn.text || ''}`;
+        if (!turn?.text || processedTurnIdsRef.current.has(turnKey)) return;
 
         // Check turn against prompt to reject system audio echo
         const cleanTurn = turn.text.toLowerCase().replace(/[^\w\s]/g, '').trim();
         const cleanPrompt = activeQuestion.prompt.toLowerCase().replace(/[^\w\s]/g, '').trim();
 
         // If turn is a direct reflection of the AI question prompt, discard as acoustic feedback
-        if (cleanPrompt.includes(cleanTurn) && cleanTurn.split(' ').length >= 4) {
-          processedTurnIdsRef.current.add(turn.id);
+        if (cleanPrompt === cleanTurn && cleanTurn.split(' ').length >= 8) {
+          processedTurnIdsRef.current.add(turnKey);
           return;
         }
 
         // Add to finalized segments
-        processedTurnIdsRef.current.add(turn.id);
+        processedTurnIdsRef.current.add(turnKey);
         setFinalizedSegments((prev) => [...prev, turn.text.trim()]);
       });
     }

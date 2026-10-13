@@ -214,6 +214,7 @@ export function InterviewRoom({
             return res;
           } catch (uploadErr) {
             console.warn('⚠️ [PROOF RECORDING] Failed to upload proof video:', uploadErr);
+            throw uploadErr;
           }
         }
         return null;
