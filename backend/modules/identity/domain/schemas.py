@@ -209,6 +209,11 @@ class UserResponse(BaseModel):
     candidate_limit: int | None = None
     candidate_id: str = ""
 
+class UserProfileUpdate(BaseModel):
+    name: str | None = None
+    phone: str | None = None
+    department: str | None = None
+
 class CompanyProfileUpdate(BaseModel):
     name: str | None = Field(None, min_length=2, max_length=255)
     industry: str | None = Field(None, max_length=255)

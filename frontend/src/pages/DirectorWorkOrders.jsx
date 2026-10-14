@@ -291,7 +291,7 @@ export default function DirectorWorkOrders() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-[#111827] pb-24 font-sans">
+    <div className="min-h-screen bg-transparent text-[#111827] pb-24 font-sans">
       {/* Embedded Print Styling for Clean A4 Single-Page Document Printing */}
       <style>{`
         @media print {

@@ -38,8 +38,10 @@ const HiringManagerChat = lazy(() => import('./pages/HiringManagerChat'));
 const DirectorDashboard = lazy(() => import('./pages/DirectorDashboard'));
 const DirectorAgreements = lazy(() => import('./pages/DirectorAgreements'));
 const DirectorWorkOrders = lazy(() => import('./pages/DirectorWorkOrders'));
+const DirectorRoleTemplates = lazy(() => import('./pages/DirectorRoleTemplates'));
 const ProcurementDashboard = lazy(() => import('./pages/ProcurementDashboard'));
 const FinanceDashboard = lazy(() => import('./pages/FinanceDashboard'));
+const UserProfileSettings = lazy(() => import('./pages/UserProfileSettings'));
 const OnboardCompany = lazy(() => import('./pages/OnboardCompany'));
 const OnboardVendor = lazy(() => import('./pages/OnboardVendor'));
 const ConfigureCompanyAccounts = lazy(() => import('./pages/ConfigureCompanyAccounts'));
@@ -334,12 +336,16 @@ export default function App() {
             <Route path="director/approvals" element={<DirectorDashboard view="approvals" />} />
             <Route path="director/requisitions" element={<DirectorDashboard view="requisitions" />} />
             <Route path="director/requisitions/:id" element={<DirectorDashboard view="requisitions" />} />
+            <Route path="director/templates" element={<DirectorRoleTemplates />} />
+            <Route path="director/role-templates" element={<DirectorRoleTemplates />} />
             <Route path="director/work-orders" element={<DirectorWorkOrders />} />
             <Route path="director/agreements" element={<DirectorAgreements />} />
+            <Route path="director/profile" element={<UserProfileSettings portalTitle="Executive Director Profile" />} />
             <Route path="procurement" element={<ProcurementDashboard />} />
             <Route path="procurement/sow" element={<ProcurementDashboard />} />
             <Route path="finance" element={<FinanceDashboard />} />
             <Route path="finance/work-orders" element={<FinanceDashboard />} />
+            <Route path="finance/profile" element={<UserProfileSettings portalTitle="Finance Officer Profile" />} />
             <Route path="superadmin" element={<SuperAdminDashboard />} />
             <Route path="superadmin/chat" element={<AiChat />} />
             <Route path="superadmin/onboard" element={<OnboardCompany />} />

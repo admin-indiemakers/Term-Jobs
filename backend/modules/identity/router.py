@@ -17,6 +17,7 @@ from modules.identity.domain.schemas import (
     UserLogin,
     UserResponse,
     UserUpdate,
+    UserProfileUpdate,
     VendorEngagementsIn,
     VendorResponse,
     _validate_real_email,
@@ -582,6 +583,7 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
 
     resp = UserResponse(
         id=current_user.id,
+        phone=getattr(current_user, 'phone', '') or '',
         email=current_user.email,
         name=current_user.name,
         role=current_user.role,
@@ -602,6 +604,29 @@ def get_user_profile(current_user: User = Depends(get_current_user), db: Session
     )
     _cache.set(cache_key, resp, ttl=60)
     return resp
+
+
+@router.put("/me", response_model=UserResponse)
+def update_user_profile(
+    body: UserProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Self-service profile update: updates name, phone, department for current user."""
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if body.name is not None and body.name.strip():
+        user.name = body.name.strip()
+    if body.phone is not None:
+        user.phone = body.phone.strip()
+    if body.department is not None:
+        user.department = body.department.strip()
+    db.commit()
+    # Invalidate cached profile
+    cache_key = f"me_profile:{current_user.id}"
+    _cache.delete(cache_key)
+    return get_user_profile(user, db)
 
 
 @router.post("/change-password")

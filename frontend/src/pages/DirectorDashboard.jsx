@@ -729,7 +729,7 @@ export default function DirectorDashboard({ view = 'overview' }) {
             Executive Governance & Approvals
           </h1>
           <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1 max-w-2xl">
-            {activeTenantName} · Review requisitions, grant sign-offs, and curate director-approved role templates.
+            {activeTenantName} · Review requisitions, grant sign-offs, and monitor hiring governance.
           </p>
         </div>
 
@@ -760,18 +760,6 @@ export default function DirectorDashboard({ view = 'overview' }) {
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             <span>Refresh</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setTemplateFormError('');
-              setShowCreateTemplateModal(true);
-            }}
-            className="px-3.5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus size={13} />
-            <span>Create Template</span>
           </button>
         </div>
       </div>
@@ -850,41 +838,6 @@ export default function DirectorDashboard({ view = 'overview' }) {
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('templates');
-          }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap cursor-pointer ${
-            activeTab === 'templates'
-              ? 'bg-black text-white shadow-xs'
-              : 'text-gray-600 hover:text-black hover:bg-white/60'
-          }`}
-        >
-          <FileText size={13.5} className={activeTab === 'templates' ? 'text-white' : 'text-gray-500'} />
-          <span>Role Templates</span>
-          <span
-            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-              activeTab === 'templates' ? 'bg-white/20 text-white' : 'bg-black/5 text-gray-700'
-            }`}
-          >
-            {templates.length}
-          </span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/director/work-orders')}
-          className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-gray-600 hover:text-black hover:bg-white/60 cursor-pointer ml-auto"
-        >
-          <Receipt size={13.5} className="text-gray-500" />
-          <span>Work Orders (SOW)</span>
-          {pendingWorkOrders.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">
-              {pendingWorkOrders.length}
-            </span>
-          )}
-        </button>
       </div>
 
       {/* Alert Notifications */}

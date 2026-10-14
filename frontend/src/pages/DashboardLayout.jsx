@@ -51,6 +51,8 @@ const CONSOLE_CLASS = {
   'Hiring Manager': 'console-hiringmanager',
   Recruiter: 'console-recruiter',
   Director: 'console-director',
+  Finance: 'console-finance',
+  'Finance Team': 'console-finance',
 };
 
 /* Exact SVGs matching user's reference design */
@@ -470,7 +472,8 @@ export default function DashboardLayout() {
   }
 
   const userRole = (user?.role || '').trim();
-  const consoleClass = CONSOLE_CLASS[userRole] || 'console-default';
+  const isFinance = userRole === 'Finance' || userRole === 'Finance Team' || userRole.toLowerCase() === 'finance' || location.pathname.startsWith('/dashboard/finance');
+  const consoleClass = isFinance ? 'console-finance' : (CONSOLE_CLASS[userRole] || 'console-default');
   const isCompanyAdmin = userRole === 'Admin' || userRole.toLowerCase() === 'admin';
   const isHiringManager = userRole === 'Hiring Manager' || userRole.toLowerCase() === 'hiring manager' || userRole === 'HR';
   const isDirector = userRole === 'Director' || userRole.toLowerCase() === 'director' || location.pathname.startsWith('/dashboard/director');
@@ -480,7 +483,7 @@ export default function DashboardLayout() {
   const isCandidateWorkstation = location.pathname.includes('/requisitions/') && location.pathname.includes('/candidates');
   const isAiChatPage = isSuperAdminChat || isAdminChat;
 
-  const isModernLayout = isCompanyAdmin || isDirector || userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
+  const isModernLayout = isCompanyAdmin || isDirector || isFinance || userRole === 'Recruiter' || userRole === 'Hiring Manager' || userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin';
 
   const navItems =
     isCompanyAdmin
@@ -524,11 +527,8 @@ export default function DashboardLayout() {
         : isDirector
           ? [
             { to: '/dashboard/director', label: 'Executive Overview', end: true, section: 'WORKSPACE', icon: Icons.Dashboard },
-            { to: '/dashboard/director/approvals', label: 'Requisition Approvals', end: false, section: 'GOVERNANCE', icon: Icons.Requisitions, badge: directorPendingRequisitions },
-            { to: '/dashboard/director/requisitions', label: 'All Requisitions', end: false, section: 'GOVERNANCE', icon: Icons.PortalAccess },
-            { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, section: 'GOVERNANCE', icon: Icons.Interviews },
-            { to: '/dashboard/director/work-orders', label: 'Work Orders', end: true, section: 'COMPLIANCE', icon: Icons.Receipt, badge: directorPendingWorkOrders },
-            { to: '/dashboard/director/agreements', label: 'Agreements', end: true, section: 'COMPLIANCE', icon: Icons.Agreements, badge: directorPendingAgreements }
+            { to: '/dashboard/director/templates', label: 'Role Templates', end: false, section: 'WORKSPACE', icon: Icons.Agreements },
+            { to: '/dashboard/director/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
           ]
           : (userRole === 'Procurement' || userRole === 'Procurement Team')
             ? [
@@ -536,11 +536,10 @@ export default function DashboardLayout() {
               { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
               { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
             ]
-            : (userRole === 'Finance' || userRole === 'Finance Team')
+            : isFinance
               ? [
-                { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, icon: Icons.Receipt, badge: financePendingPayments },
-                { to: '/dashboard/requisitions', label: 'Requisitions', end: false, icon: Icons.Requisitions },
-                { to: '/dashboard/interviews', label: 'Interviews & AI Scores', end: false, icon: Icons.Interviews },
+                { to: '/dashboard/finance', label: 'Work Orders & Payments', end: true, section: 'WORKSPACE', icon: Icons.Receipt, badge: financePendingPayments },
+                { to: '/dashboard/finance/profile', label: 'Profile', end: false, section: 'ACCOUNT', icon: User },
               ]
               : (userRole === 'Super Admin' || userRole.toLowerCase() === 'super admin')
                 ? [
@@ -562,7 +561,7 @@ export default function DashboardLayout() {
                 ];
 
   const renderSidebarContent = (onLinkClick) => {
-    const isMinimized = (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) && isSidebarMinimized;
+    const isMinimized = (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) && isSidebarMinimized;
 
     if (isMinimized) {
       return (
@@ -737,7 +736,7 @@ export default function DashboardLayout() {
                 <div className="text-[11.5px] text-[#8A8A85] font-medium mt-0.5">Vendor Portal</div>
               </div>
             </div>
-          ) : (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) ? (
+          ) : (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) ? (
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3 min-w-0">
                 <div
@@ -759,7 +758,7 @@ export default function DashboardLayout() {
                 </div>
                 <div className="leading-tight text-left min-w-0">
                   <div className="text-[15.5px] font-extrabold text-white tracking-tight truncate">{user?.tenant_name || 'Term Jobs'}</div>
-                  <div className="text-[11.5px] text-[#94A3B8] font-medium mt-0.5 truncate">{isCompanyAdmin ? 'Admin Console' : isDirector ? 'Executive Console' : 'Hiring Manager'}</div>
+                  <div className="text-[11.5px] text-[#94A3B8] font-medium mt-0.5 truncate">{isCompanyAdmin ? 'Admin Console' : isDirector ? 'Executive Console' : isFinance ? 'Finance Console' : 'Hiring Manager'}</div>
                 </div>
               </div>
               {/* Minimize toggle button matching Image 2 left side */}
@@ -905,7 +904,7 @@ export default function DashboardLayout() {
                 borderRadius: '50%',
                 backgroundColor: '#000000',
                 color: '#FFFFFF',
-                border: (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
+                border: (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) ? '1px solid rgba(255, 255, 255, 0.12)' : 'none',
               }}
               className="flex items-center justify-center font-bold text-[14px] shrink-0 shadow-2xs overflow-hidden p-1 uppercase"
             >
@@ -916,11 +915,11 @@ export default function DashboardLayout() {
               )}
             </div>
             <div className="leading-tight min-w-0 text-left">
-              <div className={`text-[13.5px] font-extrabold tracking-tight truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) ? 'text-white' : 'text-[#0A0A0A]'}`}>
-                {user?.name || (isDirector ? 'Company Director' : userRole)}
+              <div className={`text-[13.5px] font-extrabold tracking-tight truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) ? 'text-white' : 'text-[#0A0A0A]'}`}>
+                {user?.name || (isDirector ? 'Company Director' : isFinance ? 'Finance Officer' : userRole)}
               </div>
-              <div className={`text-[11px] font-medium mt-0.5 truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) ? 'text-[#94A3B8]' : 'text-[#8A8A85]'}`}>
-                {isCompanyAdmin ? 'Admin' : isDirector ? 'Director' : userRole}
+              <div className={`text-[11px] font-medium mt-0.5 truncate ${(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) ? 'text-[#94A3B8]' : 'text-[#8A8A85]'}`}>
+                {isCompanyAdmin ? 'Admin' : isDirector ? 'Director' : isFinance ? 'Finance Officer' : userRole}
               </div>
             </div>
           </div>
@@ -930,7 +929,7 @@ export default function DashboardLayout() {
             type="button"
             title="Sign out"
             className={`p-1.5 rounded-lg transition-colors cursor-pointer shrink-0 ${
-              (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector)
+              (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance)
                 ? 'text-[#94A3B8] hover:text-[#DC2626] hover:bg-white/5'
                 : 'text-[#8A8A85] hover:text-[#DC2626] hover:bg-[#FEE2E2]'
             }`}
@@ -1017,9 +1016,10 @@ export default function DashboardLayout() {
           flex-direction: column !important;
           justify-content: space-between !important;
         }
-        /* Hiring Manager & Director Dark Sidebar & Clean Proportional Layout */
+        /* Hiring Manager, Director & Finance Dark Sidebar & Clean Proportional Layout */
         .console-hiringmanager.app-shell,
-        .console-director.app-shell {
+        .console-director.app-shell,
+        .console-finance.app-shell {
           background-color: transparent !important;
           width: 100% !important;
           max-width: 100vw !important;
@@ -1028,7 +1028,8 @@ export default function DashboardLayout() {
           position: relative !important;
         }
         .console-hiringmanager .sidebar,
-        .console-director .sidebar {
+        .console-director .sidebar,
+        .console-finance .sidebar {
           width: 240px !important;
           min-width: 240px !important;
           max-width: 240px !important;
@@ -1052,7 +1053,8 @@ export default function DashboardLayout() {
           transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), min-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1), padding 0.2s ease !important;
         }
         .console-hiringmanager .sidebar.minimized,
-        .console-director .sidebar.minimized {
+        .console-director .sidebar.minimized,
+        .console-finance .sidebar.minimized {
           width: 68px !important;
           min-width: 68px !important;
           max-width: 68px !important;
@@ -1060,20 +1062,24 @@ export default function DashboardLayout() {
           align-items: center !important;
         }
         .console-hiringmanager .sidebar.minimized *::-webkit-scrollbar,
-        .console-director .sidebar.minimized *::-webkit-scrollbar {
+        .console-director .sidebar.minimized *::-webkit-scrollbar,
+        .console-finance .sidebar.minimized *::-webkit-scrollbar {
           display: none !important;
         }
         .console-hiringmanager .sidebar.minimized *,
-        .console-director .sidebar.minimized * {
+        .console-director .sidebar.minimized *,
+        .console-finance .sidebar.minimized * {
           scrollbar-width: none !important;
           -ms-overflow-style: none !important;
         }
         .console-hiringmanager .sidebar.minimized::after,
-        .console-director .sidebar.minimized::after {
+        .console-director .sidebar.minimized::after,
+        .console-finance .sidebar.minimized::after {
           display: none !important;
         }
         .console-hiringmanager .sidebar::before,
-        .console-director .sidebar::before {
+        .console-director .sidebar::before,
+        .console-finance .sidebar::before {
           content: '' !important;
           position: absolute !important;
           inset: 0 !important;
@@ -1089,7 +1095,8 @@ export default function DashboardLayout() {
           z-index: 0 !important;
         }
         .console-hiringmanager .sidebar::after,
-        .console-director .sidebar::after {
+        .console-director .sidebar::after,
+        .console-finance .sidebar::after {
           content: '' !important;
           position: absolute !important;
           top: -40px !important;
@@ -1102,39 +1109,46 @@ export default function DashboardLayout() {
           z-index: 0 !important;
         }
         .console-hiringmanager .sidebar > *,
-        .console-director .sidebar > * {
+        .console-director .sidebar > *,
+        .console-finance .sidebar > * {
           position: relative !important;
           z-index: 1 !important;
         }
         .console-hiringmanager .sidebar .custom-scrollbar,
-        .console-director .sidebar .custom-scrollbar {
+        .console-director .sidebar .custom-scrollbar,
+        .console-finance .sidebar .custom-scrollbar {
           scrollbar-width: none !important;
           -ms-overflow-style: none !important;
         }
         .console-hiringmanager .sidebar .custom-scrollbar::-webkit-scrollbar,
-        .console-director .sidebar .custom-scrollbar::-webkit-scrollbar {
+        .console-director .sidebar .custom-scrollbar::-webkit-scrollbar,
+        .console-finance .sidebar .custom-scrollbar::-webkit-scrollbar {
           display: none !important;
         }
         .console-hiringmanager .sidebar-brand,
-        .console-director .sidebar-brand {
+        .console-director .sidebar-brand,
+        .console-finance .sidebar-brand {
           border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
           padding-bottom: 12px !important;
           margin-bottom: 6px !important;
         }
         .console-hiringmanager .sidebar-nav-btn,
-        .console-director .sidebar-nav-btn {
+        .console-director .sidebar-nav-btn,
+        .console-finance .sidebar-nav-btn {
           color: #94A3B8 !important;
           padding: 7px 11px !important;
           font-size: 12.5px !important;
           border-radius: 10px !important;
         }
         .console-hiringmanager .sidebar-nav-btn:hover,
-        .console-director .sidebar-nav-btn:hover {
+        .console-director .sidebar-nav-btn:hover,
+        .console-finance .sidebar-nav-btn:hover {
           background-color: rgba(255, 255, 255, 0.08) !important;
           color: #FFFFFF !important;
         }
         .console-hiringmanager .active-nav-tab,
-        .console-director .active-nav-tab {
+        .console-director .active-nav-tab,
+        .console-finance .active-nav-tab {
           background-color: #FFFFFF !important;
           color: #0A0A0A !important;
           box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
@@ -1143,21 +1157,25 @@ export default function DashboardLayout() {
           border-radius: 12px !important;
         }
         .console-hiringmanager .active-nav-tab *,
-        .console-director .active-nav-tab * {
+        .console-director .active-nav-tab *,
+        .console-finance .active-nav-tab * {
           color: #0A0A0A !important;
         }
         .console-hiringmanager .sidebar-footer,
-        .console-director .sidebar-footer {
+        .console-director .sidebar-footer,
+        .console-finance .sidebar-footer {
           border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
           padding-top: 10px !important;
           margin-top: auto !important;
         }
         .console-hiringmanager .sidebar .text-\[\#8A8A85\],
-        .console-director .sidebar .text-\[\#8A8A85\] {
+        .console-director .sidebar .text-\[\#8A8A85\],
+        .console-finance .sidebar .text-\[\#8A8A85\] {
           color: #64748B !important;
         }
         .console-hiringmanager .sidebar .text-\[\#0A0A0A\],
-        .console-director .sidebar .text-\[\#0A0A0A\] {
+        .console-director .sidebar .text-\[\#0A0A0A\],
+        .console-finance .sidebar .text-\[\#0A0A0A\] {
           color: #FFFFFF !important;
         }
         .app-shell.ai-fixed-mode {
@@ -1200,19 +1218,19 @@ export default function DashboardLayout() {
         }
       `}</style>
 
-      {/* Landing Page Background System for Hiring Manager, Company Admin & Director */}
-      {(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) && <Backdrop tone="light" fixed />}
+      {/* Landing Page Background System for Hiring Manager, Company Admin, Director & Finance */}
+      {(userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) && <Backdrop tone="light" fixed />}
 
       {/* Desktop Floating Sidebar */}
       {!isHiringManagerChat && (
-        <aside className={`sidebar hidden lg:flex ${isSidebarMinimized && (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector) ? 'minimized' : ''}`}>
+        <aside className={`sidebar hidden lg:flex ${isSidebarMinimized && (userRole === 'Hiring Manager' || isCompanyAdmin || isDirector || isFinance) ? 'minimized' : ''}`}>
           {renderSidebarContent()}
         </aside>
       )}
 
       {/* Main Area */}
       <div className={`main-area min-w-0 flex-1 flex flex-col relative z-10 ${isFixedMode || isCandidateWorkstation ? 'h-screen max-h-screen overflow-hidden' : ''}`}>
-        {!isAiChatPage && !isCompanyAdmin && !isHiringManager && !isDirector && (
+        {!isAiChatPage && !isCompanyAdmin && !isHiringManager && !isDirector && !isFinance && (
           <header className="topbar flex items-center justify-between mx-3 sm:mx-5 py-3.5 border-b border-[#E2E2DC] bg-transparent static min-w-0">
             <div className="topbar-breadcrumb flex items-center gap-2 text-[12.5px] sm:text-[13px] min-w-0">
               <button

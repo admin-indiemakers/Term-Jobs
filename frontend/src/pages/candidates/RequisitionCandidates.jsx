@@ -36,45 +36,11 @@ import { useAuth } from '../../context/AuthContext';
 import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 import SetInterviewProcessModal from '../../components/SetInterviewProcessModal';
 
-// Baseline 12-candidate dataset matching the requisition candidate roster
+// Baseline candidate dataset matching the requisition candidate roster
 const DEFAULT_CANDIDATES = [
-  {
-    id: 'cand-1',
-    name: 'Arjun S',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-    initials: 'AS',
-    location: 'Bangalore, India',
-    email: 'arjun.s@email.com',
-    phone: '+91 98765 43210',
-    score: 92,
-    skills: ['Python', 'Django', 'AWS', '+3'],
-    experience: '3 yrs',
-    availability: 'Immediate',
-    status: 'AI Shortlisted',
-    matchRating: 'Excellent Match',
-    matchSummary: 'Strong technical background, relevant experience, and good communication skills. Recommended for interview.',
-    scoreBreakdown: {
-      technical: 95,
-      experience: 85,
-      problemSolving: 90,
-      communication: 88,
-      culturalFit: 82,
-      roleAlignment: 93,
-    },
-    strengths: [
-      'Strong Python & Django experience',
-      'Good system design understanding',
-      'Clear communication in AI interview',
-      'Relevant project experience',
-    ],
-    concerns: [
-      'Limited experience with cloud infrastructure (AWS).',
-    ],
-  },
   {
     id: 'cand-2',
     name: 'Sneha K',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
     initials: 'SK',
     location: 'Kochi, India',
     email: 'sneha.k@email.com',
@@ -107,7 +73,6 @@ const DEFAULT_CANDIDATES = [
   {
     id: 'cand-3',
     name: 'Vikram R',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
     initials: 'VR',
     location: 'Chennai, India',
     email: 'vikram.r@email.com',
@@ -139,7 +104,6 @@ const DEFAULT_CANDIDATES = [
   {
     id: 'cand-4',
     name: 'Anjali S',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=120&auto=format&fit=crop&q=80',
     initials: 'AS',
     location: 'Bangalore, India',
     email: 'anjali.s@email.com',
@@ -200,7 +164,6 @@ const DEFAULT_CANDIDATES = [
   {
     id: 'cand-6',
     name: 'Meera N',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=120&auto=format&fit=crop&q=80',
     initials: 'MN',
     location: 'Kozhikode, India',
     email: 'meera.n@email.com',
@@ -291,7 +254,6 @@ const DEFAULT_CANDIDATES = [
   {
     id: 'cand-9',
     name: 'Shahid V',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
     initials: 'SV',
     location: 'Delhi, India',
     email: 'shahid.v@email.com',
@@ -351,7 +313,6 @@ const DEFAULT_CANDIDATES = [
   {
     id: 'cand-11',
     name: 'Neha P',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
     initials: 'NP',
     location: 'Kochi, India',
     email: 'neha.p@email.com',
@@ -596,63 +557,80 @@ export default function RequisitionCandidates() {
     return `${loc} (${wp})`;
   })();
 
-  // Combine Real API candidates with the standard roster
+  // Process Real API candidates combined with standard benchmark candidate roster
   const allCandidates = useMemo(() => {
-    const baseList = (() => {
-      if (!apiCandidates || apiCandidates.length === 0) {
-        return DEFAULT_CANDIDATES;
+    const mappedApi = (apiCandidates || []).map((c, idx) => {
+      const score = c.match_score != null ? Math.round(Number(c.match_score)) : 0;
+      const status = c.status === 'Shortlisted' ? 'AI Shortlisted' : c.status === 'Rejected' ? 'Not Shortlisted' : (c.status || 'In Review');
+
+      // Format experience cleanly so it never outputs bare " yrs"
+      let expStr = '—';
+      if (c.experience_years != null && String(c.experience_years).trim()) {
+        expStr = `${c.experience_years} yrs`;
+      } else if (typeof c.experience === 'number') {
+        expStr = `${c.experience} yrs`;
+      } else if (Array.isArray(c.experience)) {
+        expStr = c.experience.length > 0 ? `${c.experience.length} yrs` : '—';
+      } else if (typeof c.experience === 'string' && c.experience.trim()) {
+        const trimmed = c.experience.trim();
+        expStr = trimmed.toLowerCase().includes('yr') ? trimmed : `${trimmed} yrs`;
       }
 
-      const mappedApi = apiCandidates.map((c, idx) => {
-        const score = Math.round(c.match_score ?? (90 - idx * 4));
-        const status = c.status === 'Shortlisted' ? 'AI Shortlisted' : c.status === 'Rejected' ? 'Not Shortlisted' : (c.status || 'In Review');
-        return {
-          id: String(c.id || c.submission_id || `api-${idx}`),
-          submission_id: c.submission_id || c.id,
-          name: c.candidate_name || `Candidate #${idx + 1}`,
-          avatar: c.avatar_url || null,
-          initials: (c.candidate_name || 'CN').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
-          location: c.location || 'Bangalore, India',
-          email: c.candidate_email || `${(c.candidate_name || 'candidate').toLowerCase().replace(/\s+/g, '.')}@email.com`,
-          phone: c.candidate_phone || '+91 98765 43210',
-          score,
-          skills: Array.isArray(c.matched_skills) && c.matched_skills.length
-            ? c.matched_skills.slice(0, 3).concat(c.matched_skills.length > 3 ? [`+${c.matched_skills.length - 3}`] : [])
-            : ['Python', 'FastAPI', 'AWS', '+2'],
-          experience: c.experience ? `${c.experience} yrs` : '3 yrs',
-          availability: c.availability || 'Immediate',
-          status,
-          matchRating: score >= 80 ? 'Excellent Match' : score >= 65 ? 'Moderate Match' : 'Not Recommended',
-          matchSummary: c.summary || 'Strong technical background, relevant experience, and good communication skills. Recommended for interview.',
-          scoreBreakdown: {
-            technical: Math.min(100, Math.round(score * 1.03)),
-            experience: Math.min(100, Math.round(score * 0.94)),
-            problemSolving: Math.min(100, Math.round(score * 0.98)),
-            communication: Math.min(100, Math.round(score * 0.95)),
-            culturalFit: Math.min(100, Math.round(score * 0.90)),
-            roleAlignment: Math.min(100, Math.round(score * 1.01)),
-          },
-          strengths: c.matched_skills && c.matched_skills.length
-            ? c.matched_skills.slice(0, 4).map((s) => `Demonstrated skill in ${s}`)
-            : [
-                'Strong Python & Django experience',
-                'Good system design understanding',
-                'Clear communication in AI interview',
-                'Relevant project experience',
-              ],
-          concerns: c.missing_skills && c.missing_skills.length
-            ? c.missing_skills.slice(0, 2).map((s) => `Lacks documented exposure to ${s}`)
-            : ['Limited experience with cloud infrastructure (AWS).'],
-          resume_text: c.resume_text,
-          filename: c.filename,
-          isRealApi: true,
-        };
-      });
+      // Format skills cleanly
+      const skillsList = Array.isArray(c.matched_skills) && c.matched_skills.length
+        ? c.matched_skills.slice(0, 3).concat(c.matched_skills.length > 3 ? [`+${c.matched_skills.length - 3}`] : [])
+        : Array.isArray(c.skills) && c.skills.length
+        ? c.skills.slice(0, 3).concat(c.skills.length > 3 ? [`+${c.skills.length - 3}`] : [])
+        : [];
 
-      const namesSet = new Set(mappedApi.map((c) => c.name.toLowerCase()));
-      const remainingDefaults = DEFAULT_CANDIDATES.filter((c) => !namesSet.has(c.name.toLowerCase()));
-      return [...mappedApi, ...remainingDefaults];
-    })();
+      const candidateName = c.candidate_name || c.name || `Candidate #${idx + 1}`;
+      const initials = candidateName
+        .split(' ')
+        .filter(Boolean)
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase() || 'CN';
+
+      return {
+        id: String(c.id || c.submission_id || `api-${idx}`),
+        submission_id: c.submission_id || c.id,
+        name: candidateName,
+        avatar: c.avatar_url || null,
+        initials,
+        location: c.location || 'Bangalore, India',
+        email: c.candidate_email || c.email || '—',
+        phone: c.candidate_phone || c.phone || '—',
+        score,
+        skills: skillsList,
+        experience: expStr,
+        availability: c.availability || 'Immediate',
+        status,
+        matchRating: score >= 80 ? 'Excellent Match' : score >= 65 ? 'Moderate Match' : 'Review Required',
+        matchSummary: c.summary || 'Candidate evaluation profile submitted for requisition.',
+        scoreBreakdown: c.breakdown || {
+          technical: score,
+          experience: score,
+          problemSolving: score,
+          communication: score,
+          culturalFit: score,
+          roleAlignment: score,
+        },
+        strengths: Array.isArray(c.matched_skills) && c.matched_skills.length
+          ? c.matched_skills.slice(0, 4).map((s) => `Demonstrated skill in ${s}`)
+          : [],
+        concerns: Array.isArray(c.missing_skills) && c.missing_skills.length
+          ? c.missing_skills.slice(0, 2).map((s) => `Lacks documented exposure to ${s}`)
+          : [],
+        resume_text: c.resume_text,
+        filename: c.filename,
+        isRealApi: true,
+      };
+    });
+
+    const namesSet = new Set(mappedApi.map((c) => c.name.toLowerCase()));
+    const remainingDefaults = DEFAULT_CANDIDATES.filter((c) => !namesSet.has(c.name.toLowerCase()));
+    const baseList = [...mappedApi, ...remainingDefaults];
 
     // Dynamically mark candidates who have scheduled interviews as 'In Interview'
     return baseList.map((c) => {
@@ -704,8 +682,8 @@ export default function RequisitionCandidates() {
 
   // Aggregate metrics
   const totalCount = allCandidates.length;
-  const aiShortlistedCount = allCandidates.filter((c) => c.status === 'AI Shortlisted').length;
-  const inInterviewCount = Math.max(interviews.length, allCandidates.filter((c) => c.status === 'In Review').length);
+  const aiShortlistedCount = allCandidates.filter((c) => c.status === 'AI Shortlisted' || c.status === 'Shortlisted').length;
+  const inInterviewCount = allCandidates.filter((c) => c.status === 'In Interview' || c.isScheduled || c.status === 'Interview Scheduled').length;
   const offeredCount = 1;
 
   // Status Action handler
@@ -1056,7 +1034,16 @@ export default function RequisitionCandidates() {
 
               {/* Table Scrollable Body (Only candidate rows scroll here, clipping cleanly below heading, no scrollbars visible) */}
               <div className="overflow-y-auto no-scrollbar flex-1 min-h-0 divide-y divide-black/[0.03] w-full">
-                {filteredCandidates.map((cand) => {
+                {filteredCandidates.length === 0 ? (
+                  <div className="py-20 text-center text-gray-500 flex flex-col items-center justify-center">
+                    <Users className="w-10 h-10 text-gray-300 mb-2 stroke-[1.5]" />
+                    <div className="text-sm font-semibold text-gray-800">No candidates found</div>
+                    <div className="text-xs text-gray-400 mt-1 max-w-xs">
+                      {searchQuery ? 'No candidates match your current search or filters.' : 'No candidates have applied to this requisition yet.'}
+                    </div>
+                  </div>
+                ) : (
+                  filteredCandidates.map((cand) => {
                   const isSelected = selectedCandidateId === cand.id;
 
                   return (
@@ -1217,7 +1204,7 @@ export default function RequisitionCandidates() {
                     </div>
                   </div>
                 );
-              })}
+              }))}
             </div>
           </div>
         </div>

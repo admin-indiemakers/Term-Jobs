@@ -16,8 +16,10 @@ import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 
-// Default mock events representing the exact UI shown in the reference design
-const DEFAULT_EVENTS = [
+// No hardcoded events - dynamically loaded from real company data
+const DEFAULT_EVENTS = [];
+/*
+const _OLD_DEFAULT_EVENTS = [
   // Oct 6, 2026 (Mocked day from reference image)
   {
     id: 'evt-1',
@@ -112,6 +114,7 @@ const DEFAULT_EVENTS = [
   { id: 'evt-35', date: '2026-10-30', time: '05:00 PM', title: 'Monthly Retrospective', subtitle: 'HR & HM Team', category: 'meeting', status: 'Scheduled', statusType: 'orange' },
   { id: 'evt-36', date: '2026-10-31', time: '11:00 AM', title: 'Requisition Closeout', subtitle: 'DevOps Pod', category: 'requisition', status: 'Completed', statusType: 'green' },
 ];
+*/
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -137,11 +140,11 @@ export default function CalendarModal({ isOpen, onClose }) {
   const { token } = useAuth();
   const navigate = useNavigate();
 
-  // Initial reference date is October 6, 2026 as per user design
-  const [currentDate, setCurrentDate] = useState(() => new Date(2026, 9, 6));
-  const [selectedDate, setSelectedDate] = useState(() => new Date(2026, 9, 6));
+  // Current live date
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [viewMode, setViewMode] = useState('Month'); // 'Month' | 'Week' | 'Day'
-  const [allEvents, setAllEvents] = useState(DEFAULT_EVENTS);
+  const [allEvents, setAllEvents] = useState([]);
 
   // Fetch live company interviews & requisitions to merge dynamically
   useEffect(() => {
