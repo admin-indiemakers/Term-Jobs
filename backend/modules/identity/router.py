@@ -47,7 +47,7 @@ def _get_gmail_creds() -> tuple[str, str]:
     pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
     if not sender or not pw:
         from dotenv import load_dotenv
-        load_dotenv(override=True)
+        load_dotenv(override=not bool(os.getenv("VERCEL")))
         sender = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
         pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
     # Gmail displays app passwords in space-separated groups.
@@ -262,25 +262,14 @@ If you did not expect this message, please contact your administrator.
     msg.attach(MIMEText(plain_text, "plain", "utf-8"))
     msg.attach(MIMEText(html_body,  "html",  "utf-8"))
 
-    try:
-        # Port 587 + STARTTLS has better deliverability than SSL 465 for Gmail
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(sender, app_pw)
-            smtp.sendmail(sender, [to_email], msg.as_string())
-        return {"status": "success"}
-    except smtplib.SMTPAuthenticationError:
-        return {"status": "failed", "reason": "Gmail rejected the server credentials. Configure a valid Gmail app password."}
-    except smtplib.SMTPRecipientsRefused:
-        return {"status": "failed", "reason": "Mail server rejected the candidate email address."}
-    except Exception as exc:
-        return {"status": "failed", "reason": "Mail server could not be reached or rejected the send. Check server mail connectivity."}
+    from modules.identity.mail_transport import deliver_credentials_message
+    return deliver_credentials_message(msg, sender, app_pw, to_email)
 
 
 def send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:
-    """Non-blocking wrapper — fires the email in a daemon thread."""
+    """Serverless requests must complete delivery before returning."""
+    if os.getenv("VERCEL"):
+        return _send_credentials_email(to_email, name, role, plain_password, candidate_id)
     t = threading.Thread(
         target=_send_credentials_email,
         args=(to_email, name, role, plain_password, candidate_id),

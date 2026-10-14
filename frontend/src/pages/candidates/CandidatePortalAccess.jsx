@@ -49,7 +49,7 @@ export default function CandidatePortalAccess() {
   const resendLogin = async (cand) => {
     setError(''); setSuccessMsg(''); setUpdatingId(cand.candidate_id || cand.workorder_id);
     try {
-      const result = await request(`/api/auth/portal-users/${cand.portal_user_id}/resend-credentials`, {method: 'POST', token, body: {}});
+      const result = await request(`/api/auth/portal-users/${cand.portal_user_id}/resend-credentials`, {method: 'POST', token, timeout: 60000, body: {}});
       if (result.email_delivery?.status !== 'success') throw new Error(result.email_delivery?.reason || 'Email could not be sent.');
       setSuccessMsg(`New login credentials emailed to ${cand.candidate_email}.`);
     } catch (err) { setError(err.message); }
@@ -85,6 +85,7 @@ export default function CandidatePortalAccess() {
     try {
       const result = await request('/api/auth/portal-users', {
         method: 'POST',
+        timeout: 60000,
         token,
         body: {
           candidate_id: showCreateModal.candidate_id || cid,
@@ -144,12 +145,14 @@ export default function CandidatePortalAccess() {
         if (editForm.password) body.password = editForm.password;
         result = await request(`/api/auth/portal-users/${showEditModal.portal_user_id}`, {
           method: 'PUT',
+          timeout: 60000,
           token,
           body,
         });
       } else {
         result = await request('/api/auth/portal-users', {
           method: 'POST',
+          timeout: 60000,
           token,
           body: {
             candidate_id: cid,
