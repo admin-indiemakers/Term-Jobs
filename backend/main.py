@@ -580,7 +580,6 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "company_name": (company.get("name") if isinstance(company, dict) else getattr(company, "name", None)) or getattr(req, "company_name", None) or "",
             "status": req.status,
             "title": req.title,
-<<<<<<< HEAD
             "department": getattr(req, "department", None) or sr.get("department") or sr.get("job_family") or "",
             "job_family": sr.get("job_family") or getattr(req, "job_family", None) or "",
             "experience": sr.get("experience") or sr.get("experience_range") or sr.get("experience_level") or "",
@@ -588,14 +587,12 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "location": sr.get("primary_location") or sr.get("workplace_type") or "",
             "primary_location": sr.get("primary_location") or "",
             "workplace_type": sr.get("workplace_type") or sr.get("work_mode") or "",
+            "skills": getattr(req, "skills", None) or sr.get("must_have_skills") or sr.get("primary_skills") or [],
+            "description": getattr(req, "description", None) or sr.get("summary") or sr.get("role_overview") or (req.intent or {}).get("description") or "",
             "applicant_count": applicant_count,
             "shortlisted_count": shortlisted_count,
             "in_interview_count": in_interview_count,
             "hired_count": hired_count,
-=======
-            "skills": getattr(req, "skills", None) or sr.get("must_have_skills") or sr.get("primary_skills") or [],
-            "description": getattr(req, "description", None) or sr.get("summary") or sr.get("role_overview") or (req.intent or {}).get("description") or "",
->>>>>>> b0ecca0e1753a7174c13fa9aa4a4af048e78fd76
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
