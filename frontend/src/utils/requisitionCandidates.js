@@ -1,3 +1,16 @@
+export function candidateRounds(candidate, rounds = []) {
+  const ids = [candidate.id, candidate.submission_id].filter(Boolean).map(String);
+  const email = String(candidate.candidate_email || candidate.email || '').trim().toLowerCase();
+  return rounds.filter(round => (!candidate.requisition_id || String(round.requisition_id) === String(candidate.requisition_id)) && (
+    ids.includes(String(round.candidate_submission_id || '')) ||
+    (email && String(round.candidate_email || '').trim().toLowerCase() === email)
+  ));
+}
+
+export function attendedApplicants(candidates, rounds) {
+  return candidates.filter(candidate => candidateRounds(candidate, rounds).some(round => round.status === 'Completed'));
+}
+
 export function mapRequisitionCandidates(candidates = [], rounds = []) {
   return candidates.map(c => {
     const active = rounds.some(r => ['Scheduled', 'Confirmed', 'In Progress'].includes(r.status) && String(r.candidate_submission_id) === String(c.id || c.submission_id));

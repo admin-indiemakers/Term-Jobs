@@ -1,3 +1,4 @@
+import { SavedEvaluation } from '../../interview/components/SavedEvaluation';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
@@ -589,6 +590,9 @@ export default function CandidateInterviewPanel() {
                 </div>
               )}
 
+              {activePanelTab === 'details' && !isAiInterviewRound(activeRound) && !activeRound.planned && (
+                <SavedEvaluation key={activeRound.id} evaluation={activeRound.evaluation} />
+              )}
               {/* Tab 2: Evaluation */}
               {((activePanelTab === 'details' && isAiInterviewRound(activeRound)) || activePanelTab === 'evaluation') && !activeRound.planned && (isAiInterviewRound(activeRound) || activeRound.status === 'Completed') && <InterviewReviewPanel round={activeRound} candidateName={candidate.name} />}
               {activePanelTab === 'evaluation' && activeRound.status !== 'Completed' && (

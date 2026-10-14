@@ -1,3 +1,4 @@
+import { SavedEvaluation } from './SavedEvaluation';
 import { useEffect, useRef, useState } from 'react';
 import { Award, Download, FileText, RefreshCw, Video } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
@@ -64,6 +65,7 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
         <div className="mt-1 text-2xl font-bold text-zinc-950">{loading ? 'Loading…' : error ? 'Unavailable' : savedScore !== null ? <>{savedScore}<span className="text-sm font-normal text-zinc-500"> / 100</span></> : 'Pending review'}</div>
       </div>
     </header>
+    <div className="p-5"><SavedEvaluation evaluation={report?.evaluation || round.evaluation} /></div>
     <section aria-label="Interview remarks" className="border-b border-zinc-200 p-5"><h3 className="text-sm font-semibold">Remarks</h3><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{report?.remarks || report?.evaluation?.notes || round.evaluation?.notes || analysis.summary || 'No remarks have been saved.'}</p></section>
 
     {error && <div role="alert" className="m-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)} className="mt-2 inline-flex items-center gap-2 font-semibold underline"><RefreshCw size={14} /> Retry review</button></div>}

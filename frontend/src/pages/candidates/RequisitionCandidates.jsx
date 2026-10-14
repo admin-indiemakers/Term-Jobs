@@ -1,3 +1,5 @@
+import { InterviewReviewPanel } from '../../interview/components/InterviewReviewPanel';
+import { isAiInterviewRound } from '../../interview/utils/interviewMode';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -35,7 +37,7 @@ import { request, API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 import SetInterviewProcessModal from '../../components/SetInterviewProcessModal';
-import { mapRequisitionCandidates } from '../../utils/requisitionCandidates';
+import { mapRequisitionCandidates, attendedApplicants, candidateRounds } from '../../utils/requisitionCandidates';
 
 // Circular SVG gauge for scores (Light Theme Clean)
 function ScoreRing({ score, size = 38, stroke = 3 }) {
@@ -151,8 +153,6 @@ export default function RequisitionCandidates() {
   const [, setActingStatusId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
 
-  const isCandidateScheduled = cand => Boolean(cand && interviews.some(inv =>
-    inv.status !== 'Cancelled' && String(inv.candidate_submission_id) === String(cand.submission_id || cand.id)));
   const [refresh, setRefresh] = useState(0);
   // Notes state
   const [newNoteText, setNewNoteText] = useState('');
@@ -188,7 +188,7 @@ export default function RequisitionCandidates() {
     return `${loc} (${wp})`;
   })();
 
-  const allCandidates = useMemo(() => mapRequisitionCandidates(apiCandidates, interviews), [apiCandidates, interviews]);
+  const allCandidates = useMemo(() => mapRequisitionCandidates(attendedApplicants(apiCandidates, interviews), interviews), [apiCandidates, interviews]);
 
   // Selected candidate (null if preview panel closed)
   const selectedCandidate = useMemo(() => {
@@ -245,7 +245,7 @@ export default function RequisitionCandidates() {
         await request(`/candidates/${submissionId}/status`, {
           method: 'PATCH',
           token,
-          body: { status: newStatus === 'AI Shortlisted' ? 'Shortlisted' : newStatus === 'Not Shortlisted' ? 'Rejected' : 'Screened' },
+          body: { status: newStatus === 'Not Shortlisted' ? 'Rejected' : newStatus },
         });
       } catch (err) {
         setError(err.message || 'Status update failed.');
@@ -446,6 +446,7 @@ export default function RequisitionCandidates() {
                     {[
                       { label: 'All Statuses', val: 'all' },
                       { label: 'AI Shortlisted', val: 'AI Shortlisted' },
+                      { label: 'Accepted', val: 'Accepted' },
                       { label: 'In Interview', val: 'In Interview' },
                       { label: 'Not Shortlisted', val: 'Not Shortlisted' },
                     ].map((item) => (
@@ -652,19 +653,7 @@ export default function RequisitionCandidates() {
                           onClick={(e) => e.stopPropagation()}
                           className="absolute right-3 top-10 w-48 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 text-left space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
                         >
-                          {isCandidateScheduled(cand) ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigate(`/interview-panel/${cand.id}?reqId=${id}`);
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
-                            >
-                              <ExternalLink size={13} className="text-blue-600 shrink-0" />
-                              <span>Go to Interview Panel</span>
-                            </button>
-                          ) : (
+
                             <button
                               type="button"
                               onClick={() => {
@@ -676,7 +665,7 @@ export default function RequisitionCandidates() {
                               <Calendar size={13} className="text-emerald-600 shrink-0" />
                               <span>Schedule Interview</span>
                             </button>
-                          )}
+
                           <button
                             type="button"
                             onClick={() => handleViewResume(cand)}
@@ -688,11 +677,11 @@ export default function RequisitionCandidates() {
                           <div className="h-px bg-black/[0.04] my-1" />
                           <button
                             type="button"
-                            onClick={() => handleUpdateStatus(cand, 'AI Shortlisted')}
+                            onClick={() => handleUpdateStatus(cand, 'Accepted')}
                             className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
                           >
                             <Check size={13} />
-                            <span>Shortlist Candidate</span>
+                            <span>Select Candidate</span>
                           </button>
                           <button
                             type="button"
@@ -989,29 +978,14 @@ export default function RequisitionCandidates() {
               {/* TAB 2: AI ANALYSIS */}
               {activePreviewTab === 'ai_analysis' && (
                 <div className="space-y-3.5 text-xs">
-                  <div className="bg-white/80 border border-black/[0.06] rounded-2xl p-4 space-y-3 shadow-3xs">
-                    <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles size={14} className="text-emerald-600" />
-                      <span>AI Intake & Calibration Summary</span>
-                    </h3>
-                    <p className="text-gray-700 leading-relaxed">
-                      Evaluated against calibrated parameters for <strong>{reqTitle}</strong> ({reqCode}). The candidate demonstrates verified competence in primary skills, responsive team alignment, and clear problem decomposition.
-                    </p>
-                    <div className="pt-2 border-t border-black/[0.06] space-y-2">
-                      <div className="flex justify-between text-gray-600">
-                        <span>Algorithm & Technical Knowledge:</span>
-                        <span className="font-bold text-gray-900">92%</span>
-                      </div>
-                      <div className="flex justify-between text-gray-600">
-                        <span>Architecture & API Practices:</span>
-                        <span className="font-bold text-gray-900">95%</span>
-                      </div>
-                      <div className="flex justify-between text-gray-600">
-                        <span>Production Reliability & Testing:</span>
-                        <span className="font-bold text-gray-900">88%</span>
-                      </div>
-                    </div>
-                  </div>
+                  {(() => {
+                    const completed = candidateRounds(selectedCandidate, interviews)
+                      .filter(round => round.status === 'Completed' && isAiInterviewRound(round))
+                      .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))[0];
+                    return completed
+                      ? <InterviewReviewPanel key={completed.id} round={completed} candidateName={selectedCandidate.name} />
+                      : <p className="p-4 text-gray-600">No completed AI assessment is available for this candidate.</p>;
+                  })()}
                 </div>
               )}
 
@@ -1061,16 +1035,7 @@ export default function RequisitionCandidates() {
                           {interviews.find(r => String(r.candidate_submission_id) === String(selectedCandidate.id))?.status || 'Not scheduled'}
                         </div>
                       </div>
-                      {isCandidateScheduled(selectedCandidate) ? (
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/interview-panel/${selectedCandidate.id}?reqId=${id}`)}
-                          className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-colors cursor-pointer shadow-3xs flex items-center gap-1"
-                        >
-                          <ExternalLink size={11} />
-                          <span>Go to Interview Panel</span>
-                        </button>
-                      ) : (
+
                         <button
                           type="button"
                           onClick={() => setSchedulingCandidate(selectedCandidate)}
@@ -1078,7 +1043,6 @@ export default function RequisitionCandidates() {
                         >
                           Schedule
                         </button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -1118,17 +1082,8 @@ export default function RequisitionCandidates() {
 
             {/* Bottom Action Buttons Bar */}
             <div className="p-3 sm:p-4 border-t border-black/[0.06] bg-white/70 flex items-center gap-2.5 shrink-0">
-              {/* Schedule Interview OR Go to Interview Panel */}
-              {isCandidateScheduled(selectedCandidate) ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/interview-panel/${selectedCandidate.id}?reqId=${id}`)}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
-                >
-                  <ExternalLink size={14} />
-                  <span>Go to Interview Panel</span>
-                </button>
-              ) : (
+              {/* Schedule company interview rounds */}
+
                 <button
                   type="button"
                   onClick={() => setSchedulingCandidate(selectedCandidate)}
@@ -1137,7 +1092,6 @@ export default function RequisitionCandidates() {
                   <Calendar size={14} />
                   <span>Schedule Interview</span>
                 </button>
-              )}
 
               {/* View Full Profile */}
               <button
@@ -1164,11 +1118,11 @@ export default function RequisitionCandidates() {
                   >
                     <button
                       type="button"
-                      onClick={() => handleUpdateStatus(selectedCandidate, 'AI Shortlisted')}
+                      onClick={() => handleUpdateStatus(selectedCandidate, 'Accepted')}
                       className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
                     >
                       <Check size={13} />
-                      <span>Shortlist</span>
+                      <span>Select Candidate</span>
                     </button>
                     <button
                       type="button"

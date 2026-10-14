@@ -563,6 +563,8 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
         except Exception:
             pass
 
+        from modules.interview.domain.applicants import attended_applicants
+        cand_list = attended_applicants(db, cand_list)
         applicant_count = len(cand_list)
         shortlisted_count = sum(1 for c in cand_list if (c.get("status") or "").lower() == "shortlisted")
         in_interview_count = sum(
@@ -1614,13 +1616,10 @@ def list_requisitions(
         cand_counts = {}
         try:
             from modules.shared.db import db
-            cand_counts = {
-                str(doc["_id"]): doc["count"]
-                for doc in db["candidate_submissions"].aggregate([
-                    {"$group": {"_id": "$requisition_id", "count": {"$sum": 1}}}
-                ])
-                if doc.get("_id")
-            }
+            from modules.interview.domain.applicants import attended_applicants
+            for applicant in attended_applicants(db, db["candidate_submissions"].find({"requisition_id": {"$in": [str(r.id) for r in rows]}})):
+                req_key = str(applicant["requisition_id"])
+                cand_counts[req_key] = cand_counts.get(req_key, 0) + 1
         except Exception:
             pass
 
@@ -1761,7 +1760,8 @@ def get_requisitions_overview_metrics(current_user: User = Depends(get_current_u
         except Exception as e:
             logger.warning(f"Failed to query candidates for overview metrics: {e}")
 
-        total_applicants = len(cands)
+        from modules.interview.domain.applicants import attended_applicants
+        total_applicants = len(attended_applicants(db, cands))
         shortlisted = sum(1 for c in cands if (c.get("status") or "").lower() == "shortlisted")
         hired = sum(
             1 for c in cands if (c.get("status") or "").lower() in ("accepted", "hired", "offer extended", "offer accepted", "completed")

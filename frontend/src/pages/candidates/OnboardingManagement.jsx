@@ -550,13 +550,7 @@ export default function OnboardingManagement() {
       {/* Navigation Pills & Search Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 flex-shrink-0">
         <div className="flex items-center gap-1.5 p-1 bg-white/40 backdrop-blur-xl border border-white/70 rounded-2xl shadow-2xs">
-          <button
-            type="button"
-            onClick={() => navigate('/dashboard/candidates')}
-            className="px-4 py-1.5 rounded-xl text-xs font-bold text-gray-600 hover:text-black hover:bg-white/60 transition cursor-pointer"
-          >
-            Shortlisted
-          </button>
+
           <button
             type="button"
             onClick={() => navigate('/dashboard/candidates/accepted')}

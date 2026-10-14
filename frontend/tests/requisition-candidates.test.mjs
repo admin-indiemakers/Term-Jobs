@@ -29,3 +29,9 @@ test('original compact rows show three real skills and a remaining-skill count',
   assert.deepEqual(candidate.skills, ['Python', 'Django', 'AWS', '+2']);
   assert.equal(candidate.skillsMatchPct, 83);
 });
+
+
+test('accepted selection stays accepted even with upcoming interview rounds', () => {
+  const [candidate] = mapRequisitionCandidates([{id: 'selected', status: 'Accepted'}], [{candidate_submission_id: 'selected', status: 'Scheduled'}]);
+  assert.equal(candidate.status, 'Accepted');
+});

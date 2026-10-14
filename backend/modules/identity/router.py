@@ -50,16 +50,18 @@ def _get_gmail_creds() -> tuple[str, str]:
         load_dotenv(override=True)
         sender = os.getenv("GMAIL_SENDER_EMAIL", "").strip()
         pw = os.getenv("GMAIL_APP_PASSWORD", "").strip()
-    return sender, pw
+    # Gmail displays app passwords in space-separated groups.
+    return sender, "".join(pw.split())
 
 def _send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:
     """Send a welcome / credential email to the newly created user."""
     sender, app_pw = _get_gmail_creds()
     if not sender or not app_pw:
         print(f"[TermJob] Email skipped — Gmail credentials not configured in .env (to: {to_email})")
-        return  # silently skip if not configured
+        return {"status": "failed", "reason": "Mail credentials are not configured on the server"}
 
-    login_url = f"{_FRONTEND_URL}/login"
+    from modules.interview.services.interview_service import _resolve_interview_domain
+    login_url = f"{_resolve_interview_domain()}/login"
 
     # Role-specific branding
     ROLE_META = {
@@ -268,9 +270,13 @@ If you did not expect this message, please contact your administrator.
             smtp.ehlo()
             smtp.login(sender, app_pw)
             smtp.sendmail(sender, [to_email], msg.as_string())
-        print(f"[TermJob] Credential email sent -> {to_email}")
+        return {"status": "success"}
+    except smtplib.SMTPAuthenticationError:
+        return {"status": "failed", "reason": "Gmail rejected the server credentials. Configure a valid Gmail app password."}
+    except smtplib.SMTPRecipientsRefused:
+        return {"status": "failed", "reason": "Mail server rejected the candidate email address."}
     except Exception as exc:
-        print(f"[TermJob] Email delivery failed -> {to_email}: {exc}")
+        return {"status": "failed", "reason": "Mail server could not be reached or rejected the send. Check server mail connectivity."}
 
 
 def send_credentials_email(to_email: str, name: str, role: str, plain_password: str, candidate_id: str = "") -> None:
@@ -2028,9 +2034,10 @@ def create_or_update_portal_user(
         # Synchronize to Mongo collections
         _sync_candidate_credentials_to_mongo(candidate_id, email, name)
 
+        email_delivery = {"status": "not_requested"}
         # Send credentials email to candidate if password was provided/reset
         if password:
-            send_credentials_email(
+            email_delivery = _send_credentials_email(
                 to_email=existing_user.email,
                 name=existing_user.name,
                 role="Candidate",
@@ -2040,6 +2047,7 @@ def create_or_update_portal_user(
 
         return {
             "ok": True,
+            "email_delivery": email_delivery,
             "id": existing_user.id,
             "email": existing_user.email,
             "name": existing_user.name,
@@ -2076,7 +2084,7 @@ def create_or_update_portal_user(
     _sync_candidate_credentials_to_mongo(candidate_id, email, name)
 
     # Fire welcome credential email to candidate
-    send_credentials_email(
+    email_delivery = _send_credentials_email(
         to_email=new_user.email,
         name=new_user.name,
         role="Candidate",
@@ -2086,6 +2094,7 @@ def create_or_update_portal_user(
 
     return {
         "ok": True,
+            "email_delivery": email_delivery,
         "id": new_user.id,
         "email": new_user.email,
         "name": new_user.name,
@@ -2136,16 +2145,18 @@ def update_portal_user(
             target_name = name or m_user.get("name")
             if cid:
                 _sync_candidate_credentials_to_mongo(cid, target_email, target_name)
-            if password and target_email:
-                send_credentials_email(
+            email_delivery = {"status": "not_requested"}
+            if target_email:
+                email_delivery = _send_credentials_email(
                     to_email=target_email,
                     name=target_name,
                     role="Candidate",
-                    plain_password=password,
+                    plain_password=password or "Use your existing password (unchanged)",
                     candidate_id=cid,
                 )
             return {
                 "ok": True,
+            "email_delivery": email_delivery,
                 "message": "Portal credentials updated successfully" + (" and new password emailed to candidate" if password else ""),
                 "user": {
                     "id": user_id,
@@ -2198,18 +2209,20 @@ def update_portal_user(
     if cid:
         _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
 
-    # If password was reset or changed, send credentials email
-    if password and target.email:
-        send_credentials_email(
+    email_delivery = {"status": "not_requested"}
+    # Every Save Changes sends portal access details; a blank password keeps the existing hash.
+    if target.email:
+        email_delivery = _send_credentials_email(
             to_email=target.email,
             name=target.name,
             role="Candidate",
-            plain_password=password,
+            plain_password=password or "Use your existing password (unchanged)",
             candidate_id=cid or getattr(target, 'candidate_id', '') or getattr(target, 'workorder_id', '')
         )
 
     return {
         "ok": True,
+            "email_delivery": email_delivery,
         "message": "Portal credentials updated successfully" + (" and new password emailed to candidate" if password else ""),
         "user": {
             "id": target.id,
@@ -2235,17 +2248,10 @@ def resend_portal_user_credentials(
     import secrets
     body = body or {}
     plain_password = body.get("password") or f"TermJob@{secrets.randbelow(9000) + 1000}"
-    target.password_hash = hash_password(plain_password)
-    target.is_active = True
-    db.commit()
-    db.refresh(target)
-    _cache.invalidate_prefix("users:")
-    _cache.invalidate_prefix(f"auth_user:{target.id}")
-
     cid = target.candidate_id or getattr(target, 'workorder_id', '')
     _sync_candidate_credentials_to_mongo(cid, target.email, target.name)
 
-    send_credentials_email(
+    email_delivery = _send_credentials_email(
         to_email=target.email,
         name=target.name,
         role="Candidate",
@@ -2253,9 +2259,18 @@ def resend_portal_user_credentials(
         candidate_id=cid,
     )
 
+    if email_delivery.get("status") == "success":
+        target.password_hash = hash_password(plain_password)
+        target.is_active = True
+        db.commit()
+        db.refresh(target)
+        _cache.invalidate_prefix("users:")
+        _cache.invalidate_prefix(f"auth_user:{target.id}")
+
     return {
         "ok": True,
-        "message": f"Candidate login credentials successfully dispatched to {target.email}",
+            "email_delivery": email_delivery,
+        "message": "Login email sent" if email_delivery.get("status") == "success" else "Login email failed; existing password is unchanged",
         "email": target.email,
         "temporary_password": plain_password,
         "candidate_id": cid,

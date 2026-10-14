@@ -1706,7 +1706,7 @@ export default function RequisitionOverview({ section }) {
                             navigate(`/dashboard/requisitions/${r.id}/candidates`);
                           }}
                         >
-                          <ApplicantStack count={r.applicant_count ?? 12} />
+                          <ApplicantStack count={r.applicant_count ?? 0} />
                         </td>
 
                         {/* 5. Status */}

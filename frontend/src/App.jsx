@@ -49,7 +49,6 @@ const HRDashboard = lazy(() => import('./pages/HRDashboard'));
 const RequisitionOverview = lazy(() => import('./pages/requisitions/RequisitionOverview'));
 const NewRequisition = lazy(() => import('./pages/requisitions/NewRequisition'));
 const RequisitionDetail = lazy(() => import('./pages/requisitions/RequisitionDetail'));
-const ShortlistedCandidates = lazy(() => import('./pages/candidates/ShortlistedCandidates'));
 const RequisitionCandidates = lazy(() => import('./pages/candidates/RequisitionCandidates'));
 const CandidateSchedule = lazy(() => import('./pages/candidates/CandidateSchedule'));
 const CandidateInterviewPanel = lazy(() => import('./pages/candidates/CandidateInterviewPanel'));
@@ -123,7 +122,7 @@ function CandidateRouteDispatcher() {
   if (user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') {
     return <SuperAdminCandidatePool />;
   }
-  return <ShortlistedCandidates />;
+  return <Navigate to="/dashboard/candidates/accepted" replace />;
 }
 
 function DashboardAccessGuard({ children }) {
