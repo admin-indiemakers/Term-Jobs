@@ -1,6 +1,9 @@
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
+import CompanyInterviewScheduleCard from '../interview/components/CompanyInterviewScheduleCard';
+import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { request } from '../api/client';
+import { request, API_BASE_URL } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import termjobsLogo from '../assets/termjobs-logo.png';
 import {
@@ -161,6 +164,7 @@ const PREDEFINED_ROLES = [];
 export default function HiringManagerDashboard() {
   const { user, token, logout } = useAuth();
   const navigate = useNavigate();
+  const [googleCalendar, setGoogleCalendar] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -179,6 +183,8 @@ export default function HiringManagerDashboard() {
   // Inline Card & Modal States (Image 2 Match)
   const [editingDraftData, setEditingDraftData] = useState(null);
   const [selectedCandidateProfile, setSelectedCandidateProfile] = useState(null);
+  const [resumeError, setResumeError] = useState('');
+  const [resumeLoading, setResumeLoading] = useState(false);
 
   // Dynamic Right Panel / AI Connected Output View State
   const [activePanel, setActivePanel] = useState({
@@ -524,8 +530,9 @@ export default function HiringManagerDashboard() {
 
   // Real Upcoming Interviews mapped from backend interview rounds & summary
   const upcomingInterviews = useMemo(() => {
-    if (interviewRounds.length > 0) {
-      return interviewRounds.map((r) => {
+    const scheduledRounds = upcomingInterviewRounds(interviewRounds, requisitions);
+    if (scheduledRounds.length > 0) {
+      return scheduledRounds.map((r) => {
         const name = r.candidate_name || 'Candidate';
         const initials = name
           .split(' ')
@@ -555,7 +562,7 @@ export default function HiringManagerDashboard() {
           role: r.requisition_title || 'Position',
           round: r.interview_round || r.round_name || 'Technical Round 1',
           time: timeStr,
-          status: r.status || 'SCHEDULED',
+          status: r.status,
           candidate_id: r.candidate_submission_id,
           requisition_id: r.requisition_id,
         };
@@ -574,21 +581,23 @@ export default function HiringManagerDashboard() {
           .toUpperCase() || 'C';
 
         fromSummary.push({
-          id: r.id || r.round_id || `${cand.candidate_id || cand.candidate_email}-${idx}`,
+          id: r.id || r.round_id,
           name,
           initials,
           role: cand.requisition_title || r.requisition_title || 'Position',
           round: r.round_name || r.interview_round || 'AI Technical Interview',
           time: r.scheduled_time || 'Scheduled',
-          status: r.status || 'SCHEDULED',
+          scheduled_date: r.scheduled_date,
+          scheduled_time: r.scheduled_time,
+          status: r.status,
           candidate_id: cand.candidate_id || cand.candidate_submission_id,
           requisition_id: cand.requisition_id,
         });
       });
     });
 
-    return fromSummary;
-  }, [interviewRounds, interviewSummary]);
+    return upcomingInterviewRounds(fromSummary, requisitions);
+  }, [interviewRounds, interviewSummary, requisitions]);
 
   // Exact real data counts
   const liveRolesCount = liveRequisitions.length;
@@ -1325,6 +1334,7 @@ export default function HiringManagerDashboard() {
           history: messages.slice(-10).map((m) => ({
             role: m.sender === 'user' ? 'user' : 'assistant',
             content: m.text,
+            ...(m.interviewProposal ? { interview_proposal: m.interviewProposal } : {}),
           })),
           user_name: userName,
           user_role: user?.role || 'Hiring Manager',
@@ -1378,28 +1388,23 @@ export default function HiringManagerDashboard() {
         }
       }
 
-      // If user requested candidates explicitly and backend didn't return cards, fallback to active candidate pool
-      const isCandQuery =
-        textLower.includes('candidate') ||
-        textLower.includes('candiates') ||
-        textLower.includes('suggest 5') ||
-        textLower.includes('shortlist') ||
-        textLower.includes('pool') ||
-        textLower.includes('applicant');
+      const isCandQuery = /candidate|candiates|shortlist|pool|applicant/i.test(textLower);
 
-      if (!candCards && isCandQuery) {
-        const sources = [...shortlistedCandidates, ...allCandidates, ...acceptedCandidates].filter(Boolean);
-        const seen = new Set();
-        const fallbackPool = [];
-        for (const c of sources) {
-          const name = (c.candidate_name || c.name || '').trim();
-          if (name && !seen.has(name.toLowerCase())) {
-            seen.add(name.toLowerCase());
-            fallbackPool.push(c);
+      // Fallback candidate extraction from dashboard state if candCards is still empty
+      if (isCandQuery && (!candCards || candCards.length === 0)) {
+        const roleCandidatePool = (shortlistedCandidates.length > 0 ? shortlistedCandidates : allCandidates) || [];
+        if (roleCandidatePool.length > 0) {
+          // Check if specific role is requested
+          const matchedForRole = roleCandidatePool.filter((c) => {
+            const reqTitle = (c.requisition_title || c.role || c.job_title || '').toLowerCase();
+            const candSkills = (Array.isArray(c.skills) ? c.skills.join(' ') : (c.skills || '')).toLowerCase();
+            const words = textLower.replace(/show|list|view|candidates?|for|in|the|me|all|my/g, '').trim().split(/\s+/).filter((w) => w.length > 2);
+            return words.some((w) => reqTitle.includes(w) || candSkills.includes(w));
+          });
+          const poolToDisplay = matchedForRole.length > 0 ? matchedForRole : (textLower.includes('shortlist') ? shortlistedCandidates : roleCandidatePool);
+          if (poolToDisplay.length > 0) {
+            candCards = poolToDisplay.slice(0, 5).map((c, idx) => formatCandidateCard(c, idx));
           }
-        }
-        if (fallbackPool.length > 0) {
-          candCards = fallbackPool.slice(0, 5).map((c, idx) => formatCandidateCard(c, idx));
         }
       }
 
@@ -1408,6 +1413,16 @@ export default function HiringManagerDashboard() {
       const schedAction = executedActions.find((a) => a.tool === 'schedule_candidate_interview');
       if (schedAction && schedAction.result && (schedAction.result.candidate || schedAction.result.candidate_name)) {
         interviewProposal = schedAction.result;
+      }
+
+      const bookedInterview = executedActions.find(action => action.tool === 'book_company_interview');
+      if (bookedInterview?.result?.id) interviewProposal = bookedInterview.result;
+
+      // 1c. Scheduled interviews / meetings list from list_scheduled_interviews
+      let scheduledInterviews = null;
+      const meetAction = executedActions.find(a => a.tool === 'list_scheduled_interviews');
+      if (meetAction && Array.isArray(meetAction.result) && meetAction.result.length > 0) {
+        scheduledInterviews = meetAction.result;
       }
 
       // 2. Draft requisition cards from backend tool or context
@@ -1614,6 +1629,7 @@ export default function HiringManagerDashboard() {
         requisitionDraft: reqDraft,
         requisitionsList: reqList,
         interviewProposal,
+        scheduledInterviews,
         roleOptions,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
@@ -2260,6 +2276,7 @@ export default function HiringManagerDashboard() {
           </div>
         </div>
 
+        <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interview dates, times and durations can now be edited in the interview card and synced on dispatch.` }])} />
         {/* Mobile compact tool buttons */}
         <div className="flex items-center gap-1">
           <button
@@ -2344,6 +2361,7 @@ export default function HiringManagerDashboard() {
 
       {/* Top-Right Icon Toolbar (Desktop only) */}
       <div className="hidden lg:flex absolute top-1.5 sm:top-2 right-2 sm:right-2.5 z-20 items-center gap-1">
+        <GoogleCalendarConnect onStatus={setGoogleCalendar} onConnected={data => setMessages(previous => [...previous, { sender: 'ai', text: `Google Calendar connected: ${data.email}. Calendar: primary. Timezone: ${data.timezone}. Company interviews can be scheduled or rescheduled using editable date and time fields.` }])} />
         {/* + Icon: Opens a New Chat */}
         <button
           type="button"
@@ -2976,73 +2994,60 @@ export default function HiringManagerDashboard() {
 
                           {/* Inline Interview Proposal Card */}
                           {msg.interviewProposal && (
-                            <div className="mt-3.5 p-4 rounded-2xl bg-white border border-gray-200/90 shadow-2xs w-full max-w-xl text-left">
-                              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xs border border-emerald-100">
-                                    <CalendarCheck size={16} />
+                            <CompanyInterviewScheduleCard proposal={msg.interviewProposal} timezone={googleCalendar?.timezone}
+                              onSaved={result => setMessages(previous => [...previous, { sender: 'ai', text: `Company interview saved for ${result.candidate_name}: ${result.scheduled_date} at ${result.scheduled_time} (${result.scheduled_timezone}), ${result.duration_minutes} minutes. Google Calendar: ${result.calendar_sync?.status}. Email delivery: ${result.email_delivery?.status}. LiveKit room: ${result.meeting_link}` }])} />
+                          )}
+
+                          {/* Inline Scheduled Interviews / Calendar Meetings Card */}
+                          {msg.scheduledInterviews && msg.scheduledInterviews.length > 0 && (
+                            <div className="space-y-2 mt-3 w-full max-w-4xl xl:max-w-5xl text-left">
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                {msg.scheduledInterviews.map((meet, mIdx) => (
+                                  <div
+                                    key={meet.id || mIdx}
+                                    className="p-4 rounded-2xl bg-white border border-gray-200/90 shadow-2xs hover:border-gray-300 hover:shadow-xs transition-all flex flex-col justify-between space-y-3 text-left"
+                                  >
+                                    <div>
+                                      <div className="flex items-start justify-between gap-1.5 mb-2">
+                                        <h4 className="font-bold text-xs sm:text-sm text-gray-900 line-clamp-1">
+                                          {meet.title || meet.round_name || 'Scheduled Interview'}
+                                        </h4>
+                                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border shrink-0 bg-emerald-50 text-emerald-700 border-emerald-200">
+                                          {meet.status || 'Confirmed'}
+                                        </span>
+                                      </div>
+                                      <div className="space-y-1 text-xs text-gray-500">
+                                        <div className="flex items-center gap-2">
+                                          <Calendar size={13} className="text-gray-400 shrink-0" />
+                                          <span>📅 {meet.date} at {meet.time}</span>
+                                        </div>
+                                        {meet.candidate_name && (
+                                          <div className="flex items-center gap-2">
+                                            <Users size={13} className="text-gray-400 shrink-0" />
+                                            <span className="font-medium text-gray-700">{meet.candidate_name}</span>
+                                          </div>
+                                        )}
+                                        {meet.timezone && (
+                                          <div className="text-[10px] text-gray-400">
+                                            Timezone: {meet.timezone}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    {meet.meeting_link && (
+                                      <div className="pt-2.5 border-t border-gray-100 flex items-center justify-between gap-2">
+                                        <a
+                                          href={meet.meeting_link}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-xs font-semibold hover:bg-black transition-colors w-full text-center"
+                                        >
+                                          Join Interview Room
+                                        </a>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div>
-                                    <h4 className="text-xs font-bold text-gray-900">
-                                      Interview Scheduled: {msg.interviewProposal.round || 'Technical Round'}
-                                    </h4>
-                                    <p className="text-[11px] text-gray-500">
-                                      For {msg.interviewProposal.requisition || 'Active Role'}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  Calendar Ready
-                                </span>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-2.5 my-3 text-xs">
-                                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100">
-                                  <span className="text-[10px] text-gray-400 font-medium block">Candidate</span>
-                                  <span className="font-semibold text-gray-800 truncate block mt-0.5">
-                                    {msg.interviewProposal.candidate}
-                                  </span>
-                                  <span className="text-[10.5px] text-gray-500 truncate block">
-                                    {msg.interviewProposal.candidate_email}
-                                  </span>
-                                </div>
-
-                                <div className="p-2.5 rounded-xl bg-gray-50 border border-gray-100">
-                                  <span className="text-[10px] text-gray-400 font-medium block">Date & Time</span>
-                                  <span className="font-semibold text-gray-800 block mt-0.5">
-                                    {msg.interviewProposal.scheduled_date} at {msg.interviewProposal.scheduled_time}
-                                  </span>
-                                  <span className="text-[10.5px] text-gray-500 block">
-                                    Duration: {msg.interviewProposal.duration || '45 mins'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSendPrompt(
-                                      `Dispatch calendar invitation and meeting link to ${msg.interviewProposal.candidate}`
-                                    )
-                                  }
-                                  className="flex-1 py-2 px-3 rounded-xl bg-black text-white text-xs font-semibold hover:bg-gray-800 transition-colors flex items-center justify-center gap-1.5 shadow-2xs cursor-pointer"
-                                >
-                                  <Send size={12} />
-                                  <span>Dispatch Invitation</span>
-                                </button>
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleSendPrompt(
-                                      `Reschedule interview for ${msg.interviewProposal.candidate} to next week`
-                                    )
-                                  }
-                                  className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  Reschedule
-                                </button>
+                                ))}
                               </div>
                             </div>
                           )}
@@ -3516,6 +3521,21 @@ export default function HiringManagerDashboard() {
             </div>
 
             <div className="flex items-center justify-end gap-2 p-4 sm:p-5 border-t border-gray-100 bg-gray-50/50">
+              {resumeError && <p role="alert" className="text-xs text-red-700">{resumeError}</p>}
+              <button type="button" disabled={resumeLoading} className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold disabled:opacity-50" onClick={async () => {
+                setResumeError(''); setResumeLoading(true);
+                const tab = window.open('', '_blank');
+                if (tab) tab.opener = null;
+                try {
+                  const response = await fetch(`${API_BASE_URL}/api/candidates/manager/${encodeURIComponent(selectedCandidateProfile.id)}/resume`, { headers: { Authorization: `Bearer ${token}` } });
+                  if (!response.ok) { const error = await response.json().catch(() => ({})); throw new Error(error.detail || 'Could not open resume.'); }
+                  const url = URL.createObjectURL(await response.blob());
+                  if (tab) tab.location.href = url;
+                  else { const link = document.createElement('a'); link.href = url; link.download = 'resume'; link.click(); }
+                  setTimeout(() => URL.revokeObjectURL(url), 60000);
+                } catch (error) { tab?.close(); setResumeError(error.message); }
+                finally { setResumeLoading(false); }
+              }}>{resumeLoading ? 'Opening…' : 'Open Resume'}</button>
               <button
                 type="button"
                 onClick={() => setEditingDraftData(null)}

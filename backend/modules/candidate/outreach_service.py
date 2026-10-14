@@ -4,7 +4,6 @@ Sends personalized emails with interactive buttons (Available & Interested vs No
 to the Top 20 ranked candidates, and handles candidate one-click RSVP responses.
 """
 
-import os
 import uuid
 import secrets
 import logging
@@ -14,11 +13,12 @@ from bson import ObjectId
 from modules.shared.db import db
 from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
 from modules.candidate.ranking_service import rank_candidates_for_requisition, get_requisition_data
+from modules.interview.services.interview_service import _resolve_interview_domain, send_interview_invitation_email
 
 logger = logging.getLogger(__name__)
 
 # Public URL used in email buttons
-API_PUBLIC_BASE_URL = os.getenv("API_PUBLIC_BASE_URL") or os.getenv("CALENDAR_REDIRECT_BASE") or "http://localhost:8000"
+API_PUBLIC_BASE_URL = _resolve_interview_domain()
 
 
 def clean_bson(obj: Any) -> Any:
@@ -55,6 +55,7 @@ def build_interactive_outreach_html(
     Renders a responsive HTML email featuring job highlights and
     one-click interactive RSVP action buttons.
     """
+    base_url = _resolve_interview_domain()
     interested_url = f"{base_url}/api/public/outreach/{token}/respond?action=interested"
     unavailable_url = f"{base_url}/api/public/outreach/{token}/respond?action=unavailable"
     decline_url = f"{base_url}/api/public/outreach/{token}/respond?action=declined"
@@ -393,20 +394,13 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
     """
     action = (action or "").lower().strip()
     if action not in ["interested", "unavailable", "declined"]:
-        action = "interested"
+        return {"success": False, "error": "Invalid response. Please use a button in your invitation."}
 
     outreach = db["candidate_outreach"].find_one({"token": token})
     now = _utcnow_iso()
 
     if not outreach:
-        # Fallback to keep candidate unblocked if testing with ephemeral or unrecorded token
-        latest_req = db["requisitions"].find_one({"status": {"$in": ["Published", "Active", "Open"]}}) or db["requisitions"].find_one({}) or {}
-        cand_id = str(uuid.uuid4())
-        cand_email = "candidate@termjobs.in"
-        req_id = latest_req.get("id", "req_fast_track")
-        req_title = latest_req.get("title", "Software Engineer")
-        comp_name = latest_req.get("company_name", "Enterprise Partner")
-        cand_name = "Candidate"
+        return {"success": False, "error": "This invitation link is invalid. Please request a new invitation."}
     else:
         cand_id = outreach.get("candidate_id") or str(uuid.uuid4())
         cand_email = outreach.get("candidate_email") or "candidate@termjobs.in"
@@ -429,6 +423,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
     meeting_link = None
     candidate_portal_link = None
     candidate_passcode = None
+    interview_email_delivery = None
 
     if action == "interested":
         # 1. Update candidate global availability to available
@@ -578,21 +573,16 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
 
         # 4. Construct links using hosted domain
         import urllib.parse
-        termjobs_domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
-        base_url = (origin or termjobs_domain).strip().rstrip("/")
-        if "localhost" in base_url or "127.0.0.1" in base_url:
-            base_url = termjobs_domain
+        base_url = _resolve_interview_domain()
         
         if round_doc:
             round_id = round_doc.get("id")
             candidate_token = round_doc.get("candidate_token")
             candidate_passcode = round_doc.get("candidate_passcode") or "TJ-INT-2026"
-            meeting_link = f"{base_url}/interview/room/{round_id}?role=candidate&name={urllib.parse.quote(cand_name)}"
+            meeting_link = f"{base_url}/interview/room/{round_id}?role=candidate&token={urllib.parse.quote(candidate_token or '')}&name={urllib.parse.quote(cand_name)}"
             candidate_portal_link = f"{base_url}/interview/candidate/login?token={candidate_token}&email={urllib.parse.quote(cand_email)}&passcode={candidate_passcode}"
         else:
-            meeting_link = f"{base_url}/interview/login"
-            candidate_portal_link = f"{base_url}/interview/candidate/login"
-            candidate_passcode = "TJ-FAST-TRACK"
+            return {"success": False, "error": "Your interest has been recorded, but the AI interview could not be prepared. Please try this link again."}
 
         # Update candidate_outreach with links
         if outreach:
@@ -616,7 +606,43 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
             }}
         )
 
-        logger.info(f"Candidate '{cand_name}' responded INTERESTED for role '{req_title}'. Meeting link: {meeting_link}")
+        # Claim delivery atomically so repeated/concurrent clicks do not resend.
+        # A stale claim may be retried after a worker interruption.
+        cutoff = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        claimed = db["candidate_outreach"].update_one(
+            {"token": token, "interview_email_sent_round_id": {"$ne": round_id},
+             "$or": [{"interview_email_status": {"$ne": "sending"}},
+                      {"interview_email_started_at": {"$lt": cutoff}}]},
+            {"$set": {"interview_email_status": "sending", "interview_email_started_at": now}},
+        )
+        if claimed.modified_count:
+            try:
+                interview_email_delivery = send_interview_invitation_email(
+                    candidate_name=cand_name, candidate_email=cand_email,
+                    requisition_title=req_title, company_name=comp_name,
+                    round_name=round_doc.get("round_name") or "AI Fast-Track Technical Interview",
+                    scheduled_date=round_doc.get("scheduled_date") or "",
+                    scheduled_time=round_doc.get("scheduled_time") or "Immediate / On-Demand",
+                    duration_minutes=round_doc.get("duration_minutes") or 45,
+                    meeting_link=meeting_link, candidate_portal_link=candidate_portal_link,
+                    passcode=candidate_passcode,
+                    instructions="Thank you for confirming your interest. Join your AI interview using the link below. The link expires 10 hours after the interview is created. Allow camera and microphone access.",
+                )
+            except Exception:
+                logger.exception("Failed to send AI interview invitation")
+                interview_email_delivery = {"status": "failed", "reason": "Email delivery failed"}
+            delivery_fields = {
+                "interview_email_status": interview_email_delivery.get("status", "failed"),
+                "interview_email_delivery": interview_email_delivery,
+            }
+            if interview_email_delivery.get("status") == "success":
+                delivery_fields.update(interview_email_sent_round_id=round_id, interview_email_sent_at=_utcnow_iso())
+            db["candidate_outreach"].update_one({"token": token}, {"$set": delivery_fields})
+        else:
+            latest = db["candidate_outreach"].find_one({"token": token}) or {}
+            interview_email_delivery = latest.get("interview_email_delivery") or {"status": "sending"}
+
+        logger.info("Candidate RSVP recorded and AI interview invitation processed")
 
     elif action == "unavailable":
         # Candidate explicitly reports they took another job / not available
@@ -644,6 +670,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
         "meeting_link": meeting_link,
         "candidate_portal_link": candidate_portal_link,
         "candidate_passcode": candidate_passcode,
+        "interview_email_delivery": interview_email_delivery,
         "responded_at": now
     }
 

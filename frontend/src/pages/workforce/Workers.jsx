@@ -354,188 +354,187 @@ Generated via Term Jobs Recruiter Vendor Portal
   if (loading) {
     return (
       <div className="flex h-96 w-full items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#0A0A0A]"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-black"></div>
       </div>
     );
   }
 
   return (
-    <div className="w-full pb-8 space-y-4 font-sans antialiased text-[#0A0A0A]">
+    <div
+      className="w-full min-w-0 h-full flex-1 flex flex-col justify-between gap-3 text-left overflow-y-auto pb-4 font-sans"
+      style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
+    >
       {/* Toast Alert */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 bg-[#0A0A0A] text-white px-5 py-3.5 rounded-xl shadow-2xl flex items-center gap-3 border border-white/10 animate-fade-in text-[13px] font-medium">
-          <CheckCircle2 size={18} className="text-[#22C55E]" />
+        <div className="fixed bottom-6 right-6 z-50 bg-black text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10 animate-fade-in text-[13px] font-medium backdrop-blur-xl">
+          <CheckCircle2 size={18} className="text-emerald-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Header Banner */}
-      <div className="bg-[#0A0A0A] text-white rounded-2xl px-6 py-5 sm:px-7 sm:py-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 w-full">
+      {/* ── 1. MODERN TOP HEADER ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 shrink-0">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <span className="bg-[#22C55E]/20 text-[#22C55E] text-[10px] font-extrabold tracking-wider px-2 py-0.5 rounded-md uppercase">
-              ENTERPRISE CONTRACTOR MANAGEMENT
-            </span>
-            <span className="text-[11px] font-bold tracking-widest text-[#8A8A85] uppercase">
-              WORKERS DIRECTORY & BILLING ENGINE
-            </span>
+          <div className="text-[10px] font-extrabold text-gray-400 tracking-wider uppercase mb-1">
+            TERM JOBS • WORKFORCE
           </div>
-          <h1 className="text-[24px] sm:text-[28px] font-extrabold tracking-tight text-white flex items-center gap-3">
-            <span>Workers Roster & Work Order Generator</span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight leading-none">
+            Workers Roster & Work Orders
           </h1>
-          <p className="text-[13.5px] text-[#A3A39E] mt-0.5 font-normal">
+          <p className="text-xs sm:text-[13px] text-gray-500 font-normal mt-1">
             Manage contract workforce, filter billing cycles, generate Work Order packages, and submit to Procurement.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2.5 shrink-0">
           <button
             onClick={() => setViewMode(viewMode === 'roster' ? 'detail' : 'roster')}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white border border-white/20 rounded-xl text-[12.5px] font-semibold transition-all cursor-pointer flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            {viewMode === 'roster' ? <FileText size={14} /> : <Users size={14} />}
+            {viewMode === 'roster' ? <FileText size={13} /> : <Users size={13} />}
             <span>{viewMode === 'roster' ? 'Work Order Billing View' : 'Master Workers Roster'}</span>
           </button>
         </div>
       </div>
 
-      {/* Fleet Summary Cards Across 100+ Contractors */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-          <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Total Deployed Fleet</div>
-          <div className="text-[20px] font-extrabold text-[#0A0A0A] mt-1">{rosterStats.totalCount} Contractors</div>
-          <div className="text-[11.5px] text-[#60605B] mt-0.5 font-medium">Active placements</div>
+      {/* ── 2. FLEET SUMMARY GLASSMORHPIC METRIC CARDS ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 shrink-0">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Total Deployed Fleet</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{rosterStats.totalCount}</div>
+          <div className="text-[11px] text-gray-500 mt-1 font-medium">Active placements</div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-          <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Total Active Spend</div>
-          <div className="text-[20px] font-extrabold text-[#0A0A0A] mt-1">
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Total Active Spend</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">
             ₹{rosterStats.totalSpend > 0 ? rosterStats.totalSpend.toLocaleString() : '0'}
           </div>
-          <div className="text-[11.5px] text-[#60605B] mt-0.5 font-medium">Approved hours & expenses</div>
+          <div className="text-[11px] text-gray-500 mt-1 font-medium">Approved hours & expenses</div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-          <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Total Approved Hours</div>
-          <div className="text-[20px] font-extrabold text-[#0A0A0A] mt-1">{rosterStats.totalHours} hrs</div>
-          <div className="text-[11.5px] text-[#166534] mt-0.5 font-semibold">Base & 1.5x Overtime</div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Total Approved Hours</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-emerald-600 tracking-tight mt-1">{rosterStats.totalHours} hrs</div>
+          <div className="text-[11px] text-emerald-700 mt-1 font-semibold">Base & 1.5x Overtime</div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-          <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Pending Procurement</div>
-          <div className="text-[20px] font-extrabold text-[#92400e] mt-1">{rosterStats.pendingProcurement} Work Orders</div>
-          <div className="text-[11.5px] text-[#60605B] mt-0.5 font-medium">Sent to procurement</div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Pending Procurement</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-amber-600 tracking-tight mt-1">{rosterStats.pendingProcurement}</div>
+          <div className="text-[11px] text-gray-500 mt-1 font-medium">Sent to procurement</div>
         </div>
 
-        <div className="bg-[#0A0A0A] text-white rounded-2xl p-4 col-span-2 lg:col-span-1 shadow-md">
-          <div className="text-[11px] font-bold text-[#A3A39E] uppercase tracking-wider">Draft Work Orders</div>
-          <div className="text-[20px] font-black text-[#22C55E] mt-1">{rosterStats.draftCount} Ready</div>
-          <div className="text-[11px] text-[#A3A39E] mt-0.5 font-medium">Ready for review & send</div>
+        <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] col-span-2 lg:col-span-1 flex flex-col justify-between">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Draft Work Orders</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-1">{rosterStats.draftCount}</div>
+          <div className="text-[11px] text-gray-500 mt-1 font-medium">Ready for review & send</div>
         </div>
       </div>
 
-      {/* VIEW MODE 1: MASTER WORKERS ROSTER TABLE (OPTIMIZED FOR 100+ WORKERS) */}
+      {/* VIEW MODE 1: MASTER WORKERS ROSTER TABLE */}
       {viewMode === 'roster' && (
-        <div className="space-y-4">
-          {/* Roster Controls: Search + Filter Pills */}
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-[#EAEAE6] shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
-            {/* Search Input */}
-            <div className="relative flex-1">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8A8A85]" />
-              <input
-                type="text"
-                placeholder="Search across 100+ contractors by name, role, client, or WO #..."
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full bg-[#F7F7F5] border border-[#E0E0DC] text-[#0A0A0A] text-[13.5px] font-medium rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-[#0A0A0A]"
-              />
-            </div>
-
-            {/* Filter Pills */}
-            <div className="flex flex-wrap items-center gap-1.5 bg-[#F7F7F5] p-1.5 rounded-xl border border-[#EAEAE6]">
-              {[
-                { id: 'ALL', label: 'All Contractors' },
-                { id: 'Draft', label: 'Draft Work Orders' },
-                { id: 'Sent to Procurement', label: 'Sent to Procurement' },
-                { id: 'Has Overtime', label: 'Has Overtime' },
-              ].map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => {
-                    setStatusFilter(f.id);
+        <div className="space-y-3">
+          {/* ── 3. MAIN GLASSMORHPIC TABLE CONTAINER ── */}
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between overflow-hidden">
+            {/* Roster Controls: Search + Filter Pills */}
+            <div className="shrink-0 flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-black/[0.04]">
+              {/* Search Input */}
+              <div className="relative flex-1 max-w-md">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search contractors by name, role, client, or WO #..."
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
                     setCurrentPage(1);
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all cursor-pointer ${
-                    statusFilter === f.id
-                      ? 'bg-[#0A0A0A] text-white shadow-xs'
-                      : 'text-[#60605B] hover:bg-[#EAEAE6]'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-          </div>
+                  className="w-full pl-9 pr-4 py-1.5 text-xs text-gray-900 bg-white/60 backdrop-blur-md border border-white/80 rounded-xl focus:outline-hidden focus:ring-1 focus:ring-black shadow-3xs placeholder:text-gray-400 transition-all font-medium"
+                />
+              </div>
 
-          {/* Master Roster Table */}
-          <div className="bg-white rounded-2xl border border-[#EAEAE6] shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[13px]">
-                <thead className="bg-[#F4F4F0] text-[#70706B] font-extrabold uppercase text-[11px] border-b border-[#EAEAE6]">
-                  <tr>
-                    <th className="py-3.5 px-4">Personnel & Role</th>
-                    <th className="py-3.5 px-4">Client Company</th>
-                    <th className="py-3.5 px-4">Billing Rate / Cycle</th>
-                    <th className="py-3.5 px-4">Approved Hours</th>
-                    <th className="py-3.5 px-4">Total Work Order Billing</th>
-                    <th className="py-3.5 px-4">Work Order Status</th>
-                    <th className="py-3.5 px-4 text-right">Action</th>
+              {/* Filter Pills */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'ALL', label: 'All Contractors' },
+                  { id: 'Draft', label: 'Draft' },
+                  { id: 'Sent to Procurement', label: 'In Procurement' },
+                  { id: 'Has Overtime', label: 'Overtime' },
+                ].map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => {
+                      setStatusFilter(f.id);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-full text-xs font-bold transition shadow-3xs cursor-pointer ${
+                      statusFilter === f.id
+                        ? 'bg-black text-white shadow-xs'
+                        : 'bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md'
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Master Roster Table */}
+            <div className="overflow-x-auto pt-2">
+              <table className="w-full text-left border-collapse min-w-[750px]">
+                <thead>
+                  <tr className="border-b border-black/[0.04] text-[10.5px] font-extrabold uppercase tracking-wider text-gray-400">
+                    <th className="py-3 pl-3 pr-3">Personnel & Role</th>
+                    <th className="py-3 px-3">Client Company</th>
+                    <th className="py-3 px-3">Billing Rate / Cycle</th>
+                    <th className="py-3 px-3">Approved Hours</th>
+                    <th className="py-3 px-3">Total Work Order Billing</th>
+                    <th className="py-3 px-3">Work Order Status</th>
+                    <th className="py-3 pr-3 pl-3 text-right">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#EAEAE6] text-[#0A0A0A]">
+                <tbody className="divide-y divide-black/[0.03]">
                   {paginatedWorkers.length > 0 ? (
                     paginatedWorkers.map((w) => (
-                      <tr key={w.candidate_id} className="hover:bg-[#FDFDFB] transition-colors">
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-full bg-[#0A0A0A] text-white font-black text-[12px] flex items-center justify-center uppercase shrink-0">
+                      <tr key={w.candidate_id} className="hover:bg-white/60 transition-colors">
+                        <td className="py-3 pl-3 pr-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-black text-white flex items-center justify-center text-xs font-bold shrink-0 shadow-3xs uppercase">
                               {(w.candidate_name || 'W').charAt(0)}
                             </div>
                             <div>
-                              <div className="font-bold text-[#0A0A0A]">{w.candidate_name}</div>
-                              <div className="text-[11.5px] text-[#60605B] font-medium">{w.role} · {w.ws_number}</div>
+                              <div className="text-xs sm:text-[13px] font-extrabold text-gray-900">{w.candidate_name}</div>
+                              <div className="text-[11px] text-gray-400 font-medium">{w.role} · {w.ws_number}</div>
                             </div>
                           </div>
                         </td>
 
-                        <td className="py-3.5 px-4 font-semibold text-[#0A0A0A]">
+                        <td className="py-3 px-3 text-xs font-semibold text-gray-900">
                           {w.company_name}
                         </td>
 
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-[#0A0A0A]">{w.billing_rate}</div>
-                          <div className="text-[11px] text-[#70706B] font-medium">{w.billing_cycle} cycle</div>
+                        <td className="py-3 px-3">
+                          <div className="text-xs font-bold text-gray-900">{w.billing_rate}</div>
+                          <div className="text-[10.5px] text-gray-400 font-medium">{w.billing_cycle} cycle</div>
                         </td>
 
-                        <td className="py-3.5 px-4">
-                          <div className="font-extrabold text-[#0A0A0A]">{w.total_approved_hours || 0} hrs</div>
+                        <td className="py-3 px-3">
+                          <div className="text-xs font-extrabold text-gray-900">{w.total_approved_hours || 0} hrs</div>
                           {w.overtime_hours > 0 ? (
-                            <span className="text-[10.5px] font-extrabold text-[#166534] bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
                               +{w.overtime_hours}h OT (1.5x)
                             </span>
                           ) : (
-                            <span className="text-[10.5px] text-[#70706B] font-medium">Standard Hours</span>
+                            <span className="text-[10.5px] text-gray-400 font-medium">Standard Hours</span>
                           )}
                         </td>
 
-                        <td className="py-3.5 px-4 font-black text-[#0A0A0A]">
+                        <td className="py-3 px-3 text-xs font-extrabold text-gray-900">
                           ₹{(w.total_billing_amount || 0).toLocaleString()}
                         </td>
 
-                        <td className="py-3.5 px-4 min-w-[210px]">
+                        <td className="py-3 px-3 min-w-[210px]">
                           <WorkOrderProgressBar
                             status={w.sow_status || w.agreement_status}
                             paymentStatus={w.payment_status}
@@ -543,10 +542,10 @@ Generated via Term Jobs Recruiter Vendor Portal
                           />
                         </td>
 
-                        <td className="py-3.5 px-4 text-right">
+                        <td className="py-3 pr-3 pl-3 text-right">
                           <button
                             onClick={() => handleOpenDetail(w.candidate_id)}
-                            className="px-3.5 py-1.5 bg-[#0A0A0A] hover:bg-[#252525] text-white text-[12px] font-bold rounded-xl transition-all cursor-pointer shadow-xs inline-flex items-center gap-1.5"
+                            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-black hover:bg-gray-900 text-white text-xs font-bold transition shadow-xs cursor-pointer"
                           >
                             <span>Manage SOW</span>
                             <ChevronRight size={13} />
@@ -556,8 +555,9 @@ Generated via Term Jobs Recruiter Vendor Portal
                     ))
                   ) : (
                     <tr>
-                      <td colSpan="7" className="py-8 text-center text-[#70706B] text-[13.5px] font-medium">
-                        No contractors match the filter criteria.
+                      <td colSpan="7" className="py-12 text-center text-gray-400 text-xs font-medium">
+                        <AlertCircle size={24} className="mx-auto mb-2 text-gray-300" />
+                        <div>No contractors match the filter criteria.</div>
                       </td>
                     </tr>
                   )}
@@ -566,33 +566,33 @@ Generated via Term Jobs Recruiter Vendor Portal
             </div>
 
             {/* Pagination Controls */}
-            <div className="bg-[#F8F8F6] px-4 py-3 border-t border-[#EAEAE6] flex items-center justify-between text-[12.5px] font-semibold text-[#60605B]">
+            <div className="pt-3 mt-2 border-t border-black/[0.04] flex items-center justify-between text-xs font-medium text-gray-500">
               <div>
-                Showing <span className="font-bold text-[#0A0A0A]">{paginatedWorkers.length}</span> of{' '}
-                <span className="font-bold text-[#0A0A0A]">{filteredWorkers.length}</span> contractors
+                Showing <span className="font-bold text-gray-900">{paginatedWorkers.length}</span> of{' '}
+                <span className="font-bold text-gray-900">{filteredWorkers.length}</span> contractors
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="px-3 py-1.5 bg-white border border-[#E0E0DC] rounded-lg text-[#0A0A0A] hover:bg-[#F0F0ED] disabled:opacity-40 cursor-pointer flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all disabled:opacity-40 cursor-pointer flex items-center gap-1"
                 >
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={13} />
                   <span>Previous</span>
                 </button>
 
-                <span className="text-[12px] font-bold text-[#0A0A0A]">
+                <span className="text-xs font-bold text-gray-900 px-1">
                   Page {currentPage} of {totalPages}
                 </span>
 
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="px-3 py-1.5 bg-white border border-[#E0E0DC] rounded-lg text-[#0A0A0A] hover:bg-[#F0F0ED] disabled:opacity-40 cursor-pointer flex items-center gap-1"
+                  className="px-3 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all disabled:opacity-40 cursor-pointer flex items-center gap-1"
                 >
                   <span>Next</span>
-                  <ChevronRight size={14} />
+                  <ChevronRight size={13} />
                 </button>
               </div>
             </div>
@@ -602,40 +602,40 @@ Generated via Term Jobs Recruiter Vendor Portal
 
       {/* VIEW MODE 2: DEDICATED WORKER SOW & BILLING SHEET DETAIL */}
       {viewMode === 'detail' && (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {/* Top Detail Navigation Bar */}
-          <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs flex flex-wrap items-center justify-between gap-3">
+          <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-wrap items-center justify-between gap-3">
             <button
               onClick={() => setViewMode('roster')}
-              className="px-3.5 py-1.5 bg-[#F4F4F0] hover:bg-[#EAEAE6] text-[#0A0A0A] text-[12.5px] font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <ArrowLeft size={15} />
+              <ArrowLeft size={13} />
               <span>Back to Master Roster ({filteredWorkers.length})</span>
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2.5 flex-wrap">
               {/* Prev / Next Worker Rapid Switcher */}
-              <div className="flex items-center gap-1 bg-[#F7F7F5] px-2 py-1 rounded-xl border border-[#EAEAE6]">
+              <div className="flex items-center gap-1 bg-white/60 backdrop-blur-md px-2 py-1 rounded-xl border border-white/80 shadow-3xs">
                 <button
                   onClick={() => handleNavigateWorker('prev')}
                   disabled={selectedIndex <= 0}
-                  className="p-1 text-[#0A0A0A] hover:bg-[#EAEAE6] rounded disabled:opacity-30 cursor-pointer"
+                  className="p-1 text-gray-700 hover:text-black hover:bg-black/5 rounded-lg disabled:opacity-30 cursor-pointer transition-all"
                   title="Previous Worker"
                 >
-                  <ChevronLeft size={16} />
+                  <ChevronLeft size={14} />
                 </button>
 
-                <span className="text-[12px] font-bold text-[#0A0A0A] px-2">
+                <span className="text-[11px] font-bold text-gray-900 px-1.5">
                   Worker {selectedIndex >= 0 ? selectedIndex + 1 : 1} of {filteredWorkers.length}
                 </span>
 
                 <button
                   onClick={() => handleNavigateWorker('next')}
                   disabled={selectedIndex < 0 || selectedIndex >= filteredWorkers.length - 1}
-                  className="p-1 text-[#0A0A0A] hover:bg-[#EAEAE6] rounded disabled:opacity-30 cursor-pointer"
+                  className="p-1 text-gray-700 hover:text-black hover:bg-black/5 rounded-lg disabled:opacity-30 cursor-pointer transition-all"
                   title="Next Worker"
                 >
-                  <ChevronRight size={16} />
+                  <ChevronRight size={14} />
                 </button>
               </div>
 
@@ -643,7 +643,7 @@ Generated via Term Jobs Recruiter Vendor Portal
               <select
                 value={selectedWorkerId}
                 onChange={(e) => setSelectedWorkerId(e.target.value)}
-                className="bg-[#F7F7F5] border border-[#E0E0DC] text-[#0A0A0A] text-[13px] font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer"
+                className="bg-white/60 backdrop-blur-md border border-white/80 text-gray-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-black shadow-3xs cursor-pointer"
               >
                 {filteredWorkers.map((w) => (
                   <option key={w.candidate_id} value={w.candidate_id}>
@@ -653,13 +653,13 @@ Generated via Term Jobs Recruiter Vendor Portal
               </select>
 
               {/* Billing Cycle Dropdown */}
-              <div className="flex items-center gap-1 bg-[#F7F7F5] p-1 rounded-xl border border-[#EAEAE6]">
+              <div className="flex items-center gap-1 bg-white/60 backdrop-blur-md p-1 rounded-xl border border-white/80 shadow-3xs">
                 {['Monthly', 'Fortnightly', 'Weekly', 'Yearly'].map((cycle) => (
                   <button
                     key={cycle}
                     onClick={() => setBillingCycle(cycle)}
-                    className={`px-2.5 py-1 rounded-lg text-[11.5px] font-bold transition-all cursor-pointer ${
-                      billingCycle === cycle ? 'bg-[#0A0A0A] text-white shadow-xs' : 'text-[#60605B] hover:bg-[#EAEAE6]'
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      billingCycle === cycle ? 'bg-black text-white shadow-xs' : 'text-gray-600 hover:text-black hover:bg-white/60'
                     }`}
                   >
                     {cycle}
@@ -671,84 +671,92 @@ Generated via Term Jobs Recruiter Vendor Portal
 
           {/* KPI Summary Banner */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-              <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Billing Rate</div>
-              <div className="text-[19px] font-extrabold text-[#0A0A0A] mt-1">{sowData.charge_rate}</div>
-              <div className="text-[11.5px] text-[#60605B] mt-0.5 font-medium">Standard 8h day</div>
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Billing Rate</div>
+              <div className="text-2xl font-extrabold text-gray-900 tracking-tight mt-1">{sowData.charge_rate}</div>
+              <div className="text-[11px] text-gray-500 mt-1 font-medium">Standard 8h day</div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-              <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Billing Cycle</div>
-              <div className="text-[19px] font-extrabold text-[#0A0A0A] mt-1">{billingCycle}</div>
-              <div className="text-[11.5px] text-[#60605B] mt-0.5 font-medium">{sowData.payment_terms || 'Net 30'}</div>
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Billing Cycle</div>
+              <div className="text-2xl font-extrabold text-gray-900 tracking-tight mt-1">{billingCycle}</div>
+              <div className="text-[11px] text-gray-500 mt-1 font-medium">{sowData.payment_terms || 'Net 30'}</div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-              <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Approved Hours</div>
-              <div className="text-[19px] font-extrabold text-[#0A0A0A] mt-1">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Approved Hours</div>
+              <div className="text-2xl font-extrabold text-emerald-600 tracking-tight mt-1">
                 {sowData.regular_hours + sowData.overtime_hours} hrs
               </div>
-              <div className="text-[11.5px] text-[#166534] mt-0.5 font-semibold">
+              <div className="text-[11px] text-emerald-700 mt-1 font-semibold">
                 {sowData.regular_hours}h Base + {sowData.overtime_hours}h OT (1.5x)
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-4 border border-[#EAEAE6] shadow-xs">
-              <div className="text-[11px] font-bold text-[#8A8A85] uppercase tracking-wider">Approved Expenses</div>
-              <div className="text-[19px] font-extrabold text-[#0A0A0A] mt-1">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Approved Expenses</div>
+              <div className="text-2xl font-extrabold text-gray-900 tracking-tight mt-1">
                 ₹{calculatedTotalExpenses.toLocaleString()}
               </div>
-              <div className="text-[11.5px] text-[#60605B] mt-0.5 font-medium">Approved by Hiring Manager</div>
+              <div className="text-[11px] text-gray-500 mt-1 font-medium">Approved by Hiring Manager</div>
             </div>
 
-            <div className="bg-[#0A0A0A] text-white rounded-2xl p-4 col-span-2 lg:col-span-1 shadow-md">
-              <div className="text-[11px] font-bold text-[#A3A39E] uppercase tracking-wider">Total Work Order Billing</div>
-              <div className="text-[20px] font-black text-[#22C55E] mt-1">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-3.5 sm:p-4 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] col-span-2 lg:col-span-1 flex flex-col justify-between">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Total Work Order Billing</div>
+              <div className="text-2xl font-extrabold text-gray-900 tracking-tight mt-1">
                 ₹{calculatedGrandTotal.toLocaleString()}
               </div>
-              <div className="text-[11px] text-[#A3A39E] mt-0.5 font-medium">Base + Overtime + Expenses</div>
+              <div className="text-[11px] text-gray-500 mt-1 font-medium">Base + Overtime + Expenses</div>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <div className="flex items-center gap-2 border-b border-[#EAEAE6] pt-1">
+          <div className="flex items-center gap-1.5 p-1 bg-white/40 backdrop-blur-xl border border-white/70 rounded-2xl shadow-2xs overflow-x-auto">
             <button
               onClick={() => setActiveTab('sow')}
-              className={`px-4 py-2.5 text-[13.5px] font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === 'sow' ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-transparent text-[#70706B] hover:text-[#0A0A0A]'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'sow'
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-gray-600 hover:text-black hover:bg-white/60'
               }`}
             >
-              <FileText size={16} />
+              <FileText size={14} />
               <span>Work Order & Billing Sheet (Editable)</span>
             </button>
 
             <button
               onClick={() => setActiveTab('timesheets')}
-              className={`px-4 py-2.5 text-[13.5px] font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === 'timesheets' ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-transparent text-[#70706B] hover:text-[#0A0A0A]'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'timesheets'
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-gray-600 hover:text-black hover:bg-white/60'
               }`}
             >
-              <Clock size={16} />
+              <Clock size={14} />
               <span>Approved Timesheets</span>
             </button>
 
             <button
               onClick={() => setActiveTab('expenses')}
-              className={`px-4 py-2.5 text-[13.5px] font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === 'expenses' ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-transparent text-[#70706B] hover:text-[#0A0A0A]'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'expenses'
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-gray-600 hover:text-black hover:bg-white/60'
               }`}
             >
-              <Receipt size={16} />
+              <Receipt size={14} />
               <span>Approved Expenses</span>
             </button>
 
             <button
               onClick={() => setActiveTab('contract')}
-              className={`px-4 py-2.5 text-[13.5px] font-bold border-b-2 transition-all cursor-pointer flex items-center gap-2 ${
-                activeTab === 'contract' ? 'border-[#0A0A0A] text-[#0A0A0A]' : 'border-transparent text-[#70706B] hover:text-[#0A0A0A]'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 ${
+                activeTab === 'contract'
+                  ? 'bg-black text-white shadow-xs'
+                  : 'text-gray-600 hover:text-black hover:bg-white/60'
               }`}
             >
-              <Building size={16} />
+              <Building size={14} />
               <span>Contract Details & MSA</span>
             </button>
           </div>
@@ -756,27 +764,27 @@ Generated via Term Jobs Recruiter Vendor Portal
           {/* TAB CONTENT 1: SOW & BILLING SHEET */}
           {activeTab === 'sow' && (
             <div className="space-y-4">
-              <div className="bg-white rounded-2xl border border-[#EAEAE6] shadow-sm p-6 sm:p-9 space-y-7">
+              <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 sm:p-7 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-6">
                 {/* Header Document Titles */}
-                <div className="border-b border-[#EAEAE6] pb-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div className="border-b border-black/[0.04] pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                   <div>
-                    <div className="text-[11px] font-bold tracking-widest text-[#70706B] uppercase">
+                    <div className="text-[10px] font-extrabold tracking-wider text-gray-400 uppercase">
                       STATEMENT OF WORK & BILLING STATEMENT · {billingCycle.toUpperCase()} CYCLE
                     </div>
-                    <h2 className="text-[22px] font-extrabold text-[#0A0A0A] tracking-tight mt-1">
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight mt-1">
                       WORK STATEMENT: {sowData.ws_number || 'WO-2026'}
                     </h2>
-                    <p className="text-[13px] text-[#60605B] mt-0.5">
-                      Issued under Master Service Agreement <span className="font-semibold text-[#0A0A0A]">{sowData.msa_ref || 'MSA-2026'}</span> · {sowData.company_name}
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Issued under Master Service Agreement <span className="font-semibold text-gray-900">{sowData.msa_ref || 'MSA-2026'}</span> · {sowData.company_name}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     <button
                       onClick={handleDownloadTxt}
-                      className="px-3.5 py-1.5 bg-[#F4F4F0] hover:bg-[#EAEAE6] text-[#0A0A0A] rounded-xl text-[12px] font-bold transition-all cursor-pointer flex items-center gap-1.5"
+                      className="px-3.5 py-1.5 rounded-xl bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 text-xs font-semibold shadow-3xs transition-all cursor-pointer flex items-center gap-1.5"
                     >
-                      <Download size={14} />
+                      <Download size={13} />
                       <span>Download Document</span>
                     </button>
                   </div>
@@ -790,65 +798,65 @@ Generated via Term Jobs Recruiter Vendor Portal
 
                 {/* SECTION 1: PERSONNEL & ROLE */}
                 <div>
-                  <h3 className="text-[13px] font-extrabold text-[#0A0A0A] tracking-wider uppercase mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#0A0A0A]"></span>
+                  <h3 className="text-xs font-extrabold text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
                     1. Personnel and Engagement Scope
                   </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-[#F8F8F6] p-4 rounded-xl border border-[#EAEAE6]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-white/60 backdrop-blur-md p-4 rounded-xl border border-white/80 shadow-3xs">
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Deployed Personnel</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Deployed Personnel</div>
                       {editMode ? (
                         <input
                           type="text"
                           value={sowData.deployed_personnel}
                           onChange={(e) => handleFieldChange('deployed_personnel', e.target.value)}
-                          className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13.5px] w-full focus:outline-none"
+                          className="bg-amber-50 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full focus:outline-none border border-amber-200 mt-1"
                         />
                       ) : (
-                        <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{sowData.deployed_personnel || '—'}</div>
+                        <div className="text-xs font-bold text-gray-900 mt-1">{sowData.deployed_personnel || '—'}</div>
                       )}
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Designation / Role</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Designation / Role</div>
                       {editMode ? (
                         <input
                           type="text"
                           value={sowData.role}
                           onChange={(e) => handleFieldChange('role', e.target.value)}
-                          className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13.5px] w-full focus:outline-none"
+                          className="bg-amber-50 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full focus:outline-none border border-amber-200 mt-1"
                         />
                       ) : (
-                        <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{sowData.role || '—'}</div>
+                        <div className="text-xs font-bold text-gray-900 mt-1">{sowData.role || '—'}</div>
                       )}
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Reporting Manager</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Reporting Manager</div>
                       {editMode ? (
                         <input
                           type="text"
                           value={sowData.reporting_to}
                           onChange={(e) => handleFieldChange('reporting_to', e.target.value)}
-                          className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13.5px] w-full focus:outline-none"
+                          className="bg-amber-50 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full focus:outline-none border border-amber-200 mt-1"
                         />
                       ) : (
-                        <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{sowData.reporting_to || '—'}</div>
+                        <div className="text-xs font-bold text-gray-900 mt-1">{sowData.reporting_to || '—'}</div>
                       )}
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Place of Work</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Place of Work</div>
                       {editMode ? (
                         <input
                           type="text"
                           value={sowData.place_of_work}
                           onChange={(e) => handleFieldChange('place_of_work', e.target.value)}
-                          className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13.5px] w-full focus:outline-none"
+                          className="bg-amber-50 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full focus:outline-none border border-amber-200 mt-1"
                         />
                       ) : (
-                        <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{sowData.place_of_work || '—'}</div>
+                        <div className="text-xs font-bold text-gray-900 mt-1">{sowData.place_of_work || '—'}</div>
                       )}
                     </div>
                   </div>
@@ -856,100 +864,100 @@ Generated via Term Jobs Recruiter Vendor Portal
 
                 {/* SECTION 2: MSA CHARGES & BILLING RATE */}
                 <div>
-                  <h3 className="text-[13px] font-extrabold text-[#0A0A0A] tracking-wider uppercase mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#0A0A0A]"></span>
+                  <h3 className="text-xs font-extrabold text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
                     2. MSA Billing Rate & Overtime Terms
                   </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-[#F8F8F6] p-4 rounded-xl border border-[#EAEAE6]">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 bg-white/60 backdrop-blur-md p-4 rounded-xl border border-white/80 shadow-3xs">
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Billing Rate</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Billing Rate</div>
                       {editMode ? (
                         <input
                           type="number"
                           value={sowData.raw_charge_rate}
                           onChange={(e) => handleFieldChange('raw_charge_rate', e.target.value)}
-                          className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13.5px] w-full focus:outline-none"
+                          className="bg-amber-50 text-amber-950 font-bold px-2 py-1 rounded text-xs w-full focus:outline-none border border-amber-200 mt-1"
                         />
                       ) : (
-                        <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{sowData.charge_rate}</div>
+                        <div className="text-xs font-bold text-gray-900 mt-1">{sowData.charge_rate}</div>
                       )}
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Billing Cycle</div>
-                      <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{billingCycle}</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Billing Cycle</div>
+                      <div className="text-xs font-bold text-gray-900 mt-1">{billingCycle}</div>
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Overtime Multiplier</div>
-                      <div className="text-[14px] font-bold text-[#166534] mt-0.5">1.5× Base Hourly Rate</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Overtime Multiplier</div>
+                      <div className="text-xs font-bold text-emerald-700 mt-1">1.5× Base Hourly Rate</div>
                     </div>
 
                     <div>
-                      <div className="text-[11px] font-medium text-[#70706B]">Payment Terms</div>
-                      <div className="text-[14px] font-bold text-[#0A0A0A] mt-0.5">{sowData.payment_terms || 'Net 30 days'}</div>
+                      <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-wider">Payment Terms</div>
+                      <div className="text-xs font-bold text-gray-900 mt-1">{sowData.payment_terms || 'Net 30 days'}</div>
                     </div>
                   </div>
                 </div>
 
                 {/* SECTION 3: APPROVED TIMESHEET HOURS BREAKDOWN */}
                 <div>
-                  <h3 className="text-[13px] font-extrabold text-[#0A0A0A] tracking-wider uppercase mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#0A0A0A]"></span>
+                  <h3 className="text-xs font-extrabold text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
                     3. Approved Timesheet Hours & Overtime Billing Breakdown
                   </h3>
 
-                  <div className="overflow-x-auto rounded-xl border border-[#EAEAE6]">
-                    <table className="w-full text-left text-[13px]">
-                      <thead className="bg-[#F4F4F0] text-[#70706B] font-bold uppercase text-[11px] border-b border-[#EAEAE6]">
-                        <tr>
-                          <th className="py-3 px-4">Hour Type</th>
-                          <th className="py-3 px-4">Hours Approved</th>
-                          <th className="py-3 px-4">Billing Rate / Multiplier</th>
-                          <th className="py-3 px-4 text-right">Line Total Amount</th>
+                  <div className="overflow-x-auto rounded-xl border border-black/[0.04]">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-black/[0.04] text-[10px] font-extrabold uppercase tracking-wider text-gray-400 bg-white/30">
+                          <th className="py-2.5 px-3">Hour Type</th>
+                          <th className="py-2.5 px-3">Hours Approved</th>
+                          <th className="py-2.5 px-3">Billing Rate / Multiplier</th>
+                          <th className="py-2.5 px-3 text-right">Line Total Amount</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-[#EAEAE6] text-[#0A0A0A]">
-                        <tr>
-                          <td className="py-3 px-4 font-bold">Standard Regular Hours</td>
-                          <td className="py-3 px-4">
+                      <tbody className="divide-y divide-black/[0.03]">
+                        <tr className="hover:bg-white/60 transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-gray-900">Standard Regular Hours</td>
+                          <td className="py-2.5 px-3 text-gray-700">
                             {editMode ? (
                               <input
                                 type="number"
                                 value={sowData.regular_hours}
                                 onChange={(e) => handleFieldChange('regular_hours', e.target.value)}
-                                className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13px] w-24 focus:outline-none"
+                                className="bg-amber-50 text-amber-950 font-bold px-2 py-0.5 rounded text-xs w-20 focus:outline-none border border-amber-200"
                               />
                             ) : (
                               <span>{sowData.regular_hours} hrs</span>
                             )}
                           </td>
-                          <td className="py-3 px-4">₹{sowData.raw_charge_rate} / hr</td>
-                          <td className="py-3 px-4 text-right font-bold">₹{calculatedBaseCost.toLocaleString()}</td>
+                          <td className="py-2.5 px-3 text-gray-600">₹{sowData.raw_charge_rate} / hr</td>
+                          <td className="py-2.5 px-3 text-right font-bold text-gray-900">₹{calculatedBaseCost.toLocaleString()}</td>
                         </tr>
-                        <tr>
-                          <td className="py-3 px-4 font-bold text-[#166534]">Overtime Hours (&gt;40h/wk)</td>
-                          <td className="py-3 px-4">
+                        <tr className="hover:bg-white/60 transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-emerald-700">Overtime Hours (&gt;40h/wk)</td>
+                          <td className="py-2.5 px-3">
                             {editMode ? (
                               <input
                                 type="number"
                                 value={sowData.overtime_hours}
                                 onChange={(e) => handleFieldChange('overtime_hours', e.target.value)}
-                                className="bg-amber-100/90 text-amber-950 font-bold px-2 py-0.5 rounded text-[13px] w-24 focus:outline-none"
+                                className="bg-amber-50 text-amber-950 font-bold px-2 py-0.5 rounded text-xs w-20 focus:outline-none border border-amber-200"
                               />
                             ) : (
-                              <span className="text-[#166534] font-bold">{sowData.overtime_hours} hrs</span>
+                              <span className="text-emerald-700 font-bold">{sowData.overtime_hours} hrs</span>
                             )}
                           </td>
-                          <td className="py-3 px-4 text-[#166534] font-semibold">
+                          <td className="py-2.5 px-3 text-emerald-700 font-medium">
                             1.5× Rate (₹{(sowData.raw_charge_rate * 1.5).toLocaleString()} / hr)
                           </td>
-                          <td className="py-3 px-4 text-right font-bold text-[#166534]">₹{calculatedOtCost.toLocaleString()}</td>
+                          <td className="py-2.5 px-3 text-right font-bold text-emerald-700">₹{calculatedOtCost.toLocaleString()}</td>
                         </tr>
-                        <tr className="bg-[#F8F8F6] font-extrabold text-[13.5px]">
-                          <td colSpan="3" className="py-3 px-4 text-right">Subtotal Hours Billing:</td>
-                          <td className="py-3 px-4 text-right">₹{(calculatedBaseCost + calculatedOtCost).toLocaleString()}</td>
+                        <tr className="bg-white/50 font-extrabold text-xs">
+                          <td colSpan="3" className="py-2.5 px-3 text-right text-gray-700">Subtotal Hours Billing:</td>
+                          <td className="py-2.5 px-3 text-right text-gray-900">₹{(calculatedBaseCost + calculatedOtCost).toLocaleString()}</td>
                         </tr>
                       </tbody>
                     </table>
@@ -958,39 +966,39 @@ Generated via Term Jobs Recruiter Vendor Portal
 
                 {/* SECTION 4: APPROVED HIRING MANAGER EXPENSES */}
                 <div>
-                  <h3 className="text-[13px] font-extrabold text-[#0A0A0A] tracking-wider uppercase mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-[#0A0A0A]"></span>
+                  <h3 className="text-xs font-extrabold text-gray-900 tracking-wider uppercase mb-3 flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-black"></span>
                     4. Approved Additional Expenses (Hiring Manager Approved)
                   </h3>
 
-                  <div className="overflow-x-auto rounded-xl border border-[#EAEAE6]">
+                  <div className="overflow-x-auto rounded-xl border border-black/[0.04]">
                     {sowData.expense_items.length > 0 ? (
-                      <table className="w-full text-left text-[13px]">
-                        <thead className="bg-[#F4F4F0] text-[#70706B] font-bold uppercase text-[11px] border-b border-[#EAEAE6]">
-                          <tr>
-                            <th className="py-3 px-4">Category</th>
-                            <th className="py-3 px-4">Description</th>
-                            <th className="py-3 px-4">Approval Date</th>
-                            <th className="py-3 px-4 text-right">Amount</th>
+                      <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-black/[0.04] text-[10px] font-extrabold uppercase tracking-wider text-gray-400 bg-white/30">
+                            <th className="py-2.5 px-3">Category</th>
+                            <th className="py-2.5 px-3">Description</th>
+                            <th className="py-2.5 px-3">Approval Date</th>
+                            <th className="py-2.5 px-3 text-right">Amount</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-[#EAEAE6] text-[#0A0A0A]">
+                        <tbody className="divide-y divide-black/[0.03]">
                           {sowData.expense_items.map((item, idx) => (
-                            <tr key={item.id || idx}>
-                              <td className="py-3 px-4 font-bold">{item.category}</td>
-                              <td className="py-3 px-4 text-[#60605B]">{item.description}</td>
-                              <td className="py-3 px-4">{item.approved_at || '—'}</td>
-                              <td className="py-3 px-4 text-right font-bold">₹{parseFloat(item.amount || 0).toLocaleString()}</td>
+                            <tr key={item.id || idx} className="hover:bg-white/60 transition-colors">
+                              <td className="py-2.5 px-3 font-bold text-gray-900">{item.category}</td>
+                              <td className="py-2.5 px-3 text-gray-600">{item.description}</td>
+                              <td className="py-2.5 px-3 text-gray-500">{item.approved_at || '—'}</td>
+                              <td className="py-2.5 px-3 text-right font-bold text-gray-900">₹{parseFloat(item.amount || 0).toLocaleString()}</td>
                             </tr>
                           ))}
-                          <tr className="bg-[#F8F8F6] font-extrabold text-[13.5px]">
-                            <td colSpan="3" className="py-3 px-4 text-right">Subtotal Expenses:</td>
-                            <td className="py-3 px-4 text-right">₹{calculatedTotalExpenses.toLocaleString()}</td>
+                          <tr className="bg-white/50 font-extrabold text-xs">
+                            <td colSpan="3" className="py-2.5 px-3 text-right text-gray-700">Subtotal Expenses:</td>
+                            <td className="py-2.5 px-3 text-right text-gray-900">₹{calculatedTotalExpenses.toLocaleString()}</td>
                           </tr>
                         </tbody>
                       </table>
                     ) : (
-                      <div className="p-4 bg-[#F8F8F6] text-center text-[#70706B] text-[13px] font-medium">
+                      <div className="p-4 bg-white/30 text-center text-gray-400 text-xs font-medium">
                         No approved expenses recorded in database for this worker.
                       </div>
                     )}
@@ -998,15 +1006,15 @@ Generated via Term Jobs Recruiter Vendor Portal
                 </div>
 
                 {/* GRAND TOTAL INVOICE SUMMARY BOX */}
-                <div className="bg-[#0A0A0A] text-white p-6 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md">
+                <div className="bg-white/80 backdrop-blur-xl border border-white/90 p-5 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
                   <div>
-                    <div className="text-[11px] font-bold text-[#A3A39E] uppercase tracking-widest">
+                    <div className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
                       TOTAL WORK ORDER & INVOICE BILLING AMOUNT
                     </div>
-                    <div className="text-[28px] font-black text-[#22C55E] tracking-tight mt-0.5">
+                    <div className="text-2xl sm:text-3xl font-extrabold text-gray-900 tracking-tight mt-0.5">
                       ₹{calculatedGrandTotal.toLocaleString()}
                     </div>
-                    <div className="text-[12px] text-[#A3A39E] mt-0.5 font-medium">
+                    <div className="text-xs text-gray-500 mt-0.5 font-medium">
                       Includes Base Pay (₹{calculatedBaseCost.toLocaleString()}) + Overtime (₹{calculatedOtCost.toLocaleString()}) + Approved Expenses (₹{calculatedTotalExpenses.toLocaleString()})
                     </div>
                   </div>
@@ -1014,27 +1022,27 @@ Generated via Term Jobs Recruiter Vendor Portal
                   <button
                     onClick={handleSendToProcurement}
                     disabled={isSending}
-                    className="px-6 py-3 bg-[#22C55E] hover:bg-[#16a34a] text-white font-extrabold rounded-xl text-[14px] transition-all cursor-pointer shadow-lg flex items-center gap-2 shrink-0"
+                    className="px-5 py-2.5 bg-black hover:bg-gray-900 text-white font-bold rounded-xl text-xs transition-all cursor-pointer shadow-xs flex items-center gap-2 shrink-0 disabled:opacity-50"
                   >
-                    {isSending ? <RefreshCw size={17} className="animate-spin" /> : <Send size={17} />}
+                    {isSending ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
                     <span>Send to Procurement</span>
                   </button>
                 </div>
 
                 {/* SIGNATURE BLOCKS */}
-                <div className="pt-6 border-t border-[#EAEAE6] grid grid-cols-1 sm:grid-cols-2 gap-8 text-[13px]">
+                <div className="pt-4 border-t border-black/[0.04] grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
                   <div>
-                    <div className="border-b border-[#0A0A0A] pb-2 font-bold text-[#0A0A0A]">
+                    <div className="border-b border-gray-900 pb-2 font-bold text-gray-900">
                       {sowData.signatory_supplier || 'Authorised Signatory'}
                     </div>
-                    <div className="text-[#60605B] mt-1 font-medium">For {sowData.supplier_name || 'Supplier Vendor'}</div>
+                    <div className="text-gray-500 mt-1 font-medium">For {sowData.supplier_name || 'Supplier Vendor'}</div>
                   </div>
 
                   <div>
-                    <div className="border-b border-[#0A0A0A] pb-2 font-bold text-[#0A0A0A]">
+                    <div className="border-b border-gray-900 pb-2 font-bold text-gray-900">
                       {sowData.signatory_company || 'Procurement / Director'}
                     </div>
-                    <div className="text-[#60605B] mt-1 font-medium">For {sowData.company_name || 'Client Company'}</div>
+                    <div className="text-gray-500 mt-1 font-medium">For {sowData.company_name || 'Client Company'}</div>
                   </div>
                 </div>
               </div>
@@ -1043,39 +1051,39 @@ Generated via Term Jobs Recruiter Vendor Portal
 
           {/* TAB CONTENT 2: APPROVED TIMESHEETS */}
           {activeTab === 'timesheets' && (
-            <div className="bg-white rounded-2xl border border-[#EAEAE6] p-6 shadow-xs space-y-4">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-[16px] font-extrabold text-[#0A0A0A]">Approved Timesheets Breakdown</h3>
-                <span className="text-[12px] font-bold text-[#166534] bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
-                  Verified from MongoDB records
+                <h3 className="text-sm font-extrabold text-gray-900">Approved Timesheets Breakdown</h3>
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  Verified from records
                 </span>
               </div>
 
               {loadingTimesheets ? (
-                <div className="py-8 text-center text-[#70706B] text-[13px]">Loading timesheets...</div>
+                <div className="py-8 text-center text-gray-400 text-xs">Loading timesheets...</div>
               ) : dbTimesheets.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-[#EAEAE6]">
-                  <table className="w-full text-left text-[13px]">
-                    <thead className="bg-[#F4F4F0] text-[#70706B] font-bold uppercase text-[11px] border-b border-[#EAEAE6]">
-                      <tr>
-                        <th className="py-3 px-4">Period</th>
-                        <th className="py-3 px-4">Regular Hours</th>
-                        <th className="py-3 px-4">Overtime Hours</th>
-                        <th className="py-3 px-4">Total Hours</th>
-                        <th className="py-3 px-4">Approval Date</th>
-                        <th className="py-3 px-4">Status</th>
+                <div className="overflow-x-auto rounded-xl border border-black/[0.04]">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-black/[0.04] text-[10px] font-extrabold uppercase tracking-wider text-gray-400 bg-white/30">
+                        <th className="py-2.5 px-3">Period</th>
+                        <th className="py-2.5 px-3">Regular Hours</th>
+                        <th className="py-2.5 px-3">Overtime Hours</th>
+                        <th className="py-2.5 px-3">Total Hours</th>
+                        <th className="py-2.5 px-3">Approval Date</th>
+                        <th className="py-2.5 px-3">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#EAEAE6] text-[#0A0A0A]">
+                    <tbody className="divide-y divide-black/[0.03]">
                       {dbTimesheets.map((ts) => (
-                        <tr key={ts.id}>
-                          <td className="py-3 px-4 font-bold">{ts.period_label || ts.week_start_date || 'Weekly Period'}</td>
-                          <td className="py-3 px-4">{ts.total_regular_hours || ts.total_hours || 0} hrs</td>
-                          <td className="py-3 px-4 text-[#166534] font-bold">{ts.total_overtime_hours || 0} hrs</td>
-                          <td className="py-3 px-4 font-extrabold">{ts.total_hours || 0} hrs</td>
-                          <td className="py-3 px-4 text-[#60605B]">{ts.approved_at_human || ts.submitted_at || '—'}</td>
-                          <td className="py-3 px-4">
-                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-bold rounded">
+                        <tr key={ts.id} className="hover:bg-white/60 transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-gray-900">{ts.period_label || ts.week_start_date || 'Weekly Period'}</td>
+                          <td className="py-2.5 px-3 text-gray-700">{ts.total_regular_hours || ts.total_hours || 0} hrs</td>
+                          <td className="py-2.5 px-3 text-emerald-700 font-bold">{ts.total_overtime_hours || 0} hrs</td>
+                          <td className="py-2.5 px-3 font-extrabold text-gray-900">{ts.total_hours || 0} hrs</td>
+                          <td className="py-2.5 px-3 text-gray-500">{ts.approved_at_human || ts.submitted_at || '—'}</td>
+                          <td className="py-2.5 px-3">
+                            <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-[10px] font-bold rounded-full">
                               {ts.status || 'APPROVED'}
                             </span>
                           </td>
@@ -1085,7 +1093,7 @@ Generated via Term Jobs Recruiter Vendor Portal
                   </table>
                 </div>
               ) : (
-                <div className="py-8 text-center text-[#70706B] text-[13.5px] font-medium bg-[#F8F8F6] rounded-xl border border-[#EAEAE6]">
+                <div className="py-8 text-center text-gray-400 text-xs font-medium bg-white/30 rounded-xl border border-white/70">
                   No approved timesheets found in database for this candidate.
                 </div>
               )}
@@ -1094,39 +1102,39 @@ Generated via Term Jobs Recruiter Vendor Portal
 
           {/* TAB CONTENT 3: APPROVED EXPENSES */}
           {activeTab === 'expenses' && (
-            <div className="bg-white rounded-2xl border border-[#EAEAE6] p-6 shadow-xs space-y-4">
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-[16px] font-extrabold text-[#0A0A0A]">Hiring Manager Approved Expenses</h3>
-                <span className="text-[12px] font-bold text-[#166534] bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-lg">
-                  Verified from MongoDB records
+                <h3 className="text-sm font-extrabold text-gray-900">Hiring Manager Approved Expenses</h3>
+                <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                  Verified from records
                 </span>
               </div>
 
               {sowData.expense_items.length > 0 ? (
-                <div className="overflow-x-auto rounded-xl border border-[#EAEAE6]">
-                  <table className="w-full text-left text-[13px]">
-                    <thead className="bg-[#F4F4F0] text-[#70706B] font-bold uppercase text-[11px] border-b border-[#EAEAE6]">
-                      <tr>
-                        <th className="py-3 px-4">Category</th>
-                        <th className="py-3 px-4">Description</th>
-                        <th className="py-3 px-4">Approval Date</th>
-                        <th className="py-3 px-4 text-right">Amount</th>
+                <div className="overflow-x-auto rounded-xl border border-black/[0.04]">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-black/[0.04] text-[10px] font-extrabold uppercase tracking-wider text-gray-400 bg-white/30">
+                        <th className="py-2.5 px-3">Category</th>
+                        <th className="py-2.5 px-3">Description</th>
+                        <th className="py-2.5 px-3">Approval Date</th>
+                        <th className="py-2.5 px-3 text-right">Amount</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#EAEAE6] text-[#0A0A0A]">
+                    <tbody className="divide-y divide-black/[0.03]">
                       {sowData.expense_items.map((item, idx) => (
-                        <tr key={item.id || idx}>
-                          <td className="py-3 px-4 font-bold">{item.category}</td>
-                          <td className="py-3 px-4 text-[#60605B]">{item.description}</td>
-                          <td className="py-3 px-4">{item.approved_at || '—'}</td>
-                          <td className="py-3 px-4 text-right font-bold">₹{parseFloat(item.amount || 0).toLocaleString()}</td>
+                        <tr key={item.id || idx} className="hover:bg-white/60 transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-gray-900">{item.category}</td>
+                          <td className="py-2.5 px-3 text-gray-600">{item.description}</td>
+                          <td className="py-2.5 px-3 text-gray-500">{item.approved_at || '—'}</td>
+                          <td className="py-2.5 px-3 text-right font-bold text-gray-900">₹{parseFloat(item.amount || 0).toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               ) : (
-                <div className="py-8 text-center text-[#70706B] text-[13.5px] font-medium bg-[#F8F8F6] rounded-xl border border-[#EAEAE6]">
+                <div className="py-8 text-center text-gray-400 text-xs font-medium bg-white/30 rounded-xl border border-white/70">
                   No approved expenses recorded in database for this worker.
                 </div>
               )}
@@ -1135,19 +1143,19 @@ Generated via Term Jobs Recruiter Vendor Portal
 
           {/* TAB CONTENT 4: CONTRACT & MSA DETAILS */}
           {activeTab === 'contract' && (
-            <div className="bg-white rounded-2xl border border-[#EAEAE6] p-6 shadow-xs space-y-4">
-              <h3 className="text-[16px] font-extrabold text-[#0A0A0A]">Contract & MSA Reference Terms</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[13px]">
-                <div className="p-4 bg-[#F8F8F6] rounded-xl border border-[#EAEAE6] space-y-2">
-                  <div><span className="font-semibold text-[#70706B]">MSA Ref Number:</span> <span className="font-bold text-[#0A0A0A]">{sowData.msa_ref || '—'}</span></div>
-                  <div><span className="font-semibold text-[#70706B]">Work Order Ref:</span> <span className="font-bold text-[#0A0A0A]">{sowData.ws_number || '—'}</span></div>
-                  <div><span className="font-semibold text-[#70706B]">Contract Period:</span> <span className="font-bold text-[#0A0A0A]">{sowData.commencement} to {sowData.expiry} ({sowData.duration})</span></div>
+            <div className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] space-y-4">
+              <h3 className="text-sm font-extrabold text-gray-900">Contract & MSA Reference Terms</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-4 bg-white/60 backdrop-blur-md rounded-xl border border-white/80 shadow-3xs space-y-2">
+                  <div><span className="font-semibold text-gray-500">MSA Ref Number:</span> <span className="font-bold text-gray-900">{sowData.msa_ref || '—'}</span></div>
+                  <div><span className="font-semibold text-gray-500">Work Order Ref:</span> <span className="font-bold text-gray-900">{sowData.ws_number || '—'}</span></div>
+                  <div><span className="font-semibold text-gray-500">Contract Period:</span> <span className="font-bold text-gray-900">{sowData.commencement} to {sowData.expiry} ({sowData.duration})</span></div>
                 </div>
 
-                <div className="p-4 bg-[#F8F8F6] rounded-xl border border-[#EAEAE6] space-y-2">
-                  <div><span className="font-semibold text-[#70706B]">Standard Working Day:</span> <span className="font-bold text-[#0A0A0A]">{sowData.standard_work_day}</span></div>
-                  <div><span className="font-semibold text-[#70706B]">Overtime Terms:</span> <span className="font-bold text-[#166534]">1.5× rate for hours &gt; 40/week</span></div>
-                  <div><span className="font-semibold text-[#70706B]">Payment Terms:</span> <span className="font-bold text-[#0A0A0A]">{sowData.payment_terms || '—'}</span></div>
+                <div className="p-4 bg-white/60 backdrop-blur-md rounded-xl border border-white/80 shadow-3xs space-y-2">
+                  <div><span className="font-semibold text-gray-500">Standard Working Day:</span> <span className="font-bold text-gray-900">{sowData.standard_work_day}</span></div>
+                  <div><span className="font-semibold text-gray-500">Overtime Terms:</span> <span className="font-bold text-emerald-700">1.5× rate for hours &gt; 40/week</span></div>
+                  <div><span className="font-semibold text-gray-500">Payment Terms:</span> <span className="font-bold text-gray-900">{sowData.payment_terms || '—'}</span></div>
                 </div>
               </div>
             </div>

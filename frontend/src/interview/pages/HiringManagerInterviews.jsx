@@ -1,3 +1,4 @@
+import CompanyInterviewScheduleCard from '../components/CompanyInterviewScheduleCard';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -29,7 +30,7 @@ import { RoundTimeline } from '../components/RoundTimeline';
 import { CreateRoundModal } from '../components/CreateRoundModal';
 import { InviteActionsModal } from '../components/InviteActionsModal';
 import { EvaluationForm } from '../components/EvaluationForm';
-import { CandidateRecordingPlayer } from '../components/CandidateRecordingPlayer';
+import { InterviewReviewPanel } from '../components/InterviewReviewPanel';
 import { EVALUATION_VERDICTS } from '../utils/interviewConstants';
 import { getMeetingRoomLink } from '../utils/credentialGenerator';
 
@@ -69,10 +70,6 @@ export function HiringManagerInterviews() {
   const [errorMsg, setErrorMsg] = useState('');
   const [poolCandidates, setPoolCandidates] = useState([]);
   const [poolError, setPoolError] = useState('');
-  const [roundCommAnalysis, setRoundCommAnalysis] = useState(null);
-  const [candidateAiAnalysis, setCandidateAiAnalysis] = useState(null);
-  const [isTranscriptExpanded, setIsTranscriptExpanded] = useState(false);
-  const [loadingCommAnalysis, setLoadingCommAnalysis] = useState(false);
 
   // Shortlist dispatch & 48h countdown state
   const [shortlistStatus, setShortlistStatus] = useState(null);
@@ -235,91 +232,6 @@ export function HiringManagerInterviews() {
       setSubmittingDecision(false);
     }
   };
-
-  // Sync communication analysis for selected round
-  useEffect(() => {
-    if (!selectedRoundForDetails?.id) {
-      setRoundCommAnalysis(null);
-      return;
-    }
-
-    if (
-      selectedRoundForDetails.communication_analysis &&
-      Object.keys(selectedRoundForDetails.communication_analysis).length > 0
-    ) {
-      setRoundCommAnalysis({
-        analysis: selectedRoundForDetails.communication_analysis,
-        metrics: selectedRoundForDetails.communication_metrics || {},
-        transcript: selectedRoundForDetails.transcript || [],
-      });
-      return;
-    }
-
-    setLoadingCommAnalysis(true);
-    interviewApi
-      .getCommunicationAnalysis(selectedRoundForDetails.id)
-      .then((res) => {
-        if (res && res.analysis && Object.keys(res.analysis).length > 0) {
-          setRoundCommAnalysis(res);
-        } else {
-          setRoundCommAnalysis(null);
-        }
-      })
-      .catch(() => {
-        setRoundCommAnalysis(null);
-      })
-      .finally(() => {
-        setLoadingCommAnalysis(false);
-      });
-  }, [selectedRoundForDetails?.id, selectedRoundForDetails?.communication_analysis]);
-
-  // Candidate's baseline AI screening round (so AI scores/transcript are always available)
-  const candidateAiRound = useMemo(() => {
-    if (!selectedCandidate) return null;
-    const candRounds = selectedCandidate.rounds || [];
-    return (
-      candRounds.find(
-        (r) =>
-          r.communication_analysis?.overall_score ||
-          (r.round_name || '').startsWith('AI') ||
-          r.round_type === 'AI_Screening'
-      ) || null
-    );
-  }, [selectedCandidate]);
-
-  // Sync candidate AI screening analysis so it is always accessible to Hiring Manager
-  useEffect(() => {
-    if (!candidateAiRound?.id) {
-      setCandidateAiAnalysis(null);
-      return;
-    }
-    if (selectedRoundForDetails?.id === candidateAiRound.id && roundCommAnalysis) {
-      setCandidateAiAnalysis(roundCommAnalysis);
-      return;
-    }
-    if (
-      candidateAiRound.communication_analysis &&
-      Object.keys(candidateAiRound.communication_analysis).length > 0
-    ) {
-      setCandidateAiAnalysis({
-        analysis: candidateAiRound.communication_analysis,
-        metrics: candidateAiRound.communication_metrics || {},
-        transcript: candidateAiRound.transcript || [],
-      });
-      return;
-    }
-
-    interviewApi
-      .getCommunicationAnalysis(candidateAiRound.id)
-      .then((res) => {
-        if (res && res.analysis && Object.keys(res.analysis).length > 0) {
-          setCandidateAiAnalysis(res);
-        } else {
-          setCandidateAiAnalysis(null);
-        }
-      })
-      .catch(() => setCandidateAiAnalysis(null));
-  }, [candidateAiRound?.id, candidateAiRound?.communication_analysis, selectedRoundForDetails?.id, roundCommAnalysis]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -508,18 +420,24 @@ export function HiringManagerInterviews() {
         <div className="flex items-center gap-2">
           <button
             type="button"
+            disabled={!selectedCandidate && acceptedCandidates.length === 0}
             onClick={() => {
               if (selectedCandidate) {
                 handleScheduleForCandidate(selectedCandidate);
-              } else {
-                setCreateModalInitialData({
-                  interviewer_name: user?.name || 'Hiring Manager',
-                  interviewer_email: user?.email || '',
-                });
-                setIsCreateModalOpen(true);
+              } else if (acceptedCandidates.length > 0) {
+                handleScheduleForCandidate(acceptedCandidates[0]);
               }
             }}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold shadow-xs transition active:scale-95 cursor-pointer"
+            title={
+              !selectedCandidate && acceptedCandidates.length === 0
+                ? 'No shortlisted candidates are currently ready for interview scheduling.'
+                : 'Schedule a company interview round for the shortlisted candidate'
+            }
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition active:scale-95 ${
+              !selectedCandidate && acceptedCandidates.length === 0
+                ? 'bg-zinc-200 text-zinc-400 cursor-not-allowed border border-zinc-300'
+                : 'bg-black hover:bg-gray-800 text-white cursor-pointer'
+            }`}
           >
             <Plus size={14} />
             <span>Schedule Interview</span>
@@ -888,9 +806,9 @@ export function HiringManagerInterviews() {
                   <div className="flex items-center justify-between gap-2 mb-0.5">
                     <h3 className="font-extrabold text-base tracking-tight">{cand.candidate_name}</h3>
                     {(() => {
-                      const completedWithScore = candRounds.find(r => r.communication_analysis?.overall_score) || (cand.latest_round?.communication_analysis?.overall_score ? cand.latest_round : null);
+                      const completedWithScore = candRounds.find(r => r.communication_analysis?.status === 'scored' && Number.isFinite(r.communication_analysis?.overall_score)) || (cand.latest_round?.communication_analysis?.status === 'scored' && Number.isFinite(cand.latest_round?.communication_analysis?.overall_score) ? cand.latest_round : null);
                       const score = completedWithScore?.communication_analysis?.overall_score;
-                      if (!score) return null;
+                      if (!Number.isFinite(score)) return null;
                       return (
                         <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-500 text-zinc-950 flex items-center gap-1 shadow-sm shrink-0">
                           <Sparkles size={11} className="stroke-[3]" />
@@ -1099,9 +1017,9 @@ export function HiringManagerInterviews() {
               {/* Highlight AI Communication Score Banner if Available */}
               {(() => {
                 const candRounds = selectedCandidate.rounds || [];
-                const completedWithScore = candRounds.find(r => r.communication_analysis?.overall_score) || (selectedCandidate.latest_round?.communication_analysis?.overall_score ? selectedCandidate.latest_round : null);
+                const completedWithScore = candRounds.find(r => r.communication_analysis?.status === 'scored' && Number.isFinite(r.communication_analysis?.overall_score)) || (selectedCandidate.latest_round?.communication_analysis?.status === 'scored' && Number.isFinite(selectedCandidate.latest_round?.communication_analysis?.overall_score) ? selectedCandidate.latest_round : null);
                 const score = completedWithScore?.communication_analysis?.overall_score;
-                if (!score) return null;
+                if (!Number.isFinite(score)) return null;
                 return (
                   <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-teal-500/10 border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                     <div className="flex items-center gap-3">
@@ -1111,7 +1029,7 @@ export function HiringManagerInterviews() {
                       <div>
                         <div className="text-xs font-black text-emerald-900 uppercase tracking-wider flex items-center gap-1.5">
                           <Sparkles size={13} className="text-emerald-600" />
-                          <span>AI Spoken Communication Score: {score} / 100</span>
+                          <span>AI Interview Assessment: {score} / 100</span>
                         </div>
                         <div className="text-[11px] text-emerald-800 mt-0.5">
                           {completedWithScore.communication_analysis?.summary || 'Spoken interview completed. Click below to inspect dimensional scores & transcript.'}
@@ -1124,7 +1042,7 @@ export function HiringManagerInterviews() {
                       onClick={() => setSelectedRoundForDetails(completedWithScore)}
                       className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition shrink-0 cursor-pointer shadow-xs"
                     >
-                      View AI Scorecard & Results
+                      Review video, transcript & criteria
                     </button>
                   </div>
                 );
@@ -1288,7 +1206,7 @@ export function HiringManagerInterviews() {
                       <h4 className="text-lg font-bold text-zinc-950">{selectedRoundForDetails.round_name}</h4>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {selectedRoundForDetails.status !== 'Completed' && (
                         <a
                           href={`${getMeetingRoomLink(selectedRoundForDetails.id)}?role=interviewer&name=${encodeURIComponent(user?.name || 'Interviewer')}`}
@@ -1373,249 +1291,16 @@ export function HiringManagerInterviews() {
                     </div>
                   )}
 
-                  {/* Candidate Video Recording Player */}
-                  <CandidateRecordingPlayer
-                    round={selectedRoundForDetails?.video_recording_url || selectedRoundForDetails?.recording_metadata ? selectedRoundForDetails : candidateAiRound}
-                    candidateName={selectedCandidate?.candidate_name}
+                  {selectedRoundForDetails.status !== 'Completed' && selectedRoundForDetails.status !== 'Cancelled' && !(selectedRoundForDetails.round_name || '').startsWith('AI') && (
+                    <details className="rounded-2xl border border-zinc-200 bg-white p-4"><summary className="cursor-pointer text-sm font-semibold">Edit interview date, time & duration</summary>
+                      <CompanyInterviewScheduleCard key={selectedRoundForDetails.id} proposal={selectedRoundForDetails} onSaved={result => { setSelectedRoundForDetails(result); loadData(); }} />
+                    </details>
+                  )}
+                  <InterviewReviewPanel
+                    key={selectedRoundForDetails.id}
+                    round={selectedRoundForDetails}
+                    candidateName={selectedCandidate.candidate_name}
                   />
-
-                  {/* AI Spoken Communication Assessment & Executive Scorecard for Admin */}
-                  {(() => {
-                    const activeAnalysis = roundCommAnalysis || candidateAiAnalysis;
-                    const isViewingAiBaseline = !roundCommAnalysis && !!candidateAiAnalysis;
-
-                    if (!activeAnalysis || !activeAnalysis.analysis || Object.keys(activeAnalysis.analysis).length === 0) {
-                      if (loadingCommAnalysis) {
-                        return (
-                          <div className="p-4 bg-zinc-100 rounded-2xl border border-zinc-200 text-center text-xs text-zinc-500 flex items-center justify-center gap-2">
-                            <div className="w-4 h-4 border-2 border-zinc-400 border-t-zinc-800 rounded-full animate-spin" />
-                            <span>Loading AI Communication Analysis...</span>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }
-
-                    return (
-                      <div className="p-5 bg-gradient-to-b from-zinc-900 to-zinc-950 text-white rounded-3xl border border-zinc-800 space-y-4 shadow-xl animate-in fade-in duration-300">
-                        <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold border border-emerald-500/30">
-                              <Sparkles size={16} />
-                            </div>
-                            <div>
-                              <div className="text-xs font-bold text-white flex items-center gap-2">
-                                <span>AI Spoken Communication Assessment</span>
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                                  {isViewingAiBaseline ? 'AI SCREENING BASELINE · ACCEPTED' : 'CONFIDENTIAL · ADMIN ONLY'}
-                                </span>
-                              </div>
-                              <div className="text-[11px] text-zinc-400">
-                                {isViewingAiBaseline
-                                  ? `Pre-screening linguistic & communication scores for ${selectedCandidate.candidate_name} (Round 1: AI Screening)`
-                                  : `Automated linguistic, cadence, and response analysis for ${selectedCandidate.candidate_name}`}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Overall Score & Assessment Grade */}
-                          <div className="flex items-center gap-3">
-                            <div className="text-right">
-                              <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">
-                                {activeAnalysis.analysis.assessment_grade || 'Overall Score'}
-                              </span>
-                              <span className={`text-xl font-black ${
-                                (activeAnalysis.analysis.overall_score ?? 0) >= 75
-                                  ? 'text-emerald-400'
-                                  : (activeAnalysis.analysis.overall_score ?? 0) >= 50
-                                  ? 'text-sky-400'
-                                  : (activeAnalysis.analysis.overall_score ?? 0) >= 30
-                                  ? 'text-amber-400'
-                                  : 'text-rose-400'
-                              }`}>
-                                {activeAnalysis.analysis.overall_score ?? 0}
-                                <span className="text-xs text-zinc-500 font-semibold"> / 100</span>
-                              </span>
-                            </div>
-                            <div className={`w-11 h-11 rounded-2xl border-2 flex items-center justify-center font-black text-lg ${
-                              (activeAnalysis.analysis.overall_score ?? 0) >= 75
-                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                                : (activeAnalysis.analysis.overall_score ?? 0) >= 50
-                                ? 'bg-sky-500/10 border-sky-500/30 text-sky-400'
-                                : (activeAnalysis.analysis.overall_score ?? 0) >= 30
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-400'
-                                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-                            }`}>
-                              {activeAnalysis.analysis.overall_score ?? 0}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Summary */}
-                        {activeAnalysis.analysis.summary && (
-                          <div className="p-3 bg-zinc-900/90 rounded-2xl border border-zinc-800 text-xs text-zinc-300 leading-relaxed">
-                            <span className="font-bold text-zinc-200 block mb-1">Executive Summary:</span>
-                            {activeAnalysis.analysis.summary}
-                          </div>
-                        )}
-
-                        {/* Linguistic Cadence & Metrics */}
-                        <div className="grid grid-cols-3 gap-2.5 text-center">
-                          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                            <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
-                              <Activity size={12} className="text-emerald-400" />
-                              <span>Speaking Pace</span>
-                            </div>
-                            <div className="text-base font-black text-white mt-1">
-                              {activeAnalysis.metrics?.words_per_minute || 140} <span className="text-xs font-normal text-zinc-400">WPM</span>
-                            </div>
-                            <div className="text-[10px] text-emerald-400 font-medium truncate mt-0.5">
-                              {activeAnalysis.metrics?.pace_rating || 'Optimal Cadence'}
-                            </div>
-                          </div>
-
-                          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                            <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
-                              <Zap size={12} className="text-sky-400" />
-                              <span>Filler Frequency</span>
-                            </div>
-                            <div className="text-base font-black text-white mt-1">
-                              {activeAnalysis.metrics?.filler_percentage !== undefined ? `${activeAnalysis.metrics.filler_percentage}%` : '1.8%'}
-                            </div>
-                            <div className="text-[10px] text-sky-400 font-medium truncate mt-0.5">
-                              {activeAnalysis.metrics?.filler_count || 0} filler words detected
-                            </div>
-                          </div>
-
-                          <div className="p-3 bg-zinc-950 rounded-xl border border-zinc-800">
-                            <div className="text-[10px] text-zinc-400 uppercase font-semibold flex items-center justify-center gap-1">
-                              <Award size={12} className="text-purple-400" />
-                              <span>Lexical Variety</span>
-                            </div>
-                            <div className="text-base font-black text-white mt-1">
-                              {activeAnalysis.metrics?.lexical_diversity || 0.54} <span className="text-xs font-normal text-zinc-400">TTR</span>
-                            </div>
-                            <div className="text-[10px] text-purple-400 font-medium truncate mt-0.5">
-                              {activeAnalysis.metrics?.vocabulary_rating || 'Rich Lexicon'}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 6 Core Dimensions */}
-                        <div className="p-3.5 bg-zinc-950 rounded-2xl border border-zinc-800">
-                          <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block mb-2.5">
-                            Dimensional Competency Breakdown (1 - 10)
-                          </span>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center text-xs">
-                            {[
-                              { label: 'Relevance', val: activeAnalysis.analysis.relevance_score ?? 7.5 },
-                              { label: 'Substance', val: activeAnalysis.analysis.substance_score ?? 7.0 },
-                              { label: 'Clarity', val: activeAnalysis.analysis.clarity_score ?? 7.5 },
-                              { label: 'Structure', val: activeAnalysis.analysis.structure_score ?? 7.0 },
-                              { label: 'Vocabulary', val: activeAnalysis.analysis.vocabulary_score ?? 7.5 },
-                              { label: 'Confidence', val: activeAnalysis.analysis.confidence_score ?? 7.0 },
-                            ].map((dim, idx) => (
-                              <div key={idx} className="p-2 rounded-xl bg-zinc-900 border border-zinc-800/80">
-                                <div className="text-[11px] text-zinc-400">{dim.label}</div>
-                                <div className={`text-sm font-black mt-0.5 ${
-                                  dim.val >= 7 ? 'text-emerald-400' : dim.val >= 4 ? 'text-amber-400' : 'text-rose-400'
-                                }`}>
-                                  {dim.val} / 10
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Strengths & Growth Areas */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          {activeAnalysis.analysis.key_strengths && activeAnalysis.analysis.key_strengths.length > 0 && (
-                            <div className="p-3 rounded-2xl bg-emerald-950/30 border border-emerald-900/40">
-                              <div className="font-bold text-emerald-400 flex items-center gap-1.5 mb-2">
-                                <CheckCircle2 size={13} />
-                                <span>Key Strengths</span>
-                              </div>
-                              <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
-                                {activeAnalysis.analysis.key_strengths.map((str, i) => (
-                                  <li key={i}>{str}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-
-                          {activeAnalysis.analysis.areas_for_improvement && activeAnalysis.analysis.areas_for_improvement.length > 0 && (
-                            <div className="p-3 rounded-2xl bg-amber-950/30 border border-amber-900/40">
-                              <div className="font-bold text-amber-400 flex items-center gap-1.5 mb-2">
-                                <AlertCircle size={13} />
-                                <span>Areas for Growth</span>
-                              </div>
-                              <ul className="space-y-1 text-zinc-300 list-disc list-inside text-[11px]">
-                                {activeAnalysis.analysis.areas_for_improvement.map((area, i) => (
-                                  <li key={i}>{area}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Full Transcript Accordion */}
-                        {activeAnalysis.transcript && activeAnalysis.transcript.length > 0 && (
-                          <div className="border border-zinc-800 rounded-2xl overflow-hidden">
-                            <button
-                              type="button"
-                              onClick={() => setIsTranscriptExpanded(!isTranscriptExpanded)}
-                              className="w-full p-3 bg-zinc-900/80 hover:bg-zinc-900 flex items-center justify-between text-xs font-bold text-zinc-200 transition cursor-pointer"
-                            >
-                              <span className="flex items-center gap-2">
-                                <FileText size={14} className="text-zinc-400" />
-                                <span>View Spoken Q&A Transcript ({activeAnalysis.transcript.length} turns)</span>
-                              </span>
-                              {isTranscriptExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                            </button>
-
-                            {isTranscriptExpanded && (
-                              <div className="p-3 bg-zinc-950/90 space-y-2.5 max-h-72 overflow-y-auto border-t border-zinc-800 text-xs">
-                                {activeAnalysis.transcript.map((t, idx) => {
-                                  const isAi = t.speaker === 'interviewer';
-                                  return (
-                                    <div
-                                      key={idx}
-                                      className={`p-2.5 rounded-xl border ${
-                                        isAi
-                                          ? 'bg-zinc-900/60 border-zinc-800 text-zinc-300'
-                                          : 'bg-emerald-950/20 border-emerald-900/30 text-emerald-100'
-                                      }`}
-                                    >
-                                      <div className="flex items-center justify-between text-[10px] text-zinc-500 mb-1 font-semibold">
-                                        <span>{t.speaker_name || (isAi ? 'AI Interviewer (Aria)' : selectedCandidate.candidate_name)}</span>
-                                        <span>{t.timestamp || ''}</span>
-                                      </div>
-                                      <div className="leading-relaxed">{t.text}</div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Evaluation Form quick trigger */}
-                        <div className="flex items-center justify-between pt-2">
-                          <span className="text-[11px] text-zinc-400">
-                            Transfer scores and insights to official evaluation record:
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setActiveEvaluationRound(selectedRoundForDetails)}
-                            className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
-                          >
-                            <Award size={13} />
-                            <span>Record Official Evaluation</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })()}
                 </div>
               ) : (
                 <div className="p-6 text-center text-xs text-zinc-400 bg-zinc-50 rounded-2xl border border-zinc-200">

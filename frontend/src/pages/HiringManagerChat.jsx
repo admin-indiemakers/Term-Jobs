@@ -1,7 +1,10 @@
+import GoogleCalendarConnect from '../components/GoogleCalendarConnect';
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { interviewMetrics } from '../interview/utils/interviewMetrics';
+import { upcomingInterviewRounds } from '../interview/utils/upcomingInterviews';
 import { interviewApi } from '../interview/services/interviewApi';
 import {
   Briefcase,
@@ -92,7 +95,7 @@ export default function HiringManagerChat() {
   const [openIssues, setOpenIssues] = useState([]);
   const [wfStats, setWfStats] = useState(null);
   const [pendingTimesheets, setPendingTimesheets] = useState([]);
-  const [interviewSummary, setInterviewSummary] = useState([]);
+  const [interviewDataError, setInterviewDataError] = useState('');
   const [interviewRounds, setInterviewRounds] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
@@ -104,6 +107,7 @@ export default function HiringManagerChat() {
   const loadDashboardData = async () => {
     setLoading(true);
     setError('');
+    setInterviewDataError('');
     try {
       const [
         reqsData,
@@ -112,18 +116,16 @@ export default function HiringManagerChat() {
         issuesData,
         wfData,
         timesheetsData,
-        interviewSumData,
         roundsData,
         notifsData
       ] = await Promise.all([
-        request('/api/requisitions', { token }).catch(() => []),
+        request('/api/requisitions', { token }).catch(() => { setInterviewDataError('Unable to load requisition data'); return []; }),
         request('/api/candidates/shortlisted', { token }).catch(() => []),
         request('/api/candidates?status=Accepted', { token }).catch(() => []),
         request('/api/onboarding/issues', { token }).catch(() => []),
         request('/api/workforce/stats', { token }).catch(() => null),
         request('/api/workforce/timesheets', { token }).catch(() => []),
-        interviewApi.getSummary(token).catch(() => []),
-        interviewApi.listRounds({}, token).catch(() => []),
+        interviewApi.listRounds({}, token).catch(() => { setInterviewDataError('Unable to load interview data'); return []; }),
         request('/api/notifications?compact=true&limit=12', { token }).catch(() => [])
       ]);
 
@@ -151,7 +153,7 @@ export default function HiringManagerChat() {
         )
       );
 
-      setInterviewSummary(Array.isArray(interviewSumData) ? interviewSumData : []);
+      if (!Array.isArray(roundsData)) setInterviewDataError('Unexpected interview response');
       setInterviewRounds(Array.isArray(roundsData) ? roundsData : []);
 
       const nList = Array.isArray(notifsData) ? notifsData : notifsData?.notifications || [];
@@ -169,6 +171,16 @@ export default function HiringManagerChat() {
       loadDashboardData();
     }
   }, [token]);
+
+  const upcomingInterviews = useMemo(
+    () => upcomingInterviewRounds(interviewRounds, requisitions),
+    [interviewRounds, requisitions]
+  );
+
+  const interviewStats = useMemo(
+    () => interviewMetrics(interviewRounds, requisitions),
+    [interviewRounds, requisitions]
+  );
 
   // Derived KPI metrics
   const activeRequisitionsCount = useMemo(() => {
@@ -278,34 +290,6 @@ export default function HiringManagerChat() {
       });
     });
 
-    // Fallbacks if empty
-    if (list.length === 0) {
-      list.push(
-        {
-          id: 'seed-1',
-          type: 'requisition',
-          category: 'requisitions',
-          title: 'Hiring pipeline live',
-          description: 'Ready to create requisitions and screen qualified candidate pool',
-          timestamp: new Date().toISOString(),
-          link: '/dashboard/requisitions/new',
-          icon: Briefcase,
-          color: 'text-blue-600 bg-blue-500/10 border-blue-500/20',
-        },
-        {
-          id: 'seed-2',
-          type: 'candidate',
-          category: 'candidates',
-          title: 'Cal.com & AI screening synchronized',
-          description: 'Autonomous interview scheduling and fit evaluation active',
-          timestamp: new Date().toISOString(),
-          link: '/dashboard/interviews',
-          icon: CalendarCheck,
-          color: 'text-purple-600 bg-purple-500/10 border-purple-500/20',
-        }
-      );
-    }
-
     list.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
     return list;
   }, [notifications, requisitions, shortlistedCandidates, interviewRounds]);
@@ -394,6 +378,7 @@ export default function HiringManagerChat() {
           </p>
         </div>
 
+        <GoogleCalendarConnect />
         {/* Date Stamp */}
         <div className="text-left sm:text-right text-[11px] font-semibold text-gray-400 pt-1 sm:pt-2 shrink-0 pr-1">
           {currentDateFormatted}
@@ -453,18 +438,18 @@ export default function HiringManagerChat() {
             </div>
 
             {/* Stat Card 3: Interviews & AI Scores */}
-            <div
+            <button
+              type="button"
+              aria-label="Review interview videos, transcripts and AI scoring criteria"
               onClick={() => navigate('/dashboard/interviews')}
-              className="bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
+              className="text-left bg-white/80 hover:bg-white/95 backdrop-blur-2xl border border-white/85 hover:border-white rounded-2xl p-2.5 sm:p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.04),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_12px_36px_0_rgba(0,0,0,0.06)] transition-all duration-300 flex flex-col justify-between group cursor-pointer"
             >
               <div className="flex items-center justify-between mb-1.5">
                 <div className="w-7 h-7 rounded-xl bg-white/70 backdrop-blur-md border border-white flex items-center justify-center text-gray-700 shadow-3xs group-hover:scale-105 transition-transform">
                   <CalendarCheck size={14} />
                 </div>
                 <div className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
-                  {interviewRounds.length > 0
-                    ? interviewRounds.length
-                    : interviewSummary.length || (requisitions.length > 0 ? 11 : 0)}
+                  {loading ? '…' : interviewDataError ? '—' : interviewStats.interviewCount}
                 </div>
               </div>
               <div>
@@ -472,10 +457,13 @@ export default function HiringManagerChat() {
                   Interviews & AI Scores
                 </div>
                 <div className="text-[9.5px] font-semibold text-emerald-600 mt-0.5 truncate">
-                  Cal.com sync live • AI Ready
+                  {loading ? 'Loading interview data…' : interviewDataError || `${upcomingInterviews.length} upcoming • ${interviewStats.aiScoreCount} AI scores`}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-1 text-[10px] font-semibold text-zinc-600">
+                  <span>Video · Transcript · Criteria</span><ArrowRight size={12} className="shrink-0" />
                 </div>
               </div>
-            </div>
+            </button>
 
             {/* Stat Card 4: Workforce Approvals */}
             <div
@@ -685,10 +673,15 @@ export default function HiringManagerChat() {
                     </div>
                   ))}
                 </div>
-              ) : interviewRounds.length === 0 && shortlistedCandidates.length === 0 ? (
+              ) : interviewDataError ? (
+                <div role="alert" className="py-6 text-center text-xs text-red-600">
+                  <p>{interviewDataError}</p>
+                  <button type="button" onClick={loadDashboardData} className="mt-2 underline">Retry</button>
+                </div>
+              ) : upcomingInterviews.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center py-6 text-center text-gray-400">
                   <CalendarCheck size={20} className="mb-1 text-gray-300" />
-                  <span className="text-xs font-medium">No upcoming interviews today</span>
+                  <span className="text-xs font-medium">No upcoming interviews scheduled</span>
                   <button
                     type="button"
                     onClick={() => navigate('/dashboard/interviews')}
@@ -697,8 +690,8 @@ export default function HiringManagerChat() {
                     Manage Interview Slots →
                   </button>
                 </div>
-              ) : interviewRounds.length > 0 ? (
-                interviewRounds.slice(0, 4).map((round, idx) => (
+              ) : (
+                upcomingInterviews.slice(0, 4).map((round, idx) => (
                   <div
                     key={round.id || idx}
                     onClick={() => navigate('/dashboard/interviews')}
@@ -709,41 +702,19 @@ export default function HiringManagerChat() {
                         {round.candidate_name || 'Candidate Interview'}
                       </div>
                       <div className="text-[10px] text-gray-400 truncate">
-                        {round.round_name || 'Technical Round'} • {round.scheduled_time || 'Confirmed slot'}
+                        {round.round_name || 'Technical Round'} • {round.scheduled_time || round.scheduled_date}
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        Confirmed
+                        {round.status}
                       </span>
                     </div>
                   </div>
                 ))
-              ) : (
-                shortlistedCandidates.slice(0, 4).map((cand) => (
-                  <div
-                    key={cand.id || cand.candidate_id || cand.name}
-                    onClick={() => navigate('/dashboard/candidates')}
-                    className="flex items-center justify-between p-2 rounded-xl bg-transparent hover:bg-white/35 border border-transparent hover:border-black/[0.03] transition-all cursor-pointer group"
-                  >
-                    <div className="min-w-0">
-                      <div className="font-bold text-gray-900 text-xs sm:text-[12.5px] leading-tight truncate group-hover:text-black">
-                        {cand.name}
-                      </div>
-                      <div className="text-[10px] text-gray-400 truncate">
-                        {cand.role || cand.requisition_title || 'Software Engineer'} • {cand.experience || '4+ yrs'}
-                      </div>
-                    </div>
 
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[9.5px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70">
-                        {cand.match_score ? `${cand.match_score}% Match` : 'Shortlisted'}
-                      </span>
-                    </div>
-                  </div>
-                ))
               )}
             </div>
           </div>

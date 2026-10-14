@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { todayForDeadline } from '../utils/submissionDeadline';
 
 const TABS = ['Role', 'Engagement', 'Commercials', 'Work setup', 'Compliance', 'Process'];
 const ENGAGEMENT_TYPES = ['Contract'];
@@ -438,7 +439,7 @@ case 'Work setup':
                 <TextField value={role.hiring_manager} editable={editable} onChange={(v) => set({ hiring_manager: v })} placeholder="Arjun Mehta" />
               </Field>
               <Field label={<span className="text-red-600 font-extrabold flex items-center gap-1.5 whitespace-nowrap h-5 select-none text-[10.5px] uppercase tracking-tight"><span>Submission Deadline<span className="text-red-600 font-bold ml-0.5">*</span></span><span className="px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase bg-red-100 text-red-700 border border-red-200 shrink-0">MANDATORY</span></span>} required>
-                <TextField type="date" value={role.submission_deadline} editable={editable} onChange={(v) => set({ submission_deadline: v })} className="bg-red-50/40 border-red-300 text-red-900 font-bold" />
+                <TextField type="date" min={todayForDeadline()} value={role.submission_deadline} editable={editable} onChange={(v) => set({ submission_deadline: v })} className="bg-red-50/40 border-red-300 text-red-900 font-bold" />
               </Field>
               <Field label="Priority" required>
                 {editable ? (

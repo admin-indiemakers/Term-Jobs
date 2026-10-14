@@ -232,6 +232,11 @@ export default function DashboardLayout() {
       const rCount = Array.isArray(reqs) ? reqs.length : (Array.isArray(reqs?.requisitions) ? reqs.requisitions.length : 0);
       const sList = Array.isArray(shortlisted) ? shortlisted : (shortlisted?.shortlisted_candidates || []);
       const aList = Array.isArray(accepted) ? accepted : (accepted?.candidates || []);
+      const uniqueCandIds = new Set();
+      [...sList, ...aList].forEach((c) => {
+        const cid = c.id || c.submission_id || c.candidate_id || c.candidate_email;
+        if (cid) uniqueCandIds.add(String(cid).toLowerCase());
+      });
       const issueList = Array.isArray(issuesData) ? issuesData : issuesData?.issues || [];
       const openIssues = issueList.filter((i) => (i.status || '').toLowerCase() === 'open').length;
       const pendingTs = wfStats?.stats?.pending_timesheets || 0;
@@ -239,7 +244,7 @@ export default function DashboardLayout() {
       setHmCounts((prev) => ({
         ...prev,
         requisitions: rCount,
-        candidates: sList.length + aList.length,
+        candidates: uniqueCandIds.size,
         openIssues: openIssues,
         pendingTimesheets: pendingTs,
         pendingExpenses: pendingExp,

@@ -1174,6 +1174,12 @@ def get_company_profile(tenant_id: str) -> dict:
 
 
 def run_company_admin_agent_chat(prompt: str, history: list = None, current_user: dict = None) -> dict:
+    from .scope import SCOPE_REPLY, is_admin_request_in_scope
+
+    # Reject unrelated requests before loading company data or calling any model.
+    if not is_admin_request_in_scope(prompt, history):
+        return {"reply": SCOPE_REPLY, "executed_actions": [], "out_of_scope": True}
+
     user_data = current_user or {}
     tenant_id = str(user_data.get("tenant_id") or "local")
     company_name = user_data.get("tenant_name") or "TCS"
@@ -1424,6 +1430,9 @@ def run_company_admin_agent_chat(prompt: str, history: list = None, current_user
     tech_stack_str = ", ".join(comp_info.get("tech_stack", [])) if isinstance(comp_info.get("tech_stack"), list) else str(comp_info.get("tech_stack", "React, Python, Cloud"))
 
     system_prompt = (
+        "Stay within TermJobs company administration and hiring workflows. "
+        "Decline unrelated requests, including unrelated clauses in mixed requests. "
+        "Do not generate general-purpose code, jokes, or unrelated advice. "
         f"You are the dedicated, highly intelligent Company Admin AI Assistant for {actual_company_name}.\n"
         f"You assist the Company Administrator ({user_name}) with comprehensive oversight of hiring operations, departmental hiring managers, job requisitions, candidate evaluation pipelines, and organizational setup.\n\n"
         f"ENTERPRISE REAL-TIME KNOWLEDGE BASE (100% GROUND TRUTH FOR {actual_company_name}):\n"

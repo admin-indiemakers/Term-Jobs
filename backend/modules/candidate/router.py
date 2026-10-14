@@ -54,12 +54,11 @@ def _resume_disposition(filename: str) -> str:
 def _tenant_requisition_ids(session, tenant_id: str, user_id: str | None = None, user_role: str | None = None) -> set[str]:
     """IDs of all requisitions belonging to a tenant.
     
-    When user_role is 'Hiring Manager', prioritizes requisitions created by that user, falling back to company tenant requisitions.
+    When user_role is 'Hiring Manager', strictly scopes to requisitions created by that user.
     """
     if user_role == "Hiring Manager" and user_id:
         user_rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id, Requisition.created_by == user_id).all()
-        if user_rows:
-            return {r.id for r in user_rows}
+        return {r.id for r in user_rows}
     rows = session.query(Requisition).filter(Requisition.tenant_id == tenant_id).all()
     return {r.id for r in rows}
 
@@ -135,13 +134,19 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
             tenant = session.query(Tenant).filter(Tenant.id == current_user.tenant_id).first()
             vendor_name = (tenant.name or "").lower().strip() if tenant else None
 
-        or_conditions = [
-            {"tenant_id": current_user.tenant_id},
-        ]
-        if tenant_reqs:
-            or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
-        if vendor_name:
-            or_conditions.append({"vendor_name": {"$regex": f"^{vendor_name}$", "$options": "i"}})
+        if current_user.role == "Hiring Manager":
+            if not tenant_reqs:
+                # Hiring Manager has no requisitions yet; return no submissions
+                return []
+            or_conditions = [{"requisition_id": {"$in": tenant_reqs}}]
+        else:
+            or_conditions = [
+                {"tenant_id": current_user.tenant_id},
+            ]
+            if tenant_reqs:
+                or_conditions.append({"requisition_id": {"$in": tenant_reqs}})
+            if vendor_name:
+                or_conditions.append({"vendor_name": {"$regex": f"^{vendor_name}$", "$options": "i"}})
         
         if "$or" in query_filter:
             query_filter = {"$and": [query_filter, {"$or": or_conditions}]}
@@ -279,6 +284,8 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
         results.append({
             "id": doc_id,
             "submission_id": doc_id,
+            "manual_shortlist": doc.get('manual_shortlist') is True,
+            "manual_shortlist_reason": doc.get('manual_shortlist_reason') or '',
             "workorder_id": wo_match.get("workorder_id") or doc_id,
             "agreement_status": agr_status,
             "agreement_approved_by": wo_match.get("approved_by") or "",
@@ -406,13 +413,14 @@ def list_candidates(
     status: str | None = None,
     requisition_id: str | None = None,
     include_details: bool = False,
+    refresh: bool = False,
     current_user: User = Depends(get_current_user),
 ) -> list[dict]:
     """List candidate submissions, optionally filtered by status and/or requisition."""
     from modules.shared.cache import cache as _cache
     cache_key = f"cands_list:{current_user.id}:{current_user.role}:{status or 'all'}:{requisition_id or 'all'}:{include_details}"
     cached = _cache.get(cache_key)
-    if cached is not None:
+    if cached is not None and not refresh:
         return cached
 
     query_filter = {}
@@ -443,7 +451,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
     from modules.interview.domain.models import InterviewRound
 
     candidates = _fetch_candidate_submissions_mongo(
-        {"status": {"$in": ["Shortlisted", "Accepted", "Offer Extended", "Offer Accepted", "Under Review", "Hired"]}},
+        {'$or': [{"status": {"$in": ["Shortlisted", "Accepted", "Offer Extended", "Offer Accepted", "Under Review", "Hired"]}}, {'manual_shortlist': True, 'status': {'$in': ['Screened', 'Shortlisted']}}]},
         current_user
     )
 
@@ -489,7 +497,7 @@ def list_shortlisted(current_user: User = Depends(get_current_user)) -> list[dic
             or (c.get("round_status") == "Completed")
         )
 
-        if has_completed_interview:
+        if has_completed_interview or c.get('manual_shortlist') is True:
             verified.append(c)
         else:
             # Candidate was marked Shortlisted without an interview -> auto-correct to Screened
@@ -549,6 +557,37 @@ def list_bank_candidates(current_user: User = Depends(get_current_user)) -> list
 
 
 @router.get("/bank/{candidate_id}/resume-pdf")
+@router.get('/manager/{candidate_id}/resume')
+def get_manager_candidate_resume(candidate_id: str, current_user: User = Depends(get_current_user)):
+    """Original resume only, authorized through the manager's own requisition application."""
+    from modules.shared.db import db
+    if current_user.role != 'Hiring Manager' or not current_user.tenant_id:
+        raise HTTPException(status_code=403, detail='Hiring manager access required')
+    reqs = list(db['requisitions'].find({'tenant_id': current_user.tenant_id, 'created_by': str(current_user.id)}, {'id': 1}))
+    doc = db['candidate_submissions'].find_one({'requisition_id': {'$in': [req['id'] for req in reqs if req.get('id')]},
+        '$and': [{'$or': [{'id': candidate_id}, {'submission_id': candidate_id}, {'candidate_id': candidate_id}]},
+                 {'$or': [{'tenant_id': current_user.tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}]})
+    if not doc:
+        raise HTTPException(status_code=404, detail='Candidate application not found in your requisitions')
+    if not doc.get('resume_pdf') and not doc.get('resume_text') and not doc.get('extracted_text') and doc.get('candidate_id'):
+        linked = db['candidates'].find_one({'id': doc['candidate_id'], '$or': [{'tenant_id': current_user.tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]})
+        if linked and str(linked.get('candidate_email') or '').lower() == str(doc.get('candidate_email') or '').lower():
+            doc = linked
+    headers = {'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff'}
+    if doc.get('resume_pdf'):
+        try:
+            contents = base64.b64decode(doc['resume_pdf'], validate=True)
+        except Exception:
+            raise HTTPException(status_code=422, detail='The stored resume file is unreadable')
+        filename = doc.get('filename') or 'resume.pdf'
+        media_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' if filename.lower().endswith('.docx') else 'application/pdf'
+        return Response(contents, media_type=media_type, headers={**headers, 'Content-Disposition': _resume_disposition(filename)})
+    text = doc.get('resume_text') or doc.get('extracted_text')
+    if text:
+        return Response(text, media_type='text/plain', headers=headers)
+    raise HTTPException(status_code=404, detail='No resume has been uploaded for this candidate')
+
+
 @router.get("/bank/{candidate_id}/resume")
 @router.get("/{candidate_id}/resume-pdf")
 @router.get("/{candidate_id}/resume")
@@ -557,6 +596,8 @@ def get_candidate_resume(candidate_id: str, current_user: User = Depends(get_cur
     from fastapi.responses import Response
     from modules.shared.db import db
     from bson import ObjectId
+    if current_user.role == 'Hiring Manager':
+        return get_manager_candidate_resume(candidate_id, current_user)
 
     doc = None
     # 1. Look in candidate_submissions by string ID

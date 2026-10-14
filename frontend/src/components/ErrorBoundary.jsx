@@ -33,13 +33,10 @@ export class ErrorBoundary extends React.Component {
             </details>
           )}
           <button
-            onClick={() => {
-              localStorage.clear();
-              window.location.href = '/#jobs';
-            }}
+            onClick={() => window.location.reload()}
             style={{ marginTop: '20px', padding: '10px 20px', background: '#0f172a', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
           >
-            Clear Session & Reload
+            Reload Page
           </button>
         </div>
       );

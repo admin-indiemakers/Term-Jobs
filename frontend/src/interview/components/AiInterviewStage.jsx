@@ -41,6 +41,12 @@ export function AiInterviewStage({
   userRole = 'candidate',
   isMicOn = true,
   liveTranscript = '',
+  isSpeechListening = false,
+  speechError = '',
+  clearLiveTranscript,
+  isCameraOn = false,
+  onEnableCamera,
+  cameraError,
   transcriptTurns = [],
   startSpeechRecognition,
   stopSpeechRecognition,
@@ -50,6 +56,10 @@ export function AiInterviewStage({
   localStream = null,
 }) {
   const [currentStep, setCurrentStep] = useState(0);
+  const [questions, setQuestions] = useState([]);
+  const [questionLoadError, setQuestionLoadError] = useState('');
+  const [cameraReady, setCameraReady] = useState(false);
+  const [submissionError, setSubmissionError] = useState('');
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [ttsEnabled, setTtsEnabled] = useState(true);
   const [availableVoices, setAvailableVoices] = useState([]);
@@ -58,10 +68,14 @@ export function AiInterviewStage({
 
   // Per-question finalized speech segments
   const [finalizedSegments, setFinalizedSegments] = useState([]);
+  const [typedAnswer, setTypedAnswer] = useState('');
+  const [showTypedAnswer, setShowTypedAnswer] = useState(false);
+  const [answerError, setAnswerError] = useState('');
   const [answers, setAnswers] = useState({});
   const [isCompleted, setIsCompleted] = useState(round?.status === 'Completed');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [recordingUploaded, setRecordingUploaded] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(round?.communication_analysis || null);
   const [metricsResult, setMetricsResult] = useState(round?.communication_metrics || null);
@@ -75,17 +89,6 @@ export function AiInterviewStage({
   const recordedChunksRef = useRef([]);
   const recordingStartTimeRef = useRef(null);
   const internalStreamRef = useRef(null);
-
-  // Safety watchdog: ensure loading spinner never hangs indefinitely
-  useEffect(() => {
-    if (!isUploadingRecording && !isAnalyzing) return;
-    const safetyTimer = setTimeout(() => {
-      console.log('🔄 [AI STAGE] Auto-recovery: releasing loading screen');
-      setIsUploadingRecording(false);
-      setIsAnalyzing(false);
-    }, 4500);
-    return () => clearTimeout(safetyTimer);
-  }, [isUploadingRecording, isAnalyzing]);
 
   // Auto-record candidate video/audio stream using MediaRecorder (if not handled centrally by parent InterviewRoom)
   useEffect(() => {
@@ -131,7 +134,7 @@ export function AiInterviewStage({
           return;
         }
 
-        const options = chosenMime ? { mimeType: chosenMime } : undefined;
+        const options = { ...(chosenMime ? { mimeType: chosenMime } : {}), videoBitsPerSecond: 1200000, audioBitsPerSecond: 64000 };
         const recorder = new MediaRecorder(stream, options);
         recordedChunksRef.current = [];
         recordingStartTimeRef.current = Date.now();
@@ -162,50 +165,24 @@ export function AiInterviewStage({
     };
   }, [localStream]);
 
-  // 4 Core Structured Questions focused on Spoken Communication & Role Fit
-  const questions = useMemo(
-    () => [
-      {
-        id: 'q1_intro',
-        category: 'Introduction & Fluency',
-        phase: 'Phase 1 of 4',
-        title: 'Professional Introduction & Background',
-        prompt: `Hi ${candidateName}! Welcome to your TermJobs Fast-Track interview for the ${requisitionTitle} position at ${companyName}. To start, please introduce yourself, share an overview of your technical journey, and tell us what drives your passion in this role.`,
-        hint: 'Tip: Aim for a clear, natural cadence (130-160 WPM). Highlight your top technical achievements and motivation.',
-        durationGuide: '1 - 2 mins',
-      },
-      {
-        id: 'q2_collaboration',
-        category: 'Technical Communication',
-        phase: 'Phase 2 of 4',
-        title: 'Technical Problem Solving & Collaboration',
-        prompt: `Can you walk me through a challenging technical problem or project you recently delivered? How did you communicate technical architecture and collaborate with your teammates to overcome obstacles?`,
-        hint: 'Tip: Focus on technical clarity, explaining trade-offs, and working through roadblocks with colleagues.',
-        durationGuide: '2 mins',
-      },
-      {
-        id: 'q3_conflict',
-        category: 'Cross-Functional Articulation',
-        phase: 'Phase 3 of 4',
-        title: 'Explaining Complexity & Handling Disagreements',
-        prompt: `How do you communicate complex technical concepts or trade-offs to non-technical stakeholders? In addition, describe a situation where a teammate or manager had a conflicting viewpoint on a technical choice, and how you resolved it constructively.`,
-        hint: 'Tip: Demonstrate empathy, structured reasoning, active listening, and consensus-building.',
-        durationGuide: '2 mins',
-      },
-      {
-        id: 'q4_motivation',
-        category: 'Culture & Role Fit',
-        phase: 'Phase 4 of 4',
-        title: 'Work Environment & Career Motivation',
-        prompt: `What kind of team culture and work environment enables you to do your highest quality work, and what excites you the most about joining ${companyName} for this ${requisitionTitle} role?`,
-        hint: 'Tip: Share your authentic values, preferred collaboration style, and long-term aspirations.',
-        durationGuide: '1 - 2 mins',
-      },
-    ],
-    [candidateName, requisitionTitle, companyName]
-  );
+  const loadQuestions = useCallback(async () => {
+    setQuestionLoadError('');
+    try {
+      const data = await interviewApi.getAssessmentQuestions(round?.id, round?.candidate_token || round?.interviewer_token);
+      if (!Array.isArray(data.questions) || data.questions.length !== 4) throw new Error('Interview questions are unavailable.');
+      setQuestions(data.questions);
+    } catch (error) { setQuestionLoadError(error.message || 'Unable to prepare resume-based questions.'); }
+  }, [round?.id, round?.candidate_token, round?.interviewer_token]);
 
-  const activeQuestion = questions[currentStep] || questions[0];
+  useEffect(() => { loadQuestions(); }, [loadQuestions]);
+  useEffect(() => {
+    const checkCamera = () => setCameraReady(Boolean(isCameraOn && localStream?.getVideoTracks().some(track => track.enabled && !track.muted && track.readyState === 'live')));
+    checkCamera();
+    const timer = setInterval(checkCamera, 500);
+    return () => clearInterval(timer);
+  }, [localStream, isCameraOn]);
+
+  const activeQuestion = questions[currentStep] || { id: '', prompt: '', phase: '', category: '' };
 
   // =========================================================================
   // NATURAL HUMAN VOICE LOADER (Fixes "super ai" robotic voice)
@@ -261,10 +238,34 @@ export function AiInterviewStage({
     [onAiSpeakingChange]
   );
 
-  // Per-question elapsed timer
+  // Speech synthesis cancellation can omit onend; never leave capture gated forever.
   useEffect(() => {
-    setQuestionDuration(0);
+    if (!isAiSpeaking) return;
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      if (!synthRef.current?.speaking || Date.now() - startedAt > 60000) {
+        synthRef.current?.cancel();
+        updateAiSpeaking(false);
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isAiSpeaking, updateAiSpeaking]);
 
+  useEffect(() => {
+    if (isCompleted) return;
+    if (!cameraReady) {
+      synthRef.current?.cancel();
+      updateAiSpeaking(false);
+      stopSpeechRecognition?.();
+    } else if (isMicOn) {
+      startSpeechRecognition?.();
+    }
+  }, [cameraReady, isCompleted, isMicOn, updateAiSpeaking, stopSpeechRecognition, startSpeechRecognition]);
+
+  // Per-question elapsed timer
+  useEffect(() => { setQuestionDuration(0); }, [currentStep]);
+  useEffect(() => {
+    if (!cameraReady || !questions.length || isCompleted) return;
     timerRef.current = setInterval(() => {
       setQuestionDuration((prev) => prev + 1);
     }, 1000);
@@ -272,7 +273,7 @@ export function AiInterviewStage({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [currentStep]);
+  }, [currentStep, cameraReady, questions.length, isCompleted]);
 
   const formatSecs = (seconds) => {
     const mins = Math.floor(seconds / 60);
@@ -326,7 +327,7 @@ export function AiInterviewStage({
 
   // Speak new question when moving to next step
   useEffect(() => {
-    if (!isCompleted && ttsEnabled && activeQuestion) {
+    if (!isCompleted && ttsEnabled && activeQuestion.prompt && cameraReady) {
       const timeout = setTimeout(() => {
         speakCurrentQuestion(activeQuestion.prompt);
       }, 500);
@@ -337,29 +338,30 @@ export function AiInterviewStage({
         synthRef.current.cancel();
       }
     };
-  }, [currentStep, isCompleted, ttsEnabled, activeQuestion, speakCurrentQuestion]);
+  }, [currentStep, isCompleted, ttsEnabled, activeQuestion, cameraReady, speakCurrentQuestion]);
 
   // =========================================================================
   // AIC FILTER & TRANSCRIPT ACCUMULATION (No word limit, no echo)
   // =========================================================================
   useEffect(() => {
     if (transcriptTurns.length > 0) {
-      const candidateTurns = transcriptTurns.filter((t) => t.speaker === 'candidate');
+      const candidateTurns = transcriptTurns.filter((t) => String(t.speaker || '').toLowerCase() === 'candidate');
       candidateTurns.forEach((turn) => {
-        if (!turn?.text || processedTurnIdsRef.current.has(turn.id)) return;
+        const turnKey = turn.id || `${turn.timestamp || ''}:${turn.text || ''}`;
+        if (!turn?.text || processedTurnIdsRef.current.has(turnKey)) return;
 
         // Check turn against prompt to reject system audio echo
         const cleanTurn = turn.text.toLowerCase().replace(/[^\w\s]/g, '').trim();
         const cleanPrompt = activeQuestion.prompt.toLowerCase().replace(/[^\w\s]/g, '').trim();
 
         // If turn is a direct reflection of the AI question prompt, discard as acoustic feedback
-        if (cleanPrompt.includes(cleanTurn) && cleanTurn.split(' ').length >= 4) {
-          processedTurnIdsRef.current.add(turn.id);
+        if (cleanPrompt === cleanTurn && cleanTurn.split(' ').length >= 8) {
+          processedTurnIdsRef.current.add(turnKey);
           return;
         }
 
         // Add to finalized segments
-        processedTurnIdsRef.current.add(turn.id);
+        processedTurnIdsRef.current.add(turnKey);
         setFinalizedSegments((prev) => [...prev, turn.text.trim()]);
       });
     }
@@ -367,12 +369,12 @@ export function AiInterviewStage({
 
   // Real-time displayed answer text combining finalized segments and clean in-flight speech
   const currentAnswerText = useMemo(() => {
-    const finalized = finalizedSegments.join(' ').trim();
+    const finalized = [...finalizedSegments, typedAnswer].filter(Boolean).join(' ').trim();
     if (liveTranscript && !isAiSpeaking) {
       return finalized ? `${finalized} ${liveTranscript.trim()}` : liveTranscript.trim();
     }
     return finalized;
-  }, [finalizedSegments, liveTranscript, isAiSpeaking]);
+  }, [finalizedSegments, typedAnswer, liveTranscript, isAiSpeaking]);
 
   // Real-time metrics heuristics for the candidate's current response
   const liveMetrics = useMemo(() => {
@@ -389,8 +391,19 @@ export function AiInterviewStage({
     return { wordCount, wpm, fillerCount: fillers };
   }, [currentAnswerText, questionDuration]);
 
+  const captureWarning = speechError || (!isAiSpeaking && isMicOn && questionDuration >= 20 && !currentAnswerText.trim()
+    ? 'No answer has been detected yet. If you are speaking, check your microphone, retry, or type your answer below.'
+    : '');
+
   // Submit current answer and move to next question
   const handleNextQuestion = () => {
+    if (!cameraReady || !questions.length) { setAnswerError('Your camera must be on and questions loaded before continuing.'); return; }
+    if (!currentAnswerText.trim()) {
+      setAnswerError('No answer has been captured. Retry speech recognition or type your answer before continuing.');
+      setShowTypedAnswer(true);
+      return;
+    }
+    setAnswerError('');
     if (synthRef.current) {
       synthRef.current.cancel();
       updateAiSpeaking(false);
@@ -400,7 +413,8 @@ export function AiInterviewStage({
       questionId: activeQuestion.id,
       questionTitle: activeQuestion.title,
       questionPrompt: activeQuestion.prompt,
-      answerText: currentAnswerText.trim() || '(Spoken answer recorded)',
+      answerText: currentAnswerText.trim(),
+      input_mode: typedAnswer.trim() ? 'typed_fallback' : 'speech',
       wordCount: liveMetrics.wordCount,
       durationSeconds: questionDuration,
       recordedAt: new Date().toLocaleTimeString(),
@@ -414,6 +428,8 @@ export function AiInterviewStage({
     if (currentStep < questions.length - 1) {
       setCurrentStep((prev) => prev + 1);
       setFinalizedSegments([]);
+      setTypedAnswer('');
+      clearLiveTranscript?.();
     } else {
       finishAndAnalyzeInterview({
         ...answers,
@@ -424,6 +440,8 @@ export function AiInterviewStage({
 
   // Finalize interview and call 3-Tier Communication Analyzer API + Upload Video Recording
   const finishAndAnalyzeInterview = async (finalAnswers) => {
+    setSubmissionError('');
+    if (!cameraReady && !recordingUploaded) { setAnswerError('Your camera must be on before submitting.'); return; }
     setIsCompleted(true);
     setIsAnalyzing(true);
 
@@ -442,7 +460,8 @@ export function AiInterviewStage({
       try {
         if (onSaveProofRecording) {
           console.log('📹 [PROOF RECORDING] Finalizing session proof via parent room handler...');
-          await onSaveProofRecording(callSeconds);
+          const saved = recordingUploaded || await onSaveProofRecording(callSeconds, setUploadProgress);
+          if (!saved) throw new Error('Video recording could not be saved. Please retry submission.');
           setRecordingUploaded(true);
         } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
           let recordedBlob = null;
@@ -468,27 +487,25 @@ export function AiInterviewStage({
             console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
           }
           if (recordedBlob && round?.id) {
-            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds);
+            await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds, round.candidate_token || round.interviewer_token, setUploadProgress);
             setRecordingUploaded(true);
             console.log('✅ [RECORDING] Video successfully uploaded to backend');
-          }
-        }
+          } else { throw new Error('No camera recording was captured.'); }
+        } else { throw new Error('Video recording is unavailable. Camera recording is required.'); }
       } catch (recErr) {
-        console.warn('⚠️ [RECORDING] Video proof storage warning:', recErr);
+        throw recErr;
       }
     })();
 
-    // Wait at most 1.5 seconds for video packaging, then release the UI so candidate is never stuck
     try {
-      await Promise.race([
-        backgroundUpload,
-        new Promise((resolve) => setTimeout(resolve, 1500))
-      ]);
-    } catch (e) {
-      // Ignored
-    } finally {
+      await backgroundUpload;
+    } catch (error) {
+      setSubmissionError(error.message || 'Video upload failed. Please retry submission.');
       setIsUploadingRecording(false);
+      setIsAnalyzing(false);
+      return;
     }
+    setIsUploadingRecording(false);
 
     const turnsToSubmit = [];
     Object.keys(finalAnswers)
@@ -506,19 +523,12 @@ export function AiInterviewStage({
           speaker: 'candidate',
           speaker_name: candidateName,
           text: item.answerText,
+          question_id: item.questionId,
+          input_mode: item.input_mode,
           timestamp: item.recordedAt,
           duration_seconds: item.durationSeconds || 30,
         });
       });
-
-    // Also include any raw non-duplicate turns
-    if (transcriptTurns && transcriptTurns.length > 0) {
-      transcriptTurns.forEach((t) => {
-        if (!turnsToSubmit.some((item) => item.text === t.text)) {
-          turnsToSubmit.push(t);
-        }
-      });
-    }
 
     const totalSeconds = Object.values(finalAnswers).reduce(
       (acc, curr) => acc + (curr.durationSeconds || 30),
@@ -528,15 +538,13 @@ export function AiInterviewStage({
     try {
       if (round?.id) {
         const analysisPromise = interviewApi.analyzeCommunication(round.id, {
+          interview_token: round.candidate_token || round.interviewer_token,
           transcript_turns: turnsToSubmit,
           call_duration_seconds: totalSeconds,
           candidate_name: candidateName,
           role_title: requisitionTitle,
         });
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Analysis timeout after 5s')), 5000)
-        );
-        const res = await Promise.race([analysisPromise, timeoutPromise]);
+        const res = await analysisPromise;
 
         if (res) {
           setAnalysisResult(res.analysis || null);
@@ -545,43 +553,8 @@ export function AiInterviewStage({
         }
       }
     } catch (err) {
-      console.warn('Communication analysis API fallback:', err);
-      // Fallback calibrated estimation based on actual words spoken so candidate is never stuck with fake high scores
-      const totalWordsSpoken = Object.values(finalAnswers).reduce((acc, curr) => {
-        const words = (curr.answerText || '').trim().split(/\s+/).filter(Boolean);
-        return acc + words.length;
-      }, 0);
-
-      const lengthFactor = Math.min(1.0, Math.max(0.12, totalWordsSpoken / 180));
-      const fallbackScore = Math.max(5, Math.min(90, Math.round(75 * lengthFactor)));
-
-      setMetricsResult({
-        words_per_minute: liveMetrics.wpm || 135,
-        pace_rating: liveMetrics.wpm ? `${liveMetrics.wpm} WPM` : 'Measured Cadence',
-        filler_count: liveMetrics.fillerCount || 0,
-        filler_percentage: liveMetrics.wordCount ? Math.round(((liveMetrics.fillerCount || 0) / Math.max(liveMetrics.wordCount, 1)) * 100) : 0,
-        filler_rating: 'Standard Delivery',
-        lexical_diversity: 0.5,
-        vocabulary_rating: 'Professional Lexicon',
-      });
-      setAnalysisResult({
-        relevance_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
-        substance_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
-        clarity_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
-        structure_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
-        vocabulary_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
-        confidence_score: Math.min(10, Math.max(1, Math.round(fallbackScore / 10))),
-        overall_score: fallbackScore,
-        summary: totalWordsSpoken < 40
-          ? `Candidate responses were brief (${totalWordsSpoken} words total) and lacked detailed technical substance.`
-          : `Candidate completed the assessment with ${totalWordsSpoken} words spoken across questions.`,
-        key_strengths: [
-          totalWordsSpoken > 80 ? 'Maintained an active speaking flow across questions' : 'Participated in the interview questions',
-        ],
-        areas_for_improvement: [
-          totalWordsSpoken < 100 ? 'Significantly elaborate answers with deeper technical examples' : 'Structure complex answers with STAR framework',
-        ],
-      });
+      setSubmissionError(err.message || 'Assessment could not be submitted. Your answers remain available for retry.');
+      setAnalysisResult(null);
     } finally {
       setIsAnalyzing(false);
     }
@@ -599,25 +572,24 @@ export function AiInterviewStage({
         <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300">
           <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-400 animate-spin mb-4" />
           <div className="text-base font-bold text-white tracking-tight">
-            {isUploadingRecording ? 'Saving Interview Video & Audio...' : 'Submitting Interview Responses...'}
+            {isUploadingRecording ? (uploadProgress?.phase === 'uploading' ? `Uploading video: ${Math.round(uploadProgress.uploaded / uploadProgress.total * 100)}%` : 'Finalizing saved video…') : 'Submitting Interview Responses...'}
           </div>
           <p className="text-xs text-zinc-400 mt-1 max-w-sm">
             {isUploadingRecording
-              ? 'Securely encrypting and archiving your interview video recording for the hiring team...'
-              : 'Encrypting and securely delivering your spoken responses to the hiring team...'}
+              ? 'Uploading your recording. Keep this page open until saving is confirmed.'
+              : 'Saving your answers and preparing the interview assessment…'}
           </p>
-          <button
-            type="button"
-            onClick={() => {
-              setIsUploadingRecording(false);
-              setIsAnalyzing(false);
-            }}
-            className="mt-6 px-4 py-2 rounded-xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold transition cursor-pointer shadow-sm"
-          >
-            Continue to Confirmation →
-          </button>
+
         </div>
       );
+    }
+
+    if (submissionError) {
+      return <div role="alert" className="h-full rounded-3xl bg-zinc-950 p-6 text-amber-200 flex flex-col justify-center gap-4">
+        <h2 className="text-lg font-bold">Interview submission needs attention</h2>
+        <p>{submissionError}</p>
+        <button type="button" onClick={() => finishAndAnalyzeInterview(answers)} className="rounded-xl bg-emerald-600 p-3 text-white">Retry submission</button>
+      </div>;
     }
 
     // 2. Candidate View: Reassuring Confirmation without Scores or Metrics
@@ -638,7 +610,7 @@ export function AiInterviewStage({
           </h2>
 
           <p className="text-zinc-400 text-xs sm:text-sm max-w-lg mt-2 leading-relaxed">
-            Your spoken responses for the <strong className="text-zinc-200">{requisitionTitle}</strong> role at{' '}
+            Your interview responses for the <strong className="text-zinc-200">{requisitionTitle}</strong> role at{' '}
             <strong className="text-zinc-200">{companyName}</strong> have been securely recorded and submitted to the hiring team.
           </p>
 
@@ -705,7 +677,13 @@ export function AiInterviewStage({
     }
 
     // 3. Admin / Recruiter / Hiring Manager View: Full Executive Communication Scorecard
-    const score = analysisResult?.overall_score || 85;
+    if (analysisResult?.status !== 'scored') {
+      return <div className="h-full rounded-3xl bg-zinc-950 p-6 text-zinc-200 flex flex-col justify-center gap-3">
+        <h2 className="text-lg font-bold">Assessment pending human review</h2>
+        <p>{analysisResult?.summary || 'No validated STAR and competency assessment is available. No score has been assigned.'}</p>
+      </div>;
+    }
+    const score = analysisResult.overall_score;
     const scoreColor =
       score >= 80
         ? 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10'
@@ -716,7 +694,7 @@ export function AiInterviewStage({
     return (
       <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col p-6 animate-in fade-in zoom-in-95 duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
+        <div className="flex flex-col gap-4 pb-4 border-b border-zinc-800/80 shrink-0 @min-[760px]:flex-row @min-[760px]:items-start @min-[760px]:justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-zinc-950 flex items-center justify-center font-black shadow-lg">
               <Sparkles size={20} />
@@ -770,10 +748,10 @@ export function AiInterviewStage({
                   <span className="text-[10px] font-bold tracking-wider uppercase opacity-80">/ 100</span>
                 </div>
                 <div>
-                  <div className="text-sm font-bold text-white">Overall Spoken Communication</div>
+                  <div className="text-sm font-bold text-white">STAR & Competency Assessment</div>
                   <p className="text-xs text-zinc-400 mt-0.5 line-clamp-2">
                     {analysisResult?.summary ||
-                      'Demonstrated articulate, coherent delivery with high confidence and structured explanations.'}
+                      'Review the quoted evidence and competency ratings below.'}
                   </p>
                 </div>
               </div>
@@ -785,7 +763,7 @@ export function AiInterviewStage({
             </div>
 
             {/* Heuristics Grid (Pace, Fillers, Lexicon) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {metricsResult?.speech_metrics_available ? <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Pace Meter */}
               <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
                 <div className="flex items-center justify-between text-xs text-zinc-400 mb-1">
@@ -793,7 +771,7 @@ export function AiInterviewStage({
                   <Activity size={14} className="text-emerald-400" />
                 </div>
                 <div className="text-2xl font-black text-white">
-                  {metricsResult?.words_per_minute || 140}{' '}
+                  {metricsResult?.words_per_minute ?? '—'}{' '}
                   <span className="text-xs font-normal text-zinc-400">WPM</span>
                 </div>
                 <div className="text-[11px] text-emerald-400 mt-1 font-medium">
@@ -808,9 +786,9 @@ export function AiInterviewStage({
                   <Zap size={14} className="text-sky-400" />
                 </div>
                 <div className="text-2xl font-black text-white">
-                  {metricsResult?.filler_percentage !== undefined ? `${metricsResult.filler_percentage}%` : '1.8%'}
+                  {metricsResult?.filler_percentage !== undefined ? `${metricsResult.filler_percentage}%` : 'Not measured'}
                   <span className="text-xs font-normal text-zinc-400 ml-1">
-                    ({metricsResult?.filler_count || 1} detected)
+                    ({metricsResult?.filler_count ?? 0} detected)
                   </span>
                 </div>
                 <div className="text-[11px] text-sky-400 mt-1 font-medium">
@@ -825,34 +803,37 @@ export function AiInterviewStage({
                   <Award size={14} className="text-purple-400" />
                 </div>
                 <div className="text-2xl font-black text-white">
-                  {metricsResult?.lexical_diversity || 0.54}{' '}
+                  {metricsResult?.lexical_diversity ?? '—'}{' '}
                   <span className="text-xs font-normal text-zinc-400">TTR</span>
                 </div>
                 <div className="text-[11px] text-purple-400 mt-1 font-medium">
-                  {metricsResult?.vocabulary_rating || 'Balanced Professional Lexicon'}
+                  {metricsResult?.vocabulary_rating || 'Not measured'}
                 </div>
               </div>
-            </div>
+            </div> : <p className="text-xs text-zinc-400">Speech delivery metrics are unavailable for typed responses. Competency ratings use answer content.</p>}
 
             {/* 4 Core Dimensions */}
             <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
               <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-3">
-                Core Communication Dimensions (Scale 1 - 10)
+                Competency Dictionary Ratings (Scale 1 - 5) · {analysisResult.rubric_version}
               </h3>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { label: 'Clarity & Articulation', val: analysisResult?.clarity_score || 8.8 },
-                  { label: 'Structure & Coherence', val: analysisResult?.structure_score || 8.5 },
-                  { label: 'Professional Vocabulary', val: analysisResult?.vocabulary_score || 8.9 },
-                  { label: 'Confidence & Fluency', val: analysisResult?.confidence_score || 8.6 },
-                ].map((item, i) => (
+                {(analysisResult.competencies || []).map(row => ({
+                  label: analysisResult.competency_dictionary?.[row.competency]?.name || row.competency,
+                  val: row.rating, rationale: row.rationale, star: row.star, evidence: row.evidence,
+                  indicators: analysisResult.competency_dictionary?.[row.competency]?.indicators || [],
+                })).map((item, i) => (
                   <div key={i} className="p-3 rounded-xl bg-zinc-950/70 border border-zinc-800 text-center">
                     <div className="text-xs text-zinc-400 truncate mb-1">{item.label}</div>
-                    <div className="text-lg font-black text-white">{item.val}</div>
+                    <div className="text-lg font-black text-white">{item.val} / 5</div>
+                    <p className="mt-2 text-xs text-zinc-400">{item.rationale}</p>
+                    <p className="mt-2 text-xs text-zinc-500">Indicators: {item.indicators.join('; ')}</p>
+                    {(item.evidence || []).map((quote, index) => <blockquote key={index} className="mt-2 text-xs text-zinc-300">“{quote}”</blockquote>)}
+                    <dl className="mt-2 text-left text-xs text-zinc-400">{Object.entries(item.star || {}).map(([key, value]) => <div key={key}><dt className="font-semibold capitalize">{key}</dt><dd>{value || 'Not demonstrated'}</dd></div>)}</dl>
                     <div className="w-full bg-zinc-800 h-1 rounded-full mt-2 overflow-hidden">
                       <div
                         className="bg-emerald-400 h-full rounded-full"
-                        style={{ width: `${Math.min(100, item.val * 10)}%` }}
+                        style={{ width: `${Math.min(100, item.val * 20)}%` }}
                       />
                     </div>
                   </div>
@@ -941,12 +922,22 @@ export function AiInterviewStage({
   // =========================================================================
   // VIEW B: LIVE INTERVIEW QUESTIONS & CONTINUOUS SPEECH RECOGNITION
   // =========================================================================
+  if (!questions.length || !cameraReady) {
+    return <div role="status" className="h-full rounded-3xl bg-zinc-950 p-6 text-zinc-200 flex flex-col justify-center gap-4">
+      <h2 className="text-lg font-bold">Prepare your AI interview</h2>
+      <p>Video is required throughout this interview. Allow camera access and keep your camera on. Your answers are preserved if the camera disconnects.</p>
+      {!cameraReady && <button type="button" onClick={onEnableCamera} className="rounded-xl bg-emerald-600 p-3">Enable camera</button>}
+      {cameraError && <p role="alert" className="text-amber-200">{cameraError}</p>}
+      {!questions.length && <p>{questionLoadError || 'Preparing questions from your resume and requisition…'}</p>}
+      {questionLoadError && <button type="button" onClick={loadQuestions} className="underline">Retry question preparation</button>}
+    </div>;
+  }
   return (
-    <div className="w-full h-full rounded-3xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col p-5 sm:p-6 min-h-0 relative">
+    <div className="@container w-full h-full rounded-2xl sm:rounded-3xl overflow-y-auto overflow-x-hidden bg-zinc-950 border border-zinc-800 shadow-2xl flex flex-col p-4 sm:p-5 min-h-0 relative">
       {/* Top Phase Indicator & Control Bar */}
-      <div className="flex items-center justify-between pb-4 border-b border-zinc-800/80">
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      <div className="flex flex-col gap-4 pb-4 border-b border-zinc-800/80 shrink-0 @min-[760px]:flex-row @min-[760px]:items-start @min-[760px]:justify-between">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="relative shrink-0">
             <div
               className={`w-11 h-11 rounded-2xl flex items-center justify-center font-bold text-sm shadow-xl transition-all duration-300 ${
                 isAiSpeaking
@@ -961,26 +952,26 @@ export function AiInterviewStage({
             )}
           </div>
 
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-white">Aria · TermJobs AI Assessor</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 flex items-center gap-1">
+          <div className="min-w-0 flex-1">
+            <h2 className="font-bold text-sm sm:text-base text-white leading-snug">Aria · TermJobs AI Assessor</h2>
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
                 <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
                 AI INTERVIEW
               </span>
-              <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <span className="inline-flex items-center gap-1 whitespace-nowrap shrink-0 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <ShieldCheck size={10} />
-                AIC FILTER ON
+                Echo protection
               </span>
             </div>
-            <div className="text-xs text-zinc-400">
+            <div className="text-xs text-zinc-400 mt-2 leading-relaxed">
               {activeQuestion.phase} &bull; {activeQuestion.category}
             </div>
           </div>
         </div>
 
         {/* Top Right Controls (TTS toggle, Voice settings, Replay, Question Counter) */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           {/* TTS Audio Toggle */}
           <button
             type="button"
@@ -992,14 +983,16 @@ export function AiInterviewStage({
               setTtsEnabled(!ttsEnabled);
             }}
             title={ttsEnabled ? 'Mute AI Voice' : 'Unmute AI Voice'}
-            className={`p-2 rounded-xl border transition text-xs flex items-center gap-1.5 cursor-pointer ${
+            aria-label={ttsEnabled ? 'Mute AI voice' : 'Unmute AI voice'}
+            aria-pressed={ttsEnabled}
+            className={`min-h-10 px-3 py-2 rounded-xl border transition text-xs inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
               ttsEnabled
                 ? 'bg-zinc-900 border-zinc-700 text-cyan-400 hover:bg-zinc-800'
                 : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-zinc-300'
             }`}
           >
             {ttsEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-            <span className="hidden sm:inline">{ttsEnabled ? 'Natural Voice ON' : 'Muted'}</span>
+            <span>{ttsEnabled ? 'Voice on' : 'Voice muted'}</span>
           </button>
 
           {/* Voice Switcher Dropdown Toggle */}
@@ -1008,7 +1001,9 @@ export function AiInterviewStage({
               type="button"
               onClick={() => setShowVoiceSettings(!showVoiceSettings)}
               title="Voice Settings"
-              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition text-xs flex items-center gap-1 cursor-pointer"
+              aria-label="Voice settings"
+              aria-expanded={showVoiceSettings}
+              className="min-h-10 min-w-10 p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-zinc-200 transition text-xs flex items-center gap-1 cursor-pointer"
             >
               <Sliders size={14} />
             </button>
@@ -1019,14 +1014,16 @@ export function AiInterviewStage({
             type="button"
             onClick={() => speakCurrentQuestion(activeQuestion.prompt)}
             title="Replay Question Audio"
-            className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition text-xs flex items-center gap-1 cursor-pointer"
+            aria-label="Replay question audio"
+            disabled={!ttsEnabled}
+            className="min-h-10 px-3 py-2 whitespace-nowrap shrink-0 disabled:opacity-40 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white transition text-xs flex items-center gap-1 cursor-pointer"
           >
             <RotateCcw size={14} />
-            <span className="hidden sm:inline">Replay</span>
+            <span>Replay</span>
           </button>
 
           {/* Question Step Pill */}
-          <div className="px-3 py-1.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono font-bold text-zinc-200">
+          <div className="ml-auto min-h-10 flex items-center whitespace-nowrap shrink-0 px-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-mono font-bold text-zinc-200">
             {currentStep + 1} / {questions.length}
           </div>
         </div>
@@ -1034,7 +1031,7 @@ export function AiInterviewStage({
 
       {/* Voice Selector Drawer (Dropdown) */}
       {showVoiceSettings && (
-        <div className="absolute top-20 right-6 z-40 w-72 p-4 rounded-2xl bg-zinc-900/95 backdrop-blur-xl border border-zinc-700 shadow-2xl text-xs space-y-3">
+        <div className="absolute top-20 right-4 z-40 w-72 max-w-[calc(100%-2rem)] p-4 rounded-2xl bg-zinc-900/95 backdrop-blur-xl border border-zinc-700 shadow-2xl text-xs space-y-3">
           <div className="flex items-center justify-between text-zinc-200 font-bold">
             <span>Natural AI Voice Model</span>
             <button
@@ -1073,7 +1070,7 @@ export function AiInterviewStage({
       )}
 
       {/* Progress Dots Bar */}
-      <div className="grid grid-cols-4 gap-2 my-4">
+      <div className="grid grid-cols-4 gap-2 my-4 shrink-0">
         {questions.map((q, idx) => (
           <div
             key={q.id}
@@ -1089,14 +1086,14 @@ export function AiInterviewStage({
       </div>
 
       {/* Main Interactive Stage: AI Question Card & Candidate Live Speech Area */}
-      <div className="flex-1 flex flex-col justify-between min-h-0 space-y-4">
+      <div className="flex-1 flex flex-col min-h-0 space-y-4">
         {/* Active Question Box */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800/90 relative overflow-hidden shadow-lg">
-          <div className="flex items-center justify-between mb-2">
+        <div className="p-4 sm:p-5 shrink-0 rounded-2xl bg-zinc-900/90 border border-zinc-800/90 relative overflow-hidden shadow-lg">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <span className="text-[11px] font-bold text-cyan-400 tracking-wider uppercase">
               {activeQuestion.title}
             </span>
-            <span className="text-[11px] text-zinc-500 font-mono flex items-center gap-1">
+            <span className="text-[11px] text-zinc-400 font-mono flex items-center gap-1 whitespace-nowrap">
               <Clock size={12} />
               Suggested: {activeQuestion.durationGuide}
             </span>
@@ -1127,13 +1124,13 @@ export function AiInterviewStage({
         {/* Candidate Live Speech Capture Card with AIC Indicator */}
         <div className="flex-1 flex flex-col rounded-2xl bg-zinc-900/40 border border-zinc-800/80 p-4 min-h-[160px] relative overflow-hidden">
           {/* Header of speech box with live metrics & AIC status */}
-          <div className="flex items-center justify-between pb-2 mb-2 border-b border-zinc-800/60 text-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 mb-2 border-b border-zinc-800/60 text-xs">
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full ${
                   isAiSpeaking
                     ? 'bg-amber-400 animate-pulse'
-                    : isMicOn
+                    : isMicOn && isSpeechListening && !speechError
                     ? 'bg-emerald-400 animate-pulse'
                     : 'bg-rose-500'
                 }`}
@@ -1166,6 +1163,21 @@ export function AiInterviewStage({
             </div>
           </div>
 
+          {(captureWarning || answerError) && (
+            <div role="alert" className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+              {answerError || captureWarning}
+            </div>
+          )}
+          <div className="mb-3 flex gap-3 text-xs">
+            <button type="button" disabled={!isMicOn || isAiSpeaking} onClick={startSpeechRecognition} className="underline disabled:opacity-40">Retry speech recognition</button>
+            <button type="button" onClick={() => setShowTypedAnswer((value) => !value)} className="underline">{showTypedAnswer ? 'Hide typed answer' : 'Type an answer instead'}</button>
+          </div>
+          {(showTypedAnswer || captureWarning) && (
+            <label className="mb-3 text-xs text-zinc-300">
+              Typed answer (saved with your response)
+              <textarea value={typedAnswer} onChange={(event) => { setTypedAnswer(event.target.value); setAnswerError(''); }} rows={4} className="mt-1 w-full rounded-lg border border-zinc-600 bg-zinc-950 p-2 text-sm text-white" placeholder="If speech recognition is not working, type your answer here." />
+            </label>
+          )}
           {/* Spoken text area */}
           <div className="flex-1 overflow-y-auto text-sm text-zinc-200 leading-relaxed font-sans pr-1">
             {currentAnswerText ? (
@@ -1183,7 +1195,7 @@ export function AiInterviewStage({
                 <Mic size={24} className="text-zinc-600 mb-2 animate-bounce" />
                 <p>Speak clearly into your microphone...</p>
                 <p className="text-[11px] text-zinc-600 mt-0.5">
-                  Continuous STT is active &bull; Speak as long as needed without interruption.
+                  {!isMicOn ? 'Your microphone is muted. Unmute it or type your answer.' : isSpeechListening && !speechError ? 'Listening for your answer…' : 'Speech recognition is not ready. Retry or type your answer.'}
                 </p>
               </div>
             )}
@@ -1193,7 +1205,7 @@ export function AiInterviewStage({
           {currentAnswerText && !isAiSpeaking && (
             <button
               type="button"
-              onClick={() => setFinalizedSegments([])}
+              onClick={() => { setFinalizedSegments([]); setTypedAnswer(''); clearLiveTranscript?.(); }}
               className="absolute bottom-3 right-3 text-[11px] text-zinc-500 hover:text-zinc-300 underline cursor-pointer"
             >
               Clear & Re-speak
@@ -1202,16 +1214,16 @@ export function AiInterviewStage({
         </div>
 
         {/* Bottom Actions Bar */}
-        <div className="pt-2 flex items-center justify-between gap-3">
+        <div className="pt-2 flex flex-col gap-3 shrink-0 @min-[600px]:flex-row @min-[600px]:items-center @min-[600px]:justify-between">
           <div className="text-xs text-zinc-400 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span>Acoustic Echo Cancellation (AIC) Active &bull; No word count cutoff</span>
+            <span>{isAiSpeaking ? 'Speech capture pauses while Aria speaks' : !isMicOn ? 'Microphone muted · Typed answers available' : isSpeechListening && !captureWarning ? 'Speech recognition listening' : 'Speech capture unavailable · Retry or type your answer'}</span>
           </div>
 
           <button
             type="button"
             onClick={handleNextQuestion}
-            className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950 transition flex items-center gap-2 cursor-pointer group"
+            className="w-full @min-[600px]:w-auto shrink-0 justify-center min-h-11 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-950 transition flex items-center gap-2 cursor-pointer group"
           >
             <span>
               {currentStep < questions.length - 1

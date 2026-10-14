@@ -66,10 +66,10 @@ export default function AcceptedCandidates() {
     setError('');
     try {
       const [candData, obData, issuesData, woData] = await Promise.all([
-        request('/candidates?status=Accepted', { token }).catch(() => []),
-        request('/api/onboarding', { token }).catch(() => []),
-        request('/api/onboarding/issues', { token }).catch(() => []),
-        request('/api/work-orders', { token }).catch(() => []),
+        request('/candidates?status=Accepted&refresh=true', { token, noCache: true }),
+        request('/api/onboarding', { token, noCache: true }).catch(() => []),
+        request('/api/onboarding/issues', { token, noCache: true }).catch(() => []),
+        request('/api/work-orders', { token, noCache: true }).catch(() => []),
       ]);
 
       const candList = Array.isArray(candData) ? candData : candData?.candidates || [];
@@ -124,9 +124,19 @@ export default function AcceptedCandidates() {
   // Derived Real KPI Metrics
   const metrics = useMemo(() => {
     const totalAccepted = candidates.length;
-    const obValues = Object.values(onboardingDocs);
-    const started = obValues.filter((o) => o.status === 'in_progress' || o.status === 'started').length;
-    const completed = obValues.filter((o) => o.status === 'completed').length;
+    let started = 0;
+    let completed = 0;
+    candidates.forEach((cand) => {
+      const id = cand.id || cand.candidate_id;
+      const ob = id ? onboardingDocs[id] : null;
+      if (ob) {
+        if (ob.status === 'completed' || ob.setup_status === 'completed') {
+          completed += 1;
+        } else if (ob.status === 'in_progress' || ob.status === 'started') {
+          started += 1;
+        }
+      }
+    });
 
     return {
       accepted: totalAccepted,

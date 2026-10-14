@@ -4,6 +4,7 @@ import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import VendorBilling from './recruiter/VendorBilling';
 import CandidateOfferLetterSection from '../components/CandidateOfferLetterSection';
+import { isValidCompanyName } from '../utils/adminDashboard';
 import {
   Building2,
   Users,
@@ -17,6 +18,7 @@ import {
   Bell,
   RefreshCw,
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
   TrendingUp,
   Award,
@@ -68,6 +70,21 @@ export default function SuperAdminCandidateManagement() {
   const [sortBy, setSortBy] = useState('newest');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' | 'table'
 
+  // Pagination for high-volume feeds
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10); // 10, 25, 50
+
+  // Reset to first page when company, search, or sorting changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCompany, searchQuery, sortBy, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(selections.length / pageSize));
+  const paginatedSelections = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return selections.slice(startIndex, startIndex + pageSize);
+  }, [selections, currentPage, pageSize]);
+
   // Modal / Drawer state
   const [activeCandidateDetail, setActiveCandidateDetail] = useState(null);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
@@ -102,7 +119,8 @@ export default function SuperAdminCandidateManagement() {
       if (res && res.status === 'success') {
         setSelections(res.selections || []);
         if (res.companies) {
-          setCompanies(res.companies);
+          const validCompanies = (res.companies || []).filter(isValidCompanyName);
+          setCompanies(validCompanies);
         }
         if (res.stats) {
           setStats(res.stats);
@@ -751,173 +769,80 @@ export default function SuperAdminCandidateManagement() {
             </button>
           </div>
         </div>
-      ) : viewMode === 'cards' ? (
-        /* Notification Cards Feed */
-        <div className="space-y-3.5">
-          {selections.map((cand) => (
-            <div
-              key={cand.id || cand.selection_id}
-              onClick={() => setActiveCandidateDetail(cand)}
-              className="bg-white border border-gray-200/90 hover:border-gray-300 rounded-2xl p-5 sm:p-6 shadow-xs hover:shadow-md transition-all cursor-pointer relative group"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                {/* Left side: Notification Headline & Details */}
-                <div className="space-y-2.5 flex-1 min-w-0">
-                  {/* Notification Banner Header */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-extrabold">
-                      <CheckCircle2 size={13} className="text-emerald-600" />
-                      <span>Selected by Company</span>
-                    </span>
+      ) : (
+        <div className="space-y-4">
+          {viewMode === 'cards' ? (
+            /* Notification Cards Feed - Streamlined spacing with clean layout */
+            <div className="space-y-3">
+              {paginatedSelections.map((cand) => (
+                <div
+                  key={cand.id || cand.selection_id}
+                  onClick={() => setActiveCandidateDetail(cand)}
+                  className="bg-white border border-gray-200/90 hover:border-gray-300 rounded-2xl p-4 sm:p-5 shadow-xs hover:shadow-md transition-all cursor-pointer relative group"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+                    {/* Left side: Notification Headline & Details */}
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      {/* Notification Banner Header */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-extrabold">
+                          <CheckCircle2 size={12} className="text-emerald-600" />
+                          <span>Selected</span>
+                        </span>
 
-                    <span className="text-xs text-gray-400 font-medium">
-                      • {getRelativeTime(cand.selected_at)}
-                    </span>
+                        <span className="text-xs text-gray-400 font-medium">
+                          • {getRelativeTime(cand.selected_at)}
+                        </span>
 
-                    <span className="text-[11px] text-gray-400 font-medium hidden sm:inline">
-                      ({formatDate(cand.selected_at)})
-                    </span>
-                  </div>
+                        <span className="text-[11px] text-gray-400 font-medium hidden sm:inline">
+                          ({formatDate(cand.selected_at)})
+                        </span>
+                      </div>
 
-                  {/* Primary Notification Message Text */}
-                  <div className="text-base sm:text-lg font-black text-gray-950 tracking-tight leading-snug">
-                    Candidate <span className="text-emerald-700 underline decoration-emerald-300 underline-offset-4">{cand.candidate_name}</span> has been selected by <span className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200/80">{cand.company_name}</span>
-                  </div>
+                      {/* Primary Notification Message Text */}
+                      <div className="text-sm sm:text-base font-black text-gray-950 tracking-tight leading-snug">
+                        Candidate <span className="text-emerald-700 font-extrabold">{cand.candidate_name}</span> has been selected by <span className="text-gray-900 bg-gray-100 px-2 py-0.5 rounded-lg border border-gray-200/80 font-bold">{cand.company_name}</span>
+                      </div>
 
-                  {/* Role, Requisition and Hiring Manager Meta */}
-                  <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap pt-0.5">
-                    <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-lg">
-                      <Briefcase size={13} className="text-gray-500 shrink-0" />
-                      <span className="font-semibold text-gray-900">{cand.requisition_title || 'Role'}</span>
-                      {cand.requisition_ref && (
-                        <span className="text-gray-400 text-[11px] font-mono">({cand.requisition_ref})</span>
+                      {/* Role, Requisition and Hiring Manager Meta */}
+                      <div className="flex items-center gap-2.5 text-xs text-gray-600 flex-wrap pt-0.5">
+                        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-md text-[11.5px]">
+                          <Briefcase size={12} className="text-gray-500 shrink-0" />
+                          <span className="font-semibold text-gray-900">{cand.requisition_title || 'Role'}</span>
+                          {cand.requisition_ref && (
+                            <span className="text-gray-400 text-[10.5px] font-mono">({cand.requisition_ref})</span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1 text-[11.5px] text-gray-500">
+                          <UserCheck size={12} className="text-gray-400 shrink-0" />
+                          <span>HM: <strong className="text-gray-800">{cand.hiring_manager_name || 'Hiring Manager'}</strong></span>
+                        </div>
+
+                        {cand.candidate_email && (
+                          <div className="text-gray-400 text-[11.5px] truncate">
+                            ✉ {cand.candidate_email}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Notes / Remarks if available */}
+                      {cand.notes && (
+                        <div className="bg-amber-50/70 border border-amber-200/80 rounded-lg px-2.5 py-1.5 text-[11.5px] text-amber-900 max-w-2xl line-clamp-2">
+                          <span className="font-bold text-amber-950">Manager Note: </span>
+                          {cand.notes}
+                        </div>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5 text-gray-500">
-                      <UserCheck size={13} className="text-gray-400 shrink-0" />
-                      <span>Hiring Manager: <strong className="text-gray-800">{cand.hiring_manager_name || 'Hiring Manager'}</strong></span>
-                    </div>
+                    {/* Right side: Score Pill & Action Buttons */}
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-gray-100">
+                      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-900 text-white text-[11.5px] font-black shadow-2xs">
+                        <Award size={12} className="text-amber-400" />
+                        <span>{formatMatchScore(cand.match_score)} Fit</span>
+                      </div>
 
-                    {cand.candidate_email && (
-                      <div className="text-gray-400 text-xs truncate">
-                        ✉ {cand.candidate_email}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Notes / Remarks if available */}
-                  {cand.notes && (
-                    <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-2.5 text-xs text-amber-900 max-w-3xl">
-                      <span className="font-bold text-amber-950">Manager Note: </span>
-                      {cand.notes}
-                    </div>
-                  )}
-                </div>
-
-                {/* Right side: Score Pill & Action Buttons */}
-                <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-start gap-2 shrink-0">
-                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-900 text-white text-xs font-black shadow-2xs">
-                    <Award size={13} className="text-amber-400" />
-                    <span>{formatMatchScore(cand.match_score)} Fit</span>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 pt-1 opacity-90 group-hover:opacity-100 transition-opacity">
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setContractCandidate(cand);
-                        handleTabChange('contracts');
-                      }}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-                      title="Draft & Issue Employment Contract"
-                    >
-                      <FileText size={13} />
-                      <span>Issue Contract</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveCandidateDetail(cand);
-                      }}
-                      className="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition cursor-pointer"
-                    >
-                      View Details
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleDeleteSelection(cand.id || cand.selection_id, e)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition cursor-pointer"
-                      title="Remove record"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* Structured Table View */
-        <div className="bg-white border border-gray-200/90 rounded-2xl shadow-xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-gray-600">
-              <thead className="bg-gray-50 border-b border-gray-200 text-gray-900 uppercase font-extrabold text-[10.5px] tracking-wider">
-                <tr>
-                  <th className="py-3.5 px-4">Candidate</th>
-                  <th className="py-3.5 px-4">Selected By (Company)</th>
-                  <th className="py-3.5 px-4">Role / Requisition</th>
-                  <th className="py-3.5 px-4">Hiring Manager</th>
-                  <th className="py-3.5 px-4">Match Fit</th>
-                  <th className="py-3.5 px-4">Selected At</th>
-                  <th className="py-3.5 px-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {selections.map((cand) => (
-                  <tr
-                    key={cand.id || cand.selection_id}
-                    onClick={() => setActiveCandidateDetail(cand)}
-                    className="hover:bg-gray-50/80 transition cursor-pointer"
-                  >
-                    <td className="py-3.5 px-4">
-                      <div className="font-extrabold text-gray-950 text-[13px]">
-                        {cand.candidate_name}
-                      </div>
-                      <div className="text-[11px] text-gray-400">
-                        {cand.candidate_email || 'No email provided'}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-100 border border-gray-200/90 font-bold text-gray-900">
-                        <Building2 size={12} className="text-gray-500" />
-                        <span>{cand.company_name}</span>
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-gray-900">
-                        {cand.requisition_title || 'Position'}
-                      </div>
-                      <div className="text-[10px] text-gray-400 font-mono">
-                        {cand.requisition_ref}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4 font-medium text-gray-800">
-                      {cand.hiring_manager_name || 'Hiring Manager'}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-200">
-                        {formatMatchScore(cand.match_score)}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-gray-500 whitespace-nowrap">
-                      {formatDate(cand.selected_at)}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
+                      <div className="flex items-center gap-1.5 pt-0.5 opacity-90 group-hover:opacity-100 transition-opacity">
                         <button
                           type="button"
                           onClick={(e) => {
@@ -925,26 +850,173 @@ export default function SuperAdminCandidateManagement() {
                             setContractCandidate(cand);
                             handleTabChange('contracts');
                           }}
-                          className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-xs"
                           title="Draft & Issue Employment Contract"
                         >
                           <FileText size={12} />
-                          <span>Contract</span>
+                          <span>Issue Contract</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setActiveCandidateDetail(cand);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold transition cursor-pointer"
+                        >
+                          View Details
                         </button>
                         <button
                           type="button"
                           onClick={(e) => handleDeleteSelection(cand.id || cand.selection_id, e)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
-                          title="Delete"
+                          className="p-1 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-600 transition cursor-pointer"
+                          title="Remove record"
                         >
-                          <Trash2 size={14} />
+                          <Trash2 size={13} />
                         </button>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* Structured Table View */
+            <div className="bg-white border border-gray-200/90 rounded-2xl shadow-xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs text-gray-600">
+                  <thead className="bg-gray-50 border-b border-gray-200 text-gray-900 uppercase font-extrabold text-[10.5px] tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Candidate</th>
+                      <th className="py-3 px-4">Selected By (Company)</th>
+                      <th className="py-3 px-4">Role / Requisition</th>
+                      <th className="py-3 px-4">Hiring Manager</th>
+                      <th className="py-3 px-4">Match Fit</th>
+                      <th className="py-3 px-4">Selected At</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {paginatedSelections.map((cand) => (
+                      <tr
+                        key={cand.id || cand.selection_id}
+                        onClick={() => setActiveCandidateDetail(cand)}
+                        className="hover:bg-gray-50/80 transition cursor-pointer"
+                      >
+                        <td className="py-3 px-4">
+                          <div className="font-extrabold text-gray-950 text-[13px]">
+                            {cand.candidate_name}
+                          </div>
+                          <div className="text-[11px] text-gray-400">
+                            {cand.candidate_email || 'No email provided'}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-100 border border-gray-200/90 font-bold text-gray-900">
+                            <Building2 size={12} className="text-gray-500" />
+                            <span>{cand.company_name}</span>
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="font-semibold text-gray-900">
+                            {cand.requisition_title || 'Position'}
+                          </div>
+                          <div className="text-[10px] text-gray-400 font-mono">
+                            {cand.requisition_ref}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-medium text-gray-800">
+                          {cand.hiring_manager_name || 'Hiring Manager'}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-black text-[11px] border border-emerald-200">
+                            {formatMatchScore(cand.match_score)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-gray-500 whitespace-nowrap">
+                          {formatDate(cand.selected_at)}
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setContractCandidate(cand);
+                                handleTabChange('contracts');
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 text-xs font-bold transition flex items-center gap-1 cursor-pointer"
+                              title="Draft & Issue Employment Contract"
+                            >
+                              <FileText size={12} />
+                              <span>Contract</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => handleDeleteSelection(cand.id || cand.selection_id, e)}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition cursor-pointer"
+                              title="Delete"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Dedicated Pagination Controls Bar */}
+          <div className="bg-white border border-gray-200/90 rounded-2xl px-4 sm:px-5 py-3 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-3 text-gray-600 font-medium">
+              <div>
+                Showing <span className="font-bold text-gray-900">{selections.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}</span> to{' '}
+                <span className="font-bold text-gray-900">{Math.min(currentPage * pageSize, selections.length)}</span> of{' '}
+                <span className="font-bold text-gray-900">{selections.length}</span> selections
+              </div>
+
+              <div className="flex items-center gap-1.5 border-l border-gray-200 pl-3">
+                <span className="text-gray-400 text-[11px]">Rows:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value))}
+                  className="bg-gray-50 border border-gray-200 rounded-lg px-2 py-1 text-xs font-semibold text-gray-800 cursor-pointer focus:outline-none"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold flex items-center gap-1 cursor-pointer transition shadow-2xs"
+              >
+                <ChevronLeft size={13} />
+                <span>Previous</span>
+              </button>
+
+              <div className="px-2 font-bold text-gray-800 text-xs">
+                Page {currentPage} of {totalPages}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed font-semibold flex items-center gap-1 cursor-pointer transition shadow-2xs"
+              >
+                <span>Next</span>
+                <ChevronRight size={13} />
+              </button>
+            </div>
           </div>
         </div>
       )}

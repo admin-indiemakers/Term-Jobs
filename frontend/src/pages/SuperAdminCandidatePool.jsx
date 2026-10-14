@@ -1064,7 +1064,7 @@ export default function SuperAdminCandidatePool() {
                             </span>
                           )}
                           <span className="px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-                            {app.status || 'Screened'}
+                            {app.status || 'Submitted'}
                           </span>
                         </div>
                       </div>

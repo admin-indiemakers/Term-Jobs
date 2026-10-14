@@ -1,4 +1,5 @@
 import { request } from '../../api/client';
+import { uploadParts } from '../utils/uploadPool';
 
 const commAnalysisCache = new Map();
 
@@ -113,7 +114,12 @@ export const interviewApi = {
     return request(`/api/interviews/rounds/${roundId}/analyze-communication`, {
       method: 'POST',
       body: payload,
+      timeout: 60000,
     });
+  },
+
+  async getAssessmentQuestions(roundId, token) {
+    return request(`/api/interviews/rounds/${roundId}/questions?token=${encodeURIComponent(token || '')}`, { noCache: true });
   },
 
   async saveTranscript(roundId, transcriptTurns) {
@@ -139,13 +145,38 @@ export const interviewApi = {
   },
 
   // Candidate Interview Video Recording
-  async uploadRecording(roundId, videoBlob, durationSeconds = 0) {
+  async uploadRecording(roundId, videoBlob, durationSeconds = 0, interviewToken = '', onProgress = () => {}) {
+    if (interviewToken) {
+      const size = 1024 * 1024;
+      const count = Math.ceil(videoBlob.size / size);
+      if (!count || count > 256) throw new Error('Recording is empty or larger than 256 MB. Contact the hiring team.');
+      const uploadId = crypto.randomUUID();
+      const base = `/api/interviews/rounds/${roundId}/recording/chunks/${uploadId}`;
+      const query = `?token=${encodeURIComponent(interviewToken)}`;
+      await uploadParts(count, async index => {
+        const body = new FormData();
+        body.append('file', videoBlob.slice(index * size, (index + 1) * size), 'chunk.bin');
+        let failure;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { await request(`${base}/parts/${index}${query}`, { method: 'POST', body, timeout: 60000 }); failure = null; break; }
+          catch (error) { failure = error; }
+        }
+        if (failure) throw failure;
+      }, onProgress);
+      onProgress({ uploaded: count, total: count, phase: 'saving' });
+      const body = new FormData();
+      body.append('chunk_count', String(count));
+      body.append('duration_seconds', String(Math.round(durationSeconds)));
+      body.append('content_type', videoBlob.type || 'video/webm');
+      return request(`${base}/complete${query}`, { method: 'POST', body, timeout: 180000 });
+    }
     const formData = new FormData();
     formData.append('file', videoBlob, `recording_${roundId}.webm`);
     formData.append('duration_seconds', String(Math.round(durationSeconds)));
     return request(`/api/interviews/rounds/${roundId}/recording`, {
       method: 'POST',
       body: formData,
+      timeout: 60000,
     });
   },
 

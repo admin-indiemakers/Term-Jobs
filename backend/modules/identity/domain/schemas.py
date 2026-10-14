@@ -38,10 +38,11 @@ _DISPOSABLE_DOMAINS = {
     "throwam.com",
 }
 
-# Basic email regex
+# Basic email regex supporting subdomains
 _EMAIL_RE = re.compile(
-    r'^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$'
+    r'^[a-zA-Z0-9_.+\-]+@([a-zA-Z0-9\-]+\.)+[a-zA-Z]{2,}$'
 )
+_INVALID_EMAIL_CHARS = re.compile(r'[,;:\s"\'\\/]')
 
 
 def _validate_real_email(email: str) -> str:
@@ -50,11 +51,23 @@ def _validate_real_email(email: str) -> str:
         raise ValueError("Invalid email address format.")
     email = email.strip().lower()
 
+    if not email:
+        raise ValueError("Email address is required.")
+
+    if _INVALID_EMAIL_CHARS.search(email):
+        raise ValueError("Invalid email address format. Email cannot contain commas, spaces, or quotes.")
+
+    if ".." in email or email.startswith(".") or email.endswith("."):
+        raise ValueError("Invalid email address format.")
+
     # 1. Regex format check
     if not _EMAIL_RE.match(email):
         raise ValueError("Invalid email address format.")
 
-    domain = email.split("@", 1)[1]
+    parts = email.split("@", 1)
+    if len(parts) != 2:
+        raise ValueError("Invalid email address format.")
+    domain = parts[1]
 
     # 2. Disposable domain check
     if domain in _DISPOSABLE_DOMAINS:

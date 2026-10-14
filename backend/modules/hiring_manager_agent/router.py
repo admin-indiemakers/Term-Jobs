@@ -6,8 +6,10 @@ from fastapi import APIRouter, HTTPException, Header, Depends
 from pydantic import BaseModel
 from typing import Optional, Dict, Any
 
-from modules.identity.domain.models import User
+from modules.identity.domain.models import User, Tenant
+from modules.identity.router import get_current_user
 from .agent import run_hiring_manager_agent_chat
+from .chat_scope import is_hiring_request_in_scope, scope_response
 
 router = APIRouter(prefix="/api/hiring-manager/agent", tags=["Hiring Manager Agent"])
 
@@ -24,53 +26,29 @@ class HiringManagerChatRequest(BaseModel):
 @router.post("/chat")
 def hiring_manager_agent_chat(
     data: HiringManagerChatRequest,
-    authorization: str | None = Header(default=None)
+    current_user: User = Depends(get_current_user),
 ):
-    """Execute AI Agent for Hiring Manager with role-based workspace privileges."""
-    # Start with defaults
-    user_data = {
-        "name": "Hiring Manager",
-        "role": "Hiring Manager",
-        "tenant_id": "local",
-        "id": "hm-user"
-    }
-
-    # Priority 1: Use current_user from request body if provided
-    if data.current_user:
-        if data.current_user.get("id"):
-            user_data["id"] = str(data.current_user["id"])
-        if data.current_user.get("name"):
-            user_data["name"] = data.current_user["name"]
-        if data.current_user.get("tenant_id"):
-            user_data["tenant_id"] = str(data.current_user["tenant_id"])
-        if data.current_user.get("role"):
-            user_data["role"] = data.current_user["role"]
-        if data.current_user.get("tenant_name"):
-            user_data["tenant_name"] = data.current_user["tenant_name"]
-    elif data.user_name:
-        user_data["name"] = data.user_name
-
-    # Priority 2: JWT Bearer token overrides request body (most authoritative)
-    if authorization and authorization.startswith("Bearer "):
-        try:
-            from modules.identity.services.auth_service import decode_access_token
-            from modules.shared.db import get_session
-            token = authorization.split(" ")[1]
-            payload = decode_access_token(token)
-            if payload:
-                session = get_session()
-                u = session.query(User).filter(User.id == payload.get("sub")).first()
-                if u:
-                    user_data["name"] = u.name or user_data["name"]
-                    user_data["role"] = u.role or user_data["role"]
-                    user_data["tenant_id"] = str(u.tenant_id or "local")
-                    user_data["id"] = str(u.id)
-                session.close()
-        except Exception:
-            pass
-
+    """Use authenticated identity for all calendar and hiring operations."""
+    if current_user.role not in ('Hiring Manager', 'Admin', 'HR', 'Director'):
+        raise HTTPException(status_code=403, detail='Company hiring staff access required')
     if not data.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt is required.")
+    if not is_hiring_request_in_scope(data.prompt, data.history):
+        return {**scope_response(), 'status': 'success'}
+    from modules.calendar.services.google_calendar import connection_status
+    user_data = {'id': str(current_user.id), 'tenant_id': current_user.tenant_id, 'role': current_user.role,
+                 'name': current_user.name, 'email': current_user.email,
+                 'google_calendar': connection_status(current_user)}
+    from modules.shared.db import get_session
+    with get_session() as session:
+        tenant = session.get(Tenant, current_user.tenant_id)
+        if tenant: user_data['tenant_name'] = tenant.name
+    if not data.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required.")
+    from modules.calendar.services.assistant import handle_calendar_query
+    calendar_result = handle_calendar_query(data.prompt, current_user, data.history)
+    if calendar_result is not None:
+        return {**calendar_result, 'status': 'success'}
 
     result = run_hiring_manager_agent_chat(
         prompt=data.prompt.strip(),

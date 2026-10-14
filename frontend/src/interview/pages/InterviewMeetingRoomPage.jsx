@@ -3,6 +3,9 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { InterviewRoom } from '../components/InterviewRoom';
+import { mergeInterviewResult } from '../utils/interviewMode';
+import { useAuth } from '../../context/AuthContext';
+import { request } from '../../api/client';
 
 export function InterviewMeetingRoomPage() {
   const { roundId } = useParams();
@@ -12,9 +15,12 @@ export function InterviewMeetingRoomPage() {
   const [round, setRound] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+  const { token: accountToken } = useAuth();
+  const [joinIdentity, setJoinIdentity] = useState(null);
 
-  const queryRole = searchParams.get('role') || 'candidate';
-  const queryName = searchParams.get('name') || (queryRole === 'candidate' ? 'Candidate' : 'Interviewer');
+  const queryRole = joinIdentity?.role || searchParams.get('role') || 'candidate';
+  const queryName = joinIdentity?.name || searchParams.get('name') || (queryRole === 'candidate' ? 'Candidate' : 'Interviewer');
+  const invitationToken = searchParams.get('token') || '';
   const queryMode = searchParams.get('mode'); // 'meet' | 'ai'
   const isAiRequested = queryMode === 'ai';
 
@@ -27,11 +33,15 @@ export function InterviewMeetingRoomPage() {
 
     interviewApi
       .getRoundDetail(roundId)
-      .then((res) => {
+      .then(async (res) => {
         if (res) {
           if (res.status !== 'Completed' && res.is_expired) {
             setErrorMsg('This interview link has expired after 10 hours. Please request a new interview invitation.');
           } else {
+            if (accountToken || invitationToken || searchParams.get('role') === 'interviewer') {
+              const identity = await request(`/api/interviews/rounds/${roundId}/join-identity?token=${encodeURIComponent(invitationToken)}`, { token: accountToken, noCache: true });
+              setJoinIdentity(identity);
+            }
             setRound(res);
           }
         } else {
@@ -44,7 +54,7 @@ export function InterviewMeetingRoomPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, [roundId]);
+  }, [roundId, accountToken, invitationToken]);
 
   const handleLeave = () => {
     if (queryRole === 'interviewer') {
@@ -186,7 +196,7 @@ export function InterviewMeetingRoomPage() {
       currentUserName={queryName}
       onLeave={handleLeave}
       onEvaluationComplete={(updated) => {
-        setRound(updated);
+        setRound(previous => mergeInterviewResult(previous, updated));
       }}
     />
   );

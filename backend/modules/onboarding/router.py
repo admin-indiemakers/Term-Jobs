@@ -330,16 +330,42 @@ def mark_notification_read(notification_id: str):
 
 @router.get("")
 @router.get("/")
-def list_onboardings():
-    """List all onboarding checklists."""
+def list_onboardings(authorization: str | None = Header(None)):
+    """List onboarding checklists scoped by tenant and hiring manager."""
+    user = _get_current_user(authorization)
     from modules.shared.cache import cache as _cache
-    cached = _cache.get("onboardings_list")
+    cache_key = f"onboardings_list:{user.get('id') if user else 'anon'}:{user.get('role') if user else 'anon'}:{user.get('tenant_id') if user else 'anon'}"
+    cached = _cache.get(cache_key)
     if cached is not None:
         return cached
-    docs = list(_coll().find({}, {"activation_gates": 0, "completed_items": 0}))
+
+    if user and user.get("role") == "Hiring Manager":
+        from modules.requisition.domain.models import Requisition
+        from modules.shared.db import get_session as _gs
+        with _gs() as session:
+            req_ids = {r.id for r in session.query(Requisition).filter(
+                Requisition.tenant_id == user["tenant_id"],
+                Requisition.created_by == user["id"],
+            ).all()}
+        if req_ids:
+            from modules.shared.db import db as _db
+            cand_ids = set()
+            for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)}}, {"id": 1}):
+                cand_ids.add(sd.get("id"))
+            if cand_ids:
+                docs = list(_coll().find({"candidate_id": {"$in": list(cand_ids)}}, {"activation_gates": 0, "completed_items": 0}))
+            else:
+                docs = []
+        else:
+            docs = []
+    elif user and user.get("tenant_id") and user.get("role") != "Super Admin":
+        docs = list(_coll().find({"$or": [{"tenant_id": user["tenant_id"]}, {"company_id": user["tenant_id"]}]}, {"activation_gates": 0, "completed_items": 0}))
+    else:
+        docs = list(_coll().find({}, {"activation_gates": 0, "completed_items": 0}))
+
     for d in docs:
         d.pop("_id", None)
-    _cache.set("onboardings_list", docs, ttl=30)
+    _cache.set(cache_key, docs, ttl=30)
     return docs
 
 def _get_or_create_onboarding_doc(candidate_id: str) -> dict:
@@ -892,35 +918,6 @@ Rules:
         raise HTTPException(status_code=500, detail=f"AI generation failed: {str(e)}")
 
 
-@router.get("/")
-def list_onboarding(authorization: str | None = Header(None)):
-    """List onboarding checklists. Scoped by tenant and hiring manager."""
-    user = _get_current_user(authorization)
-    if user and user["role"] == "Hiring Manager":
-        from modules.requisition.domain.models import Requisition
-        from modules.shared.db import get_session as _gs
-        with _gs() as session:
-            req_ids = {r.id for r in session.query(Requisition).filter(
-                Requisition.tenant_id == user["tenant_id"],
-                Requisition.created_by == user["id"],
-            ).all()}
-        if req_ids:
-            # Get candidate_ids from those requisitions
-            from modules.shared.db import db as _db
-            cand_ids = set()
-            for sd in _db["candidate_submissions"].find({"requisition_id": {"$in": list(req_ids)}}, {"id": 1}):
-                cand_ids.add(sd.get("id"))
-            if cand_ids:
-                docs = list(_coll().find({"candidate_id": {"$in": list(cand_ids)}}))
-            else:
-                docs = []
-        else:
-            docs = []
-    else:
-        docs = list(_coll().find())
-    for d in docs:
-        d.pop("_id", None)
-    return docs
 
 
 @router.post("/assistant/chat")

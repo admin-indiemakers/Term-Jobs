@@ -2,6 +2,7 @@
 to users of that company (Super Admin sees all).
 """
 import mongomock
+import importlib
 import pytest
 from fastapi import HTTPException
 
@@ -20,8 +21,12 @@ def db_session_factory(monkeypatch):
         return Session(database)
 
     monkeypatch.setattr(app_main, "get_session", factory)
-    monkeypatch.setattr("modules.shared.db.get_session", factory)
-    monkeypatch.setattr("modules.shared.db.db", database)
+    db_module = importlib.import_module("modules.shared.db")
+    monkeypatch.setattr(db_module, "get_session", factory)
+    monkeypatch.setattr(db_module, "db", database)
+    # Some notification paths import the package attribute as a module.
+    shared_package = importlib.import_module("modules.shared")
+    monkeypatch.setattr(shared_package, "db", db_module)
     return factory
 
 
@@ -355,13 +360,8 @@ async def test_upload_template_tenant_isolation(db_session_factory):
         assert exc.value.status_code == 403
 
 
-def test_hiring_manager_delete_published_requisition_notifies_director(db_session_factory, monkeypatch):
-    """Verify that when a Hiring Manager deletes an approved/published requisition:
-    1. Director receives an in-app notification.
-    2. Requisition deletion is logged in deleted_requisitions with 'Deleted by HM' status.
-    3. Director Dashboard listing (list_requisitions) shows the deleted requisition.
-    4. Hiring Manager listing does not include it.
-    """
+def test_admin_delete_published_requisition_notifies_director(db_session_factory, monkeypatch):
+    """Only administrators can delete published requisitions; history remains visible."""
     from modules.notifications.domain.models import Notification
 
     with db_session_factory() as session:
@@ -369,6 +369,7 @@ def test_hiring_manager_delete_published_requisition_notifies_director(db_sessio
         tenant = _make_tenant(session, name="Acme Corp")
         director = _make_user(session, "Director", tenant.id, "director@acme.test")
         hm = _make_user(session, "Hiring Manager", tenant.id, "hm@acme.test")
+        admin = _make_user(session, "Admin", tenant.id, "admin@acme.test")
         prof = _make_profile(session, tenant.id, name="Acme Corp")
 
         # Create requisition that was published and approved by Director
@@ -383,8 +384,13 @@ def test_hiring_manager_delete_published_requisition_notifies_director(db_sessio
             created_by=hm.id,
         )
 
-        # HM deletes the published requisition
-        app_main.delete_requisition(req.id, current_user=hm)
+        # Hiring managers cannot remove a Director-approved requisition.
+        with pytest.raises(HTTPException) as exc:
+            app_main.delete_requisition(req.id, current_user=hm)
+        assert exc.value.status_code == 403
+        assert session.get(Requisition, req.id) is not None
+
+        app_main.delete_requisition(req.id, current_user=admin)
 
         # 1. SQL row is deleted
         assert session.get(Requisition, req.id) is None
@@ -397,12 +403,46 @@ def test_hiring_manager_delete_published_requisition_notifies_director(db_sessio
         director_reqs = app_main.list_requisitions(current_user=director)
         deleted_match = next((r for r in director_reqs if r["id"] == str(req.id)), None)
         assert deleted_match is not None
-        assert deleted_match["status"] == "Deleted by HM"
+        assert deleted_match["status"] == "Deleted"
         assert deleted_match["is_deleted"] is True
 
-        # 4. Hiring manager listing does NOT show the deleted requisition
+        # 4. Hiring manager listing includes the deleted requisition marked as is_deleted in history archive
         hm_reqs = app_main.list_requisitions(current_user=hm)
-        assert not any(r["id"] == str(req.id) for r in hm_reqs)
+        hm_deleted_match = next((r for r in hm_reqs if r["id"] == str(req.id)), None)
+        assert hm_deleted_match is not None
+        assert hm_deleted_match["status"] == "Deleted"
+        assert hm_deleted_match["is_deleted"] is True
+
+
+@pytest.mark.parametrize("status,approved", [("Published", False), ("Approved", False), ("Draft", True)])
+def test_hm_cannot_delete_protected_requisition(db_session_factory, monkeypatch, status, approved):
+    monkeypatch.setattr(app_main, "service", _FakeService())
+    with db_session_factory() as session:
+        tenant = _make_tenant(session)
+        hm = _make_user(session, "Hiring Manager", tenant.id, "hm@acme.test")
+        profile = _make_profile(session, tenant.id)
+        req = _make_requisition(session, tenant.id, profile.id, status=status, director_approved=approved)
+        with pytest.raises(HTTPException) as exc:
+            app_main.delete_requisition(req.id, current_user=hm)
+        assert exc.value.status_code == 403
+        assert session.get(Requisition, req.id) is not None
+
+
+def test_delete_requires_saved_history(db_session_factory, monkeypatch):
+    monkeypatch.setattr(app_main, "service", _FakeService())
+    db_module = importlib.import_module("modules.shared.db")
+    def fail_insert(document):
+        raise RuntimeError("Audit storage unavailable")
+    monkeypatch.setattr(db_module.db["deleted_requisitions"], "insert_one", fail_insert)
+    with db_session_factory() as session:
+        tenant = _make_tenant(session)
+        admin = _make_user(session, "Admin", tenant.id, "admin@acme.test")
+        profile = _make_profile(session, tenant.id)
+        req = _make_requisition(session, tenant.id, profile.id, status="Draft")
+        with pytest.raises(HTTPException) as exc:
+            app_main.delete_requisition(req.id, current_user=admin)
+        assert exc.value.status_code == 503
+        assert session.get(Requisition, req.id) is not None
 
 
 def test_create_template_from_form_tenant_isolation(db_session_factory):

@@ -36,8 +36,8 @@ class Settings(BaseSettings):
     confidence_threshold: float = 0.7
 
     # Calendar OAuth (Google / Microsoft / Zoho)
-    calendar_redirect_base: str = "http://localhost:8000"          # public URL of the backend (used for OAuth callback)
-    calendar_frontend_url: str = "http://localhost:5173/dashboard/admin"  # where the admin lands after connecting
+    calendar_redirect_base: str = "https://termjobs.in"          # registered OAuth callback origin
+    calendar_frontend_url: str = "https://termjobs.in/dashboard/hiring-manager"
 
     google_client_id: str = ""
     google_client_secret: str = ""

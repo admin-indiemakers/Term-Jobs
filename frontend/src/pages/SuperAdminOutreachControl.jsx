@@ -63,6 +63,7 @@ export default function SuperAdminOutreachControl() {
   const [loadingReqDetails, setLoadingReqDetails] = useState(false);
   const [triggeringOutreach, setTriggeringOutreach] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
+  const [alertingCandidateId, setAlertingCandidateId] = useState(null);
   const [activeTab, setActiveTab] = useState('candidates'); // 'candidates' | 'activity' | 'message_preview'
   const [previewChannel, setPreviewChannel] = useState('telegram'); // 'telegram' | 'email'
   const [filterRsvp, setFilterRsvp] = useState('all'); // 'all' | 'interested' | 'unavailable' | 'pending'
@@ -120,16 +121,16 @@ export default function SuperAdminOutreachControl() {
   };
 
   // Fetch requisition specific details when selected
-  const fetchRequisitionDetails = async (reqId) => {
+  const fetchRequisitionDetails = async (reqId, silent = false) => {
     if (!reqId) return;
-    setLoadingReqDetails(true);
+    if (!silent) setLoadingReqDetails(true);
     try {
       const res = await request(`/api/superadmin/outreach/requisition/${reqId}`, { token });
       setReqDetails(res);
     } catch (err) {
       showToast(err.message || 'Error fetching candidates for position', 'error');
     } finally {
-      setLoadingReqDetails(false);
+      if (!silent) setLoadingReqDetails(false);
     }
   };
 
@@ -190,8 +191,12 @@ export default function SuperAdminOutreachControl() {
   };
 
   // Send single live test alert to Telegram
-  const handleSendTestTelegram = async (email = '', name = '') => {
-    setTestingTelegram(true);
+  const handleSendTestTelegram = async (email = '', name = '', candidateId = null) => {
+    if (candidateId) {
+      setAlertingCandidateId(candidateId);
+    } else {
+      setTestingTelegram(true);
+    }
     try {
       const res = await request('/api/superadmin/outreach/send-test-telegram', {
         token,
@@ -199,12 +204,16 @@ export default function SuperAdminOutreachControl() {
         body: { email, requisition_id: selectedReqId },
       });
       showToast(`⚡ Live Telegram alert delivered to ${name || 'connected Telegram'} (Chat ID: ${res.chat_id})!`);
-      // Refresh details to reflect sent status
-      if (selectedReqId) await fetchRequisitionDetails(selectedReqId);
+      // Refresh details silently in background to update status badges without table glitch
+      if (selectedReqId) await fetchRequisitionDetails(selectedReqId, true);
     } catch (err) {
       showToast(err.message || 'Failed to send test Telegram alert. Open @Termjobs_alertbot in Telegram and send your email to link!', 'error');
     } finally {
-      setTestingTelegram(false);
+      if (candidateId) {
+        setAlertingCandidateId(null);
+      } else {
+        setTestingTelegram(false);
+      }
     }
   };
 
@@ -813,13 +822,22 @@ export default function SuperAdminOutreachControl() {
                               )}
                               <button
                                 type="button"
-                                onClick={() => handleSendTestTelegram(c.email || c.candidate_email, c.name || c.candidate_name)}
-                                disabled={testingTelegram}
+                                onClick={() => handleSendTestTelegram(c.email || c.candidate_email, c.name || c.candidate_name, c.candidate_id || c.id)}
+                                disabled={alertingCandidateId === (c.candidate_id || c.id) || testingTelegram}
                                 className="px-2 py-1 rounded-lg border border-sky-300 bg-sky-50 hover:bg-sky-100 text-[11px] font-bold text-sky-800 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
                                 title="Send live Telegram match alert to this candidate"
                               >
-                                <Send size={10} className="text-[#229ED9]" />
-                                <span>Alert</span>
+                                {alertingCandidateId === (c.candidate_id || c.id) ? (
+                                  <>
+                                    <RefreshCw size={10} className="animate-spin text-[#229ED9]" />
+                                    <span>Sending...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Send size={10} className="text-[#229ED9]" />
+                                    <span>Alert</span>
+                                  </>
+                                )}
                               </button>
                               <button
                                 type="button"

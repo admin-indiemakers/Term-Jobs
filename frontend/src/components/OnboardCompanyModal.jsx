@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { request } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { X, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { validateEmail } from '../utils/emailValidation';
 
 const COMPANY_NAME_MAX_LENGTH = 255;
 const FIELD_LIMITS = {
@@ -15,16 +16,17 @@ const FIELD_LIMITS = {
   email: 255,
   password: 128,
 };
-const EMAIL_RE = /^[a-zA-Z0-9_.+\-]+@[a-zA-Z0-9\-]+\.[a-zA-Z]{2,}$/;
 
 function getFieldError(name, value) {
   const trimmed = value.trim();
   if (name === 'company_name' && trimmed.length < 2) return 'Company name must be at least 2 characters';
   if (name === 'name' && trimmed.length < 2) return 'Admin full name must be at least 2 characters';
-  if (name === 'email' && !trimmed) return 'Admin email is required';
+  if (name === 'email') {
+    const emailErr = validateEmail(trimmed);
+    if (emailErr) return emailErr;
+  }
   if (name === 'password' && !value) return 'Password is required';
   if (value.length > FIELD_LIMITS[name]) return `Maximum ${FIELD_LIMITS[name]} characters allowed`;
-  if (name === 'email' && !EMAIL_RE.test(trimmed)) return 'Enter a valid email address';
   if (name === 'password' && value.length < 4) return 'Password must be at least 4 characters';
   if (name === 'size' && trimmed) {
     if (!/^\d[\d,]*(?:\s*-\s*\d[\d,]*|\s*\+)?$/.test(trimmed)) return 'Use a number, range (50-200), or minimum (200+)';

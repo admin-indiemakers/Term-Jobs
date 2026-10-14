@@ -3799,7 +3799,20 @@ export default function AiChat() {
       };
 
       recognition.onerror = (e) => {
-        console.warn('Fallback SpeechRecognition error:', e);
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+          // Microphone access denied or blocked by browser/OS
+          console.warn('SpeechRecognition microphone permission not allowed. Stopping voice mode.');
+          continuousModeRef.current = false;
+          setContinuousMode(false);
+          setVadStatus('idle');
+          isProcessingOrSpeakingRef.current = false;
+          muteMicTracks();
+          showToast('⚠️ Microphone permission not allowed. Voice mode disabled.', 'error');
+          return;
+        }
+        if (e.error !== 'no-speech' && e.error !== 'aborted') {
+          console.warn('Fallback SpeechRecognition error:', e);
+        }
         if (continuousModeRef.current && vadStatus !== 'ai_speaking') {
           setTimeout(() => resumeVADListening(1000), 1000);
         }

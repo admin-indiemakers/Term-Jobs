@@ -395,8 +395,25 @@ export class LiveKitService {
     this.remoteStream = null;
   }
 
+  _emitLocalMedia() {
+    if (!this.room) return;
+    const tracks = [...this.room.localParticipant.trackPublications.values()]
+      .filter(publication => publication.source !== 'screen_share' && publication.source !== 'screen_share_audio')
+      .map(publication => publication.track?.mediaStreamTrack).filter(Boolean);
+    const stream = new MediaStream(tracks);
+    this._emit('localTrackChanged', {
+      stream,
+      hasVideo: stream.getVideoTracks().some(track => track.enabled && track.readyState === 'live'),
+      hasAudio: stream.getAudioTracks().some(track => track.enabled && track.readyState === 'live'),
+    });
+  }
+
   _setupRoomListeners() {
     if (!this.room) return;
+    this.room.on(RoomEvent.LocalTrackPublished, () => this._emitLocalMedia());
+    this.room.on(RoomEvent.LocalTrackUnpublished, () => this._emitLocalMedia());
+    this.room.on(RoomEvent.TrackMuted, () => this._emitLocalMedia());
+    this.room.on(RoomEvent.TrackUnmuted, () => this._emitLocalMedia());
 
     this.room.on(RoomEvent.ParticipantConnected, (participant) => {
       this._emit('participantConnected', participant);
@@ -436,7 +453,15 @@ export class LiveKitService {
 
   async toggleCamera(enabled) {
     if (this.room && this.isLiveKitConnected) {
-      return await this.room.localParticipant.setCameraEnabled(enabled);
+      const publication = await this.room.localParticipant.setCameraEnabled(enabled);
+      this._emitLocalMedia();
+      return publication;
+    }
+    if (enabled && !this.fallbackLocalStream?.getVideoTracks().some(track => track.readyState === 'live')) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const audioTracks = this.fallbackLocalStream?.getAudioTracks() || [];
+      this.fallbackLocalStream?.getVideoTracks().forEach(track => track.stop());
+      this.fallbackLocalStream = new MediaStream([...stream.getVideoTracks(), ...audioTracks]);
     }
     if (this.fallbackLocalStream) {
       let videoTrack = this.fallbackLocalStream.getVideoTracks()[0];

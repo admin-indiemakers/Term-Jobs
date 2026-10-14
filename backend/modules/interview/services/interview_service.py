@@ -123,10 +123,11 @@ def _resolve_interview_domain(origin: Optional[str] = None, data_origin: Optiona
     Can be configured via INTERVIEW_PUBLIC_DOMAIN env variable.
     """
     domain = (os.getenv("INTERVIEW_PUBLIC_DOMAIN") or "https://termjobs.in").strip().rstrip("/")
-    candidate = (origin or data_origin or domain).strip().rstrip("/")
-    if not candidate or "localhost" in candidate or "127.0.0.1" in candidate:
-        return domain
-    return candidate
+    from urllib.parse import urlparse
+    parsed = urlparse(domain)
+    if parsed.scheme != "https" or parsed.hostname not in ("termjobs.in", "www.termjobs.in"):
+        return "https://termjobs.in"
+    return domain
 
 
 def send_interview_invitation_email(
@@ -538,7 +539,7 @@ def create_interview_proposal(
     # Automatically dispatch notification to candidate
     try:
         if cand_email:
-            send_interview_invitation_email(
+            doc['email_delivery'] = send_interview_invitation_email(
                 candidate_name=cand_name,
                 candidate_email=cand_email,
                 requisition_title=data.get("requisition_title", "Untitled Role"),
@@ -747,14 +748,70 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
     base_url = _resolve_interview_domain(origin, data.get("origin"))
 
     with get_session() as session:
-        cand_sub_id = data.get("candidate_submission_id", "")
+        cand_sub_id = (data.get("candidate_submission_id") or "").strip()
+        cand_email = (data.get("candidate_email") or "").strip().lower()
+        cand_name = (data.get("candidate_name") or "").strip()
+        req_id = (data.get("requisition_id") or "").strip()
         round_name = (data.get("round_name") or "Technical Round 1").strip()
-        
+
+        # Enforce that interviews can ONLY be scheduled for candidates who have passed the shortlisting stage
+        from modules.candidate.domain.models import CandidateSubmission
+        from modules.shared.db import db as mongo_db
+
+        sub_found = None
+        if cand_sub_id:
+            sub_found = session.get(CandidateSubmission, cand_sub_id)
+        if not sub_found and req_id:
+            if cand_email:
+                sub_found = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == req_id,
+                    CandidateSubmission.candidate_email == cand_email,
+                ).first()
+            if not sub_found and cand_name:
+                sub_found = session.query(CandidateSubmission).filter(
+                    CandidateSubmission.requisition_id == req_id,
+                    CandidateSubmission.candidate_name == cand_name,
+                ).first()
+
+        # Also cross-check mongo candidate_submissions collection
+        mongo_sub = None
+        if not sub_found:
+            m_or = []
+            if cand_sub_id:
+                m_or.extend([{"id": cand_sub_id}, {"submission_id": cand_sub_id}, {"candidate_id": cand_sub_id}])
+            if req_id and cand_email:
+                m_or.append({"requisition_id": req_id, "candidate_email": cand_email})
+            if req_id and cand_name:
+                m_or.append({"requisition_id": req_id, "candidate_name": cand_name})
+            if m_or:
+                mongo_sub = mongo_db["candidate_submissions"].find_one({"$or": m_or})
+
+        status_val = (
+            getattr(sub_found, "status", None)
+            or (mongo_sub.get("status") if mongo_sub else None)
+            or ""
+        )
+
+        # Allowed statuses for interview scheduling
+        allowed_statuses = {
+            "Shortlisted", "Interviewing", "Accepted", "Under Review", "Screened",
+            "Interested - Fast Track", "Fast Track", "Interested"
+        }
+        if not sub_found and not mongo_sub:
+            raise ValueError(
+                f"Candidate '{cand_name or cand_email or cand_sub_id}' is not in the candidate submissions for this requisition and has not passed the shortlisting stage."
+            )
+
+        if status_val and status_val not in allowed_statuses and status_val.lower() not in [s.lower() for s in allowed_statuses]:
+            raise ValueError(
+                f"Cannot schedule interview: Candidate '{cand_name or cand_email}' has not been shortlisted (current status: '{status_val}')."
+            )
+
         # Check for existing rounds for this candidate to prevent duplicates
         existing_rounds = session.query(InterviewRound).filter(
             InterviewRound.candidate_submission_id == cand_sub_id,
             InterviewRound.status != "Cancelled"
-        ).all()
+        ).all() if cand_sub_id else []
         
         for r in existing_rounds:
             if r.round_name.lower().strip() == round_name.lower().strip():
@@ -771,6 +828,12 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
         
         now_utc = datetime.now(timezone.utc)
         expires_at_val = now_utc + timedelta(hours=LINK_EXPIRATION_HOURS)
+
+        if not round_name.startswith('AI') and data.get('scheduled_date') and data.get('scheduled_time'):
+            from modules.calendar.services.google_calendar import schedule_window
+            _, scheduled_end = schedule_window(data['scheduled_date'], data['scheduled_time'],
+                data.get('scheduled_timezone') or 'Asia/Kolkata', int(data.get('duration_minutes', 45)))
+            expires_at_val = scheduled_end + timedelta(hours=LINK_EXPIRATION_HOURS)
         
         round_obj = InterviewRound(
             tenant_id=tenant_id,
@@ -784,6 +847,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
             round_type=data.get("round_type", "Technical"),
             scheduled_date=data.get("scheduled_date", ""),
             scheduled_time=data.get("scheduled_time", ""),
+            scheduled_timezone=data.get("scheduled_timezone", "Asia/Kolkata"),
             duration_minutes=int(data.get("duration_minutes", 45)),
             interviewer_name=data.get("interviewer_name", ""),
             interviewer_email=data.get("interviewer_email", ""),
@@ -819,16 +883,16 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
     # Automatically dispatch notification to candidate
     cand_email = (doc.get("candidate_email") or "").strip()
     cand_name = doc.get("candidate_name") or "Candidate"
-    if cand_email:
+    if cand_email and not data.get("suppress_email"):
         try:
-            send_interview_invitation_email(
+            doc['email_delivery'] = send_interview_invitation_email(
                 candidate_name=cand_name,
                 candidate_email=cand_email,
                 requisition_title=doc.get("requisition_title", "Position"),
                 company_name=created_by or "Hiring Team",
                 round_name=round_name,
                 scheduled_date=doc.get("scheduled_date", ""),
-                scheduled_time=doc.get("scheduled_time", ""),
+                scheduled_time=f"{doc.get('scheduled_time', '')} ({doc.get('scheduled_timezone', 'Asia/Kolkata')})",
                 duration_minutes=int(doc.get("duration_minutes", 45)),
                 meeting_link=hosted_meeting_link,
                 candidate_portal_link=cand_portal_link,
@@ -836,6 +900,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
                 instructions=doc.get("instructions", ""),
             )
         except Exception as em_err:
+            doc['email_delivery'] = {'status': 'failed', 'reason': 'Email could not be delivered.'}
             print(f"[ROUND EMAIL DISPATCH ERROR] {em_err}")
 
     # Automatically notify Telegram if connected
@@ -889,16 +954,28 @@ def get_hiring_manager_rounds(
     tenant_id: Optional[str] = None,
     requisition_id: Optional[str] = None,
     candidate_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    user_role: Optional[str] = None,
 ) -> List[dict]:
     """Retrieve all interview rounds belonging to the Hiring Manager tenant, or all rounds for Super Admin."""
     with get_session() as session:
+        from modules.requisition.domain.models import Requisition
         q = session.query(InterviewRound)
         if tenant_id:
-            q = q.filter((InterviewRound.tenant_id == tenant_id) | (InterviewRound.tenant_id == None))
+            q = q.filter(InterviewRound.tenant_id == tenant_id)
         if requisition_id:
             q = q.filter(InterviewRound.requisition_id == requisition_id)
         if candidate_id:
             q = q.filter(InterviewRound.candidate_submission_id == candidate_id)
+
+        if user_role == "Hiring Manager" and user_id:
+            hm_req_ids = [r.id for r in session.query(Requisition).only("id").filter(
+                Requisition.tenant_id == tenant_id,
+                Requisition.created_by == user_id
+            ).all()]
+            if not hm_req_ids:
+                return []
+            q = q.filter(InterviewRound.requisition_id.in_(hm_req_ids))
             
         rounds = q.all()
         # Sort by candidate and round_number
@@ -1202,7 +1279,7 @@ async def analyze_round_communication(
     Executes spoken communication skills analysis (deterministic heuristics + single-pass Groq LLM).
     Persists metrics, analysis results, and transcript to the round.
     """
-    from modules.interview.services.communication_analyzer import CommunicationAnalyzer
+    from modules.interview.services.assessment import load_questions, evaluate_assessment
 
     with get_session() as session:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
@@ -1214,13 +1291,11 @@ async def analyze_round_communication(
         cand_name = candidate_name or r.candidate_name or "Candidate"
         role = role_title or r.requisition_title or r.round_name or "Candidate Role"
 
-        # Execute communication evaluation
-        result = await CommunicationAnalyzer.evaluate_communication(
-            transcript_turns=turns,
-            call_duration_seconds=duration_seconds or (r.duration_minutes * 60 if r.duration_minutes else 0),
-            candidate_name=cand_name,
-            role_title=role,
-        )
+        metadata = r.recording_metadata or {}
+        if not r.recording_url or not metadata.get("size_bytes") or not str(metadata.get("content_type", "")).startswith("video/"):
+            raise ValueError("A saved camera video recording is required before submitting the AI assessment.")
+        questions = load_questions(session, r)
+        result = await evaluate_assessment(questions, turns, duration_seconds)
 
         r.transcript = turns
         r.communication_metrics = result.get("metrics") or {}
@@ -1228,26 +1303,12 @@ async def analyze_round_communication(
 
         # If round already has evaluation or needs auto-evaluation from AI analysis
         eval_dict = dict(r.evaluation or {})
-        scores = dict(eval_dict.get("scores") or {})
         analysis_data = result.get("analysis") or {}
-        overall = int(analysis_data.get("overall_score", 0))
+        overall = analysis_data.get("overall_score")
 
-        if "communication" not in scores and analysis_data:
-            # Map 0-100 overall score to 1-5 scale
-            scores["communication"] = min(5, max(1, round(overall / 20.0)))
-            eval_dict["scores"] = scores
-
-        if not eval_dict.get("result") and overall > 0:
-            if overall >= 80:
-                eval_dict["result"] = "Strong Yes"
-            elif overall >= 65:
-                eval_dict["result"] = "Yes"
-            elif overall >= 45:
-                eval_dict["result"] = "Hold"
-            else:
-                eval_dict["result"] = "No"
-            eval_dict["evaluator"] = "AI Assessment Engine"
-            eval_dict["notes"] = analysis_data.get("summary", "")
+        # Keep the auditable assessment separate from human hiring decisions and resume match scores.
+        eval_dict['assessment_status'] = analysis_data.get('status', 'pending_review')
+        eval_dict['rubric_version'] = analysis_data.get('rubric_version')
 
         r.evaluation = eval_dict
 
@@ -1327,7 +1388,6 @@ async def analyze_round_communication(
         for sub in sqlite_subs:
             if sub.status not in ("Hired", "Accepted"):
                 sub.status = "Shortlisted"
-            sub.match_score = max(float(sub.match_score or 0), float(overall or 0)) if overall > 0 else (sub.match_score or 55.0)
             sub.updated_at = datetime.now(timezone.utc)
             session._track(sub)
 
@@ -1396,6 +1456,9 @@ def get_round_communication_analysis(round_id: str) -> Optional[dict]:
             "metrics": r.communication_metrics or {},
             "analysis": r.communication_analysis or {},
             "transcript": r.transcript or [],
+            "questions": r.interview_questions or [],
+            "recording_url": r.recording_url,
+            "recording_metadata": r.recording_metadata or {},
             "status": r.status,
         }
 
@@ -1517,7 +1580,11 @@ def get_chat_history(round_id: str) -> List[dict]:
         return deduped
 
 
-def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
+def get_hiring_manager_summary(
+    tenant_id: str,
+    user_id: Optional[str] = None,
+    user_role: Optional[str] = None,
+) -> List[dict]:
     """
     Get aggregated candidate interview progression summary for Hiring Manager.
     Groups rounds per candidate and computes pipeline readiness.
@@ -1529,21 +1596,28 @@ def get_hiring_manager_summary(tenant_id: str) -> List[dict]:
 
         # Lookup tenant requisitions for title mapping and filtering
         req_filters = [Requisition.tenant_id == tenant_id] if tenant_id else []
+        if user_role == "Hiring Manager" and user_id:
+            req_filters.append(Requisition.created_by == user_id)
         req_rows = session.query(Requisition).only("id", "title", "tenant_id").filter(*req_filters).all()
-        if not req_rows:
-            # Fallback to all requisitions for local / multi-tenant demo
+        if not req_rows and not tenant_id:
+            # Fallback to all requisitions only for Super Admin / unscoped
             req_rows = session.query(Requisition).only("id", "title", "tenant_id").all()
+        elif not req_rows and user_role == "Hiring Manager" and user_id:
+            # Hiring Manager has no requisitions yet
+            return []
         req_title_map = {r.id: (r.title or "Position") for r in req_rows}
 
         # Query scheduled interview rounds from SQLite
         round_filters = [InterviewRound.tenant_id == tenant_id] if tenant_id else []
+        if user_role == "Hiring Manager" and user_id:
+            round_filters.append(InterviewRound.requisition_id.in_(list(req_title_map.keys())))
         # Do not transfer transcripts or recording data for the dashboard list.
         # They are fetched only when a user opens the relevant interview detail.
         round_fields = (
             "id", "tenant_id", "requisition_id", "requisition_title",
             "candidate_submission_id", "candidate_name", "candidate_email",
             "round_number", "round_name", "round_type", "scheduled_date",
-            "scheduled_time", "duration_minutes", "interviewer_name",
+            "scheduled_timezone", "google_event_id", "calendar_sync", "email_delivery", "scheduled_time", "duration_minutes", "interviewer_name",
             "interviewer_email", "interviewer_role", "instructions",
             "internal_notes", "candidate_passcode", "candidate_token",
             "interviewer_token", "room_id", "status", "evaluation",
@@ -1673,11 +1747,13 @@ def save_round_recording(
         # 1. Local filesystem persistence
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
         local_dir = os.path.join(backend_dir, "uploads", "interview_videos")
-        os.makedirs(local_dir, exist_ok=True)
         local_path = os.path.join(local_dir, f"{round_id}.webm")
+        local_saved = False
         try:
+            os.makedirs(local_dir, exist_ok=True)
             with open(local_path, "wb") as f:
                 f.write(file_bytes)
+            local_saved = True
         except Exception as e:
             print(f"[RECORDING] Local file write warning: {e}")
 
@@ -1688,9 +1764,7 @@ def save_round_recording(
             from modules.shared.db import _get_client, settings
             real_db = _get_client()[settings.mongo_db_name]
             fs = gridfs.GridFS(real_db)
-            # Remove any previous recording for this round to prevent orphaned data
-            for existing in fs.find({"round_id": round_id}):
-                fs.delete(existing._id)
+            previous_ids = [existing._id for existing in fs.find({"round_id": round_id})]
             grid_id = fs.put(
                 file_bytes,
                 filename=filename or f"recording_{round_id}.webm",
@@ -1699,10 +1773,17 @@ def save_round_recording(
                 duration_seconds=duration_seconds,
                 uploaded_at=datetime.now(timezone.utc),
             )
+            for previous_id in previous_ids:
+                try:
+                    fs.delete(previous_id)
+                except Exception:
+                    pass
         except Exception as e:
             print(f"[RECORDING] GridFS storage warning: {e}")
 
         # 3. Update InterviewRound
+        if not grid_id and not local_saved:
+            raise ValueError("Video could not be stored. Retry the recording upload.")
         clean_filename = filename or f"interview_{round_id}.webm"
         r.recording_url = f"/api/interviews/rounds/{round_id}/recording"
         r.recording_metadata = {
@@ -1711,7 +1792,7 @@ def save_round_recording(
             "size_bytes": len(file_bytes),
             "duration_seconds": duration_seconds,
             "gridfs_id": str(grid_id) if grid_id else None,
-            "local_path": local_path if os.path.exists(local_path) else None,
+            "local_path": local_path if local_saved else None,
             "uploaded_at": datetime.now(timezone.utc).isoformat(),
         }
         r.updated_at = datetime.now(timezone.utc)

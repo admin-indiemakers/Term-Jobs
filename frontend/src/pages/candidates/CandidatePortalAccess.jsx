@@ -164,14 +164,14 @@ export default function CandidatePortalAccess() {
   const statusBadge = (hasAccess) => {
     if (hasAccess) {
       return (
-        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#dcfce7] text-[#166534]">
-          <Shield size={11} /> Active
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold tracking-wide bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-3xs">
+          <Shield size={11} className="text-emerald-600" /> Active
         </span>
       );
     }
     return (
-      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide bg-[#f3f4f6] text-[#6b7280]">
-        <ShieldOff size={11} /> No Access
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold tracking-wide bg-gray-100 text-gray-500 border border-gray-200/60 shadow-3xs">
+        <ShieldOff size={11} className="text-gray-400" /> No Access
       </span>
     );
   };
@@ -380,33 +380,33 @@ export default function CandidatePortalAccess() {
 
       {/* 1. Create Access Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={() => setShowCreateModal(null)}>
-          <div className="bg-white rounded-2xl border border-[#e5e5e5] shadow-2xl w-full max-w-md p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowCreateModal(null)}>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-2xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-[1.2rem] font-extrabold text-[#0a0a0a] tracking-tight">Create Portal Access</h2>
-                <p className="text-[0.84rem] text-[#525252] mt-0.5">
-                  Create login credentials for <strong className="text-[#0a0a0a]">{showCreateModal.candidate_name}</strong>
+                <h2 className="text-lg font-extrabold text-gray-900 tracking-tight">Create Portal Access</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Create login credentials for <strong className="text-gray-900 font-bold">{showCreateModal.candidate_name}</strong>
                 </p>
               </div>
-              <button onClick={() => setShowCreateModal(null)} className="text-[#737373] hover:text-[#0a0a0a] p-1.5 rounded-lg hover:bg-[#f5f5f5] transition cursor-pointer">
-                <X size={18} />
+              <button onClick={() => setShowCreateModal(null)} className="text-gray-400 hover:text-black p-1.5 rounded-xl hover:bg-gray-100 transition cursor-pointer">
+                <X size={16} />
               </button>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex items-start gap-2.5 p-3.5 bg-emerald-50/80 border border-emerald-200/70 rounded-xl text-emerald-900 text-[0.8rem]">
-                <Mail size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+            <div className="space-y-3.5">
+              <div className="flex items-start gap-2.5 p-3 bg-emerald-50/80 border border-emerald-200/70 rounded-xl text-emerald-900 text-xs">
+                <Mail size={15} className="text-emerald-600 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-emerald-800">Email Notification Enabled</p>
-                  <p className="text-[0.74rem] text-emerald-700/90 mt-0.5">
+                  <p className="text-[11px] text-emerald-700/90 mt-0.5">
                     The candidate will automatically receive an email with their login credentials (email &amp; password) and direct portal access link.
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Email</label>
+                <label className="block text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Email</label>
                 <input
                   type="email"
                   value={createForm.email}
@@ -414,50 +414,47 @@ export default function CandidatePortalAccess() {
                     setCreateForm(f => ({ ...f, email: e.target.value }));
                     if (emailError) setEmailError('');
                   }}
-                  style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                  className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
+                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black shadow-3xs transition-all"
                 />
                 {emailError && (
-                  <p className="text-[0.74rem] text-red-600 font-semibold mt-1.5 flex items-center gap-1">
-                    <AlertCircle size={13} className="shrink-0" />
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} className="shrink-0" />
                     {emailError}
                   </p>
                 )}
               </div>
               <div>
-                <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Name</label>
+                <label className="block text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Name</label>
                 <input
                   type="text"
                   value={createForm.name}
                   onChange={e => setCreateForm(f => ({ ...f, name: e.target.value }))}
-                  style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                  className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
+                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black shadow-3xs transition-all"
                 />
               </div>
               <div>
-                <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Password</label>
+                <label className="block text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Password</label>
                 <input
                   type="text"
                   value={createForm.password}
                   onChange={e => setCreateForm(f => ({ ...f, password: e.target.value }))}
-                  style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                  className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
+                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black shadow-3xs transition-all"
                 />
-                <p className="text-[0.74rem] text-[#737373] mt-1.5 font-medium">Candidate will use this password to log in to the portal</p>
+                <p className="text-[11px] text-gray-400 mt-1 font-medium">Candidate will use this password to log in to the portal</p>
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-2.5 pt-2">
               <button
                 onClick={() => setShowCreateModal(null)}
-                className="flex-1 px-4 py-2.5 text-[0.84rem] font-bold text-[#404040] bg-white border border-[#d4d4d4] rounded-xl hover:bg-[#f5f5f5] transition cursor-pointer"
+                className="flex-1 px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer shadow-3xs"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveAccess}
                 disabled={!createForm.email || !createForm.name || !createForm.password || creatingId === (showCreateModal.candidate_id || showCreateModal.workorder_id)}
-                className="flex-1 px-4 py-2.5 text-[0.84rem] font-bold text-white bg-[#0a0a0a] rounded-xl hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer shadow-sm"
+                className="flex-1 px-4 py-2 text-xs font-bold text-white bg-black rounded-xl hover:bg-gray-900 transition disabled:opacity-50 cursor-pointer shadow-xs"
               >
                 {creatingId === (showCreateModal.candidate_id || showCreateModal.workorder_id) ? 'Creating...' : 'Create Access'}
               </button>
@@ -468,23 +465,23 @@ export default function CandidatePortalAccess() {
 
       {/* 2. Edit Access Modal */}
       {showEditModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4" onClick={() => setShowEditModal(null)}>
-          <div className="bg-white rounded-2xl border border-[#e5e5e5] shadow-2xl w-full max-w-md p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in" onClick={() => setShowEditModal(null)}>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-2xl w-full max-w-md p-6 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-[1.2rem] font-extrabold text-[#0a0a0a] tracking-tight">Edit Portal Access</h2>
-                <p className="text-[0.84rem] text-[#525252] mt-0.5">
-                  Update credentials for <strong className="text-[#0a0a0a]">{showEditModal.candidate_name}</strong>
+                <h2 className="text-lg font-extrabold text-gray-900 tracking-tight">Edit Portal Access</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Update credentials for <strong className="text-gray-900 font-bold">{showEditModal.candidate_name}</strong>
                 </p>
               </div>
-              <button onClick={() => setShowEditModal(null)} className="text-[#737373] hover:text-[#0a0a0a] p-1.5 rounded-lg hover:bg-[#f5f5f5] transition cursor-pointer">
-                <X size={18} />
+              <button onClick={() => setShowEditModal(null)} className="text-gray-400 hover:text-black p-1.5 rounded-xl hover:bg-gray-100 transition cursor-pointer">
+                <X size={16} />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3.5">
               <div>
-                <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Email</label>
+                <label className="block text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Email</label>
                 <input
                   type="email"
                   value={editForm.email}
@@ -492,51 +489,48 @@ export default function CandidatePortalAccess() {
                     setEditForm(f => ({ ...f, email: e.target.value }));
                     if (emailError) setEmailError('');
                   }}
-                  style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                  className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
+                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black shadow-3xs transition-all"
                 />
                 {emailError && (
-                  <p className="text-[0.74rem] text-red-600 font-semibold mt-1.5 flex items-center gap-1">
-                    <AlertCircle size={13} className="shrink-0" />
+                  <p className="text-[11px] text-rose-600 font-semibold mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} className="shrink-0" />
                     {emailError}
                   </p>
                 )}
               </div>
               <div>
-                <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Name</label>
+                <label className="block text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Name</label>
                 <input
                   type="text"
                   value={editForm.name}
                   onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                  style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                  className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 shadow-2xs transition-all"
+                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black shadow-3xs transition-all"
                 />
               </div>
               <div>
-                <label className="block text-[0.74rem] font-bold text-[#404040] uppercase tracking-wider mb-1.5">Reset Password (Optional)</label>
+                <label className="block text-[10.5px] font-bold text-gray-400 uppercase tracking-wider mb-1">Reset Password (Optional)</label>
                 <input
                   type="text"
                   placeholder="Enter new password to reset"
                   value={editForm.password}
                   onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
-                  style={{ color: '#0a0a0a', backgroundColor: '#ffffff' }}
-                  className="w-full px-3.5 py-2.5 text-[0.92rem] font-semibold text-[#0a0a0a] bg-white border border-[#d4d4d4] rounded-xl focus:outline-none focus:border-[#0a0a0a] focus:ring-2 focus:ring-black/5 placeholder:text-[#a3a3a3] placeholder:font-normal shadow-2xs transition-all"
+                  className="w-full px-3.5 py-2 text-xs font-semibold text-gray-900 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black placeholder:text-gray-400 shadow-3xs transition-all"
                 />
-                <p className="text-[0.74rem] text-[#737373] mt-1.5 font-medium">Leave blank to keep existing password unchanged</p>
+                <p className="text-[11px] text-gray-400 mt-1 font-medium">Leave blank to keep existing password unchanged</p>
                 {editForm.password && (
-                  <div className="flex items-center gap-2 p-2.5 bg-blue-50/80 border border-blue-200/70 rounded-xl text-blue-900 text-[0.76rem] mt-2">
-                    <Mail size={14} className="text-blue-600 shrink-0" />
+                  <div className="flex items-center gap-2 p-2.5 bg-blue-50/80 border border-blue-200/70 rounded-xl text-blue-900 text-xs mt-2">
+                    <Mail size={13} className="text-blue-600 shrink-0" />
                     <span>A notification with the updated password will be sent to the candidate's email.</span>
                   </div>
                 )}
               </div>
               <div className="flex items-center justify-between pt-1">
-                <span className="text-[0.84rem] font-bold text-[#0a0a0a]">Account Status</span>
+                <span className="text-xs font-bold text-gray-900">Account Status</span>
                 <button
                   type="button"
                   onClick={() => setEditForm(f => ({ ...f, is_active: !f.is_active }))}
-                  className={`px-3 py-1 text-[0.75rem] font-extrabold rounded-full transition cursor-pointer border ${
-                    editForm.is_active ? 'bg-[#dcfce7] text-[#166534] border-[#86efac]' : 'bg-[#fee2e2] text-[#991b1b] border-[#fca5a5]'
+                  className={`px-3 py-1 text-xs font-bold rounded-full transition cursor-pointer border ${
+                    editForm.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80' : 'bg-rose-50 text-rose-700 border-rose-200/80'
                   }`}
                 >
                   {editForm.is_active ? 'Active' : 'Suspended'}
@@ -544,17 +538,17 @@ export default function CandidatePortalAccess() {
               </div>
             </div>
 
-            <div className="flex gap-3 pt-2">
+            <div className="flex gap-2.5 pt-2">
               <button
                 onClick={() => setShowEditModal(null)}
-                className="flex-1 px-4 py-2.5 text-[0.84rem] font-bold text-[#404040] bg-white border border-[#d4d4d4] rounded-xl hover:bg-[#f5f5f5] transition cursor-pointer"
+                className="flex-1 px-4 py-2 text-xs font-bold text-gray-700 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition cursor-pointer shadow-3xs"
               >
                 Cancel
               </button>
               <button
                 onClick={handleUpdateAccess}
                 disabled={!editForm.email || !editForm.name || updatingId === (showEditModal.candidate_id || showEditModal.workorder_id)}
-                className="flex-1 px-4 py-2.5 text-[0.84rem] font-bold text-white bg-[#0a0a0a] rounded-xl hover:bg-[#262626] transition disabled:opacity-50 cursor-pointer shadow-sm"
+                className="flex-1 px-4 py-2 text-xs font-bold text-white bg-black rounded-xl hover:bg-gray-900 transition disabled:opacity-50 cursor-pointer shadow-xs"
               >
                 {updatingId === (showEditModal.candidate_id || showEditModal.workorder_id) ? 'Saving...' : 'Save Changes'}
               </button>

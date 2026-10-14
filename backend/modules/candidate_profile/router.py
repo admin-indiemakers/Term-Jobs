@@ -113,6 +113,96 @@ async def get_current_candidate(
     return candidate
 
 
+def check_candidate_email_allowed(email: str, is_registration: bool = False) -> None:
+    """Disallows enterprise/corporate company email domains for candidate self-registration/login.
+
+    Candidates must register using personal email addresses (e.g. Gmail, Outlook, Yahoo,
+    iCloud, etc.) and cannot use official enterprise company domains or tenant staff emails.
+    """
+    clean_email = (email or "").strip().lower()
+    if not clean_email or "@" not in clean_email:
+        raise HTTPException(status_code=400, detail="Invalid email address format.")
+
+    domain = clean_email.split("@", 1)[1].strip().lower()
+
+    # Generic / public consumer email domains that are always permissible for candidates
+    allowed_personal_domains = {
+        "gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com",
+        "yahoo.com", "ymail.com", "icloud.com", "me.com", "mac.com", "proton.me",
+        "protonmail.com", "aol.com", "zoho.com", "mail.com", "gmx.com", "fastmail.com",
+        "hey.com", "pm.me",
+    }
+
+    # 1. If it's a known personal email domain, it's valid immediately
+    if domain in allowed_personal_domains:
+        return
+
+    # 2. Check if the domain or exact email belongs to a registered company / tenant
+    try:
+        # Check tenant domains or names
+        tenants = list(db["tenants"].find({"is_deleted": {"$ne": True}}, {"name": 1, "domain": 1, "email": 1}))
+        for t in tenants:
+            t_domain = (t.get("domain") or "").strip().lower()
+            t_email = (t.get("email") or "").strip().lower()
+            t_name = (t.get("name") or "").strip().lower().replace(" ", "")
+            if t_domain and domain == t_domain:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Email domain '@{domain}' is associated with enterprise client '{t.get('name')}'. Candidates cannot use company email addresses. Please sign up or sign in with your personal email (e.g., Gmail, Outlook, Yahoo).",
+                )
+            if t_email and t_email == clean_email:
+                raise HTTPException(
+                    status_code=400,
+                    detail="This email belongs to a registered enterprise account. Candidate accounts cannot use company email addresses. Please use your personal email address.",
+                )
+            # Heuristic match for enterprise names e.g., apple.com, ibm.com, roblox.com
+            if t_name and len(t_name) >= 3 and domain.startswith(t_name + "."):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Company email addresses from '{domain}' cannot be used for candidate accounts. Please use a personal email address (e.g. Gmail, Outlook, Yahoo) to continue.",
+                )
+
+        # Check company profiles
+        company_profiles = list(db["company_profiles"].find({}, {"name": 1, "domain": 1, "website": 1}))
+        for cp in company_profiles:
+            cp_domain = (cp.get("domain") or "").strip().lower()
+            cp_name = (cp.get("name") or "").strip().lower().replace(" ", "")
+            cp_site = (cp.get("website") or "").strip().lower()
+            if cp_domain and domain == cp_domain:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Company email domain '@{domain}' is registered to '{cp.get('name')}'. Candidate accounts must use personal email addresses.",
+                )
+            if cp_site:
+                clean_site = cp_site.replace("https://", "").replace("http://", "").split("/")[0].replace("www.", "")
+                if clean_site and domain == clean_site:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Company email domain '@{domain}' belongs to '{cp.get('name')}'. Please register with your personal email address.",
+                    )
+            if cp_name and len(cp_name) >= 3 and domain.startswith(cp_name + "."):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Company email domain '@{domain}' belongs to an enterprise employer. Candidates must use personal email addresses (e.g. Gmail, Outlook, Yahoo).",
+                )
+
+        # 3. Check if this email exists as a portal staff user (Admin, Hiring Manager, Director, HR, etc.)
+        staff_user = db["users"].find_one({
+            "email": clean_email,
+            "role": {"$nin": ["Candidate", "CandidateProfile", "Candidate Profile"]},
+            "is_deleted": {"$ne": True},
+        })
+        if staff_user:
+            raise HTTPException(
+                status_code=400,
+                detail=f"'{clean_email}' is already registered as an internal company account ({staff_user.get('role', 'Staff')}). You cannot register or log in as a candidate with a company account email.",
+            )
+    except HTTPException:
+        raise
+    except Exception as ex:
+        logger.warning(f"Error during enterprise email validation check: {ex}")
+
+
 # -----------------------------------------------------------------------------
 # Endpoints
 # -----------------------------------------------------------------------------
@@ -178,6 +268,8 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
         ]})
 
     if candidate:
+        # Prevent existing enterprise staff account from logging into candidate portal via google
+        check_candidate_email_allowed(verified_email, is_registration=False)
         # Update google profile info if not set
         updates = {"updated_at": now_utc}
         if verified_picture and not candidate.get("picture"):
@@ -191,6 +283,9 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
         db["candidates"].update_one({"id": candidate["id"]}, {"$set": updates})
         candidate = db["candidates"].find_one({"id": candidate["id"]})
     else:
+        # Prevent signing up candidate profile with enterprise company domain
+        check_candidate_email_allowed(verified_email, is_registration=True)
+
         # Automatically create candidate profile
         cand_id = f"CND-GOOG-{uuid.uuid4().hex[:8]}"
         candidate = {
@@ -240,6 +335,9 @@ async def google_candidate_auth(payload: GoogleAuthRequest) -> dict:
 async def candidate_login(body: CandidateLoginRequest) -> dict:
     """Standard email & password login for candidate profile."""
     email = body.email.strip().lower()
+    # Check if this email is a corporate enterprise email or registered staff
+    check_candidate_email_allowed(email, is_registration=False)
+
     candidate = db["candidates"].find_one({"candidate_email": email})
 
     if not candidate:
@@ -296,6 +394,9 @@ async def candidate_register(
 ) -> dict:
     """Registers a new candidate talent profile with optional resume upload."""
     email_clean = email.strip().lower()
+    # Check if corporate or enterprise email domain is used
+    check_candidate_email_allowed(email_clean, is_registration=True)
+
     if len(password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
 
@@ -423,6 +524,8 @@ async def request_candidate_email_change(
     old_email = candidate["candidate_email"].strip().lower()
     if new_email == old_email:
         raise HTTPException(status_code=400, detail="This is already your login email.")
+    # Prevent changing candidate account to an enterprise company email
+    check_candidate_email_allowed(new_email, is_registration=True)
     existing = db["candidates"].find_one({"$or": [
         {"candidate_email": {"$regex": f"^{re.escape(new_email)}$", "$options": "i"}},
         {"google_login_email": {"$regex": f"^{re.escape(new_email)}$", "$options": "i"}},
@@ -585,7 +688,7 @@ async def get_my_candidate_profile(candidate: dict = Depends(get_current_candida
             "requisition_id": req_id,
             "requisition_title": req_title,
             "company_name": company_name,
-            "status": sub.get("status") or "Screened",
+            "status": sub.get("status") or "Submitted",
             "match_score": sub.get("match_score"),
             "recommendation": sub.get("recommendation"),
             "created_at": created_str,
@@ -1173,3 +1276,25 @@ async def update_my_candidate_profile(
         "candidate": sanitize_candidate_doc(updated_doc),
         "message": "Candidate profile updated successfully.",
     }
+
+
+class TelegramCandidateConnection(BaseModel):
+    state: str
+
+
+@router.post('/telegram/connect')
+async def connect_candidate_telegram(body: TelegramCandidateConnection, candidate: dict = Depends(get_current_candidate)):
+    pending = db['candidate_telegram_login_states'].find_one_and_delete({'state': body.state, 'expires_at': {'$gt': datetime.now(timezone.utc)}})
+    if not pending:
+        raise HTTPException(status_code=400, detail='Telegram login link expired or was already used. Send /login to the bot again.')
+    chat_id = pending['chat_id']
+    email = candidate['candidate_email']
+    # One Telegram chat belongs to one authenticated candidate; no pairing by supplied email or name.
+    for collection in ('candidates', 'candidate_submissions', 'users'):
+        db[collection].update_many({'telegram_chat_id': {'$in': [chat_id, int(chat_id)]}}, {'$unset': {'telegram_chat_id': '', 'telegram_username': '', 'telegram_connected_at': '', 'telegram_linked_at': ''}})
+    db['telegram_links'].delete_many({'$or': [{'chat_id': chat_id}, {'candidate_email': email}]})
+    fields = {'telegram_chat_id': chat_id, 'telegram_username': pending.get('username', ''), 'telegram_connected_at': datetime.now(timezone.utc).isoformat()}
+    db['candidates'].update_one({'_id': candidate['_id']}, {'$set': fields})
+    db['candidate_submissions'].update_many({'candidate_email': email}, {'$set': fields})
+    db['telegram_links'].insert_one({'chat_id': chat_id, 'candidate_email': email, 'candidate_id': candidate['id'], 'connected_at': fields['telegram_connected_at']})
+    return {'status': 'connected'}

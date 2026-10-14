@@ -35,7 +35,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from modules.candidate.router import router as candidate_router
 from modules.identity.domain.models import User, VendorEngagement, Tenant
@@ -46,6 +46,7 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
+from modules.requisition.domain.deadline import validate_submission_deadline
 from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db, _utcnow
 from modules.shared.cache import cache as _cache
@@ -98,6 +99,8 @@ async def lifespan(app: FastAPI):
             while True:
                 try:
                     await asyncio.sleep(60)
+                    from modules.interview.services.reminders import dispatch_due_interview_reminders
+                    await asyncio.to_thread(dispatch_due_interview_reminders)
                     _auto_close_expired()
                     from modules.candidate.shortlist_service import auto_check_and_dispatch_48h_shortlists
                     auto_check_and_dispatch_48h_shortlists()
@@ -366,6 +369,12 @@ class RequisitionIn(BaseModel):
     # Pre-filled structured role fields (optional, all 6 tabs)
     prefill: dict | None = None
 
+    @field_validator("prefill")
+    @classmethod
+    def validate_deadline(cls, value):
+        validate_submission_deadline((value or {}).get("submission_deadline"))
+        return value
+
 
 class AnswerIn(BaseModel):
     answer: str
@@ -378,6 +387,12 @@ class RefineIn(BaseModel):
 class ApproveIn(BaseModel):
     reviewer: str | None = None
     edited_role: dict | None = None
+
+    @field_validator("edited_role")
+    @classmethod
+    def validate_deadline(cls, value):
+        validate_submission_deadline((value or {}).get("submission_deadline"))
+        return value
 
 
 class RejectIn(BaseModel):
@@ -565,6 +580,7 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "company_name": (company.get("name") if isinstance(company, dict) else getattr(company, "name", None)) or getattr(req, "company_name", None) or "",
             "status": req.status,
             "title": req.title,
+<<<<<<< HEAD
             "department": getattr(req, "department", None) or sr.get("department") or sr.get("job_family") or "",
             "job_family": sr.get("job_family") or getattr(req, "job_family", None) or "",
             "experience": sr.get("experience") or sr.get("experience_range") or sr.get("experience_level") or "",
@@ -576,6 +592,10 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
             "shortlisted_count": shortlisted_count,
             "in_interview_count": in_interview_count,
             "hired_count": hired_count,
+=======
+            "skills": getattr(req, "skills", None) or sr.get("must_have_skills") or sr.get("primary_skills") or [],
+            "description": getattr(req, "description", None) or sr.get("summary") or sr.get("role_overview") or (req.intent or {}).get("description") or "",
+>>>>>>> b0ecca0e1753a7174c13fa9aa4a4af048e78fd76
             "intent": req.intent,
             "intake_answers": req.intake_answers,
             "pending_question": req.pending_question,
@@ -1466,26 +1486,37 @@ def create_requisition(
                 if s_req:
                     s_req.status = "Pending Approval"
                     s_req.director_approved = False
+                    s_req.director_approved_by = None
+                    s_req.director_approved_at = None
+                    s_req.approved_by = None
+                    s_req.approved_at = None
                     session.commit()
+
+        update_fields = {
+            "id": req.id,
+            "title": req.title,
+            "status": final_status,
+            "director_approved": False if is_hm else getattr(req, "director_approved", False),
+            "tenant_id": req.tenant_id,
+            "company_profile_id": req.company_profile_id,
+            "company_name": comp_name,
+            "client_name": comp_name,
+            "description": body.description or body.prompt or "",
+            "structured_role": structured,
+            "skills": req_skills,
+            "created_by": req.created_by,
+            "created_at": now_iso,
+            "updated_at": now_iso,
+        }
+        if is_hm:
+            update_fields["director_approved_by"] = None
+            update_fields["director_approved_at"] = None
+            update_fields["approved_by"] = None
+            update_fields["approved_at"] = None
 
         db["requisitions"].update_one(
             {"id": req.id},
-            {"$set": {
-                "id": req.id,
-                "title": req.title,
-                "status": final_status,
-                "director_approved": False if is_hm else getattr(req, "director_approved", False),
-                "tenant_id": req.tenant_id,
-                "company_profile_id": req.company_profile_id,
-                "company_name": comp_name,
-                "client_name": comp_name,
-                "description": body.description or body.prompt or "",
-                "structured_role": structured,
-                "skills": req_skills,
-                "created_by": req.created_by,
-                "created_at": now_iso,
-                "updated_at": now_iso,
-            }},
+            {"$set": update_fields},
             upsert=True
         )
 
@@ -1631,20 +1662,22 @@ def list_requisitions(
             for r in rows
         ]
 
-        if current_user.role in ("Director", "Hiring Manager", "Company Admin", "Admin", "Super Admin"):
+        if current_user.role in ("Director", "Company Admin", "Admin", "Hiring Manager", "Super Admin"):
             try:
                 from modules.shared.db import db
-                del_query = {}
-                if current_user.tenant_id and current_user.role != "Super Admin":
-                    tid = current_user.tenant_id
+                if current_user.role == "Super Admin":
+                    del_query = {}
+                elif current_user.role == "Hiring Manager":
                     del_query = {
+                        "tenant_id": current_user.tenant_id,
                         "$or": [
-                            {"tenant_id": tid},
-                            {"tenant_id": str(tid)},
+                            {"created_by": current_user.id},
                             {"deleted_by_email": current_user.email},
-                            {"created_by": str(current_user.id)},
                         ]
                     }
+                else:
+                    del_query = {"tenant_id": current_user.tenant_id}
+
                 deleted_docs = list(db["deleted_requisitions"].find(del_query).sort("deleted_at", -1))
                 for d in deleted_docs:
                     s_role = d.get("structured_role") or {}
@@ -1654,7 +1687,7 @@ def list_requisitions(
                         "tenant_id": d.get("tenant_id", current_user.tenant_id),
                         "status": d.get("status", "Deleted by HM"),
                         "title": d.get("title", "Untitled Requisition"),
-                        "department": d.get("department") or s_role.get("department") or "",
+                        "department": d.get("department") or s_role.get("department") or "General",
                         "company_profile_id": d.get("company_profile_id"),
                         "company_name": None,
                         "generated_jd_markdown": None,
@@ -1680,7 +1713,7 @@ def list_requisitions(
                         "is_deleted": True,
                     })
             except Exception as del_err:
-                logger.warning(f"Failed to fetch deleted requisitions for view: {del_err}")
+                logger.warning(f"Failed to fetch deleted requisitions for history view: {del_err}")
 
         _cache.set(_cache_key, result, ttl=30)  # 30s cache
         return result
@@ -2179,7 +2212,8 @@ async def apply_to_requisition(
         "jd_text": req.generated_jd_markdown or "",
         "match_score": score,
         "recommendation": recommendation,
-        "status": "Screened",
+        # Applying and calculating a preliminary skill match do not complete screening.
+        "status": "Submitted",
         "summary": profile.get("summary") or cover_note or f"Direct application for {req.title}.",
         "details": details,
         "matched_skills": matched,
@@ -2266,6 +2300,9 @@ async def register_public_candidate(
     from modules.resume_screener.pipeline.extractor import extract_text as _extract_text_new
     from modules.shared.db import db
     from modules.shared.phone_validator import validate_phone_number
+
+    from modules.candidate_profile.router import check_candidate_email_allowed
+    check_candidate_email_allowed(email, is_registration=True)
 
     if phone and phone.strip():
         phone_err = validate_phone_number(phone, required=False)
@@ -2552,7 +2589,7 @@ def get_superadmin_candidate_pool(
             "company_name": req_info.get("company") or s.get("company_name") or "Enterprise Partner",
             "match_score": float(s.get("match_score")) if s.get("match_score") is not None else None,
             "recommendation": s.get("recommendation"),
-            "status": s.get("status") or "Screened",
+            "status": s.get("status") or "Submitted",
             "applied_at": created_val.isoformat() if hasattr(created_val, "isoformat") else str(created_val or ""),
         }
 
@@ -2791,7 +2828,35 @@ def get_superadmin_candidate_management(
 
     from modules.shared.db import db
     from datetime import datetime, timezone
+    import re
     from modules.notifications.services.selection_feed import deduplicate_selections
+
+    def is_valid_company_name(name: str | None) -> bool:
+        if not name:
+            return False
+        clean = name.strip()
+        if len(clean) < 2 or len(clean) > 80:
+            return False
+        lower = clean.lower()
+        # Reject generic placeholder/fallback labels
+        if lower in {"enterprise partner", "direct applicant", "general", "n/a", "none", "unknown", "null"}:
+            return False
+        # Reject test strings (e.g. test, testxcvgb, testing123)
+        if re.search(r"\btest\b", lower) or lower.startswith("test") or lower.endswith("test"):
+            return False
+        # Reject keyboard mash / random consonant sequences (e.g. xcvgb, asdfg, qwerty)
+        keyboard_mashes = ["asdf", "sdfg", "dfgh", "fghj", "ghjk", "hjkl", "qwer", "wert", "erty", "rtyu", "tyui", "yuio", "uiop", "zxcv", "xcvb", "cvbn", "vbnm"]
+        if any(p in lower for p in keyboard_mashes):
+            return False
+        if re.match(r"^[bcdfghjklmnpqrstvwxyz]{4,}$", lower):
+            return False
+        # Must contain at least one vowel unless it is a short acronym
+        if not re.search(r"[aeiouy]", lower) and len(clean) > 3:
+            return False
+        # Reject arbitrary non-alphanumeric junk or pure numbers
+        if not re.search(r"[a-zA-Z]", clean):
+            return False
+        return True
 
     def recorded_match_score(value):
         try:
@@ -2846,9 +2911,11 @@ def get_superadmin_candidate_management(
 
     for rec in recorded_selections:
         req_info = req_map.get(rec.get("requisition_id"), {})
-        comp = (rec.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
-        if comp and comp.lower() != "enterprise partner":
+        comp = (rec.get("company_name") or req_info.get("company") or "").strip()
+        if is_valid_company_name(comp):
             distinct_companies.add(comp)
+        else:
+            comp = comp if comp else "Enterprise Partner"
         cand_name = rec.get("candidate_name") or "Candidate"
         rec_id = rec.get("id") or rec.get("selection_id") or rec.get("submission_id") or f"sel_{cand_name}_{rec.get('requisition_id')}"
         
@@ -2878,9 +2945,11 @@ def get_superadmin_candidate_management(
     for sub in accepted_submissions:
         sub_id = sub.get("id") or str(sub.get("_id"))
         req_info = req_map.get(sub.get("requisition_id"), {})
-        comp = (sub.get("company_name") or req_info.get("company") or "Enterprise Partner").strip()
-        if comp and comp.lower() != "enterprise partner":
+        comp = (sub.get("company_name") or req_info.get("company") or "").strip()
+        if is_valid_company_name(comp):
             distinct_companies.add(comp)
+        else:
+            comp = comp if comp else "Enterprise Partner"
         cand_name = sub.get("candidate_name") or "Candidate"
         now_dt = sub.get("updated_at") or sub.get("created_at") or datetime.now(timezone.utc)
         iso_str = now_dt.isoformat() if hasattr(now_dt, "isoformat") else str(now_dt)
@@ -2913,8 +2982,9 @@ def get_superadmin_candidate_management(
 
     # Add default companies from tenants for filter options if available
     for t in db["tenants"].find({"tenant_type": "client"}, {"name": 1}):
-        if t.get("name"):
-            distinct_companies.add(t["name"].strip())
+        t_name = (t.get("name") or "").strip()
+        if is_valid_company_name(t_name):
+            distinct_companies.add(t_name)
 
     filtered = all_selections
 
@@ -3148,6 +3218,13 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
         icon = "✓"
         desc = f"Thank you, <strong>{cand_name}</strong>! We've notified <strong>{comp_name}</strong> that you are available and interested in the <strong>{req_title}</strong> role."
         sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your video room is provisioned above."
+        email_status = (res.get("interview_email_delivery") or {}).get("status")
+        if email_status == "success":
+            sub_desc += " Your AI interview link has also been emailed to you. Please check your inbox and spam folder."
+        elif email_status == "sending":
+            sub_desc += " Your AI interview email is being sent. You can also use the link above."
+        else:
+            sub_desc += " We could not send the interview email. You can join using the link above or click Yes in your invitation again to retry email delivery."
     elif act == "unavailable":
         headline = "Status Successfully Updated"
         badge_bg = "#f1f5f9"
@@ -3461,7 +3538,6 @@ async def telegram_send_test_endpoint(payload: dict, current_user: User = Depend
 @app.get("/api/requisitions/{requisition_id}")
 def get_requisition(requisition_id: str, current_user: User = Depends(get_current_user)) -> dict:
     _auto_close_expired()
-    _auto_check_shortlists_48h()
     req = _get_requisition(requisition_id)
     _require_tenant(req, current_user)
     is_vendor = str(getattr(current_user, "role", "") or "") == "Recruiter"
@@ -3502,6 +3578,12 @@ class UpdateRequisitionRoleIn(BaseModel):
     structured_role: dict | None = None
     title: str | None = None
     generated_jd_markdown: str | None = None
+
+    @field_validator("structured_role")
+    @classmethod
+    def validate_deadline(cls, value):
+        validate_submission_deadline((value or {}).get("submission_deadline"))
+        return value
 
 
 @app.patch("/requisitions/{requisition_id}")
@@ -3736,6 +3818,10 @@ def submit_requisition_for_director_approval_route(
         if db_req:
             db_req.status = "Pending Approval"
             db_req.director_approved = False
+            db_req.director_approved_by = None
+            db_req.director_approved_at = None
+            db_req.approved_by = None
+            db_req.approved_at = None
             session.commit()
 
     try:
@@ -3745,6 +3831,10 @@ def submit_requisition_for_director_approval_route(
             {"$set": {
                 "status": "Pending Approval",
                 "director_approved": False,
+                "director_approved_by": None,
+                "director_approved_at": None,
+                "approved_by": None,
+                "approved_at": None,
                 "updated_at": now_iso
             }}
         )
@@ -4376,9 +4466,17 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
     _require_tenant(req, current_user)
 
     was_director_approved = bool(getattr(req, "director_approved", False)) or req.status in ("Published", "Approved")
+    if was_director_approved and current_user.role not in (
+        "Company Admin", "Admin", "Super Admin",
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Approved or published requisitions must be deleted by a company administrator.",
+        )
     hm_name = current_user.name or current_user.email or "Hiring Manager"
     req_title = req.title or "Untitled Requisition"
     tenant_id = str(req.tenant_id or current_user.tenant_id or "local")
+    now_iso = _utcnow().isoformat()
 
     if was_director_approved:
         try:
@@ -4398,7 +4496,22 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
 
     try:
         from modules.shared.db import db
-        now_iso = _utcnow().isoformat()
+        s_role = getattr(req, "structured_role", {}) or {}
+        if not isinstance(s_role, dict):
+            s_role = getattr(s_role, "__dict__", {}) or {}
+
+        approved_at_val = getattr(req, "director_approved_at", None)
+        if approved_at_val and hasattr(approved_at_val, "isoformat"):
+            approved_at_iso = approved_at_val.isoformat()
+        else:
+            approved_at_iso = _format_datetime(approved_at_val)
+
+        created_at_val = getattr(req, "created_at", None)
+        if created_at_val and hasattr(created_at_val, "isoformat"):
+            created_at_iso = created_at_val.isoformat()
+        else:
+            created_at_iso = _format_datetime(created_at_val) or now_iso
+
         db["deleted_requisitions"].insert_one({
             "id": str(req.id),
             "title": req_title,
@@ -4406,21 +4519,25 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
             "original_status": req.status,
             "director_approved": was_director_approved,
             "director_approved_by": getattr(req, "director_approved_by", None) or ("Director" if was_director_approved else None),
-            "director_approved_at": _format_datetime(getattr(req, "director_approved_at", None)),
+            "director_approved_at": approved_at_iso,
+            "created_by": str(getattr(req, "created_by", "") or current_user.id),
             "deleted_by": hm_name,
             "deleted_by_role": current_user.role,
             "deleted_by_email": current_user.email,
             "deleted_at": now_iso,
             "tenant_id": tenant_id,
             "company_profile_id": str(req.company_profile_id or ""),
-            "department": getattr(req, "department", None) or ((getattr(req, "structured_role", None) or {}).get("department", "")),
-            "structured_role": getattr(req, "structured_role", None) or {},
-            "created_by": str(getattr(req, "created_by", "") or current_user.id),
-            "created_at": _format_datetime(getattr(req, "created_at", None)) or now_iso,
+            "department": getattr(req, "department", None) or s_role.get("department", "General"),
+            "structured_role": s_role,
+            "created_at": created_at_iso,
             "is_deleted": True,
         })
     except Exception as e:
         logger.warning(f"Failed to record deleted_requisition in MongoDB: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Deletion history could not be saved. The requisition has not been deleted. Please try again.",
+        ) from e
 
     service.delete(requisition_id)
     _cache.clear()

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, WebSocke
 from fastapi.encoders import jsonable_encoder
 
 from modules.identity.domain.models import User, Tenant
+from modules.interview.domain.models import CompanyInterviewRequest
 from modules.identity.router import get_current_user
 from modules.shared.db import get_session, db
 from modules.interview.domain.models import (
@@ -201,9 +202,7 @@ def get_company_interviews(
 
         round_query = session.query(InterviewRound)
         if current_user.tenant_id and current_user.role != "Super Admin":
-            round_query = round_query.filter(
-                (InterviewRound.tenant_id == current_user.tenant_id) | (InterviewRound.tenant_id == None)
-            )
+            round_query = round_query.filter(InterviewRound.tenant_id == current_user.tenant_id)
         if req_id_val:
             round_query = round_query.filter(InterviewRound.requisition_id == req_id_val)
 
@@ -313,6 +312,17 @@ def get_vendor_interviews(
 # MULTI-ROUND INTERVIEW WORKFLOW ENDPOINTS
 # -------------------------------------------------------------
 
+@router.post("/company-round")
+def save_company_round(body: CompanyInterviewRequest, current_user: User = Depends(get_current_user)):
+    from .services.company_schedule import save_company_interview
+    if current_user.role not in ("Hiring Manager", "Admin", "HR", "Director"):
+        raise HTTPException(status_code=403, detail="Only company hiring staff may schedule interviews.")
+    try:
+        return save_company_interview(current_user, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/rounds")
 def create_round_endpoint(
     body: CreateInterviewRoundRequest,
@@ -325,6 +335,14 @@ def create_round_endpoint(
     """
     try:
         data = body.model_dump()
+        from .services.company_schedule import validate_company_requisition
+        from modules.calendar.services.google_calendar import schedule_window, sync_interview_event
+        validate_company_requisition(current_user, data['requisition_id'])
+        schedule_window(data['scheduled_date'], data['scheduled_time'], data['scheduled_timezone'], data['duration_minutes'])
+        # Company scheduling must use the same availability checks as chat booking.
+        if not data.get('round_name', '').startswith('AI'):
+            from .services.company_schedule import save_company_interview
+            return save_company_interview(current_user, {**data, 'candidate_identifier': data['candidate_submission_id']})
         origin = _extract_origin(request, data.get("origin"))
         data["origin"] = origin
         result = create_interview_round(
@@ -333,6 +351,14 @@ def create_round_endpoint(
             created_by=str(current_user.id),
             origin=origin,
         )
+        calendar = sync_interview_event(current_user, result)
+        result['calendar_sync'] = calendar
+        with get_session() as session:
+            stored = session.get(InterviewRound, result['id'])
+            stored.calendar_sync = calendar
+            stored.email_delivery = result.get('email_delivery') or {'status': 'not_confirmed'}
+            if calendar.get('event_id'): stored.google_event_id = calendar['event_id']
+            session._track(stored); session.commit()
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -352,6 +378,8 @@ def list_rounds_endpoint(
         tenant_id=effective_tenant,
         requisition_id=requisition_id,
         candidate_id=candidate_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
     )
 
 
@@ -362,11 +390,15 @@ def get_interview_summary_endpoint(
     """Get aggregated interview progression per candidate for Hiring Manager, or all for Super Admin."""
     effective_tenant = None if current_user.role == "Super Admin" else current_user.tenant_id
     from modules.shared.cache import cache as _cache
-    cache_key = f"interview_summary:{effective_tenant or 'all'}"
+    cache_key = f"interview_summary:{current_user.id}:{current_user.role}:{effective_tenant or 'all'}"
     cached_val = _cache.get(cache_key)
     if cached_val is not None:
         return cached_val
-    res = get_hiring_manager_summary(tenant_id=effective_tenant)
+    res = get_hiring_manager_summary(
+        tenant_id=effective_tenant,
+        user_id=current_user.id,
+        user_role=current_user.role,
+    )
     _cache.set(cache_key, res, ttl=30)
     return res
 
@@ -459,6 +491,25 @@ def get_round_detail_endpoint(round_id: str):
     return round_doc
 
 
+@router.get('/rounds/{round_id}/join-identity')
+async def resolve_interview_join_identity(round_id: str, request: Request, token: str = Query('')):
+    from inspect import isawaitable
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview: raise HTTPException(status_code=404, detail='Interview not found')
+        authorization = request.headers.get('authorization')
+        if authorization:
+            actor = get_current_user(authorization, session)
+            if isawaitable(actor): actor = await actor
+            if actor.role in ('Hiring Manager', 'Admin', 'HR', 'Director') and actor.tenant_id == interview.tenant_id and (str(interview.created_by) == str(actor.id) or str(interview.interviewer_email or '').lower() == str(actor.email or '').lower()):
+                return {'role': 'interviewer', 'name': actor.name}
+        if token and token == interview.interviewer_token:
+            return {'role': 'interviewer', 'name': interview.interviewer_name or 'Interviewer'}
+        if token and token == interview.candidate_token:
+            return {'role': 'candidate', 'name': interview.candidate_name or 'Candidate'}
+        raise HTTPException(status_code=403, detail='Sign in with the assigned hiring-manager account or use your personal interview invitation.')
+
+
 @router.post("/rounds/{round_id}/status")
 def update_round_status_endpoint(
     round_id: str,
@@ -511,16 +562,36 @@ async def analyze_communication_endpoint(
     Evaluates candidate spoken communication skills using zero-token linguistic heuristics
     and single-pass token-minimized LLM analysis on the recorded speech transcript.
     """
-    analysis_result = await analyze_round_communication(
-        round_id=round_id,
-        transcript_turns=body.transcript_turns,
-        duration_seconds=body.call_duration_seconds or 0,
-        candidate_name=body.candidate_name,
-        role_title=body.role_title,
-    )
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or not body.interview_token or body.interview_token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail="Interview not found")
+    try:
+        analysis_result = await analyze_round_communication(
+            round_id=round_id,
+            transcript_turns=body.transcript_turns,
+            duration_seconds=body.call_duration_seconds or 0,
+            candidate_name=body.candidate_name,
+            role_title=body.role_title,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     if not analysis_result:
         raise HTTPException(status_code=404, detail="Interview round not found")
     return analysis_result
+
+
+@router.get("/rounds/{round_id}/questions")
+def get_assessment_questions(round_id: str, token: str = Query(...)):
+    from modules.interview.services.assessment import load_questions, RUBRIC_VERSION
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail="Interview not found")
+        try:
+            return {"questions": load_questions(session, interview), "rubric_version": RUBRIC_VERSION}
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/rounds/{round_id}/communication-analysis")
@@ -530,6 +601,51 @@ def get_communication_analysis_endpoint(round_id: str):
     if not report:
         raise HTTPException(status_code=404, detail="Interview round not found")
     return report
+
+
+@router.post('/rounds/{round_id}/recording/chunks/{upload_id}/parts/{chunk_index}')
+def upload_recording_chunk(round_id: str, upload_id: str, chunk_index: int, token: str = Query(...), file: UploadFile = File(...)):
+    from datetime import datetime, timedelta, timezone
+    from modules.shared.db import db
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or not token or token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail='Interview not found')
+    try: uuid.UUID(upload_id)
+    except ValueError: raise HTTPException(status_code=400, detail='Invalid recording upload ID')
+    if not 0 <= chunk_index < 256:
+        raise HTTPException(status_code=400, detail='Recording exceeds the supported upload size')
+    contents = file.file.read(1024 * 1024 + 1)
+    if not contents or len(contents) > 1024 * 1024:
+        raise HTTPException(status_code=413, detail='Recording chunks must be at most 1 MB')
+    chunks = db['interview_recording_chunks']
+    if chunk_index == 0:
+        chunks.create_index('expires_at', expireAfterSeconds=0)
+    chunks.replace_one({'_id': f'{round_id}:{upload_id}:{chunk_index}'}, {'_id': f'{round_id}:{upload_id}:{chunk_index}',
+        'round_id': round_id, 'upload_id': upload_id, 'index': chunk_index, 'data': contents,
+        'expires_at': datetime.now(timezone.utc) + timedelta(days=1)}, upsert=True)
+    return {'status': 'uploaded', 'index': chunk_index}
+
+
+@router.post('/rounds/{round_id}/recording/chunks/{upload_id}/complete')
+def complete_recording_upload(round_id: str, upload_id: str, token: str = Query(...), chunk_count: int = Form(...), duration_seconds: int = Form(0), content_type: str = Form('video/webm')):
+    from modules.shared.db import db
+    with get_session() as session:
+        interview = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
+        if not interview or not token or token not in (interview.candidate_token, interview.interviewer_token):
+            raise HTTPException(status_code=404, detail='Interview not found')
+    if not 1 <= chunk_count <= 256 or content_type.split(';')[0] not in ('video/webm', 'video/mp4'):
+        raise HTTPException(status_code=400, detail='Invalid recording upload metadata')
+    chunks = db['interview_recording_chunks']
+    rows = list(chunks.find({'round_id': round_id, 'upload_id': upload_id}).sort('index', 1))
+    if [row['index'] for row in rows] != list(range(chunk_count)):
+        raise HTTPException(status_code=409, detail='Recording chunks are missing. Retry submission.')
+    contents = b''.join(row['data'] for row in rows)
+    extension = 'mp4' if content_type.startswith('video/mp4') else 'webm'
+    updated = save_round_recording(round_id, contents, f'recording.{extension}', content_type, duration_seconds)
+    if not updated: raise HTTPException(status_code=404, detail='Interview not found')
+    chunks.delete_many({'round_id': round_id, 'upload_id': upload_id})
+    return {'status': 'success', 'recording_url': updated['recording_url'], 'recording_metadata': updated['recording_metadata']}
 
 
 @router.post("/rounds/{round_id}/recording")
@@ -545,6 +661,8 @@ async def upload_round_recording_endpoint(
     contents = await file.read()
     if not contents:
         raise HTTPException(status_code=400, detail="Empty video recording file provided")
+    if not str(file.content_type or "").startswith("video/"):
+        raise HTTPException(status_code=415, detail="A camera video recording is required; audio-only uploads are not accepted.")
 
     updated = save_round_recording(
         round_id=round_id,
