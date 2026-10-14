@@ -1,0 +1,35 @@
+.hm-telegram-page { min-height: 100svh; padding: 44px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #f6f7f9; color: #17212f; color-scheme: light; font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
+.hm-telegram-page * { box-sizing: border-box; }
+.hm-telegram-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; color: #111827; font-size: 19px; font-weight: 800; }
+.hm-telegram-brand img { width: 30px; height: 30px; object-fit: contain; }
+.hm-telegram-card { width: 100%; max-width: 448px; padding: 36px; border: 1px solid #e1e5ea; border-radius: 24px; background: #fff; box-shadow: 0 16px 48px -24px #11182735; }
+.hm-telegram-icon { display: flex; align-items: center; justify-content: center; width: 52px; height: 52px; border-radius: 16px; background: #eaf4ff; color: #1686c7; margin-bottom: 24px; }
+.hm-telegram-icon.is-connected { color: #078457; background: #e8f7ef; }
+.hm-telegram-eyebrow { font-size: 10px; letter-spacing: 1.6px; color: #6b7280; font-weight: 800; margin: 0 0 10px; }
+.hm-telegram-card h1 { margin: 0; color: #111827; font-size: 27px; line-height: 1.25; font-weight: 800; letter-spacing: -.7px; }
+.hm-telegram-description { margin: 12px 0 26px; color: #647084; font-size: 14px; line-height: 1.65; }
+.hm-telegram-form { display: grid; gap: 20px; }
+.hm-telegram-field label { display: block; margin-bottom: 8px; color: #273244; font-size: 13px; font-weight: 700; }
+.hm-telegram-field input { display: block; width: 100%; min-height: 48px; margin: 0; padding: 12px 14px; color: #111827; -webkit-text-fill-color: #111827; background: #f9fafb; border: 1px solid #d8dfe8; border-radius: 10px; font: inherit; font-size: 15px; opacity: 1; outline: none; }
+.hm-telegram-field input::placeholder { color: #8a95a6; -webkit-text-fill-color: #8a95a6; opacity: 1; }
+.hm-telegram-field input:focus { background: #fff; border-color: #1686c7; box-shadow: 0 0 0 3px #1686c71a; }
+.hm-telegram-field input:-webkit-autofill { -webkit-text-fill-color: #111827; -webkit-box-shadow: 0 0 0 1000px #f9fafb inset; }
+.hm-telegram-password { position: relative; }
+.hm-telegram-password input { padding-right: 48px; }
+.hm-telegram-password button { position: absolute; right: 4px; top: 4px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border: 0; background: transparent; color: #647084; cursor: pointer; }
+.hm-telegram-primary { width: 100%; min-height: 48px; padding: 12px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: 11px; background: #111827; color: #fff; font: inherit; font-size: 14px; font-weight: 700; text-decoration: none; cursor: pointer; }
+.hm-telegram-primary:hover { background: #253244; }
+.hm-telegram-primary:disabled { opacity: .55; cursor: default; }
+.hm-telegram-primary:focus-visible, .hm-telegram-password button:focus-visible { outline: 3px solid #1686c7; outline-offset: 3px; }
+.hm-telegram-error { margin: 0; padding: 12px; border: 1px solid #fecaca; border-radius: 10px; background: #fff5f5; color: #b42318; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.hm-telegram-security { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 24px 0 0; color: #7a8494; font-size: 10px; line-height: 1.6; text-align: center; }
+.hm-telegram-account { display: grid; gap: 6px; border: 1px solid #e1e5ea; background: #f9fafb; padding: 16px; border-radius: 12px; }
+.hm-telegram-account strong { color: #17212f; font-size: 14px; }
+.hm-telegram-account span { color: #647084; font-size: 12px; overflow-wrap: anywhere; }
+.hm-telegram-account button, .hm-telegram-secondary { padding: 0; border: 0; background: none; color: #1686c7; font: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; text-align: left; }
+.hm-telegram-actions { display: grid; gap: 16px; }
+.hm-telegram-secondary { text-align: center; }
+.hm-telegram-notice { padding: 16px; background: #f9fafb; border: 1px solid #e1e5ea; border-radius: 12px; color: #273244; font-size: 14px; }
+.hm-telegram-notice p { margin: 8px 0 18px; color: #647084; line-height: 1.6; }
+.hm-telegram-footer { margin: 24px 0 0; color: #8a95a6; font-size: 12px; }
+@media (max-width: 480px) { .hm-telegram-page { padding: 28px 16px; } .hm-telegram-card { padding: 26px 22px; } .hm-telegram-card h1 { font-size: 25px; } .hm-telegram-field input { font-size: 16px; } }

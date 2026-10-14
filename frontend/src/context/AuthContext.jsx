@@ -124,12 +124,13 @@ export function AuthProvider({ children }) {
       loading: initializing,
       initializing,
       login,
+      applySession,
       loginWithCandidateId,
       loginCandidate: loginWithCandidateId,
       logout,
       refreshUser,
     }),
-    [user, token, initializing, login, loginWithCandidateId, logout, refreshUser]
+    [user, token, initializing, login, applySession, loginWithCandidateId, logout, refreshUser]
   );
 
   return (

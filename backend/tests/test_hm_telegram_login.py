@@ -111,3 +111,25 @@ def test_logged_out_callbacks_do_not_execute_hiring_actions(setup, monkeypatch):
     monkeypatch.setattr(handlers, '_handle_callback_query_inner', unexpected)
     monkeypatch.setattr(handlers, 'send_telegram_message', send)
     asyncio.run(handlers.handle_callback_query('fake-token', {'id': 'callback', 'from': {'id': 123}, 'message': {'chat': {'id': 123}}, 'data': 'menu:requisitions'}))
+
+
+def test_complete_login_http_endpoint_connects_and_queues_confirmation(setup, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from modules.integrations import router as integrations
+    from modules.identity.router import get_current_user
+    from modules.hm_telegram_bot import bot
+    database, actor = setup
+    sent = []
+    async def send(*args): sent.append(args)
+    monkeypatch.setattr(handlers, 'send_telegram_message', send)
+    monkeypatch.setattr(bot, 'get_hm_bot_token', lambda: 'fake-token')
+    state = state_from_link()
+    app = FastAPI()
+    app.include_router(integrations.router)
+    app.dependency_overrides[get_current_user] = lambda: actor
+    response = TestClient(app).post('/api/integrations/telegram/complete-login', json={'state': state})
+    assert response.status_code == 200
+    assert response.json()['status'] == 'success'
+    assert auth.linked_user(123)['id'] == actor.id
+    assert len(sent) == 1

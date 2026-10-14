@@ -1,51 +1,59 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { ArrowRight, CheckCircle2, Eye, EyeOff, LockKeyhole, Send } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { request } from '../api/client';
+import { signInAndConnectTelegram } from '../utils/telegramLogin';
+import logo from '../assets/termjobs-logo.png';
+import './HiringManagerTelegramLogin.css';
+
+const BOT_URL = 'https://t.me/HirMngerbot';
 
 export default function HiringManagerTelegramLogin() {
   const [params] = useSearchParams();
   const state = params.get('state') || '';
-  const { user, token, login, logout, loading } = useAuth();
+  const { user, token, applySession, logout, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [visible, setVisible] = useState(false);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
-  const connect = async event => {
-    event.preventDefault(); setBusy(true); setError('');
+  const submit = async event => {
+    event.preventDefault();
+    if (busy) return;
+    setBusy(true); setError('');
     try {
-      await request('/api/integrations/telegram/complete-login', { method: 'POST', token, body: { state } });
-      setConnected(true);
+      const session = await signInAndConnectTelegram(request, {
+        state, session: user && token ? { user, access_token: token } : null, email, password,
+      });
+      applySession(session.access_token, session.user);
+      setPassword(''); setConnected(true);
       window.history.replaceState(null, '', window.location.pathname);
-    } catch (err) { setError(err.message || 'Unable to connect Telegram.'); }
+    } catch (err) { setError(err.message || 'Unable to connect. Please try again.'); }
     finally { setBusy(false); }
   };
-  const signIn = async event => {
-    event.preventDefault(); setBusy(true); setError('');
-    try {
-      const account = await login(email, password);
-      setPassword('');
-      if (account.role !== 'Hiring Manager') setError('Use a Hiring Manager account to connect this bot.');
-    } catch (err) { setError(err.message || 'Unable to sign in.'); }
-    finally { setBusy(false); }
-  };
-  return <main className="flex min-h-screen items-center justify-center bg-gray-50 p-6">
-    <section className="w-full max-w-md space-y-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-      <h1 className="text-xl font-bold">Hiring Manager Telegram login</h1>
-      {connected ? <><p>Your Telegram account is connected. Return to the bot to start hiring tasks.</p><Link className="underline" to="/dashboard/hiring-manager">Open your dashboard</Link></> : <>
-        <p className="text-sm text-gray-600">Sign in to TermJobs, then connect this Telegram chat to your Hiring Manager account.</p>
-        {!state ? <p role="alert">Open the sign-in link sent by the bot after typing /login.</p> : loading ? <p>Checking session…</p> : user ? <>
-          <p className="text-sm">Signed in as {user.name || user.email} ({user.role}).</p>
-          {user.role === 'Hiring Manager' && <form onSubmit={connect}><button disabled={busy} className="w-full rounded-xl bg-black p-3 text-white disabled:opacity-50">{busy ? 'Connecting…' : 'Connect Telegram'}</button></form>}
-          <button className="text-sm underline" onClick={logout}>Sign out and use another account</button>
-        </> : <form onSubmit={signIn} className="space-y-3">
-          <label className="block text-sm">Email or username<input required autoComplete="username" value={email} onChange={e => setEmail(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
-          <label className="block text-sm">Password<input required type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1 w-full rounded-xl border p-3" /></label>
-          <button disabled={busy} className="w-full rounded-xl bg-black p-3 text-white disabled:opacity-50">{busy ? 'Signing in…' : 'Sign in'}</button>
-        </form>}
-      </>}
-      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+  return <main className="hm-telegram-page" data-no-field-requirements>
+    <div className="hm-telegram-brand"><img src={logo} alt="" /><span>TermJobs</span></div>
+    <section className="hm-telegram-card" aria-labelledby="telegram-title">
+      <div className={`hm-telegram-icon ${connected ? 'is-connected' : ''}`}>{connected ? <CheckCircle2 size={26} /> : <Send size={25} />}</div>
+      <p className="hm-telegram-eyebrow">HIRING MANAGER ASSISTANT</p>
+      <h1 id="telegram-title">{connected ? 'You’re connected' : 'Connect with Telegram'}</h1>
+      <p className="hm-telegram-description">{connected ? 'Your Hiring Manager workspace is ready in Telegram. Return to the bot to manage hiring tasks.' : 'Sign in with your TermJobs account to connect the Hiring Manager bot.'}</p>
+      {connected ? <div className="hm-telegram-actions">
+        <a className="hm-telegram-primary" href={BOT_URL}>Open Telegram <ArrowRight size={18} /></a>
+        <Link className="hm-telegram-secondary" to="/dashboard/hiring-manager">Go to your dashboard</Link>
+      </div> : !state ? <div className="hm-telegram-notice" role="alert"><strong>A sign-in link is required</strong><p>Open the bot and send <code>/login</code> to get a new link.</p><a className="hm-telegram-primary" href={BOT_URL}>Open Hiring Manager bot <ArrowRight size={18} /></a></div> : loading ? <p className="hm-telegram-description" role="status">Checking your session…</p> : <form onSubmit={submit} className="hm-telegram-form">
+        {user ? <div className="hm-telegram-account"><strong>{user.name || user.email}</strong><span>{user.email} · {user.role}</span><button type="button" onClick={() => { logout(); setError(''); }} disabled={busy}>Use another account</button></div> : <>
+          <div className="hm-telegram-field"><label htmlFor="telegram-email">Email or username</label><input id="telegram-email" name="username" required autoComplete="username" autoCapitalize="none" spellCheck={false} placeholder="Enter your email or username" value={email} onChange={e => setEmail(e.target.value)} disabled={busy} /></div>
+          <div className="hm-telegram-field"><label htmlFor="telegram-password">Password</label><div className="hm-telegram-password"><input id="telegram-password" name="password" required type={visible ? 'text' : 'password'} autoComplete="current-password" placeholder="Enter your password" value={password} onChange={e => setPassword(e.target.value)} disabled={busy} /><button type="button" aria-label={visible ? 'Hide password' : 'Show password'} onClick={() => setVisible(v => !v)}>{visible ? <EyeOff size={19} /> : <Eye size={19} />}</button></div></div>
+        </>}
+        {user && user.role !== 'Hiring Manager' && <p className="hm-telegram-error">Use a Hiring Manager account to connect this bot.</p>}
+        {error && <p role="alert" className="hm-telegram-error">{error}</p>}
+        <button className="hm-telegram-primary" type="submit" disabled={busy || (user && user.role !== 'Hiring Manager')}>{busy ? 'Connecting your account…' : user ? 'Connect Telegram' : 'Sign in & connect'}{!busy && <ArrowRight size={18} />}</button>
+      </form>}
+      <p className="hm-telegram-security"><LockKeyhole size={14} /> Secure, single-use link · Expires after 10 minutes</p>
     </section>
+    <p className="hm-telegram-footer">Your workspace, connected.</p>
   </main>;
 }
