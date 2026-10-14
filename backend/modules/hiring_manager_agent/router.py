@@ -9,6 +9,7 @@ from typing import Optional, Dict, Any
 from modules.identity.domain.models import User, Tenant
 from modules.identity.router import get_current_user
 from .agent import run_hiring_manager_agent_chat
+from .chat_scope import is_hiring_request_in_scope, scope_response
 
 router = APIRouter(prefix="/api/hiring-manager/agent", tags=["Hiring Manager Agent"])
 
@@ -30,6 +31,10 @@ def hiring_manager_agent_chat(
     """Use authenticated identity for all calendar and hiring operations."""
     if current_user.role not in ('Hiring Manager', 'Admin', 'HR', 'Director'):
         raise HTTPException(status_code=403, detail='Company hiring staff access required')
+    if not data.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt is required.")
+    if not is_hiring_request_in_scope(data.prompt, data.history):
+        return {**scope_response(), 'status': 'success'}
     from modules.calendar.services.google_calendar import connection_status
     user_data = {'id': str(current_user.id), 'tenant_id': current_user.tenant_id, 'role': current_user.role,
                  'name': current_user.name, 'email': current_user.email,

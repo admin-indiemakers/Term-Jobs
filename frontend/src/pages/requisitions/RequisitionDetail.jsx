@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { request } from '../../api/client';
+import { todayForDeadline, deadlineError } from '../../utils/submissionDeadline';
 import { useAuth } from '../../context/AuthContext';
 import {
   ChevronLeft,
@@ -145,7 +146,7 @@ export default function RequisitionDetail() {
     headcount: 1,
     skills: '',
     description: '',
-    deadline: '28 Sept 2026, 6:00 pm',
+    deadline: '',
   });
 
   const load = () => {
@@ -183,12 +184,12 @@ export default function RequisitionDetail() {
           duration: structured.duration || structured.contract_duration || data.duration || '6 Months',
           headcount: structured.headcount || data.headcount || 1,
           skills: skillsStr,
-          deadline:
+          deadline: (
             structured.submission_deadline ||
             data.submission_deadline ||
             structured.shortlist_deadline ||
             data.shortlist_deadline ||
-            '28 Sept 2026, 6:00 pm',
+            '').slice(0, 10),
           description:
             structured.summary ||
             structured.role_overview ||
@@ -245,6 +246,10 @@ export default function RequisitionDetail() {
   // Handle Save Edit Form
   const handleSaveEdit = async (e) => {
     if (e) e.preventDefault();
+    if (deadlineError(editForm.deadline)) {
+      setError(deadlineError(editForm.deadline));
+      return;
+    }
     setBusy('saving');
     setError('');
     setInfo('');
@@ -902,10 +907,10 @@ export default function RequisitionDetail() {
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-bold text-gray-700 mb-1">Submission Deadline</label>
                   <input
-                    type="text"
+                    type="date"
+                    min={todayForDeadline()}
                     value={editForm.deadline}
                     onChange={(e) => setEditForm({ ...editForm, deadline: e.target.value })}
-                    placeholder="e.g. 28 Sept 2026, 6:00 pm"
                     className="w-full px-3.5 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-black"
                   />
                 </div>

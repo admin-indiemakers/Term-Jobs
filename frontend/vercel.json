@@ -1,12 +1,24 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/:path*",
-      "destination": "https://term-jobs-j8ja-seven.vercel.app/api/:path*"
+      "src": "/(?:assets/.*|index\\.html|)$",
+      "headers": { "Cache-Control": "no-cache" },
+      "continue": true
     },
     {
-      "source": "/(.*)",
-      "destination": "/index.html"
+      "src": "/api/(.*)",
+      "dest": "https://term-jobs-j8ja-seven.vercel.app/api/$1"
+    },
+    { "handle": "filesystem" },
+    {
+      "src": "/assets(?:/.*)?",
+      "status": 404,
+      "headers": { "Cache-Control": "no-store" }
+    },
+    {
+      "src": "/.*",
+      "dest": "/index.html",
+      "headers": { "Cache-Control": "no-cache" }
     }
   ]
 }

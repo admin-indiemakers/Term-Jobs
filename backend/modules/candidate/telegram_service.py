@@ -30,7 +30,8 @@ TELEGRAM_API_BASE = "https://api.telegram.org"
 
 _GMAIL_SENDER = os.getenv("GMAIL_SENDER_EMAIL", "")
 _GMAIL_APP_PW  = os.getenv("GMAIL_APP_PASSWORD", "")
-_FRONTEND_URL  = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173")
+from modules.interview.services.interview_service import _resolve_interview_domain
+_FRONTEND_URL = _resolve_interview_domain()
 
 
 def _send_email_thread(to_email: str, subject: str, html_body: str, plain_text: str) -> None:

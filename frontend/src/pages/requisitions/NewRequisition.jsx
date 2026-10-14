@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { request } from '../../api/client';
+import { todayForDeadline, deadlineError } from '../../utils/submissionDeadline';
 import { useAuth } from '../../context/AuthContext';
 import {
   ArrowLeft,
@@ -497,7 +498,7 @@ export default function NewRequisition() {
     return { items, filledCount, total: items.length, score };
   }, [roleTitle, department, prefill]);
 
-  const canSubmit = Boolean(roleTitle.trim() && prefill.submission_deadline);
+  const canSubmit = Boolean(roleTitle.trim() && prefill.submission_deadline && !deadlineError(prefill.submission_deadline));
 
   // Submit Handler
   const handleSubmit = async (e) => {
@@ -509,6 +510,11 @@ export default function NewRequisition() {
     }
     if (!prefill.submission_deadline) {
       setError('Please provide a Submission Deadline in the Process tab.');
+      setActiveTab('process');
+      return;
+    }
+    if (deadlineError(prefill.submission_deadline)) {
+      setError(deadlineError(prefill.submission_deadline));
       setActiveTab('process');
       return;
     }
@@ -1334,10 +1340,14 @@ export default function NewRequisition() {
                     <input
                       type="date"
                       value={prefill.submission_deadline}
+                      min={todayForDeadline()}
                       onChange={(e) => handlePrefillChange('process', 'submission_deadline', e.target.value)}
                       className="w-full bg-red-50/40 border border-red-300 rounded-xl px-3.5 py-2 text-xs font-extrabold text-red-900 focus:outline-none focus:border-red-600 focus:ring-1 focus:ring-red-500/20 transition-all"
                       required
                     />
+                    {deadlineError(prefill.submission_deadline) && (
+                      <p role="alert" className="text-xs text-red-600">{deadlineError(prefill.submission_deadline)}</p>
+                    )}
                   </div>
 
                   <div className="space-y-1">

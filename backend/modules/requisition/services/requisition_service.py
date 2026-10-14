@@ -15,6 +15,7 @@ from ...shared.db import _utcnow, get_session
 from .. import events
 from ..agent.graph import JobRequirementAgent
 from ..domain import models
+from ..domain.deadline import validate_submission_deadline
 from ..domain.schemas import (
     RequisitionStatus,
     RoleIntent,
@@ -190,6 +191,7 @@ class RequisitionService:
         intake_meta: dict | None = None,
     ) -> models.Requisition:
         prefill = dict((intake_meta or {}).get("prefill") or {})
+        validate_submission_deadline(prefill.get("submission_deadline"))
         saved_role = _structured_role_from_prefill(intent, prefill)
         with self.session_factory() as session:
             v_limit = saved_role.get("vendor_candidate_limit") if isinstance(saved_role, dict) else getattr(saved_role, "vendor_candidate_limit", 1)

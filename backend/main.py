@@ -35,7 +35,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from modules.candidate.router import router as candidate_router
 from modules.identity.domain.models import User, VendorEngagement, Tenant
@@ -46,6 +46,7 @@ from modules.identity.router import router as identity_router
 from modules.notifications.router import router as notifications_router
 from modules.notifications.services.notification_service import notify_requisition_published
 from modules.requisition.domain import models, schemas
+from modules.requisition.domain.deadline import validate_submission_deadline
 from modules.requisition.domain.state import StateMachine
 from modules.shared.db import get_session, init_db, _utcnow
 from modules.shared.cache import cache as _cache
@@ -368,6 +369,12 @@ class RequisitionIn(BaseModel):
     # Pre-filled structured role fields (optional, all 6 tabs)
     prefill: dict | None = None
 
+    @field_validator("prefill")
+    @classmethod
+    def validate_deadline(cls, value):
+        validate_submission_deadline((value or {}).get("submission_deadline"))
+        return value
+
 
 class AnswerIn(BaseModel):
     answer: str
@@ -380,6 +387,12 @@ class RefineIn(BaseModel):
 class ApproveIn(BaseModel):
     reviewer: str | None = None
     edited_role: dict | None = None
+
+    @field_validator("edited_role")
+    @classmethod
+    def validate_deadline(cls, value):
+        validate_submission_deadline((value or {}).get("submission_deadline"))
+        return value
 
 
 class RejectIn(BaseModel):
@@ -2959,6 +2972,13 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
         icon = "✓"
         desc = f"Thank you, <strong>{cand_name}</strong>! We've notified <strong>{comp_name}</strong> that you are available and interested in the <strong>{req_title}</strong> role."
         sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your video room is provisioned above."
+        email_status = (res.get("interview_email_delivery") or {}).get("status")
+        if email_status == "success":
+            sub_desc += " Your AI interview link has also been emailed to you. Please check your inbox and spam folder."
+        elif email_status == "sending":
+            sub_desc += " Your AI interview email is being sent. You can also use the link above."
+        else:
+            sub_desc += " We could not send the interview email. You can join using the link above or click Yes in your invitation again to retry email delivery."
     elif act == "unavailable":
         headline = "Status Successfully Updated"
         badge_bg = "#f1f5f9"
@@ -3312,6 +3332,12 @@ class UpdateRequisitionRoleIn(BaseModel):
     structured_role: dict | None = None
     title: str | None = None
     generated_jd_markdown: str | None = None
+
+    @field_validator("structured_role")
+    @classmethod
+    def validate_deadline(cls, value):
+        validate_submission_deadline((value or {}).get("submission_deadline"))
+        return value
 
 
 @app.patch("/requisitions/{requisition_id}")
@@ -4194,6 +4220,13 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
     _require_tenant(req, current_user)
 
     was_director_approved = bool(getattr(req, "director_approved", False)) or req.status in ("Published", "Approved")
+    if was_director_approved and current_user.role not in (
+        "Company Admin", "Admin", "Super Admin",
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Approved or published requisitions must be deleted by a company administrator.",
+        )
     hm_name = current_user.name or current_user.email or "Hiring Manager"
     req_title = req.title or "Untitled Requisition"
     tenant_id = str(req.tenant_id or current_user.tenant_id or "local")
@@ -4236,6 +4269,10 @@ def delete_requisition(requisition_id: str, current_user: User = Depends(get_cur
         })
     except Exception as e:
         logger.warning(f"Failed to record deleted_requisition in MongoDB: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="Deletion history could not be saved. The requisition has not been deleted. Please try again.",
+        ) from e
 
     service.delete(requisition_id)
     _cache.clear()
