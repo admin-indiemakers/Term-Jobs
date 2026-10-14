@@ -14,11 +14,11 @@ import {
   ChevronDown,
   ChevronUp,
   Check,
-  CheckCircle2,
   Sparkles,
   RefreshCw,
 } from 'lucide-react';
 import { request } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 const TEMPLATES = {
   technical: {
@@ -163,12 +163,15 @@ function getRoundIcon(type) {
 }
 
 export default function SetInterviewProcessModal({
+  requisitionId,
   isOpen,
   onClose,
-  requisitionTitle = 'Senior Product Designer',
-  requisitionCode = 'REQ #1A1D5F',
+  requisitionTitle,
+  requisitionCode,
   onSave,
 }) {
+  const { token } = useAuth();
+  const [error, setError] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState('custom');
   const [rounds, setRounds] = useState(TEMPLATES.custom.rounds);
   const [hasExistingDbRecord, setHasExistingDbRecord] = useState(false);
@@ -190,7 +193,7 @@ export default function SetInterviewProcessModal({
 
     async function loadProcessFromDb() {
       try {
-        const res = await request('/interviews/process/template');
+        const res = await request(`/api/interviews/process/template?requisition_id=${encodeURIComponent(requisitionId)}`, { token, noCache: true });
         if (!isMounted) return;
 
         if (res && res.is_saved && Array.isArray(res.rounds) && res.rounds.length > 0) {
@@ -200,23 +203,7 @@ export default function SetInterviewProcessModal({
           return;
         }
       } catch (err) {
-        // Fallback to localStorage cache
-      }
-
-      // Check client-side cached configuration
-      try {
-        const cached = localStorage.getItem('hm_interview_process_template');
-        if (cached && isMounted) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed.rounds) && parsed.rounds.length > 0) {
-            setRounds(parsed.rounds);
-            setSelectedTemplate(parsed.template || 'custom');
-            setHasExistingDbRecord(true);
-            return;
-          }
-        }
-      } catch (e) {
-        // Ignore JSON error
+        if (isMounted) setError(err.message || 'Unable to load interview process.');
       }
     }
 
@@ -225,7 +212,7 @@ export default function SetInterviewProcessModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [isOpen, requisitionId, token]);
 
   if (!isOpen) return null;
 
@@ -351,21 +338,14 @@ export default function SetInterviewProcessModal({
       rounds: rounds,
     };
 
-    // 1. Save to localStorage cache immediately
     try {
-      localStorage.setItem('hm_interview_process_template', JSON.stringify(payload));
-    } catch (e) {
-      // Ignore storage error
-    }
-
-    // 2. Persist to MongoDB through backend API
-    try {
-      await request('/interviews/process/template', {
-        method: 'POST',
-        body: payload,
+      await request('/api/interviews/process/template', {
+        method: 'POST', token, body: { ...payload, requisition_id: requisitionId },
       });
     } catch (err) {
-      console.warn('Backend persistence error (cached locally):', err);
+      setError(err.message || 'Unable to save interview process.');
+      setIsSaving(false);
+      return;
     }
 
     setIsSaving(false);
@@ -384,6 +364,8 @@ export default function SetInterviewProcessModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
+      <span className="sr-only">{requisitionTitle} {requisitionCode}</span>
+      {error && <p role="alert" className="rounded bg-white p-3 text-red-600">{error}</p>}
       <div
         className="w-full max-w-4xl bg-white border border-black/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden max-h-[92vh] animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}

@@ -35,379 +35,7 @@ import { request, API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 import SetInterviewProcessModal from '../../components/SetInterviewProcessModal';
-
-// Baseline 12-candidate dataset matching the requisition candidate roster
-const DEFAULT_CANDIDATES = [
-  {
-    id: 'cand-1',
-    name: 'Arjun S',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-    initials: 'AS',
-    location: 'Bangalore, India',
-    email: 'arjun.s@email.com',
-    phone: '+91 98765 43210',
-    score: 92,
-    skills: ['Python', 'Django', 'AWS', '+3'],
-    experience: '3 yrs',
-    availability: 'Immediate',
-    status: 'AI Shortlisted',
-    matchRating: 'Excellent Match',
-    matchSummary: 'Strong technical background, relevant experience, and good communication skills. Recommended for interview.',
-    scoreBreakdown: {
-      technical: 95,
-      experience: 85,
-      problemSolving: 90,
-      communication: 88,
-      culturalFit: 82,
-      roleAlignment: 93,
-    },
-    strengths: [
-      'Strong Python & Django experience',
-      'Good system design understanding',
-      'Clear communication in AI interview',
-      'Relevant project experience',
-    ],
-    concerns: [
-      'Limited experience with cloud infrastructure (AWS).',
-    ],
-  },
-  {
-    id: 'cand-2',
-    name: 'Sneha K',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=120&auto=format&fit=crop&q=80',
-    initials: 'SK',
-    location: 'Kochi, India',
-    email: 'sneha.k@email.com',
-    phone: '+91 98765 43211',
-    score: 88,
-    skills: ['Python', 'FastAPI', 'PostgreSQL', '+2'],
-    experience: '4 yrs',
-    availability: '15 days',
-    status: 'AI Shortlisted',
-    matchRating: 'Strong Match',
-    matchSummary: 'Exceptional backend API performance tuning and relational DB optimization. High aptitude in asynchronous workflows.',
-    scoreBreakdown: {
-      technical: 92,
-      experience: 88,
-      problemSolving: 87,
-      communication: 84,
-      culturalFit: 86,
-      roleAlignment: 89,
-    },
-    strengths: [
-      'Deep FastAPI performance tuning',
-      'Relational schema design',
-      'Proactive communicator',
-      'High code coverage practices',
-    ],
-    concerns: [
-      'Limited exposure to Kubernetes clustering.',
-    ],
-  },
-  {
-    id: 'cand-3',
-    name: 'Vikram R',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-    initials: 'VR',
-    location: 'Chennai, India',
-    email: 'vikram.r@email.com',
-    phone: '+91 98765 43212',
-    score: 85,
-    skills: ['Python', 'React', 'Docker', '+2'],
-    experience: '2 yrs',
-    availability: 'Immediate',
-    status: 'AI Shortlisted',
-    matchRating: 'Strong Match',
-    matchSummary: 'Versatile fullstack developer with high agility and containerization knowledge. Quick problem solver.',
-    scoreBreakdown: {
-      technical: 86,
-      experience: 78,
-      problemSolving: 88,
-      communication: 85,
-      culturalFit: 87,
-      roleAlignment: 85,
-    },
-    strengths: [
-      'Fullstack Python & React versatility',
-      'Clean Docker containerization',
-      'Rapid prototype turnaround',
-    ],
-    concerns: [
-      'Lower total tenure (2 yrs experience).',
-    ],
-  },
-  {
-    id: 'cand-4',
-    name: 'Anjali S',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=120&auto=format&fit=crop&q=80',
-    initials: 'AS',
-    location: 'Bangalore, India',
-    email: 'anjali.s@email.com',
-    phone: '+91 98765 43213',
-    score: 78,
-    skills: ['Python', 'Flask', 'SQL', '+1'],
-    experience: '2 yrs',
-    availability: '30 days',
-    status: 'AI Shortlisted',
-    matchRating: 'Good Match',
-    matchSummary: 'Solid foundations in Python web services and relational database operations with dependable coding style.',
-    scoreBreakdown: {
-      technical: 80,
-      experience: 75,
-      problemSolving: 80,
-      communication: 82,
-      culturalFit: 81,
-      roleAlignment: 79,
-    },
-    strengths: [
-      'Clean modular Flask architecture',
-      'Consistent test automation habits',
-    ],
-    concerns: [
-      'Standard 30-day notice period.',
-    ],
-  },
-  {
-    id: 'cand-5',
-    name: 'Rohit P',
-    initials: 'RP',
-    location: 'Hyderabad, India',
-    email: 'rohit.p@email.com',
-    phone: '+91 98765 43214',
-    score: 74,
-    skills: ['Python', 'Django', 'Linux', '+2'],
-    experience: '5 yrs',
-    availability: 'Immediate',
-    status: 'In Review',
-    matchRating: 'Moderate Match',
-    matchSummary: 'Experienced backend engineer with strong Linux administration skills, currently undergoing manual calibration.',
-    scoreBreakdown: {
-      technical: 76,
-      experience: 88,
-      problemSolving: 74,
-      communication: 70,
-      culturalFit: 73,
-      roleAlignment: 75,
-    },
-    strengths: [
-      '5 years enterprise Django stability',
-      'Linux server internal tuning',
-    ],
-    concerns: [
-      'Limited recent microservices experience.',
-    ],
-  },
-  {
-    id: 'cand-6',
-    name: 'Meera N',
-    avatar: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=120&auto=format&fit=crop&q=80',
-    initials: 'MN',
-    location: 'Kozhikode, India',
-    email: 'meera.n@email.com',
-    phone: '+91 98765 43215',
-    score: 71,
-    skills: ['Python', 'Odoo', 'PostgreSQL', '+1'],
-    experience: '3 yrs',
-    availability: 'Immediate',
-    status: 'In Review',
-    matchRating: 'Moderate Match',
-    matchSummary: 'Good ERP and Python backend capabilities with strong SQL query profiling skills.',
-    scoreBreakdown: {
-      technical: 72,
-      experience: 75,
-      problemSolving: 70,
-      communication: 76,
-      culturalFit: 74,
-      roleAlignment: 71,
-    },
-    strengths: [
-      'Extensive ERP module customization',
-      'PostgreSQL indexing proficiency',
-    ],
-    concerns: [
-      'Transitioning from specialized ERP to general microservices.',
-    ],
-  },
-  {
-    id: 'cand-7',
-    name: 'Daniel K',
-    initials: 'DK',
-    location: 'Bangalore, India',
-    email: 'daniel.k@email.com',
-    phone: '+91 98765 43216',
-    score: 68,
-    skills: ['Python', 'AWS', 'CI/CD', '+1'],
-    experience: '4 yrs',
-    availability: '15 days',
-    status: 'In Review',
-    matchRating: 'Moderate Match',
-    matchSummary: 'Good DevOps & cloud orientation, slightly lower depth in application-level algorithm design.',
-    scoreBreakdown: {
-      technical: 68,
-      experience: 80,
-      problemSolving: 66,
-      communication: 72,
-      culturalFit: 70,
-      roleAlignment: 68,
-    },
-    strengths: [
-      'AWS pipeline automation',
-      'Infrastructure as Code setup',
-    ],
-    concerns: [
-      'Lacks heavy web framework architectural design experience.',
-    ],
-  },
-  {
-    id: 'cand-8',
-    name: 'Priya M',
-    initials: 'PM',
-    location: 'Coimbatore, India',
-    email: 'priya.m@email.com',
-    phone: '+91 98765 43217',
-    score: 65,
-    skills: ['Python', 'Machine Learning', '+2'],
-    experience: '3 yrs',
-    availability: '30 days',
-    status: 'Not Shortlisted',
-    matchRating: 'Partial Fit',
-    matchSummary: 'Strong data science and ML toolkit, but role requires heavy web backend & API microservice experience.',
-    scoreBreakdown: {
-      technical: 70,
-      experience: 65,
-      problemSolving: 72,
-      communication: 68,
-      culturalFit: 66,
-      roleAlignment: 58,
-    },
-    strengths: [
-      'PyTorch & scikit-learn model development',
-      'Statistical data exploration',
-    ],
-    concerns: [
-      'Role requires web backend microservices rather than ML modeling.',
-    ],
-  },
-  {
-    id: 'cand-9',
-    name: 'Shahid V',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-    initials: 'SV',
-    location: 'Delhi, India',
-    email: 'shahid.v@email.com',
-    phone: '+91 98765 43218',
-    score: 62,
-    skills: ['Python', 'React', 'Docker', '+1'],
-    experience: '2 yrs',
-    availability: 'Immediate',
-    status: 'Not Shortlisted',
-    matchRating: 'Below Benchmark',
-    matchSummary: 'Junior fullstack profile with incomplete interview responses on backend concurrency.',
-    scoreBreakdown: {
-      technical: 62,
-      experience: 60,
-      problemSolving: 64,
-      communication: 66,
-      culturalFit: 65,
-      roleAlignment: 61,
-    },
-    strengths: [
-      'Frontend component agility',
-      'Enthusiastic team learner',
-    ],
-    concerns: [
-      'Insufficient depth on Python asynchronous event loop.',
-    ],
-  },
-  {
-    id: 'cand-10',
-    name: 'Karthik B',
-    initials: 'KB',
-    location: 'Bangalore, India',
-    email: 'karthik.b@email.com',
-    phone: '+91 98765 43219',
-    score: 58,
-    skills: ['Python', 'Flask', 'MySQL', '+1'],
-    experience: '1 yr',
-    availability: '30 days',
-    status: 'Not Shortlisted',
-    matchRating: 'Below Benchmark',
-    matchSummary: 'Entry-level candidate requiring mentoring on high-scale architecture.',
-    scoreBreakdown: {
-      technical: 58,
-      experience: 50,
-      problemSolving: 60,
-      communication: 65,
-      culturalFit: 68,
-      roleAlignment: 56,
-    },
-    strengths: [
-      'Basic REST API construction',
-    ],
-    concerns: [
-      'Less than 18 months hands-on experience.',
-    ],
-  },
-  {
-    id: 'cand-11',
-    name: 'Neha P',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-    initials: 'NP',
-    location: 'Kochi, India',
-    email: 'neha.p@email.com',
-    phone: '+91 98765 43220',
-    score: 55,
-    skills: ['Python', 'Data Analysis', '+1'],
-    experience: '2 yrs',
-    availability: 'Immediate',
-    status: 'Not Shortlisted',
-    matchRating: 'Below Benchmark',
-    matchSummary: 'Data analyst experience with limited backend service engineering.',
-    scoreBreakdown: {
-      technical: 56,
-      experience: 58,
-      problemSolving: 55,
-      communication: 62,
-      culturalFit: 64,
-      roleAlignment: 52,
-    },
-    strengths: [
-      'SQL querying and dashboard generation',
-    ],
-    concerns: [
-      'No experience with production web frameworks like Django or FastAPI.',
-    ],
-  },
-  {
-    id: 'cand-12',
-    name: 'Imran T',
-    initials: 'IT',
-    location: 'Chennai, India',
-    email: 'imran.t@email.com',
-    phone: '+91 98765 43221',
-    score: 48,
-    skills: ['Python', 'HTML', 'JavaScript', '+1'],
-    experience: '1 yr',
-    availability: '15 days',
-    status: 'Not Shortlisted',
-    matchRating: 'Unmatched',
-    matchSummary: 'Skillset does not meet minimum technical requirements for the role.',
-    scoreBreakdown: {
-      technical: 48,
-      experience: 45,
-      problemSolving: 50,
-      communication: 55,
-      culturalFit: 60,
-      roleAlignment: 46,
-    },
-    strengths: [
-      'HTML / CSS styling basics',
-    ],
-    concerns: [
-      'Failed core Python algorithmic evaluation benchmark.',
-    ],
-  },
-];
+import { mapRequisitionCandidates } from '../../utils/requisitionCandidates';
 
 // Circular SVG gauge for scores (Light Theme Clean)
 function ScoreRing({ score, size = 38, stroke = 3 }) {
@@ -442,14 +70,14 @@ function ScoreRing({ score, size = 38, stroke = 3 }) {
         />
       </svg>
       <span className="absolute font-black text-gray-900 text-[12px] tracking-tight">
-        {score}
+        {score ?? '—'}
       </span>
     </div>
   );
 }
 
 // Large Circular SVG gauge for right preview panel (Light Theme Clean)
-function LargeScoreRing({ score = 92 }) {
+function LargeScoreRing({ score }) {
   const size = 96;
   const stroke = 6.5;
   const radius = (size - stroke * 2) / 2;
@@ -484,7 +112,7 @@ function LargeScoreRing({ score = 92 }) {
       </svg>
       <div className="absolute flex flex-col items-center justify-center">
         <span className="text-2xl font-black text-gray-900 leading-none tracking-tight">
-          {score}
+          {score ?? '—'}
         </span>
         <span className="text-[10px] text-gray-500 font-medium mt-0.5">
           / 100
@@ -497,7 +125,7 @@ function LargeScoreRing({ score = 92 }) {
 export default function RequisitionCandidates() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
   const [req, setReq] = useState(null);
   const [apiCandidates, setApiCandidates] = useState([]);
@@ -520,49 +148,13 @@ export default function RequisitionCandidates() {
   // Modals & Actions
   const [schedulingCandidate, setSchedulingCandidate] = useState(null);
   const [showSetInterviewModal, setShowSetInterviewModal] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteSent, setInviteSent] = useState(false);
-  const [copiedShareLink, setCopiedShareLink] = useState(false);
-  const [actingStatusId, setActingStatusId] = useState(null);
+  const [, setActingStatusId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
 
-  // Scheduled candidates tracker (persisted to localStorage)
-  const [scheduledCandidateIds, setScheduledCandidateIds] = useState(() => {
-    try {
-      const saved = localStorage.getItem('termjobs_scheduled_candidates');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Helper to determine if candidate interview has been scheduled
-  const isCandidateScheduled = (cand) => {
-    if (!cand) return false;
-    const cid = String(cand.id || cand.submission_id || '');
-    const sid = String(cand.submission_id || '');
-    if (scheduledCandidateIds.includes(cid) || (sid && scheduledCandidateIds.includes(sid))) {
-      return true;
-    }
-    if (cand.status === 'In Interview' || cand.isScheduled) {
-      return true;
-    }
-    if (
-      interviews &&
-      interviews.some(
-        (inv) =>
-          String(inv.candidate_submission_id || inv.candidate_id || '') === cid ||
-          (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid)
-      )
-    ) {
-      return true;
-    }
-    return false;
-  };
-
+  const isCandidateScheduled = cand => Boolean(cand && interviews.some(inv =>
+    inv.status !== 'Cancelled' && String(inv.candidate_submission_id) === String(cand.submission_id || cand.id)));
+  const [refresh, setRefresh] = useState(0);
   // Notes state
-  const [candidateNotes, setCandidateNotes] = useState({});
   const [newNoteText, setNewNoteText] = useState('');
 
   // Fetch requisition and candidates from API
@@ -570,9 +162,9 @@ export default function RequisitionCandidates() {
     setLoading(true);
     setError('');
     Promise.all([
-      request(`/requisitions/${id}`, { token }).catch(() => null),
-      request(`/candidates?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
-      request(`/api/interviews/company?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
+      request(`/requisitions/${id}`, { token, noCache: true }),
+      request(`/candidates?include_details=true&refresh=true&requisition_id=${encodeURIComponent(id)}`, { token, noCache: true }),
+      request(`/api/interviews/rounds?requisition_id=${encodeURIComponent(id)}`, { token, noCache: true }),
     ])
       .then(([reqData, candData, intRes]) => {
         if (reqData) setReq(reqData);
@@ -581,99 +173,22 @@ export default function RequisitionCandidates() {
         setInterviews(Array.isArray(intRes) ? intRes : intRes?.interviews || []);
       })
       .catch((err) => {
-        console.warn('API fetch warning:', err);
+        setError(err.message || 'Unable to load requisition candidates.');
       })
       .finally(() => setLoading(false));
-  }, [id, token]);
+  }, [id, token, refresh]);
 
   // Derived requisition information
-  const reqTitle = req?.title || req?.structured_role?.title || 'Python Developer';
+  const reqTitle = req?.title || req?.structured_role?.title || 'Requisition';
   const reqCode = req?.ref ? req.ref.replace('REQ-', 'REQ #') : (id ? `REQ #${id.slice(0, 6).toUpperCase()}` : 'REQ #8302C0');
-  const reqDept = req?.department || req?.structured_role?.department || 'Engineering';
+  const reqDept = req?.department || req?.structured_role?.department || req?.structured_role?.job_family || 'Not specified';
   const reqLocation = (() => {
-    const loc = req?.primary_location || req?.location || req?.structured_role?.location || 'Bangalore';
-    const wp = req?.workplace_type || req?.work_mode || 'Hybrid';
+    const loc = req?.primary_location || req?.location || req?.structured_role?.location || req?.structured_role?.work_locations?.[0] || 'Not specified';
+    const wp = req?.workplace_type || req?.work_mode || req?.structured_role?.work_mode || 'Not specified';
     return `${loc} (${wp})`;
   })();
 
-  // Combine Real API candidates with the standard roster
-  const allCandidates = useMemo(() => {
-    const baseList = (() => {
-      if (!apiCandidates || apiCandidates.length === 0) {
-        return DEFAULT_CANDIDATES;
-      }
-
-      const mappedApi = apiCandidates.map((c, idx) => {
-        const score = Math.round(c.match_score ?? (90 - idx * 4));
-        const status = c.status === 'Shortlisted' ? 'AI Shortlisted' : c.status === 'Rejected' ? 'Not Shortlisted' : (c.status || 'In Review');
-        return {
-          id: String(c.id || c.submission_id || `api-${idx}`),
-          submission_id: c.submission_id || c.id,
-          name: c.candidate_name || `Candidate #${idx + 1}`,
-          avatar: c.avatar_url || null,
-          initials: (c.candidate_name || 'CN').split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase(),
-          location: c.location || 'Bangalore, India',
-          email: c.candidate_email || `${(c.candidate_name || 'candidate').toLowerCase().replace(/\s+/g, '.')}@email.com`,
-          phone: c.candidate_phone || '+91 98765 43210',
-          score,
-          skills: Array.isArray(c.matched_skills) && c.matched_skills.length
-            ? c.matched_skills.slice(0, 3).concat(c.matched_skills.length > 3 ? [`+${c.matched_skills.length - 3}`] : [])
-            : ['Python', 'FastAPI', 'AWS', '+2'],
-          experience: c.experience ? `${c.experience} yrs` : '3 yrs',
-          availability: c.availability || 'Immediate',
-          status,
-          matchRating: score >= 80 ? 'Excellent Match' : score >= 65 ? 'Moderate Match' : 'Not Recommended',
-          matchSummary: c.summary || 'Strong technical background, relevant experience, and good communication skills. Recommended for interview.',
-          scoreBreakdown: {
-            technical: Math.min(100, Math.round(score * 1.03)),
-            experience: Math.min(100, Math.round(score * 0.94)),
-            problemSolving: Math.min(100, Math.round(score * 0.98)),
-            communication: Math.min(100, Math.round(score * 0.95)),
-            culturalFit: Math.min(100, Math.round(score * 0.90)),
-            roleAlignment: Math.min(100, Math.round(score * 1.01)),
-          },
-          strengths: c.matched_skills && c.matched_skills.length
-            ? c.matched_skills.slice(0, 4).map((s) => `Demonstrated skill in ${s}`)
-            : [
-                'Strong Python & Django experience',
-                'Good system design understanding',
-                'Clear communication in AI interview',
-                'Relevant project experience',
-              ],
-          concerns: c.missing_skills && c.missing_skills.length
-            ? c.missing_skills.slice(0, 2).map((s) => `Lacks documented exposure to ${s}`)
-            : ['Limited experience with cloud infrastructure (AWS).'],
-          resume_text: c.resume_text,
-          filename: c.filename,
-          isRealApi: true,
-        };
-      });
-
-      const namesSet = new Set(mappedApi.map((c) => c.name.toLowerCase()));
-      const remainingDefaults = DEFAULT_CANDIDATES.filter((c) => !namesSet.has(c.name.toLowerCase()));
-      return [...mappedApi, ...remainingDefaults];
-    })();
-
-    // Dynamically mark candidates who have scheduled interviews as 'In Interview'
-    return baseList.map((c) => {
-      const cid = String(c.id || c.submission_id || '');
-      const sid = String(c.submission_id || '');
-      const isSched =
-        scheduledCandidateIds.includes(cid) ||
-        (sid && scheduledCandidateIds.includes(sid)) ||
-        (interviews &&
-          interviews.some(
-            (inv) =>
-              String(inv.candidate_submission_id || inv.candidate_id || '') === cid ||
-              (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid)
-          ));
-
-      if (isSched) {
-        return { ...c, status: 'In Interview', isScheduled: true };
-      }
-      return c;
-    });
-  }, [apiCandidates, scheduledCandidateIds, interviews]);
+  const allCandidates = useMemo(() => mapRequisitionCandidates(apiCandidates, interviews), [apiCandidates, interviews]);
 
   // Selected candidate (null if preview panel closed)
   const selectedCandidate = useMemo(() => {
@@ -688,9 +203,18 @@ export default function RequisitionCandidates() {
         const q = searchQuery.toLowerCase();
         const matchesName = c.name.toLowerCase().includes(q);
         const matchesLocation = c.location.toLowerCase().includes(q);
-        const matchesSkills = c.skills.some((s) => s.toLowerCase().includes(q));
+        const matchesSkills = (c.allSkills || c.skills).some((s) => s.toLowerCase().includes(q));
         if (!matchesName && !matchesLocation && !matchesSkills) return false;
       }
+      if (scoreFilter !== 'all' && c.score === null) return false;
+      if (experienceFilter !== 'all') {
+        const years = parseFloat(c.experience);
+        if (!Number.isFinite(years)) return false;
+        if (experienceFilter === '1' && (years < 1 || years >= 3)) return false;
+        if (experienceFilter === '3' && (years < 3 || years >= 5)) return false;
+        if (experienceFilter === '5' && years < 5) return false;
+      }
+      if (locationFilter !== 'all' && c.location !== locationFilter) return false;
       if (scoreFilter === '90' && c.score < 90) return false;
       if (scoreFilter === '80' && (c.score < 80 || c.score >= 90)) return false;
       if (scoreFilter === '70' && (c.score < 70 || c.score >= 80)) return false;
@@ -700,13 +224,13 @@ export default function RequisitionCandidates() {
 
       return true;
     });
-  }, [allCandidates, searchQuery, scoreFilter, statusFilter]);
+  }, [allCandidates, searchQuery, scoreFilter, statusFilter, experienceFilter, locationFilter]);
 
   // Aggregate metrics
   const totalCount = allCandidates.length;
   const aiShortlistedCount = allCandidates.filter((c) => c.status === 'AI Shortlisted').length;
-  const inInterviewCount = Math.max(interviews.length, allCandidates.filter((c) => c.status === 'In Review').length);
-  const offeredCount = 1;
+  const inInterviewCount = allCandidates.filter(c => c.status === 'In Interview').length;
+  const offeredCount = allCandidates.filter(c => ['Offered', 'Accepted', 'Hired'].includes(c.status)).length;
 
   // Status Action handler
   const handleUpdateStatus = async (candidate, newStatus) => {
@@ -714,7 +238,7 @@ export default function RequisitionCandidates() {
     setActingStatusId(candidate.id);
     setActiveMenuId(null);
 
-    candidate.status = newStatus;
+
 
     if (candidate.isRealApi) {
       try {
@@ -724,9 +248,10 @@ export default function RequisitionCandidates() {
           body: { status: newStatus === 'AI Shortlisted' ? 'Shortlisted' : newStatus === 'Not Shortlisted' ? 'Rejected' : 'Screened' },
         });
       } catch (err) {
-        console.warn('Status update API error:', err);
+        setError(err.message || 'Status update failed.');
       }
     }
+    setRefresh(value => value + 1);
     setActingStatusId(null);
   };
 
@@ -753,46 +278,13 @@ export default function RequisitionCandidates() {
     setActivePreviewTab('resume');
   };
 
-  // Invite candidate submit
-  const handleSendInvite = (e) => {
+  const handleAddNote = async e => {
     e.preventDefault();
-    if (!inviteEmail) return;
-    setInviteSent(true);
-    setTimeout(() => {
-      setInviteSent(false);
-      setShowInviteModal(false);
-      setInviteEmail('');
-    }, 1500);
-  };
-
-  const shareableLink = `https://termjobs.com/apply/${reqCode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`;
-
-  const handleCopyLink = () => {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(shareableLink).then(() => {
-        setCopiedShareLink(true);
-        setTimeout(() => setCopiedShareLink(false), 2000);
-      });
-    }
-  };
-
-  const handleAddNote = (e) => {
-    e.preventDefault();
-    if (!newNoteText.trim()) return;
-    const currentNotes = candidateNotes[selectedCandidate.id] || [];
-    setCandidateNotes({
-      ...candidateNotes,
-      [selectedCandidate.id]: [
-        ...currentNotes,
-        {
-          id: Date.now(),
-          author: user?.name || 'Hiring Manager',
-          date: 'Just now',
-          text: newNoteText.trim(),
-        },
-      ],
-    });
-    setNewNoteText('');
+    if (!newNoteText.trim() || !selectedCandidate) return;
+    try {
+      await request(`/api/candidates/${selectedCandidate.id}/notes`, { method: 'POST', token, body: { text: newNoteText.trim() } });
+      setNewNoteText(''); setRefresh(x => x + 1);
+    } catch (err) { setError(err.message || 'Unable to save note.'); }
   };
 
   return (
@@ -800,6 +292,8 @@ export default function RequisitionCandidates() {
       className="w-full min-w-0 h-full max-h-full flex-1 flex flex-col justify-between gap-4 text-left overflow-hidden pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-sm text-gray-500">Loading candidates…</p>}
       {/* ── TOP HEADER AREA (Spacious & Uncompact) ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3.5 sm:pt-5 lg:pt-6 shrink-0">
         <div className="pl-1 sm:pl-2">
@@ -816,7 +310,7 @@ export default function RequisitionCandidates() {
               {reqTitle}
             </h1>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-3xs">
-              Open
+              {req?.status || '—'}
             </span>
           </div>
 
@@ -892,7 +386,7 @@ export default function RequisitionCandidates() {
                       : 'bg-white/70 hover:bg-white border-white/90 text-gray-700'
                   }`}
                 >
-                  <span>{scoreFilter === '90' ? '90%+ Match' : scoreFilter === '80' ? '80% – 89%' : scoreFilter === '70' ? '70% – 79%' : scoreFilter === 'under70' ? 'Below 70%' : 'AI Score'}</span>
+                  <span>{scoreFilter === '90' ? '90%+ Match' : scoreFilter === '80' ? '80% – 89%' : scoreFilter === '70' ? '70% – 79%' : scoreFilter === 'under70' ? 'Below 70%' : 'Match Score'}</span>
                   <ChevronDown size={12} className={scoreFilter !== 'all' || openFilterDropdown === 'score' ? 'text-white' : 'text-gray-400'} />
                 </button>
 
@@ -902,7 +396,7 @@ export default function RequisitionCandidates() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     {[
-                      { label: 'AI Score', val: 'all' },
+                      { label: 'Match Score', val: 'all' },
                       { label: '90%+ Match', val: '90' },
                       { label: '80% – 89%', val: '80' },
                       { label: '70% – 79%', val: '70' },
@@ -952,7 +446,7 @@ export default function RequisitionCandidates() {
                     {[
                       { label: 'All Statuses', val: 'all' },
                       { label: 'AI Shortlisted', val: 'AI Shortlisted' },
-                      { label: 'In Review', val: 'In Review' },
+                      { label: 'In Interview', val: 'In Interview' },
                       { label: 'Not Shortlisted', val: 'Not Shortlisted' },
                     ].map((item) => (
                       <button
@@ -1023,18 +517,14 @@ export default function RequisitionCandidates() {
                 )}
               </div>
 
-              {/* Location Pill */}
-              <button
-                type="button"
-                onClick={() => setLocationFilter(locationFilter === 'all' ? 'Bangalore' : 'all')}
-                className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-semibold shadow-3xs whitespace-nowrap ${
-                  locationFilter !== 'all'
-                    ? 'bg-black text-white border-black'
-                    : 'bg-white/70 hover:bg-white border-white/90 text-gray-700'
-                }`}
-              >
-                Location
-              </button>
+              <div className="relative">
+                <button type="button" onClick={() => setOpenFilterDropdown(openFilterDropdown === 'location' ? null : 'location')} className="px-3 py-1.5 rounded-xl bg-white/70 border border-white/80 text-gray-600 font-semibold shadow-3xs flex items-center gap-1.5">
+                  <span>{locationFilter === 'all' ? 'Location' : locationFilter}</span><ChevronDown size={12} />
+                </button>
+                {openFilterDropdown === 'location' && <div className="absolute right-0 top-full mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-lg p-1 z-50">
+                  {['all', ...new Set(allCandidates.map(c => c.location))].map(location => <button key={location} className="w-full rounded-xl px-2.5 py-1.5 text-left text-xs hover:bg-gray-50" onClick={() => { setLocationFilter(location); setOpenFilterDropdown(null); }}>{location === 'all' ? 'All locations' : location}</button>)}
+                </div>}
+              </div>
             </div>
           </div>
 
@@ -1045,7 +535,7 @@ export default function RequisitionCandidates() {
               <div className="shrink-0 border-b border-black/[0.04] py-2.5 w-full">
                 <div className="grid grid-cols-[minmax(0,1.2fr)_55px_minmax(0,1.8fr)_75px_85px_95px_65px] gap-2 items-center text-gray-400 font-medium text-[10.5px] uppercase tracking-wider">
                   <div className="pl-4 pr-2">Candidate</div>
-                  <div className="px-1 text-center">AI Score</div>
+                  <div className="px-1 text-center">Match Score</div>
                   <div className="px-2">Skills Match</div>
                   <div className="px-1">Experience</div>
                   <div className="px-1">Availability</div>
@@ -1361,12 +851,12 @@ export default function RequisitionCandidates() {
                             <Code size={13} className="text-gray-400" />
                             <span>Technical Skills</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.technical || 95}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.technical ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.technical || 95}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.technical ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1378,12 +868,12 @@ export default function RequisitionCandidates() {
                             <Briefcase size={13} className="text-gray-400" />
                             <span>Experience</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.experience || 85}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.experience ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.experience || 85}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.experience ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1395,12 +885,12 @@ export default function RequisitionCandidates() {
                             <Puzzle size={13} className="text-gray-400" />
                             <span>Problem Solving</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.problemSolving || 90}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.problemSolving ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.problemSolving || 90}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.problemSolving ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1412,12 +902,12 @@ export default function RequisitionCandidates() {
                             <MessageSquare size={13} className="text-gray-400" />
                             <span>Communication</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.communication || 88}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.communication ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.communication || 88}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.communication ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1429,12 +919,12 @@ export default function RequisitionCandidates() {
                             <Users size={13} className="text-gray-400" />
                             <span>Cultural Fit</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.culturalFit || 82}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.culturalFit ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.culturalFit || 82}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.culturalFit ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1446,12 +936,12 @@ export default function RequisitionCandidates() {
                             <Target size={13} className="text-gray-400" />
                             <span>Role Alignment</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.roleAlignment || 93}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.roleAlignment ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.roleAlignment || 93}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.roleAlignment ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1543,20 +1033,7 @@ export default function RequisitionCandidates() {
                     </button>
                   </div>
                   <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-xl font-mono text-[11px] text-gray-700 leading-relaxed max-h-60 overflow-y-auto">
-                    {selectedCandidate.resume_text || `RESUME: ${selectedCandidate.name}
-Location: ${selectedCandidate.location}
-Email: ${selectedCandidate.email}
-Phone: ${selectedCandidate.phone}
-
-EXPERIENCE:
-• Senior Software Engineer — 3+ years experience building scalable backend services.
-• Maintained high throughput REST and GraphQL endpoints with PostgreSQL and Redis.
-• Collaborated in cross-functional agile pods and led CI/CD deployment routines.
-
-SKILLS:
-• Languages: Python, JavaScript, SQL
-• Frameworks: Django, FastAPI, Flask, React
-• Cloud & Tools: AWS, Docker, Git, CI/CD, Linux`}
+                    {selectedCandidate.resume_text || 'No resume text is available. Use View Profile to open the saved resume.'}
                   </div>
                 </div>
               )}
@@ -1571,17 +1048,17 @@ SKILLS:
                   <div className="space-y-2.5">
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
                       <div>
-                        <div className="font-bold text-gray-900 text-xs">AI Calibration & Screening</div>
-                        <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">Completed (Score: {selectedCandidate.score}/100)</div>
+                        <div className="font-bold text-gray-900 text-xs">Saved Resume Assessment</div>
+                        <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">Saved match score: {selectedCandidate.score ?? '—'}/100</div>
                       </div>
-                      <span className="text-[10px] text-gray-400 font-mono">2 days ago</span>
+                      <span className="text-[10px] text-gray-400 font-mono">{selectedCandidate.created_at ? new Date(selectedCandidate.created_at).toLocaleDateString('en-IN') : ''}</span>
                     </div>
 
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
                       <div>
-                        <div className="font-bold text-gray-900 text-xs">Round 1: Technical & Systems</div>
+                        <div className="font-bold text-gray-900 text-xs">{interviews.find(r => String(r.candidate_submission_id) === String(selectedCandidate.id))?.round_name || 'Interview scheduling'}</div>
                         <div className="text-[11px] text-gray-500 mt-0.5">
-                          {selectedCandidate.status === 'AI Shortlisted' ? 'Ready to Schedule' : 'Pending'}
+                          {interviews.find(r => String(r.candidate_submission_id) === String(selectedCandidate.id))?.status || 'Not scheduled'}
                         </div>
                       </div>
                       {isCandidateScheduled(selectedCandidate) ? (
@@ -1614,18 +1091,7 @@ SKILLS:
                     Internal Team Notes
                   </h3>
                   <div className="space-y-2">
-                    {(candidateNotes[selectedCandidate.id] || []).map((n) => (
-                      <div key={n.id} className="p-2.5 rounded-xl bg-gray-50 border border-gray-200/80">
-                        <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-                          <span className="font-bold text-gray-800">{n.author}</span>
-                          <span>{n.date}</span>
-                        </div>
-                        <p className="text-xs text-gray-700">{n.text}</p>
-                      </div>
-                    ))}
-                    {(!candidateNotes[selectedCandidate.id] || candidateNotes[selectedCandidate.id].length === 0) && (
-                      <p className="text-xs text-gray-400 italic">No notes added for this candidate yet.</p>
-                    )}
+                    <p className="whitespace-pre-wrap text-xs text-gray-700">{selectedCandidate.hiring_manager_notes || 'No saved notes for this candidate.'}</p>
                   </div>
 
                   <form onSubmit={handleAddNote} className="space-y-2 pt-2 border-t border-black/[0.06]">
@@ -1768,9 +1234,9 @@ SKILLS:
 
             {/* Stat Card 3: In Interview */}
             <div
-              onClick={() => setStatusFilter(statusFilter === 'In Review' ? 'all' : 'In Review')}
+              onClick={() => setStatusFilter(statusFilter === 'In Interview' ? 'all' : 'In Interview')}
               className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
-                statusFilter === 'In Review'
+                statusFilter === 'In Interview'
                   ? 'bg-purple-50/90 border-purple-500/50 ring-1 ring-purple-500/20 shadow-sm'
                   : 'bg-white/40 border-white/70 hover:bg-white/60'
               }`}
@@ -1823,107 +1289,21 @@ SKILLS:
             availability: schedulingCandidate.availability,
             avatar: schedulingCandidate.avatar,
           }}
-          requisitionTitle={reqTitle}
+          requisitionId={id}
+        requisitionTitle={reqTitle}
           requisitionCode={reqCode}
           onClose={() => setSchedulingCandidate(null)}
-          onScheduled={(scheduledData) => {
-            const candId = String(schedulingCandidate?.id || schedulingCandidate?.submission_id || '');
-            const subId = String(schedulingCandidate?.submission_id || '');
-            const updated = Array.from(new Set([...scheduledCandidateIds, candId, subId].filter(Boolean)));
-            setScheduledCandidateIds(updated);
-            try {
-              localStorage.setItem('termjobs_scheduled_candidates', JSON.stringify(updated));
-            } catch (e) {}
-            setSchedulingCandidate(null);
+          onScheduled={() => {
+            setRefresh(value => value + 1);
           }}
         />
-      )}
-
-      {/* ── INVITE CANDIDATE MODAL ── */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white border border-black/[0.08] rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-black/[0.06]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-                  <Share2 size={16} />
-                </div>
-                <h3 className="text-sm font-bold text-gray-900">Invite Candidate</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowInviteModal(false)}
-                className="text-gray-400 hover:text-black cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-600">
-              Invite a candidate to apply directly to <strong>{reqTitle}</strong> ({reqCode}). Our talent calibration engine will automatically evaluate their submission.
-            </p>
-
-            <form onSubmit={handleSendInvite} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Candidate Email Address
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="e.g. candidate@example.com"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200/80 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black"
-                />
-              </div>
-
-              <div className="pt-2 border-t border-black/[0.06]">
-                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                  Or share public application link:
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={shareableLink}
-                    className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200/80 rounded-xl text-xs text-gray-700 font-mono select-all focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Copy size={12} />
-                    <span>{copiedShareLink ? 'Copied!' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowInviteModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:text-black cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-                >
-                  {inviteSent ? 'Invite Sent!' : 'Send Direct Invite'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
 
       {/* ── SET INTERVIEW PROCESS MODAL ── */}
       <SetInterviewProcessModal
         isOpen={showSetInterviewModal}
         onClose={() => setShowSetInterviewModal(false)}
+        requisitionId={id}
         requisitionTitle={reqTitle}
         requisitionCode={reqCode}
       />

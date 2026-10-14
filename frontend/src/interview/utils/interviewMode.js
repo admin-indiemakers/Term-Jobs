@@ -6,6 +6,7 @@ export function mergeInterviewResult(round, result) {
   if (!round || !result || typeof result !== 'object') return round;
   if (result.analysis || result.metrics) {
     return { ...round,
+      status: result.status === 'Completed' || result.analysis ? 'Completed' : round.status,
       ...(result.analysis ? { communication_analysis: result.analysis } : {}),
       ...(result.metrics ? { communication_metrics: result.metrics } : {}),
     };

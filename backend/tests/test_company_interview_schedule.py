@@ -75,6 +75,25 @@ def test_retry_dispatch_does_not_duplicate_the_round(setup):
     assert create.call_count == 1
 
 
+def test_dispatch_notifies_linked_telegram_and_persists_result(setup, monkeypatch):
+    user, data, factory, mail, create = setup
+    db_module = importlib.import_module('modules.shared.db')
+    db_module.db.telegram_links.insert_one({'candidate_email': 'candidate@example.com', 'chat_id': '123'})
+    telegram_module = importlib.import_module('modules.candidate.telegram_service')
+    calls = []
+    async def send(**kwargs):
+        calls.append(kwargs)
+        return {'ok': True}
+    monkeypatch.setattr(telegram_module, 'send_candidate_interview_scheduled_alert', send)
+    result = scheduling.save_company_interview(user, data)
+    assert result['telegram_delivery']['status'] == 'success'
+    assert calls[0]['chat_id'] == '123'
+    assert 'token=candidate-token' in calls[0]['meeting_link']
+    assert calls[0].get('candidate_email', '') == ''  # Email already sent by the booking service.
+    with factory() as session:
+        assert session.get(InterviewRound, result['id']).telegram_delivery['status'] == 'success'
+
+
 def test_other_company_or_manager_cannot_dispatch(setup):
     user, data, factory, mail, create = setup
     for unauthorized in [SimpleNamespace(**{**user.__dict__, 'tenant_id': 'other-company'}),

@@ -142,6 +142,7 @@ class InterviewRound(Model):
     __tablename__ = "interview_rounds"
 
     _fields: ClassVar[dict[str, object]] = {
+        "telegram_delivery": dict,
         "id": _uuid,
         "tenant_id": "",
         "requisition_id": "",
@@ -182,6 +183,7 @@ class InterviewRound(Model):
         "updated_at": _utcnow,
     }
 
+    telegram_delivery = Column("telegram_delivery")
     id = Column("id")
     tenant_id = Column("tenant_id")
     requisition_id = Column("requisition_id")
@@ -322,6 +324,9 @@ class CompanyInterviewRequest(BaseModel):
     requisition_id: Optional[str] = None
     round_id: Optional[str] = None
     round_name: str = "Technical Round"
+    round_type: str = "Technical"
+    interviewer_name: str | None = None
+    interviewer_email: str | None = None
     scheduled_date: str
     scheduled_time: str
     scheduled_timezone: str = "Asia/Kolkata"

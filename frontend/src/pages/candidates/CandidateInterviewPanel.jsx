@@ -47,215 +47,81 @@ import { Backdrop } from '../../components/landing/Backdrop';
 import termjobsLogo from '../../assets/termjobs-logo.png';
 import { request } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { mapRequisitionCandidates } from '../../utils/requisitionCandidates';
+import { InterviewReviewPanel } from '../../interview/components/InterviewReviewPanel';
+import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
+import { isAiInterviewRound } from '../../interview/utils/interviewMode';
 
 export default function CandidateInterviewPanel() {
   const { candidateId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { token } = useAuth();
 
-  const reqId = searchParams.get('reqId') || '8302c0';
-  const effectiveCandidateId = candidateId || searchParams.get('candidateId') || 'cand-1';
+  const reqId = searchParams.get('reqId') || '';
+  const effectiveCandidateId = candidateId || searchParams.get('candidateId') || '';
 
   // State
-  const [selectedRoundId, setSelectedRoundId] = useState('r-2'); // Round 2 is selected in the screenshot
+  const [selectedRoundId, setSelectedRoundId] = useState(''); // Round 2 is selected in the screenshot
   const [activePanelTab, setActivePanelTab] = useState('details'); // 'details' | 'evaluation'
   const [showResumeModal, setShowResumeModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   // Requisition details
   const [reqData, setReqData] = useState(null);
 
-  // Candidate Data matching exact photo & properties in screenshot
+  const [candidateData, setCandidateData] = useState(null);
+  const [persistedRounds, setPersistedRounds] = useState([]);
+  const [process, setProcess] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  const [refresh, setRefresh] = useState(0);
   const candidate = useMemo(() => {
-    return {
-      id: effectiveCandidateId,
-      name: 'Arjun M',
-      avatar:
-        'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
-      role: 'Python Developer',
-      location: 'Bangalore, India',
-      email: 'arjun.m@gmail.com',
-      phone: '+91 98765 43210',
-      score: 92,
-      skills: 95,
-      experience: '3 years',
-      availability: 'Immediate',
-      status: 'AI Shortlisted',
-    };
-  }, [effectiveCandidateId]);
-
-  // All 5 Interview Rounds matching screenshot
-  const roundsList = [
-    {
-      id: 'r-1',
-      index: 1,
-      title: 'AI Screening',
-      dateSubtitle: 'Oct 4, 2026',
-      status: 'Completed',
-      type: 'AI',
-      badgeClass: 'bg-emerald-50 text-emerald-700 border border-emerald-200/80',
-      details: {
-        title: 'AI Screening',
-        timing: 'Mon, Oct 4, 2026 • 10:00 AM - 10:30 AM (30 mins)',
-        statusBadge: 'Completed',
-        interviewer: {
-          name: 'AI Screening Agent',
-          role: 'Automated Evaluation Engine',
-          email: 'ai-eval@termjobs.com',
-          phone: '+91 98765 43210',
-          avatar:
-            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-        },
-        duration: '30 minutes',
-        type: 'Automated Screening',
-        focus: 'Python Foundations, Algorithmic Problem Solving',
-        format: 'AI Proctored Assessment',
-        checklist: [
-          'Candidate submitted code assessment',
-          'Automated verification completed',
-          'Benchmark score: 92/100',
-        ],
+    const mapped = mapRequisitionCandidates(candidateData ? [candidateData] : [ { id: effectiveCandidateId } ])[0];
+    return { ...mapped, role: reqData?.title || 'Requisition', skills: mapped.skillsMatchPct };
+  }, [candidateData, reqData, effectiveCandidateId]);
+  const roundsList = useMemo(() => {
+    const stored = persistedRounds.map((r, index) => ({
+      ...r, index: index + 1, title: r.round_name, dateSubtitle: [r.scheduled_date, r.scheduled_time].filter(Boolean).join(' · '),
+      type: r.round_type, badgeClass: r.status === 'Completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/80' : 'bg-black text-white shadow-3xs',
+      details: { title: r.round_name, timing: `${r.scheduled_date || ''} · ${r.scheduled_time || ''} (${r.scheduled_timezone || 'Asia/Kolkata'})`,
+        statusBadge: r.status, interviewer: { name: r.interviewer_name || 'Not assigned', role: r.interviewer_role || 'Interviewer', email: r.interviewer_email || 'Not provided', phone: r.interviewer_phone || 'Not provided', avatar: r.interviewer_avatar || null },
+        duration: `${r.duration_minutes} minutes`, type: r.round_type, focus: r.instructions || 'Not specified', format: 'Online (TermJobs)',
+        checklist: [`Email: ${r.email_delivery?.status || 'Not confirmed'}`, `Telegram: ${r.telegram_delivery?.status || 'Not confirmed'}`, `Google Calendar: ${r.calendar_sync?.status || 'Not synced'}`],
       },
-    },
-    {
-      id: 'r-2',
-      index: 2,
-      title: 'Technical Interview',
-      dateSubtitle: 'Oct 6, 2026 • 09:30 AM',
-      status: 'Upcoming',
-      type: 'Technical',
-      badgeClass: 'bg-black text-white shadow-3xs',
-      details: {
-        title: 'Technical Interview',
-        timing: 'Tue, Oct 6, 2026 • 09:30 AM - 10:15 AM (45 mins)',
-        statusBadge: 'Upcoming',
-        interviewer: {
-          name: 'Rahul Sharma',
-          role: 'Senior Software Engineer',
-          email: 'rahul.sharma@termjobs.com',
-          phone: '+91 98765 43210',
-          avatar:
-            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-        },
-        duration: '45 minutes',
-        type: 'Technical Interview',
-        focus: 'Python, Django, System Design',
-        format: 'Online (Term Jobs Panel)',
-        checklist: [
-          'Interview invitation sent',
-          'Candidate notification sent',
-          'Scheduled & Confirmed',
-        ],
-      },
-    },
-    {
-      id: 'r-3',
-      index: 3,
-      title: 'HR Interview',
-      dateSubtitle: 'Oct 9, 2026 • 11:00 AM',
-      status: 'Not Scheduled',
-      type: 'HR',
-      badgeClass: 'bg-gray-100 text-gray-500',
-      details: {
-        title: 'HR Interview',
-        timing: 'Thu, Oct 9, 2026 • 11:00 AM - 11:45 AM (45 mins)',
-        statusBadge: 'Not Scheduled',
-        interviewer: {
-          name: 'Pooja Iyer',
-          role: 'Lead HR Business Partner',
-          email: 'pooja.i@termjobs.com',
-          phone: '+91 98765 43211',
-          avatar:
-            'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-        },
-        duration: '45 minutes',
-        type: 'HR & Culture Interview',
-        focus: 'Cultural fit, team collaboration, career goals',
-        format: 'Online (Term Jobs Panel)',
-        checklist: [
-          'Draft slots proposed to panelist',
-          'Pending panelist confirmation',
-          'Candidate notification queue',
-        ],
-      },
-    },
-    {
-      id: 'r-4',
-      index: 4,
-      title: 'Manager Interview',
-      dateSubtitle: '',
-      status: 'Not Scheduled',
-      type: 'Manager',
-      badgeClass: 'bg-gray-100 text-gray-500',
-      details: {
-        title: 'Manager Interview',
-        timing: 'To be scheduled after HR Round',
-        statusBadge: 'Not Scheduled',
-        interviewer: {
-          name: 'Engineering Director',
-          role: 'Engineering Leadership',
-          email: 'director@termjobs.com',
-          phone: '+91 98765 43212',
-          avatar:
-            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-        },
-        duration: '45 minutes',
-        type: 'Management Round',
-        focus: 'Project discussion, team architecture fit',
-        format: 'Online (Term Jobs Panel)',
-        checklist: [
-          'Pending completion of Round 3',
-          'Panelist assignment in progress',
-        ],
-      },
-    },
-    {
-      id: 'r-5',
-      index: 5,
-      title: 'Final Review',
-      dateSubtitle: '',
-      status: 'Not Scheduled',
-      type: 'Final',
-      badgeClass: 'bg-gray-100 text-gray-500',
-      details: {
-        title: 'Final Review',
-        timing: 'To be scheduled upon completion of loop',
-        statusBadge: 'Not Scheduled',
-        interviewer: {
-          name: 'Hiring Committee',
-          role: 'Compensation & Offer Review',
-          email: 'hiring@termjobs.com',
-          phone: '+91 98765 43213',
-          avatar:
-            'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-        },
-        duration: '30 minutes',
-        type: 'Offer & Alignment',
-        focus: 'Hiring decision and offer discussion',
-        format: 'Online (Term Jobs Panel)',
-        checklist: [
-          'Pending completion of all technical rounds',
-          'Offer readiness review',
-        ],
-      },
-    },
-  ];
-
-  // Active round selected on right panel
-  const activeRound = useMemo(() => {
-    return roundsList.find((r) => r.id === selectedRoundId) || roundsList[1];
-  }, [selectedRoundId]);
-
-  // Fetch requisition details if available
+    }));
+    const planned = process.filter(p => !stored.some(r => r.title === p.title)).map((p, index) => ({
+      id: `planned-${p.id}`, planned: true, index: stored.length + index + 1, title: p.title, dateSubtitle: '', status: 'Not Scheduled', type: p.type, badgeClass: 'bg-gray-100 text-gray-500',
+      details: { title: p.title, timing: 'Not scheduled', statusBadge: 'Not Scheduled', interviewer: { name: 'Not assigned', role: '', email: 'Not provided', phone: 'Not provided', avatar: null }, duration: `${p.duration || 45} minutes`, type: p.type, focus: p.description || 'Not specified', format: 'Online (TermJobs)', checklist: ['Awaiting scheduling'] },
+    }));
+    return [...stored, ...planned];
+  }, [persistedRounds, process]);
+  const activeRound = roundsList.find(r => r.id === selectedRoundId) || roundsList[0] || {
+    id: null, planned: true, title: 'Interview details', status: 'Not Scheduled', type: 'Technical',
+    details: { title: 'No interview rounds', timing: 'Schedule an interview to get started', statusBadge: 'Not Scheduled', interviewer: { name: 'Not assigned', role: '', email: 'Not provided', phone: 'Not provided' }, duration: 'Not specified', type: 'Not specified', focus: 'Not specified', format: 'Online (TermJobs)', checklist: [] },
+  };
   useEffect(() => {
-    if (reqId) {
-      request(`/requisitions/${reqId}`).then(setReqData).catch(() => null);
-    }
-  }, [reqId]);
-
-  const reqTitle = reqData?.title || 'Python Developer';
-  const reqCode = reqData?.ref ? reqData.ref.replace('REQ-', 'REQ #') : 'REQ #8302C0';
+    let cancelled = false;
+    setLoading(true); setError('');
+    if (!reqId || !effectiveCandidateId) { setError('Select a requisition and candidate.'); setLoading(false); return; }
+    Promise.all([
+      request(`/api/requisitions/${reqId}`, { token, noCache: true }),
+      request(`/api/candidates/${effectiveCandidateId}`, { token, noCache: true }),
+      request(`/api/interviews/rounds?requisition_id=${encodeURIComponent(reqId)}`, { token, noCache: true }),
+      request(`/api/interviews/process/template?requisition_id=${encodeURIComponent(reqId)}`, { token, noCache: true }),
+    ]).then(([req, c, rounds, template]) => {
+      if (cancelled) return;
+      if (String(c.requisition_id) !== String(reqId)) throw new Error('Candidate does not belong to this requisition.');
+      setReqData(req); setCandidateData(c); setProcess(template.rounds || []);
+      setPersistedRounds(rounds.filter(r => String(r.candidate_submission_id) === String(effectiveCandidateId)));
+    }).catch(err => { if (!cancelled) setError(err.message); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [reqId, effectiveCandidateId, token, refresh]);
+  const reqTitle = reqData?.title || 'Requisition';
+  const reqCode = reqData?.ref?.replace('REQ-', 'REQ #') || `REQ #${reqId.slice(0, 6).toUpperCase()}`;
+  const requiredYears = parseFloat(reqData?.structured_role?.experience);
+  const candidateYears = parseFloat(candidate.experience);
+  const experienceProgress = requiredYears > 0 && Number.isFinite(candidateYears) ? Math.min(100, 100 * candidateYears / requiredYears) : 0;
 
   const getRoundIcon = (type) => {
     switch (type) {
@@ -358,6 +224,8 @@ export default function CandidateInterviewPanel() {
       {/* ═══════════════════════════════════════════════════════════════════
           MAIN WORKSPACE (With Backdrop showing through Glassmorphic Containers)
           ═══════════════════════════════════════════════════════════════════ */}
+      {loading && <p className="px-6 py-2 text-sm text-gray-500">Loading interview data…</p>}
+      {error && <p role="alert" className="px-6 py-2 text-sm text-red-600">{error}</p>}
       <main className="relative z-10 flex-1 max-w-[1480px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 space-y-4">
         {/* ── 2. CANDIDATE PROFILE HERO CARD (MODERN GLASSMORPHISM LIKE REQUISITION PAGE - NO PROFILE PIC) ── */}
         <section className="bg-white/40 backdrop-blur-2xl border border-white/70 rounded-2xl p-5 sm:p-6 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 transition-all">
@@ -408,7 +276,7 @@ export default function CandidateInterviewPanel() {
               <span className="text-[11px] font-bold text-gray-500">Score</span>
               <div className="flex items-center gap-2 mt-1">
                 <div className="w-9 h-9 rounded-full border-2 border-emerald-500 text-emerald-700 flex items-center justify-center font-black text-xs shrink-0 shadow-2xs bg-emerald-500/5">
-                  {candidate.score}
+                  {candidate.score ?? '—'}
                 </div>
                 <div className="text-[10px] text-gray-400 font-bold leading-tight">
                   <span>/100</span>
@@ -421,12 +289,12 @@ export default function CandidateInterviewPanel() {
               <span className="text-[11px] font-bold text-gray-500">Skills</span>
               <div className="mt-1 space-y-1">
                 <span className="text-base font-black text-gray-900 leading-none">
-                  {candidate.skills}%
+                  {candidate.skills ?? '—'}%
                 </span>
                 <div className="w-full h-1.5 bg-gray-200/80 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-emerald-500 rounded-full"
-                    style={{ width: `${candidate.skills}%` }}
+                    style={{ width: `${candidate.skills ?? 0}%` }}
                   />
                 </div>
               </div>
@@ -440,7 +308,7 @@ export default function CandidateInterviewPanel() {
                   {candidate.experience}
                 </span>
                 <div className="w-full h-1.5 bg-gray-200/80 rounded-full overflow-hidden">
-                  <div className="h-full bg-gray-900 rounded-full" style={{ width: '75%' }} />
+                  <div className="h-full bg-gray-900 rounded-full" style={{ width: `${experienceProgress}%` }} />
                 </div>
               </div>
             </div>
@@ -467,16 +335,16 @@ export default function CandidateInterviewPanel() {
             <h2 className="text-sm font-bold text-gray-900 tracking-tight px-1 flex items-center gap-2">
               <span>Interview Rounds</span>
               <span className="px-2 py-0.5 rounded-full bg-white/70 backdrop-blur-sm border border-black/[0.06] text-xs font-bold text-gray-600">
-                5
+                {roundsList.length}
               </span>
             </h2>
 
             {/* Vertical timeline of round cards */}
             <div className="relative pl-6 space-y-2.5 before:absolute before:left-3 before:top-4 before:bottom-4 before:w-0.5 before:bg-gradient-to-b before:from-gray-400 before:via-gray-300 before:to-gray-200/50">
               {roundsList.map((round) => {
-                const isSelected = selectedRoundId === round.id;
+                const isSelected = activeRound.id === round.id;
                 const isCompleted = round.status === 'Completed';
-                const isUpcoming = round.status === 'Upcoming';
+                const isUpcoming = ['Upcoming', 'Scheduled', 'Confirmed'].includes(round.status);
 
                 return (
                   <div key={round.id} className="relative">
@@ -573,7 +441,7 @@ export default function CandidateInterviewPanel() {
                     className={`px-3 py-1 rounded-full text-xs font-bold border backdrop-blur-sm ${
                       activeRound.status === 'Completed'
                         ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/20'
-                        : activeRound.status === 'Upcoming'
+                        : ['Upcoming', 'Scheduled', 'Confirmed'].includes(activeRound.status)
                         ? 'bg-black text-white border-black shadow-3xs'
                         : 'bg-black/[0.04] text-gray-500 border-black/[0.04]'
                     }`}
@@ -708,14 +576,13 @@ export default function CandidateInterviewPanel() {
                     <button
                       type="button"
                       onClick={() => {
-                        const roundRoomId = `round-${effectiveCandidateId}-${selectedRoundId}`;
-                        const interviewerName = user?.name || activeRound.details.interviewer.name || 'Interviewer';
-                        navigate(`/interview/room/${roundRoomId}?role=interviewer&name=${encodeURIComponent(interviewerName)}&mode=meet`);
+                        if (activeRound.planned) { setScheduling(true); return; }
+                        navigate(`/interview/room/${activeRound.id}?role=interviewer`);
                       }}
                       className="px-6 py-3 rounded-xl bg-black hover:bg-gray-800 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 shadow-sm active:scale-[0.98] transition-all cursor-pointer shrink-0"
                     >
                       <Video size={15} />
-                      <span>Enter Interview</span>
+                      <span>{activeRound.planned ? 'Schedule Interview' : 'Enter Interview'}</span>
                       <ArrowRight size={14} />
                     </button>
                   </div>
@@ -723,7 +590,8 @@ export default function CandidateInterviewPanel() {
               )}
 
               {/* Tab 2: Evaluation */}
-              {activePanelTab === 'evaluation' && (
+              {((activePanelTab === 'details' && isAiInterviewRound(activeRound)) || activePanelTab === 'evaluation') && !activeRound.planned && (isAiInterviewRound(activeRound) || activeRound.status === 'Completed') && <InterviewReviewPanel round={activeRound} candidateName={candidate.name} />}
+              {activePanelTab === 'evaluation' && activeRound.status !== 'Completed' && (
                 <div className="space-y-4 pt-1 text-xs text-gray-600">
                   <div className="p-5 rounded-xl bg-white/50 backdrop-blur-md border border-white/80 space-y-2 shadow-2xs">
                     <h4 className="font-bold text-gray-900 text-sm">Evaluation Scorecard</h4>
@@ -738,6 +606,7 @@ export default function CandidateInterviewPanel() {
         </div>
       </main>
 
+      {scheduling && <ScheduleInterviewModal candidate={candidate} requisitionId={reqId} requisitionTitle={reqTitle} requisitionCode={reqCode} onClose={() => setScheduling(false)} onScheduled={() => setRefresh(x => x + 1)} />}
       {/* ════════ RESUME PREVIEW MODAL (Glassmorphic) ════════ */}
       {showResumeModal && (
         <div
@@ -764,20 +633,7 @@ export default function CandidateInterviewPanel() {
               </button>
             </div>
             <div className="flex-1 overflow-y-auto font-mono text-xs text-gray-700 bg-white/60 p-4 rounded-xl border border-black/[0.04] leading-relaxed whitespace-pre-wrap">
-              {`CANDIDATE: ${candidate.name}
-ROLE: ${candidate.role}
-LOCATION: ${candidate.location}
-EMAIL: ${candidate.email}
-PHONE: ${candidate.phone}
-
-PROFESSIONAL SUMMARY:
-Backend software developer with 3+ years of experience engineering high-performance Python microservices, distributed data pipelines, and responsive web systems.
-
-TECHNICAL SKILLS:
-- Languages: Python, SQL, JavaScript
-- Frameworks: FastAPI, Django, Flask, React
-- Infrastructure: Docker, AWS (S3, EC2), Linux, Git, CI/CD
-- Databases: PostgreSQL, MongoDB, Redis`}
+              {candidateData?.resume_text || 'No saved resume text is available.'}
             </div>
           </div>
         </div>

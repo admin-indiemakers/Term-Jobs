@@ -22,6 +22,7 @@ const JoinDirector = lazy(() => import('./pages/JoinDirector'));
 const JoinProcurement = lazy(() => import('./pages/JoinProcurement'));
 const JoinFinance = lazy(() => import('./pages/JoinFinance'));
 const SuperAdminLogin = lazy(() => import('./pages/SuperAdminLogin'));
+const HiringManagerTelegramLogin = lazy(() => import('./pages/HiringManagerTelegramLogin'));
 const DirectorLogin = lazy(() => import('./pages/DirectorLogin'));
 const RecruiterDashboard = lazy(() => import('./pages/RecruiterDashboard'));
 const HiringManagerDashboard = lazy(() => import('./pages/HiringManagerDashboard'));
@@ -261,6 +262,7 @@ export default function App() {
             <Route path="/signin" element={null} />
           </Route>
           <Route path="/candidate/telegram-login" element={<CandidateTelegramLogin />} />
+          <Route path="/hiring-manager/telegram-login" element={<HiringManagerTelegramLogin />} />
           <Route path="/interview/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />

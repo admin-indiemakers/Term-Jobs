@@ -330,7 +330,8 @@ if not bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")):
         init_db()
         try:
             from scripts.seed_super_admin import seed_super_admin
-            seed_super_admin()
+            if os.getenv("TERMJOBS_PRESERVE_SUPER_ADMIN") != "1":
+                seed_super_admin()
         except Exception as s_exc:
             import logging
             logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)

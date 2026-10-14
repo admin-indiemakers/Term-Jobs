@@ -3,6 +3,7 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { InterviewRoom } from '../components/InterviewRoom';
+import { InterviewReviewPanel } from '../components/InterviewReviewPanel';
 import { mergeInterviewResult } from '../utils/interviewMode';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
@@ -15,7 +16,7 @@ export function InterviewMeetingRoomPage() {
   const [round, setRound] = useState(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
-  const { token: accountToken } = useAuth();
+  const { token: accountToken, loading: authLoading } = useAuth();
   const [joinIdentity, setJoinIdentity] = useState(null);
 
   const queryRole = joinIdentity?.role || searchParams.get('role') || 'candidate';
@@ -25,6 +26,11 @@ export function InterviewMeetingRoomPage() {
   const isAiRequested = queryMode === 'ai';
 
   useEffect(() => {
+    if (authLoading) return;
+    setLoading(true);
+    setErrorMsg('');
+    setRound(null);
+    setJoinIdentity(null);
     if (!roundId) {
       setErrorMsg('No interview round ID provided.');
       setLoading(false);
@@ -35,12 +41,15 @@ export function InterviewMeetingRoomPage() {
       .getRoundDetail(roundId)
       .then(async (res) => {
         if (res) {
-          if (res.status !== 'Completed' && res.is_expired) {
-            setErrorMsg('This interview link has expired after 10 hours. Please request a new interview invitation.');
-          } else {
+          {
             if (accountToken || invitationToken || searchParams.get('role') === 'interviewer') {
               const identity = await request(`/api/interviews/rounds/${roundId}/join-identity?token=${encodeURIComponent(invitationToken)}`, { token: accountToken, noCache: true });
               setJoinIdentity(identity);
+              if (res.is_expired && res.status !== 'Completed' && identity.role !== 'interviewer') {
+                setErrorMsg('This interview link has expired. Please request a new interview invitation.');
+              }
+            } else if (res.is_expired && res.status !== 'Completed') {
+              setErrorMsg('This interview link has expired. Please request a new interview invitation.');
             }
             setRound(res);
           }
@@ -54,7 +63,7 @@ export function InterviewMeetingRoomPage() {
       .finally(() => {
         setLoading(false);
       });
-  }, [roundId, accountToken, invitationToken]);
+  }, [roundId, accountToken, invitationToken, authLoading]);
 
   const handleLeave = () => {
     if (queryRole === 'interviewer') {
@@ -145,7 +154,10 @@ export function InterviewMeetingRoomPage() {
     );
   }
 
-  const isExpired = errorMsg?.toLowerCase().includes('expired') || (round?.is_expired && round?.status !== 'Completed');
+  if (!errorMsg && round && joinIdentity?.role === 'interviewer' && (round.status === 'Completed' || round.is_expired)) {
+    return <main className="min-h-screen bg-gray-50 p-6"><button className="mb-4 text-sm underline" onClick={() => navigate(-1)}>Back to interviews</button><InterviewReviewPanel round={round} candidateName={round.candidate_name} /></main>;
+  }
+  const isExpired = errorMsg?.toLowerCase().includes('expired') || (round?.is_expired && round?.status !== 'Completed' && joinIdentity?.role !== 'interviewer');
 
   if (isExpired) {
     return (

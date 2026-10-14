@@ -247,107 +247,47 @@ async def _handle_message_inner(
     if not chat_id or not text:
         return
 
-    # 0. Check for 1-Click Dashboard Pairing Link: /start link_<token>
-    if text.startswith("/start"):
-        parts = text.split()
-        if len(parts) > 1 and parts[1].startswith("link_"):
-            pairing_code = parts[1].replace("link_", "").strip()
-            now = time.time()
-            u_filter = {
-                "bot_pairing_token": pairing_code,
-                "bot_pairing_token_expires_at": {"$gt": now}
-            }
-            if tenant_id:
-                u_filter["tenant_id"] = tenant_id
-
-            target_user = None
-            try:
-                target_user = db["users"].find_one(u_filter)
-            except Exception as e:
-                print(f"[HM TELEGRAM PAIRING LOOKUP ERROR] {e}")
-
-            if target_user:
-                # Link user
-                username_clean = (from_user.get("username") or "").strip().lstrip("@")
-                db["users"].update_one(
-                    {"_id": target_user["_id"]},
-                    {"$set": {
-                        "telegram_chat_id": str(chat_id),
-                        "telegram_username": username_clean,
-                        "telegram_linked_at": datetime.datetime.utcnow().isoformat(),
-                        "bot_pairing_token": None,
-                        "bot_pairing_token_expires_at": None
-                    }}
-                )
-                invalidate_session(chat_id, tenant_id)
-                session = get_or_create_session(chat_id, from_user, tenant_id=tenant_id)
-                user_name = target_user.get("name") or from_user.get("first_name") or "Hiring Manager"
-                company_name = session["current_user"].get("company_name", "TermJobs")
-
-                success_msg = (
-                    f"🎉 *Account Connected Successfully!*\n\n"
-                    f"Hello *{user_name}*! Your Telegram account has been linked to your *{company_name}* hiring manager workspace on TermJobs.\n\n"
-                    f"⚡ *What you can do directly from Telegram:*\n"
-                    f"• _\"Show me pending works\"_\n"
-                    f"• _\"Draft a React developer with 3 yrs exp\"_\n"
-                    f"• _\"Show candidates working under me\"_\n"
-                    f"• _\"Approve pending timesheets & expenses\"_\n\n"
-                    f"Tap an option below or send any instruction to get started:"
-                )
-                await send_telegram_message(token, chat_id, success_msg, build_quick_menu_keyboard())
-                return
-            else:
-                invalid_msg = (
-                    "⚠️ *Expired or Invalid Pairing Link*\n\n"
-                    "This connection link has expired or has already been used.\n"
-                    "Please return to your *TermJobs Dashboard* and click *Connect Telegram* to generate a fresh link."
-                )
-    # 0.1 Check for explicit /pair command (e.g. /pair <token> or /pair <email>)
-    text_stripped = text.strip()
-    if text_stripped.lower().startswith("/pair") or text_stripped.lower().startswith("pair "):
-        token_or_email = text_stripped.split(None, 1)[1].strip() if len(text_stripped.split(None, 1)) > 1 else ""
-        if token_or_email:
-            clean_arg = token_or_email.lstrip("@").strip()
-            target_user = None
-            try:
-                target_user = db["users"].find_one({
-                    "$or": [
-                        {"bot_pairing_token": clean_arg},
-                        {"email": {"$regex": f"^{re.escape(clean_arg)}$", "$options": "i"}}
-                    ]
-                })
-            except Exception as e:
-                print(f"[HM TELEGRAM PAIR ERROR] {e}")
-
-            if target_user:
-                username_clean = (from_user.get("username") or "").strip().lstrip("@")
-                db["users"].update_one(
-                    {"_id": target_user["_id"]},
-                    {"$set": {
-                        "telegram_chat_id": str(chat_id),
-                        "telegram_username": username_clean,
-                        "telegram_linked_at": _utcnow_iso(),
-                        "bot_pairing_token": None,
-                        "bot_pairing_token_expires_at": None
-                    }}
-                )
-                invalidate_session(chat_id, target_user.get("tenant_id"))
-                session = get_or_create_session(chat_id, from_user, tenant_id=target_user.get("tenant_id"))
-                user_name = target_user.get("name") or from_user.get("first_name") or "Hiring Manager"
-                company_name = session["current_user"].get("company_name", "TermJobs")
-                success_msg = (
-                    f"🎉 *Account Connected to {company_name}!* 💼\n\n"
-                    f"Hello *{user_name}*! Your Telegram account is now paired with your *{company_name}* hiring manager workspace.\n\n"
-                    f"All requisitions, candidates, and timesheets in this session are strictly isolated to **{company_name}**."
-                )
-                await send_telegram_message(token, chat_id, success_msg, build_quick_menu_keyboard())
-                return
-            else:
-                await send_telegram_message(
-                    token, chat_id,
-                    f"⚠️ *No account found matching '{token_or_email}'.*\n\nPlease make sure you provided the exact email address or pairing token from your TermJobs dashboard."
-                )
-                return
+    from .auth import create_login_link, logout_chat, linked_user
+    command = text.split()[0].split('@')[0].lower()
+    if chat.get('type', 'private') != 'private' or str(from_user.get('id', chat_id)) != str(chat_id):
+        await send_telegram_message(token, chat_id, 'Please open a private chat with this bot to sign in.')
+        return
+    if command == '/logout':
+        logout_chat(chat_id, from_user.get('id'), tenant_id)
+        await send_telegram_message(token, chat_id, 'You are logged out of the Hiring Manager bot. Send /login to reconnect.')
+        return
+    if command == '/login':
+        url = create_login_link(chat_id, {**from_user, 'id': from_user.get('id', chat_id)}, tenant_id)
+        await send_telegram_message(token, chat_id, 'Sign in with your Hiring Manager account using the link below. The link is single-use and expires in 10 minutes. Never send your password in Telegram.',
+            {'inline_keyboard': [[{'text': 'Log in to TermJobs', 'url': url}]]})
+        return
+    # Existing dashboard deep links continue to work, with expiry and role checks.
+    if command in ('/start', '/pair') and len(text.split()) > 1:
+        code = text.split(None, 1)[1].removeprefix('link_').strip()
+        query = {'bot_pairing_token': code, 'bot_pairing_token_expires_at': {'$gt': time.time()},
+                 'role': 'Hiring Manager', 'is_active': {'$ne': False}, 'is_deleted': {'$ne': True}}
+        if tenant_id: query['tenant_id'] = tenant_id
+        user = db.users.find_one_and_update(query, {'$set': {
+            'telegram_chat_id': str(chat_id), 'telegram_user_id': str(from_user.get('id', chat_id)),
+            'telegram_username': from_user.get('username') or '', 'telegram_linked_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            'bot_pairing_token': None, 'bot_pairing_token_expires_at': None,
+        }})
+        if not user:
+            await send_telegram_message(token, chat_id, 'This pairing link is invalid or expired. Send /login for a new secure sign-in link.')
+            return
+        db.users.update_many({'telegram_chat_id': str(chat_id), '_id': {'$ne': user['_id']}}, {'$unset': {
+            'telegram_chat_id': '', 'telegram_user_id': '', 'telegram_username': '', 'telegram_linked_at': '',
+        }})
+        if user.get('telegram_chat_id'):
+            invalidate_session(user['telegram_chat_id'])
+        invalidate_session(chat_id)
+        await send_telegram_message(token, chat_id, 'Your Hiring Manager account is connected.', build_quick_menu_keyboard())
+        return
+    if not linked_user(chat_id, from_user.get('id'), tenant_id):
+        url = create_login_link(chat_id, {**from_user, 'id': from_user.get('id', chat_id)}, tenant_id)
+        await send_telegram_message(token, chat_id, 'Please sign in before using Hiring Manager tasks. Send /login for a new link or use the button below.',
+            {'inline_keyboard': [[{'text': 'Log in to TermJobs', 'url': url}]]})
+        return
 
     session = get_or_create_session(chat_id, from_user, tenant_id=tenant_id)
     text_lower = text.lower().strip()
@@ -1292,6 +1232,11 @@ async def handle_callback_query(
     query_id = callback_query.get("id")
     message = callback_query.get("message", {})
     chat_id = message.get("chat", {}).get("id")
+    from .auth import linked_user
+    sender = callback_query.get('from') or {}
+    if not linked_user(chat_id, sender.get('id'), tenant_id):
+        await send_telegram_message(token, chat_id, 'Your Telegram session is disconnected. Send /login to sign in.')
+        return
     try:
         await _handle_callback_query_inner(token, callback_query, tenant_id=tenant_id)
     except Exception as e:
