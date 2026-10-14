@@ -541,21 +541,20 @@ export default function RequisitionCandidates() {
       const cid = String(c.id || c.submission_id || '');
       const sid = String(c.submission_id || '');
       const isSched =
-        scheduledCandidateIds.includes(cid) ||
-        (sid && scheduledCandidateIds.includes(sid)) ||
-        (interviews &&
-          interviews.some(
-            (inv) =>
-              String(inv.candidate_submission_id || inv.candidate_id || '') === cid ||
-              (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid)
-          ));
+        interviews &&
+        interviews.some(
+          (inv) =>
+            ['Scheduled', 'Confirmed', 'In Progress'].includes(inv.status) &&
+            (String(inv.candidate_submission_id || inv.candidate_id || '') === cid ||
+              (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid))
+        );
 
       if (isSched && !['Accepted', 'Hired', 'Offered', 'Rejected'].includes(c.status)) {
         return { ...c, status: 'In Interview', isScheduled: true };
       }
       return c;
     });
-  }, [apiCandidates, scheduledCandidateIds, interviews]);
+  }, [apiCandidates, interviews]);
 
   // Selected candidate (null if preview panel closed)
   const selectedCandidate = useMemo(() => {
