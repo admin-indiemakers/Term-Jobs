@@ -12,7 +12,7 @@ export default function CandidateTelegramLogin() {
   if (candidateLoading) return <main role="status" className="min-h-dvh bg-gray-50 text-gray-900 flex items-center justify-center p-6">Loading your candidate account…</main>;
   if (!candidateToken || !candidateUser) return <CandidateProfileAuth onBackToHome={() => { window.location.href = '/'; }} />;
   return <main className="min-h-dvh bg-gray-50 text-gray-900 flex items-center justify-center p-6" style={{ color: '#111827' }}><section className="bg-white rounded-2xl p-6 w-full max-w-md space-y-4 shadow">
-    <h1 className="text-xl font-bold">Connect TermJobs job notifications</h1>
+    <h1 className="text-xl font-bold" style={{ color: '#111827' }}>{connected ? `Connection successful, ${candidateUser?.candidate_name || candidateUser?.name || 'Candidate'}!` : 'Connect TermJobs job notifications'}</h1>
     <p>{candidateUser?.candidate_email || candidateUser?.email}</p>
     {!connected && <button type="button" onClick={logout} className="text-sm text-gray-700 underline">Sign in with a different candidate account</button>}
     <p>{connected ? 'Connected. You will receive your job and interview notifications in Telegram. Use /logout in the bot to disconnect.' : 'Connect this candidate account to the Telegram chat that requested this link.'}</p>

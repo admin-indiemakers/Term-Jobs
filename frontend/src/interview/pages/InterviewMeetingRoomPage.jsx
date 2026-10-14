@@ -3,8 +3,9 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { Clock, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
 import { InterviewRoom } from '../components/InterviewRoom';
+import { AiInterviewRoom } from '../components/AiInterviewRoom';
 import { InterviewReviewPanel } from '../components/InterviewReviewPanel';
-import { mergeInterviewResult } from '../utils/interviewMode';
+import { mergeInterviewResult, isAiInterviewRound } from '../utils/interviewMode';
 import { useAuth } from '../../context/AuthContext';
 import { request } from '../../api/client';
 
@@ -22,8 +23,6 @@ export function InterviewMeetingRoomPage() {
   const queryRole = joinIdentity?.role || searchParams.get('role') || 'candidate';
   const queryName = joinIdentity?.name || searchParams.get('name') || (queryRole === 'candidate' ? 'Candidate' : 'Interviewer');
   const invitationToken = searchParams.get('token') || '';
-  const queryMode = searchParams.get('mode'); // 'meet' | 'ai'
-  const isAiRequested = queryMode === 'ai';
 
   useEffect(() => {
     if (authLoading) return;
@@ -201,8 +200,9 @@ export function InterviewMeetingRoomPage() {
     );
   }
 
+  const Room = isAiInterviewRound(round) ? AiInterviewRoom : InterviewRoom;
   return (
-    <InterviewRoom
+    <Room
       round={round}
       currentUserRole={queryRole}
       currentUserName={queryName}

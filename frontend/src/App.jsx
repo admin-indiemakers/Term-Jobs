@@ -268,6 +268,7 @@ export default function App() {
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
           <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
           <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
+          <Route path="/interview/ai/:roundId" element={<InterviewMeetingRoomPage />} />
           <Route path="/interview-panel/:candidateId" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
           <Route path="/interview-panel" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
           <Route path="/requisitions/:reqId/candidates/:candidateId/interview" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />

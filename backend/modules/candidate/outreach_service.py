@@ -14,6 +14,7 @@ from modules.shared.db import db
 from modules.candidate_screening_agent.services.email_service import send_email_via_gmail
 from modules.candidate.ranking_service import rank_candidates_for_requisition, get_requisition_data
 from modules.interview.services.interview_service import _resolve_interview_domain, send_interview_invitation_email
+from modules.interview.domain.links import is_ai_round, candidate_interview_link
 
 logger = logging.getLogger(__name__)
 
@@ -516,11 +517,12 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
             from modules.interview.services.interview_service import _generate_candidate_passcode
 
             with get_session() as session:
-                existing_round = session.query(InterviewRound).filter(
+                candidate_rounds = session.query(InterviewRound).filter(
                     InterviewRound.candidate_email == cand_email.lower(),
                     InterviewRound.requisition_id == req_id,
                     InterviewRound.status != "Cancelled"
-                ).first()
+                ).all()
+                existing_round = next((row for row in candidate_rounds if is_ai_round(row.to_doc())), None)
 
                 if existing_round:
                     round_doc = existing_round.to_doc()
@@ -545,7 +547,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
                         candidate_email=cand_email.lower(),
                         round_number=1,
                         round_name="AI Fast-Track Technical Interview",
-                        round_type="Technical",
+                        round_type="AI",
                         scheduled_date=now_utc.strftime("%Y-%m-%d"),
                         scheduled_time="Immediate / On-Demand",
                         duration_minutes=45,
@@ -579,7 +581,7 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
             round_id = round_doc.get("id")
             candidate_token = round_doc.get("candidate_token")
             candidate_passcode = round_doc.get("candidate_passcode") or "TJ-INT-2026"
-            meeting_link = f"{base_url}/interview/room/{round_id}?role=candidate&token={urllib.parse.quote(candidate_token or '')}&name={urllib.parse.quote(cand_name)}"
+            meeting_link = candidate_interview_link(round_doc, base_url)
             candidate_portal_link = f"{base_url}/interview/candidate/login?token={candidate_token}&email={urllib.parse.quote(cand_email)}&passcode={candidate_passcode}"
         else:
             return {"success": False, "error": "Your interest has been recorded, but the AI interview could not be prepared. Please try this link again."}
@@ -641,6 +643,30 @@ def handle_candidate_rsvp(token: str, action: str, origin: Optional[str] = None)
         else:
             latest = db["candidate_outreach"].find_one({"token": token}) or {}
             interview_email_delivery = latest.get("interview_email_delivery") or {"status": "sending"}
+
+        # Both email and Telegram confirmations deliver the same authenticated AI link.
+        chat_id = outreach.get("telegram_chat_id")
+        if not chat_id:
+            candidate = db["candidates"].find_one({"candidate_email": cand_email.lower()}) or {}
+            chat_id = candidate.get("telegram_chat_id")
+        if chat_id:
+            telegram_claim = db["candidate_outreach"].update_one(
+                {"token": token, "interview_telegram_sent_round_id": {"$ne": round_id},
+                 "$or": [{"interview_telegram_status": {"$ne": "sending"}},
+                          {"interview_telegram_started_at": {"$lt": cutoff}}]},
+                {"$set": {"interview_telegram_status": "sending", "interview_telegram_started_at": now}},
+            )
+            if telegram_claim.modified_count:
+                try:
+                    from modules.candidate.telegram_service import send_ai_interview_link
+                    delivery = send_ai_interview_link(chat_id, cand_name, req_title, meeting_link, candidate_passcode)
+                except Exception:
+                    logger.exception("Failed to send AI interview Telegram invitation")
+                    delivery = {"ok": False}
+                fields = {"interview_telegram_status": "sent" if delivery.get("ok") else "failed"}
+                if delivery.get("ok"):
+                    fields["interview_telegram_sent_round_id"] = round_id
+                db["candidate_outreach"].update_one({"token": token}, {"$set": fields})
 
         logger.info("Candidate RSVP recorded and AI interview invitation processed")
 

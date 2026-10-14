@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile, BackgroundTasks
 import httpx
 from pydantic import BaseModel, EmailStr
 
@@ -1283,7 +1283,7 @@ class TelegramCandidateConnection(BaseModel):
 
 
 @router.post('/telegram/connect')
-async def connect_candidate_telegram(body: TelegramCandidateConnection, candidate: dict = Depends(get_current_candidate)):
+async def connect_candidate_telegram(body: TelegramCandidateConnection, candidate: dict = Depends(get_current_candidate), background_tasks: BackgroundTasks = None):
     pending = db['candidate_telegram_login_states'].find_one_and_delete({'state': body.state, 'expires_at': {'$gt': datetime.now(timezone.utc)}})
     if not pending:
         raise HTTPException(status_code=400, detail='Telegram login link expired or was already used. Send /login to the bot again.')
@@ -1297,4 +1297,7 @@ async def connect_candidate_telegram(body: TelegramCandidateConnection, candidat
     db['candidates'].update_one({'_id': candidate['_id']}, {'$set': fields})
     db['candidate_submissions'].update_many({'candidate_email': email}, {'$set': fields})
     db['telegram_links'].insert_one({'chat_id': chat_id, 'candidate_email': email, 'candidate_id': candidate['id'], 'connected_at': fields['telegram_connected_at']})
-    return {'status': 'connected'}
+    if background_tasks is not None:
+        from modules.candidate.telegram_service import send_candidate_connection_confirmation
+        background_tasks.add_task(send_candidate_connection_confirmation, chat_id, candidate, db)
+    return {'status': 'connected', 'candidate_name': candidate.get('candidate_name') or candidate.get('name') or 'Candidate'}

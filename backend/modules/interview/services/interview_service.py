@@ -154,6 +154,7 @@ def send_interview_invitation_email(
     if candidate_portal_link:
         candidate_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, candidate_portal_link)
     
+    join_label = "🤖 Start AI Interview" if "/interview/ai/" in meeting_link else "🎥 Join TermJobs Video Interview Room"
     subject = f"Interview Invitation: {round_name} for {requisition_title} at {company_name}"
     
     html = f"""<!DOCTYPE html>
@@ -208,7 +209,7 @@ def send_interview_invitation_email(
         <!-- Join Video Room Button -->
         <div style="text-align: center; margin-bottom: 24px;">
           <a href="{meeting_link}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(15,23,42,0.25);">
-            🎥 Join TermJobs Video Interview Room
+            {join_label}
           </a>
         </div>
 

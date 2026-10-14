@@ -1,3 +1,4 @@
+import { getCandidateInterviewPath } from '../utils/interviewMode';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -79,7 +80,7 @@ export function CandidateInterviewPortal() {
       setErrorMsg('This AI interview link has expired after 10 hours. Please contact your recruiter to request a new link.');
       return;
     }
-    navigate(`/interview/room/${round.id}?role=candidate&name=${encodeURIComponent(session?.candidate_name || 'Candidate')}`);
+    navigate(getCandidateInterviewPath(round));
   };
 
   if (loading) {

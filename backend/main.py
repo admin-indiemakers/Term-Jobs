@@ -3191,11 +3191,11 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
         interview_box = f"""
     <div style="margin: 20px 0; padding: 20px; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 14px; text-align: center;">
       <div style="font-size: 13px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-        🎥 Your Video Interview Room is Ready
+        🤖 Your AI Interview is Ready
       </div>
       <div style="margin: 14px 0;">
         <a href="{meeting_link}" target="_blank" style="display: inline-block; background: #059669; color: #ffffff; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 4px 12px rgba(5,150,105,0.25);">
-          Enter Video Interview Room &rarr;
+          Start AI Interview &rarr;
         </a>
       </div>
       <div style="font-size: 12px; color: #374151; margin-top: 10px;">
@@ -3215,7 +3215,7 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
         badge_color = "#059669"
         icon = "✓"
         desc = f"Thank you, <strong>{cand_name}</strong>! We've notified <strong>{comp_name}</strong> that you are available and interested in the <strong>{req_title}</strong> role."
-        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your video room is provisioned above."
+        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your AI interview link is ready above."
         email_status = (res.get("interview_email_delivery") or {}).get("status")
         if email_status == "success":
             sub_desc += " Your AI interview link has also been emailed to you. Please check your inbox and spam folder."
