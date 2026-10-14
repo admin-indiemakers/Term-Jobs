@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 import httpx
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
 from modules.identity.domain.models import User
 from modules.identity.router import get_current_user
 from modules.shared.db import db
@@ -487,6 +487,22 @@ async def generate_telegram_pairing_link(
         "bot_username": bot_username_clean,
         "expires_in_seconds": 600
     }
+
+
+class TelegramLoginIn(BaseModel):
+    state: str = Field(min_length=20, max_length=100)
+
+
+@router.post('/telegram/complete-login')
+async def complete_hiring_manager_telegram_login(body: TelegramLoginIn, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user)):
+    from modules.hm_telegram_bot.auth import complete_login
+    from modules.hm_telegram_bot.bot import get_hm_bot_token
+    from modules.hm_telegram_bot.handlers import send_telegram_message
+    record = complete_login(body.state, current_user)
+    token = get_hm_bot_token()
+    if token:
+        background_tasks.add_task(send_telegram_message, token, int(record['chat_id']), 'Your Hiring Manager account is connected. Send /help to get started, or /logout to disconnect.')
+    return {'status': 'success', 'message': 'Hiring Manager Telegram account connected.'}
 
 
 @router.post("/telegram/unlink")

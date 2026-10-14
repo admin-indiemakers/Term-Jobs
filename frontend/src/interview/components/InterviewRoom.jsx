@@ -60,6 +60,7 @@ export function InterviewRoom({
   // LiveKit / WebRTC State
   const [livekitToken, setLivekitToken] = useState('');
   const [livekitUrl, setLivekitUrl] = useState('');
+  const [connectionError, setConnectionError] = useState('');
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -94,7 +95,7 @@ export function InterviewRoom({
         }
       })
       .catch((err) => {
-        console.warn('Fallback WebRTC active:', err);
+        setConnectionError(err.message || 'Unable to connect to the interview video service.');
       });
   }, [round?.id, currentUserName, currentUserRole]);
 
@@ -226,6 +227,7 @@ export function InterviewRoom({
 
   return (
     <div className="w-full h-screen h-[100dvh] bg-[#07090E] text-zinc-100 flex flex-col overflow-hidden font-sans select-none">
+      {connectionError && <div role="alert" className="bg-red-950 p-3 text-sm text-red-100">{connectionError} <button className="underline" onClick={() => window.location.reload()}>Retry connection</button></div>}
       {/* ─────────────────────────────────────────────────────────────────
           TOP NAVBAR
           ───────────────────────────────────────────────────────────────── */}

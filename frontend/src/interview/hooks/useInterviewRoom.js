@@ -11,6 +11,7 @@ export function useInterviewRoom({ roundId, participantName, role, livekitToken,
 
   const connectRoom = useCallback(async () => {
     setConnectionState('connecting');
+    if (!isAiInterview && (!livekitToken || !livekitUrl)) return;
     const result = await livekitService.connect({
       url: livekitUrl,
       token: livekitToken,

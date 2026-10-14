@@ -22,6 +22,7 @@ const JoinDirector = lazy(() => import('./pages/JoinDirector'));
 const JoinProcurement = lazy(() => import('./pages/JoinProcurement'));
 const JoinFinance = lazy(() => import('./pages/JoinFinance'));
 const SuperAdminLogin = lazy(() => import('./pages/SuperAdminLogin'));
+const HiringManagerTelegramLogin = lazy(() => import('./pages/HiringManagerTelegramLogin'));
 const DirectorLogin = lazy(() => import('./pages/DirectorLogin'));
 const RecruiterDashboard = lazy(() => import('./pages/RecruiterDashboard'));
 const HiringManagerDashboard = lazy(() => import('./pages/HiringManagerDashboard'));
@@ -50,7 +51,6 @@ const HRDashboard = lazy(() => import('./pages/HRDashboard'));
 const RequisitionOverview = lazy(() => import('./pages/requisitions/RequisitionOverview'));
 const NewRequisition = lazy(() => import('./pages/requisitions/NewRequisition'));
 const RequisitionDetail = lazy(() => import('./pages/requisitions/RequisitionDetail'));
-const ShortlistedCandidates = lazy(() => import('./pages/candidates/ShortlistedCandidates'));
 const RequisitionCandidates = lazy(() => import('./pages/candidates/RequisitionCandidates'));
 const CandidateSchedule = lazy(() => import('./pages/candidates/CandidateSchedule'));
 const CandidateInterviewPanel = lazy(() => import('./pages/candidates/CandidateInterviewPanel'));
@@ -124,7 +124,7 @@ function CandidateRouteDispatcher() {
   if (user?.role === 'Super Admin' || user?.role?.toLowerCase() === 'super admin') {
     return <SuperAdminCandidatePool />;
   }
-  return <ShortlistedCandidates />;
+  return <Navigate to="/dashboard/candidates/accepted" replace />;
 }
 
 function DashboardAccessGuard({ children }) {
@@ -263,11 +263,13 @@ export default function App() {
             <Route path="/signin" element={null} />
           </Route>
           <Route path="/candidate/telegram-login" element={<CandidateTelegramLogin />} />
+          <Route path="/hiring-manager/telegram-login" element={<HiringManagerTelegramLogin />} />
           <Route path="/interview/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate/login" element={<CandidateInterviewLogin />} />
           <Route path="/interview/candidate" element={<CandidateInterviewPortal />} />
           <Route path="/interview/staff" element={<InterviewerStaffPortal />} />
           <Route path="/interview/room/:roundId" element={<InterviewMeetingRoomPage />} />
+          <Route path="/interview/ai/:roundId" element={<InterviewMeetingRoomPage />} />
           <Route path="/interview-panel/:candidateId" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
           <Route path="/interview-panel" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />
           <Route path="/requisitions/:reqId/candidates/:candidateId/interview" element={<RequireAuth><CandidateInterviewPanel /></RequireAuth>} />

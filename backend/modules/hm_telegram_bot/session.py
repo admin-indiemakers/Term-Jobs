@@ -11,6 +11,8 @@ MAX_HISTORY_TURNS = 20
 
 def _build_session_key(chat_id: int, tenant_id: Optional[str] = None) -> str:
     """Build composite key for tenant-scoped session cache."""
+    from modules.hiring_manager_agent.scope import current_hiring_scope
+    tenant_id = tenant_id or (current_hiring_scope() or {}).get('tenant_id')
     return f"{tenant_id}:{chat_id}" if tenant_id else str(chat_id)
 
 
@@ -29,40 +31,9 @@ def get_or_create_session(
         username = (tg_user.get("username") if tg_user else "") or ""
         username_clean = username.lstrip("@").strip()
 
-        # Attempt to find linked user in DB
-        linked_user = None
-        try:
-            if tenant_id:
-                linked_user = db["users"].find_one({"tenant_id": tenant_id, "telegram_chat_id": str(chat_id)})
-            if not linked_user:
-                linked_user = db["users"].find_one({"telegram_chat_id": str(chat_id)})
-            if not linked_user and username_clean:
-                if tenant_id:
-                    linked_user = db["users"].find_one({
-                        "tenant_id": tenant_id,
-                        "telegram_username": {"$regex": f"^{re.escape(username_clean)}$", "$options": "i"}
-                    })
-                if not linked_user:
-                    linked_user = db["users"].find_one({
-                        "telegram_username": {"$regex": f"^{re.escape(username_clean)}$", "$options": "i"}
-                    })
-            if not linked_user and full_tg_name and full_tg_name != "Hiring Manager":
-                if tenant_id:
-                    linked_user = db["users"].find_one({
-                        "tenant_id": tenant_id,
-                        "name": {"$regex": f"^{re.escape(full_tg_name)}$", "$options": "i"}
-                    })
-                if not linked_user:
-                    linked_user = db["users"].find_one({
-                        "name": {"$regex": f"^{re.escape(full_tg_name)}$", "$options": "i"}
-                    })
-            # Fallback to single hiring manager in this tenant if unique
-            if not linked_user and tenant_id and tenant_id != "local":
-                hms = list(db["users"].find({"tenant_id": tenant_id, "role": {"$in": ["HIRING_MANAGER", "Hiring Manager", "hiring_manager"]}}).limit(2))
-                if len(hms) == 1:
-                    linked_user = hms[0]
-        except Exception as e:
-            print(f"[HM TELEGRAM SESSION LOAD ERROR] {e}")
+        # Only an explicitly verified chat link establishes identity.
+        from .auth import linked_user as find_linked_user
+        linked_user = find_linked_user(chat_id, (tg_user or {}).get('id'), tenant_id)
 
         # Resolve tenant company context & profile
         effective_tenant_id = str(linked_user.get("tenant_id")) if (linked_user and linked_user.get("tenant_id")) else (tenant_id or "local")
@@ -72,7 +43,7 @@ def get_or_create_session(
 
         if linked_user:
             current_user = {
-                "id": str(linked_user.get("_id") or linked_user.get("id")),
+                "id": str(linked_user.get("id") or linked_user.get("_id")),
                 "name": linked_user.get("name") or full_tg_name,
                 "email": linked_user.get("email") or "",
                 "role": linked_user.get("role") or "Hiring Manager",
@@ -123,7 +94,7 @@ def get_or_create_session(
             lu = db["users"].find_one({"telegram_chat_id": str(chat_id)})
             if lu and lu.get("name"):
                 session["current_user"]["name"] = lu.get("name")
-                session["current_user"]["id"] = str(lu.get("_id") or lu.get("id"))
+                session["current_user"]["id"] = str(lu.get("id") or lu.get("_id"))
                 if lu.get("email"):
                     session["current_user"]["email"] = lu.get("email")
                 if lu.get("tenant_id"):
@@ -183,6 +154,6 @@ def clear_session(chat_id: int, tenant_id: Optional[str] = None) -> None:
 
 def invalidate_session(chat_id: int, tenant_id: Optional[str] = None) -> None:
     """Force remove cached session so new credentials or identity will be reloaded."""
-    key = _build_session_key(chat_id, tenant_id)
-    _SESSIONS.pop(key, None)
-    _SESSIONS.pop(str(chat_id), None)
+    for key in list(_SESSIONS):
+        if key == str(chat_id) or key.endswith(f':{chat_id}'):
+            _SESSIONS.pop(key, None)

@@ -25,70 +25,13 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { request } from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import GoogleCalendarConnect from './GoogleCalendarConnect';
+import { todayForDeadline } from '../utils/submissionDeadline';
+import { toInterviewTime } from '../utils/interviewSchedule';
 
-// Default rounds if no hiring process saved in DB yet
-const DEFAULT_ROUNDS = [
-  {
-    id: 'r-1',
-    title: 'Technical Interview',
-    type: 'Technical',
-    duration: 45,
-    scheduledDate: '2026-10-06',
-    scheduledTime: '10:30 AM',
-    interviewer: {
-      name: 'Rahul Sharma',
-      role: 'Senior Software Engineer',
-      email: 'rahul.sharma@termjobs.com',
-      phone: '+91 98765 43210',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-    },
-  },
-  {
-    id: 'r-2',
-    title: 'HR Interview',
-    type: 'HR',
-    duration: 30,
-    scheduledDate: '',
-    scheduledTime: '',
-    interviewer: {
-      name: 'Pooja Iyer',
-      role: 'Lead HR Business Partner',
-      email: 'pooja.i@termjobs.com',
-      phone: '+91 98765 43211',
-      avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-    },
-  },
-  {
-    id: 'r-3',
-    title: 'Manager Interview',
-    type: 'Manager',
-    duration: 45,
-    scheduledDate: '',
-    scheduledTime: '',
-    interviewer: {
-      name: 'Anand Verma',
-      role: 'Engineering Manager',
-      email: 'anand.v@termjobs.com',
-      phone: '+91 98765 43212',
-      avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-    },
-  },
-  {
-    id: 'r-4',
-    title: 'Final Review',
-    type: 'Final',
-    duration: 30,
-    scheduledDate: '',
-    scheduledTime: '',
-    interviewer: {
-      name: 'Henry Vance',
-      role: 'Director of Product',
-      email: 'henry.vance@termjobs.com',
-      phone: '+91 98765 43213',
-      avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=120&auto=format&fit=crop&q=80',
-    },
-  },
-];
+// Default editable process when this requisition has no saved template yet.
+const DEFAULT_ROUNDS = ['Technical', 'HR', 'Manager', 'Final'].map((type, index) => ({ id: `round-${index + 1}`, title: type === 'Final' ? 'Final Review' : `${type} Interview`, type, duration: type === 'Final' ? 30 : 45, scheduledDate: '', scheduledTime: '', interviewer: null }));
 
 const TIME_SLOTS = [
   '09:00 AM',
@@ -106,41 +49,6 @@ const TIME_SLOTS = [
   '03:30 PM',
   '04:00 PM',
   '04:30 PM',
-];
-
-const AVAILABLE_INTERVIEWERS = [
-  {
-    id: 'int-1',
-    name: 'Rahul Sharma',
-    role: 'Senior Software Engineer',
-    email: 'rahul.sharma@termjobs.com',
-    phone: '+91 98765 43210',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'int-2',
-    name: 'Pooja Iyer',
-    role: 'Lead HR Business Partner',
-    email: 'pooja.i@termjobs.com',
-    phone: '+91 98765 43211',
-    avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'int-3',
-    name: 'Anand Verma',
-    role: 'Engineering Manager',
-    email: 'anand.v@termjobs.com',
-    phone: '+91 98765 43212',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80',
-  },
-  {
-    id: 'int-4',
-    name: 'Priya Nair',
-    role: 'Staff System Architect',
-    email: 'priya.nair@termjobs.com',
-    phone: '+91 98765 43214',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-  },
 ];
 
 function getCategoryIcon(type) {
@@ -163,7 +71,7 @@ function getCategoryIcon(type) {
 }
 
 // Mini score gauge
-function MiniScoreRing({ score = 92 }) {
+function MiniScoreRing({ score }) {
   const size = 36;
   const stroke = 3;
   const radius = (size - stroke * 2) / 2;
@@ -194,18 +102,24 @@ function MiniScoreRing({ score = 92 }) {
           fill="transparent"
         />
       </svg>
-      <span className="absolute font-black text-gray-900 text-[11px] tracking-tight">{score}</span>
+      <span className="absolute font-black text-gray-900 text-[11px] tracking-tight">{score ?? '—'}</span>
     </div>
   );
 }
 
 export default function ScheduleInterviewModal({
   candidate,
-  requisitionTitle = 'Senior Product Designer',
-  requisitionCode = 'REQ #1A1D5F',
+  requisitionId,
+  requisitionTitle = '',
+  requisitionCode = '',
   onClose,
   onScheduled,
 }) {
+  const { token, user } = useAuth();
+  const [error, setError] = useState('');
+  const [dispatchResults, setDispatchResults] = useState({});
+  const [availability, setAvailability] = useState(null);
+  const [checking, setChecking] = useState(false);
   const [rounds, setRounds] = useState(DEFAULT_ROUNDS);
   const [selectedRoundIndex, setSelectedRoundIndex] = useState(0);
   const [currentStep, setCurrentStep] = useState(2); // 1 = Set Process (completed with checkmark), 2 = Schedule Interviews, 3 = Review & Confirm
@@ -213,12 +127,12 @@ export default function ScheduleInterviewModal({
   const [scheduledSuccess, setScheduledSuccess] = useState(false);
 
   // Calendar month state
-  const [currentMonth, setCurrentMonth] = useState(new Date(2026, 9, 1)); // October 2026 as per mockup
-  const [selectedDate, setSelectedDate] = useState('2026-10-06');
-  const [selectedTimeSlot, setSelectedTimeSlot] = useState('10:30 AM');
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTimeSlot, setSelectedTimeSlot] = useState('');
 
   // Interviewers list & search state
-  const [interviewersList, setInterviewersList] = useState(AVAILABLE_INTERVIEWERS);
+  const [interviewersList, setInterviewersList] = useState([]);
   const [interviewerSearch, setInterviewerSearch] = useState('');
   const [showInterviewerDropdown, setShowInterviewerDropdown] = useState(false);
 
@@ -228,89 +142,23 @@ export default function ScheduleInterviewModal({
   const [isSavingInterviewer, setIsSavingInterviewer] = useState(false);
   const [interviewerError, setInterviewerError] = useState('');
 
-  // 1. Load interviewers from DB
-  const loadInterviewersFromDb = async () => {
-    try {
-      const res = await request('/interviews/interviewers');
-      if (res && Array.isArray(res.interviewers) && res.interviewers.length > 0) {
-        setInterviewersList(res.interviewers);
-        try {
-          localStorage.setItem('hm_saved_interviewers', JSON.stringify(res.interviewers));
-        } catch (e) {}
-      }
-    } catch (e) {
-      try {
-        const cached = localStorage.getItem('hm_saved_interviewers');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setInterviewersList(parsed);
-          }
-        }
-      } catch (err) {}
-    }
-  };
-
   useEffect(() => {
-    loadInterviewersFromDb();
-  }, []);
-
-  // 2. Load configured interview process from DB / localStorage
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadConfiguredProcess() {
-      try {
-        const res = await request('/interviews/process/template');
-        if (!isMounted) return;
-
-        if (res && res.is_saved && Array.isArray(res.rounds) && res.rounds.length > 0) {
-          setRounds(
-            res.rounds.map((r, i) => ({
-              ...r,
-              duration: r.duration || 45,
-              scheduledDate: i === 0 ? '2026-10-06' : '',
-              scheduledTime: i === 0 ? '10:30 AM' : '',
-              interviewer: DEFAULT_ROUNDS[i % DEFAULT_ROUNDS.length].interviewer,
-            }))
-          );
-          return;
-        }
-      } catch (e) {
-        // Fallback
-      }
-
-      try {
-        const cached = localStorage.getItem('hm_interview_process_template');
-        if (cached && isMounted) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed.rounds) && parsed.rounds.length > 0) {
-            setRounds(
-              parsed.rounds.map((r, i) => ({
-                ...r,
-                duration: r.duration || 45,
-                scheduledDate: i === 0 ? '2026-10-06' : '',
-                scheduledTime: i === 0 ? '10:30 AM' : '',
-                interviewer: DEFAULT_ROUNDS[i % DEFAULT_ROUNDS.length].interviewer,
-              }))
-            );
-          }
-        }
-      } catch (e) {
-        // Ignore
-      }
-    }
-
-    loadConfiguredProcess();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    let mounted = true;
+    Promise.all([
+      request('/api/interviews/interviewers', { token, noCache: true }),
+      request(`/api/interviews/process/template?requisition_id=${encodeURIComponent(requisitionId)}`, { token, noCache: true }),
+    ]).then(([people, process]) => {
+      if (!mounted) return;
+      setInterviewersList(people.interviewers || []);
+      const configured = process.rounds?.length ? process.rounds : DEFAULT_ROUNDS;
+      setRounds(configured.map(r => ({ ...r, duration: r.duration || 45, scheduledDate: '', scheduledTime: '', interviewer: null })));
+    }).catch(err => { if (mounted) setError(err.message || 'Unable to load scheduling data.'); });
+    return () => { mounted = false; };
+  }, [token, requisitionId]);
 
   const activeRound = rounds[selectedRoundIndex] || rounds[0];
 
-  // Calendar helper: days in October 2026
+  // Calendar helper for the selected month
   const calendarDays = useMemo(() => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
@@ -335,7 +183,7 @@ export default function ScheduleInterviewModal({
         day: d,
         isCurrentMonth: true,
         dateStr: `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
-        hasSlots: [6, 7, 8, 9, 13, 14, 15, 16, 20, 21, 22].includes(d),
+        hasSlots: false,
       });
     }
 
@@ -344,6 +192,7 @@ export default function ScheduleInterviewModal({
 
   // Handle slot click
   const handleSelectSlot = (slot) => {
+    setAvailability(null);
     setSelectedTimeSlot(slot);
     setRounds((prev) =>
       prev.map((r, idx) =>
@@ -356,7 +205,8 @@ export default function ScheduleInterviewModal({
 
   // Handle day click
   const handleSelectDay = (dayObj) => {
-    if (!dayObj.isCurrentMonth) return;
+    if (!dayObj.isCurrentMonth || dayObj.dateStr < todayForDeadline()) return;
+    setAvailability(null);
     setSelectedDate(dayObj.dateStr);
     setRounds((prev) =>
       prev.map((r, idx) =>
@@ -397,62 +247,17 @@ export default function ScheduleInterviewModal({
     setInterviewerError('');
 
     try {
-      const res = await request('/interviews/interviewers', {
-        method: 'POST',
-        body: {
-          name: newInterviewer.name.trim(),
-          role: newInterviewer.role.trim(),
-          email: newInterviewer.email.trim(),
-        },
-      });
-
-      let added = null;
-      if (res && res.interviewer) {
-        added = res.interviewer;
-        if (Array.isArray(res.interviewers)) {
-          setInterviewersList(res.interviewers);
-          try {
-            localStorage.setItem('hm_saved_interviewers', JSON.stringify(res.interviewers));
-          } catch (err) {}
-        }
-      } else {
-        added = {
-          id: `int-${Date.now()}`,
-          name: newInterviewer.name.trim(),
-          role: newInterviewer.role.trim(),
-          email: newInterviewer.email.trim(),
-          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${newInterviewer.name.trim().replace(/\s+/g, '')}`,
-        };
-        setInterviewersList((prev) => [added, ...prev]);
-      }
-
-      // Automatically assign the newly added interviewer to active round
-      if (added) {
-        handleAssignInterviewer(added);
-      }
-
-      setNewInterviewer({ name: '', role: '', email: '' });
-      setShowAddModal(false);
-    } catch (err) {
-      // Local fallback
-      const added = {
-        id: `int-${Date.now()}`,
-        name: newInterviewer.name.trim(),
-        role: newInterviewer.role.trim(),
-        email: newInterviewer.email.trim(),
-        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${newInterviewer.name.trim().replace(/\s+/g, '')}`,
-      };
-      setInterviewersList((prev) => [added, ...prev]);
-      handleAssignInterviewer(added);
-      setNewInterviewer({ name: '', role: '', email: '' });
-      setShowAddModal(false);
-    } finally {
-      setIsSavingInterviewer(false);
-    }
+      const res = await request('/api/interviews/interviewers', { method: 'POST', token, body: newInterviewer });
+      setInterviewersList(res.interviewers || []);
+      handleAssignInterviewer(res.interviewer);
+      setNewInterviewer({ name: '', role: '', email: '' }); setShowAddModal(false);
+    } catch (err) { setInterviewerError(err.message || 'Unable to save interviewer.'); }
+    finally { setIsSavingInterviewer(false); }
   };
 
   // Proceed directly to Review & Confirm (Step 3)
   const handleSaveAndNext = () => {
+    setError('');
     // Sync current active round selections before proceeding
     setRounds((prev) =>
       prev.map((r, idx) =>
@@ -469,54 +274,43 @@ export default function ScheduleInterviewModal({
     setCurrentStep(3);
   };
 
-  // Final confirmation and dispatch
+  const checkAvailability = async () => {
+    setChecking(true); setError(''); setAvailability(null);
+    try {
+      const result = await request('/api/calendar/google/availability', { method: 'POST', token, body: {
+        scheduled_date: selectedDate, scheduled_time: toInterviewTime(selectedTimeSlot), scheduled_timezone: 'Asia/Kolkata', duration_minutes: activeRound.duration || 45,
+      }});
+      setAvailability(result);
+    } catch (err) { setError(err.message || 'Unable to check Google Calendar.'); }
+    finally { setChecking(false); }
+  };
+
   const handleConfirmAndSchedule = async () => {
-    setIsSubmitting(true);
+    setIsSubmitting(true); setError('');
     try {
-      await request('/interviews/schedule', {
-        method: 'POST',
-        body: {
-          candidate_id: candidate?.id,
-          candidate_name: candidate?.name,
-          candidate_email: candidate?.email,
-          rounds: rounds,
-          requisition_title: requisitionTitle,
-          requisition_code: requisitionCode,
-        },
-      });
-    } catch (e) {
-      // Silent fallback
-    }
-
-    try {
-      const stored = localStorage.getItem('scheduled_candidates_pool') || '[]';
-      const parsed = JSON.parse(stored);
-      parsed.push({
-        candidateId: candidate?.id,
-        candidateName: candidate?.name,
-        rounds,
-        requisitionTitle,
-        requisitionCode,
-        scheduledAt: new Date().toISOString(),
-      });
-      localStorage.setItem('scheduled_candidates_pool', JSON.stringify(parsed));
-    } catch (e) {}
-
-    setIsSubmitting(false);
-    setScheduledSuccess(true);
-    setTimeout(() => {
-      if (onScheduled) onScheduled({ candidate, rounds });
-      onClose();
-    }, 700);
+      if (rounds.some(r => !r.scheduledDate || !r.scheduledTime)) throw new Error('Choose a date and time for each round before confirming.');
+      for (const r of rounds) {
+        const saved = await request('/api/interviews/company-round', { method: 'POST', token, timeout: 90000, body: {
+          candidate_identifier: candidate.submission_id || candidate.id, requisition_id: requisitionId,
+          round_id: dispatchResults[r.id]?.id || null, round_name: r.title, round_type: r.type,
+          scheduled_date: r.scheduledDate, scheduled_time: toInterviewTime(r.scheduledTime), scheduled_timezone: 'Asia/Kolkata', duration_minutes: r.duration || 45,
+          interviewer_name: r.interviewer?.name || user?.name, interviewer_email: r.interviewer?.email || user?.email,
+        }});
+        setDispatchResults(prev => ({ ...prev, [r.id]: saved }));
+        onScheduled?.(saved);
+      }
+      setScheduledSuccess(true);
+    } catch (err) { setError(err.message || 'Unable to schedule interviews.'); }
+    finally { setIsSubmitting(false); }
   };
 
   // Filtered interviewers from DB
   const filteredInterviewers = interviewersList.filter(
     (i) =>
       !interviewerSearch ||
-      i.name.toLowerCase().includes(interviewerSearch.toLowerCase()) ||
-      i.role.toLowerCase().includes(interviewerSearch.toLowerCase()) ||
-      i.email.toLowerCase().includes(interviewerSearch.toLowerCase())
+      (i.name || '').toLowerCase().includes(interviewerSearch.toLowerCase()) ||
+      (i.role || '').toLowerCase().includes(interviewerSearch.toLowerCase()) ||
+      (i.email || '').toLowerCase().includes(interviewerSearch.toLowerCase())
   );
 
   return (
@@ -553,6 +347,11 @@ export default function ScheduleInterviewModal({
           </button>
         </div>
 
+        <div className="px-6 py-2 border-b border-black/[0.06] bg-white">
+          <GoogleCalendarConnect />
+          {error && <p role="alert" className="mt-2 text-xs text-red-600">{error}</p>}
+          {Object.values(dispatchResults).map(r => <p key={r.id} className="mt-2 text-xs text-gray-600">{r.round_name}: saved · Email: {r.email_delivery?.status || 'Not sent'} · Telegram: {r.telegram_delivery?.status || 'Not sent'} · Google Calendar: {r.calendar_sync?.status || 'Not synced'}</p>)}
+        </div>
         {/* ── STEPPER BAR (Reflects Active & Completed Steps) ── */}
         <div className="px-6 py-3.5 border-b border-black/[0.06] bg-gray-50/60 flex items-center justify-center gap-3 sm:gap-6 flex-wrap shrink-0">
           {/* Step 1: Set Interview Process (COMPLETED with checkmark) */}
@@ -632,8 +431,8 @@ export default function ScheduleInterviewModal({
                             key={round.id || idx}
                             onClick={() => {
                               setSelectedRoundIndex(idx);
-                              if (round.scheduledDate) setSelectedDate(round.scheduledDate);
-                              if (round.scheduledTime) setSelectedTimeSlot(round.scheduledTime);
+                              setSelectedDate(round.scheduledDate || '');
+                              setSelectedTimeSlot(round.scheduledTime || '');
                             }}
                             className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center gap-2.5 ${
                               isSelected
@@ -817,6 +616,11 @@ export default function ScheduleInterviewModal({
 
                 {/* RIGHT COLUMN: Active Round Date & Time Slots (Enlarged Calendar & Roomy Timesheet) */}
                 <div className="lg:col-span-7 space-y-4">
+                  <div className="flex items-center gap-2 text-xs">
+                    <button type="button" disabled={checking || !selectedDate || !selectedTimeSlot} onClick={checkAvailability} className="rounded-xl border border-gray-200 px-3 py-1.5 disabled:opacity-40">{checking ? 'Checking calendar…' : 'Check Google Calendar availability'}</button>
+                    {availability && <span>{availability.available ? 'Slot free; rechecked on booking' : 'Slot unavailable'}</span>}
+                    <span className="text-gray-500">Asia/Kolkata</span>
+                  </div>
                   {/* Header for Active Round */}
                   <div className="flex items-center justify-between gap-2 border-b border-black/[0.06] pb-2.5">
                     <div>
@@ -839,11 +643,12 @@ export default function ScheduleInterviewModal({
                     {/* ── ENLARGED CALENDAR ── */}
                     <div className="sm:col-span-6 bg-white border border-gray-200/90 rounded-2xl p-4 sm:p-4.5 shadow-3xs space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm sm:text-base font-bold text-gray-900">October 2026</span>
+                        <span className="text-sm sm:text-base font-bold text-gray-900">{currentMonth.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</span>
                         <div className="flex items-center gap-1 text-gray-500">
                           <button
                             type="button"
                             className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+                            onClick={() => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
                             title="Previous Month"
                           >
                             <ChevronLeft size={15} />
@@ -851,6 +656,7 @@ export default function ScheduleInterviewModal({
                           <button
                             type="button"
                             className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center cursor-pointer transition-colors"
+                            onClick={() => setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
                             title="Next Month"
                           >
                             <ChevronRight size={15} />
@@ -879,7 +685,7 @@ export default function ScheduleInterviewModal({
                               key={i}
                               onClick={() => handleSelectDay(dObj)}
                               className={`h-8 sm:h-9 rounded-xl flex flex-col items-center justify-center transition-all cursor-pointer relative ${
-                                !dObj.isCurrentMonth
+                                (!dObj.isCurrentMonth || dObj.dateStr < todayForDeadline())
                                   ? 'text-gray-300 pointer-events-none'
                                   : isChosen
                                   ? 'bg-black text-white font-bold shadow-xs'
@@ -903,7 +709,7 @@ export default function ScheduleInterviewModal({
                           Available Time Slots
                         </h5>
                         <span className="text-xs font-normal text-gray-400 block mt-0.5">
-                          Tue, Oct 6, 2026
+                          {selectedDate ? new Date(`${selectedDate}T00:00:00`).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : 'Select a date'}
                         </span>
                       </div>
 
@@ -961,10 +767,10 @@ export default function ScheduleInterviewModal({
                   <div className="min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-base font-black text-gray-900 tracking-tight">
-                        {candidate?.name || 'Arjun S'}
+                        {candidate?.name || 'Candidate'}
                       </h3>
                       <span className="px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-bold">
-                        {candidate?.score || 92}% Match Score
+                        {candidate?.score ?? null}% Match Score
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 font-medium mt-0.5">
@@ -975,10 +781,10 @@ export default function ScheduleInterviewModal({
                         <Mail size={12} /> {candidate?.email || 'arjun.s@email.com'}
                       </span>
                       <span className="flex items-center gap-1">
-                        <MapPin size={12} /> {candidate?.location || 'Bangalore, India'}
+                        <MapPin size={12} /> {candidate?.location || 'Not provided'}
                       </span>
                       <span className="flex items-center gap-1">
-                        <Briefcase size={12} /> {candidate?.experience || '3 yrs'} experience
+                        <Briefcase size={12} /> {candidate?.experience || 'Not provided'} experience
                       </span>
                     </div>
                   </div>
@@ -1026,12 +832,12 @@ export default function ScheduleInterviewModal({
                             <Calendar size={12} className="text-emerald-600" />
                             <span>
                               {round.scheduledDate
-                                ? `Oct ${round.scheduledDate.split('-')[2] || '6'}, 2026`
-                                : 'Oct 06, 2026'}
+                                ? new Date(`${round.scheduledDate}T00:00:00`).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' })
+                                : 'Not scheduled'}
                             </span>
                             <span>&bull;</span>
                             <Clock size={12} className="text-emerald-600" />
-                            <span>{round.scheduledTime || '10:30 AM'}</span>
+                            <span>{round.scheduledTime || 'Not selected'}</span>
                           </div>
                         </div>
                       </div>
@@ -1093,7 +899,7 @@ export default function ScheduleInterviewModal({
 
                 <button
                   type="button"
-                  onClick={handleConfirmAndSchedule}
+                  onClick={scheduledSuccess ? onClose : handleConfirmAndSchedule}
                   disabled={isSubmitting}
                   className={`px-7 py-3 rounded-2xl bg-black hover:bg-gray-800 text-white text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-sm transition-all cursor-pointer ${
                     scheduledSuccess ? 'bg-emerald-600 hover:bg-emerald-700' : ''

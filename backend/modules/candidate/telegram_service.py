@@ -260,6 +260,21 @@ async def send_candidate_requisition_alert(
         return {"ok": False, "error": str(exc)}
 
 
+def send_ai_interview_link(chat_id, candidate_name, requisition_title, meeting_link, passcode):
+    """Deliver the AI invitation without duplicating its email notification."""
+    token = get_telegram_token()
+    if not token or not chat_id:
+        return {"ok": False, "error": "Candidate Telegram is not connected"}
+    with httpx.Client(timeout=15) as client:
+        response = client.post(f"{TELEGRAM_API_BASE}/bot{token}/sendMessage", json={
+            "chat_id": chat_id,
+            "text": f"Hi {candidate_name}, your AI interview for {requisition_title} is ready.\nPasscode: {passcode}\nUse the button below to start your AI assessment.",
+            "reply_markup": {"inline_keyboard": [[{"text": "🤖 Start AI Interview", "url": meeting_link}]]},
+        })
+        response.raise_for_status()
+        return response.json()
+
+
 async def send_candidate_interview_scheduled_alert(
     chat_id: int | str,
     candidate_name: str,
@@ -373,6 +388,61 @@ async def send_candidate_interview_scheduled_alert(
         return {"ok": False, "error": str(exc)}
 
 
+def candidate_interview_links(candidate, database=None, ai_only=False):
+    """Resolve real invitations for this candidate's own applications."""
+    from urllib.parse import urlencode
+    from modules.interview.services.interview_service import is_round_link_expired
+    database = database if database is not None else db
+    email = candidate['candidate_email']
+    applications = list(database['candidate_submissions'].find({'candidate_email': email}))
+    app_ids = [app.get('id') or app.get('submission_id') for app in applications]
+    req_ids = [app.get('requisition_id') for app in applications if app.get('requisition_id')]
+    rows = database['interview_rounds'].find({'candidate_email': email,
+        '$or': [{'candidate_submission_id': {'$in': app_ids}}, {'requisition_id': {'$in': req_ids}}],
+        'status': {'$nin': ['Cancelled', 'Completed', 'No Show']}}).sort('scheduled_date', 1)
+    invitations = []
+    for row in rows:
+        application = next((app for app in applications if app.get('requisition_id') == row.get('requisition_id') and
+                            ((app.get('id') or app.get('submission_id')) == row.get('candidate_submission_id') or row.get('requisition_id') in req_ids)), None)
+        if not application: continue
+        req = database['requisitions'].find_one({'id': row.get('requisition_id'), 'tenant_id': row.get('tenant_id')})
+        if not req: continue
+        is_ai = (row.get('round_name') or '').upper().startswith('AI') or (row.get('round_type') or '').lower() == 'ai'
+        if ai_only and not is_ai: continue
+        if (row.get('expires_at') or row.get('created_at')) and is_round_link_expired(row): continue
+        if not row.get('id') or not row.get('candidate_token'): continue
+        from modules.interview.domain.links import candidate_interview_link
+        url = candidate_interview_link(row, _resolve_interview_domain())
+        invitations.append({'title': req.get('title') or row.get('requisition_title') or 'Interview', 'round': row.get('round_name') or 'Interview',
+            'date': row.get('scheduled_date') or 'On demand', 'time': row.get('scheduled_time') or '', 'url': url, 'is_ai': is_ai})
+    return invitations[:10]
+
+
+def candidate_connection_payload(chat_id, candidate, database=None):
+    name = candidate.get('candidate_name') or candidate.get('name') or 'Candidate'
+    invitations = candidate_interview_links(candidate, database, ai_only=True)
+    lines = [f'Connection successful! Hello, {name}.', 'Job and interview notifications are enabled.',
+             '/jobs — View open jobs', '/applied — View your applications', '/interviews — Get interview links', '/logout — Disconnect notifications']
+    keyboard = []
+    if invitations:
+        lines.append('\nYour AI interview links:')
+        for invitation in invitations:
+            lines.append(f"• {invitation['title']} — {invitation['round']}")
+            keyboard.append([{'text': f"Join AI interview · {invitation['title']}"[:64], 'url': invitation['url']}])
+    else:
+        lines.append('\nNo active AI interview invitation is available yet. Use /applied to check your application status.')
+    keyboard.append([{'text': 'Open TermJobs jobs', 'url': 'https://termjobs.in/open-roles'}])
+    return {'chat_id': chat_id, 'text': '\n'.join(lines), 'reply_markup': {'inline_keyboard': keyboard}}
+
+
+async def send_candidate_connection_confirmation(chat_id, candidate, database=None):
+    token = get_telegram_token()
+    if not token: return
+    payload = candidate_connection_payload(chat_id, candidate, database)
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(f'{TELEGRAM_API_BASE}/bot{token}/sendMessage', json=payload)
+
+
 async def process_telegram_update(update: dict) -> None:
     """Process incoming webhook or polled Telegram update."""
     token = get_telegram_token()
@@ -402,19 +472,12 @@ async def process_telegram_update(update: dict) -> None:
                 await process_telegram_update({'message': {**msg, 'text': '/login'}})
                 return
             if command in ('/interviews', '/interview'):
-                email = connected_candidate['candidate_email']
-                applications = list(db['candidate_submissions'].find({'candidate_email': email}))
-                app_ids = [row.get('id') or row.get('submission_id') for row in applications]
-                rows = list(db['interview_rounds'].find({'candidate_email': email, 'candidate_submission_id': {'$in': [value for value in app_ids if value]}, 'status': {'$nin': ['Cancelled', 'Completed']}}).sort('scheduled_date', 1))
+                invitations = candidate_interview_links(connected_candidate)
                 lines = ['Your scheduled interviews:']
-                for row in rows[:10]:
-                    application = next((app for app in applications if (app.get('id') or app.get('submission_id')) == row.get('candidate_submission_id') and app.get('requisition_id') == row.get('requisition_id')), None)
-                    if not application: continue
-                    req = db['requisitions'].find_one({'id': row.get('requisition_id'), 'tenant_id': row.get('tenant_id')})
-                    if not req: continue
-                    lines.append(f"• {req.get('title') or 'Interview'} — {row.get('round_name') or 'Company interview'}\n  {row.get('scheduled_date') or 'Date pending'} {row.get('scheduled_time') or ''} {row.get('scheduled_timezone') or ''}")
-                if len(lines) == 1:
-                    lines.append('No scheduled interviews were found for your applications. Applying to a job does not automatically schedule an interview. Use /applied to check your application status.')
+                for invitation in invitations:
+                    lines.append(f"• {invitation['title']} — {invitation['round']}\n  {invitation['date']} {invitation['time']}")
+                if not invitations:
+                    lines.append('No active interview invitations were found for your applications. Use /applied to check your status.')
             elif command in ('/applied', '/applications'):
                 rows = list(db['candidate_submissions'].find({'candidate_email': connected_candidate['candidate_email']}).sort('created_at', -1).limit(10))
                 lines = ['Your applications:']
@@ -430,8 +493,13 @@ async def process_telegram_update(update: dict) -> None:
                 for row in rows:
                     lines.append(f"• {row.get('title') or 'Open role'}")
                 if not rows: lines.append('No published jobs are available right now.')
+            invitations = candidate_interview_links(connected_candidate, ai_only=command not in ('/interviews', '/interview'))
+            if invitations and command not in ('/interviews', '/interview'):
+                lines.append('\nAI interview invitations are ready. Use the join buttons below.')
+            keyboard = [[{'text': f"Join {'AI ' if invitation['is_ai'] else ''}interview · {invitation['title']}"[:64], 'url': invitation['url']}] for invitation in invitations]
+            keyboard.append([{'text': 'View jobs / apply', 'url': 'https://termjobs.in/open-roles'}])
             async with httpx.AsyncClient(timeout=10) as client:
-                await client.post(f'{TELEGRAM_API_BASE}/bot{token}/sendMessage', json={'chat_id': chat_id, 'text': '\n'.join(lines), 'reply_markup': {'inline_keyboard': [[{'text': 'View jobs / apply', 'url': 'https://termjobs.in/open-roles'}]]}})
+                await client.post(f'{TELEGRAM_API_BASE}/bot{token}/sendMessage', json={'chat_id': chat_id, 'text': '\n'.join(lines), 'reply_markup': {'inline_keyboard': keyboard}})
             return
         if command in ('/logout', '/login', '/start'):
             if chat.get('type') != 'private':
@@ -443,7 +511,7 @@ async def process_telegram_update(update: dict) -> None:
                 db['candidate_telegram_login_states'].delete_many({'chat_id': str(chat_id)})
                 payload = {'chat_id': chat_id, 'text': 'You are logged out of the TermJobs candidate bot. Job notifications to this chat are disabled. Use /login to reconnect.'}
             elif connected_candidate:
-                payload = {'chat_id': chat_id, 'text': f"You are connected as {connected_candidate.get('candidate_name') or 'Candidate'}.\n\n/jobs — View open requisitions\n/applied — View your applications\n/logout — Disconnect notifications", 'reply_markup': {'inline_keyboard': [[{'text': 'Open TermJobs jobs', 'url': 'https://termjobs.in/open-roles'}]]}}
+                payload = candidate_connection_payload(chat_id, connected_candidate)
             else:
                 from datetime import timedelta
                 state = secrets.token_urlsafe(32)
@@ -543,7 +611,7 @@ async def process_telegram_update(update: dict) -> None:
 
                     if meeting_link:
                         keyboard_buttons = [
-                            [{"text": "🎥 Enter Video Interview Room", "url": meeting_link}]
+                            [{"text": "🤖 Start AI Interview", "url": meeting_link}]
                         ]
                         if portal_link:
                             keyboard_buttons.append([{"text": "🚀 Candidate Portal Login", "url": portal_link}])
@@ -572,25 +640,6 @@ async def process_telegram_update(update: dict) -> None:
                         tasks.append(client.post(
                             f"{TELEGRAM_API_BASE}/bot{token}/editMessageText",
                             json=edit_payload
-                        ))
-
-                    if action == "interested" and chat_id and meeting_link:
-                        new_msg = (
-                            f"🎉 *Here is your Live Interview Room Link!*\n\n"
-                            f"💼 *Position:* {req_title}\n"
-                            f"🏢 *Company:* {company}\n"
-                            f"🔑 *Passcode:* `{passcode}`\n\n"
-                            f"🎥 *Meeting Room:*\n{meeting_link}\n\n"
-                            f"Tap below to join the live video room:"
-                        )
-                        tasks.append(client.post(
-                            f"{TELEGRAM_API_BASE}/bot{token}/sendMessage",
-                            json={
-                                "chat_id": chat_id,
-                                "text": new_msg,
-                                "parse_mode": "Markdown",
-                                "reply_markup": reply_markup
-                            }
                         ))
 
                     if tasks:

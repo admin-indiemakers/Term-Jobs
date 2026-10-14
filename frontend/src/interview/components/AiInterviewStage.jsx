@@ -1,3 +1,4 @@
+import { finalizeRecording } from '../utils/recording';
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
   Sparkles,
@@ -88,7 +89,6 @@ export function AiInterviewStage({
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const recordingStartTimeRef = useRef(null);
-  const internalStreamRef = useRef(null);
 
   // Auto-record candidate video/audio stream using MediaRecorder (if not handled centrally by parent InterviewRoom)
   useEffect(() => {
@@ -100,20 +100,10 @@ export function AiInterviewStage({
 
     const initRecording = async () => {
       try {
-        let stream = localStream;
-        if (!stream || stream.getTracks().length === 0) {
-          if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-            try {
-              stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-              internalStreamRef.current = stream;
-            } catch (mediaErr) {
-              console.warn('[RECORDING] Fallback camera/mic access not granted:', mediaErr);
-              return;
-            }
-          }
-        }
-
-        if (!stream || isCancelled) return;
+        // Record the same camera stream shown in the preview. A second camera
+        // request can end the recorder when the preview stream arrives (Safari).
+        const stream = localStream;
+        if (!stream?.getVideoTracks().some(track => track.readyState === 'live') || isCancelled) return;
 
         // Choose supported mimeType
         const mimeCandidates = [
@@ -130,7 +120,7 @@ export function AiInterviewStage({
           }
         }
 
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        if (mediaRecorderRef.current && (mediaRecorderRef.current.state !== 'inactive' || recordedChunksRef.current.length > 0)) {
           return;
         }
 
@@ -157,13 +147,14 @@ export function AiInterviewStage({
 
     return () => {
       isCancelled = true;
-      if (internalStreamRef.current) {
-        try {
-          internalStreamRef.current.getTracks().forEach((t) => t.stop());
-        } catch (_) {}
-      }
     };
   }, [localStream]);
+
+  useEffect(() => () => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') recorder.stop();
+  }, []);
+
 
   const loadQuestions = useCallback(async () => {
     setQuestionLoadError('');
@@ -463,29 +454,10 @@ export function AiInterviewStage({
           const saved = recordingUploaded || await onSaveProofRecording(callSeconds, setUploadProgress);
           if (!saved) throw new Error('Video recording could not be saved. Please retry submission.');
           setRecordingUploaded(true);
-        } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          let recordedBlob = null;
-          await new Promise((resolve) => {
-            const timer = setTimeout(() => {
-              console.warn('[RECORDING] onstop timed out after 1.5s');
-              resolve();
-            }, 1500);
-            mediaRecorderRef.current.onstop = () => {
-              clearTimeout(timer);
-              resolve();
-            };
-            try {
-              mediaRecorderRef.current.stop();
-            } catch (e) {
-              clearTimeout(timer);
-              resolve();
-            }
-          });
-          if (recordedChunksRef.current.length > 0) {
-            const mime = mediaRecorderRef.current.mimeType || 'video/webm';
-            recordedBlob = new Blob(recordedChunksRef.current, { type: mime });
-            console.log(`📹 [RECORDING] Completed. Captured ${(recordedBlob.size / 1024 / 1024).toFixed(2)} MB video`);
-          }
+        } else if (recordingUploaded) {
+          // Scoring retries reuse the already saved recording.
+        } else if (mediaRecorderRef.current) {
+          const recordedBlob = await finalizeRecording(mediaRecorderRef.current, recordedChunksRef.current);
           if (recordedBlob && round?.id) {
             await interviewApi.uploadRecording(round.id, recordedBlob, callSeconds, round.candidate_token || round.interviewer_token, setUploadProgress);
             setRecordingUploaded(true);

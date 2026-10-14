@@ -762,15 +762,17 @@ def livekit_token_endpoint(body: LiveKitTokenRequest):
             status_code=410,
             detail="Cannot enter interview room: This AI interview link expired after 10 hours."
         )
-    room_name = round_doc.get("room_id") if round_doc else f"room_{body.round_id}"
+    if not round_doc:
+        raise HTTPException(status_code=404, detail="Interview room not found. Create a scheduled interview first.")
+    room_name = round_doc.get("room_id")
     ident = body.participant_identity or f"{body.role}_{uuid.uuid4().hex[:6]}"
     
-    token_payload = generate_livekit_token(
-        room_name=room_name,
-        identity=ident,
-        name=body.participant_name,
-        role=body.role,
-    )
+    try:
+        token_payload = generate_livekit_token(
+            room_name=room_name, identity=ident, name=body.participant_name, role=body.role,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return token_payload
 
 
@@ -855,23 +857,6 @@ async def room_websocket_endpoint(websocket: WebSocket, round_id: str):
         _room_websockets.get(round_id, set()).discard(websocket)
 
 
-@router.get("/{interview_id}")
-def get_interview_detail(
-    interview_id: str,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Fetch single interview schedule details along with 1-click calendar links.
-    """
-    with get_session() as session:
-        interview = session.query(InterviewSchedule).filter(InterviewSchedule.id == interview_id).first()
-        if not interview:
-            raise HTTPException(status_code=404, detail="Interview schedule not found")
-        doc = interview.to_doc()
-        doc["calendar_links"] = generate_calendar_links(doc)
-        return doc
-
-
 @router.post("/{interview_id}/vendor-confirm")
 def vendor_confirm_interview(
     interview_id: str,
@@ -953,6 +938,7 @@ def get_calendar_direct_links(
 
 @router.get("/process/template")
 def get_interview_process_template(
+    requisition_id: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -960,8 +946,14 @@ def get_interview_process_template(
     Effects all requisitions for this hiring manager.
     """
     tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
+    if requisition_id:
+        from .services.company_schedule import validate_company_requisition
+        try:
+            validate_company_requisition(current_user, requisition_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
     doc = db["hiring_manager_interview_processes"].find_one(
-        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {"tenant_id": tenant_id, "requisition_id": requisition_id},
         sort=[("updated_at", -1)],
     )
     if not doc:
@@ -985,15 +977,23 @@ def save_interview_process_template(
     This applies across all requisitions for this hiring manager.
     """
     tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
+    requisition_id = body.get('requisition_id')
+    if requisition_id:
+        from .services.company_schedule import validate_company_requisition
+        try:
+            validate_company_requisition(current_user, requisition_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
     template = body.get("template", "custom")
     rounds = body.get("rounds", [])
 
     now = datetime.now(timezone.utc)
     db["hiring_manager_interview_processes"].update_one(
-        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {"tenant_id": tenant_id, "requisition_id": requisition_id},
         {
             "$set": {
                 "tenant_id": tenant_id,
+                "requisition_id": requisition_id,
                 "user_id": current_user.id,
                 "template": template,
                 "rounds": rounds,
@@ -1012,38 +1012,6 @@ def save_interview_process_template(
     }
 
 
-DEFAULT_SEED_INTERVIEWERS = [
-    {
-        "id": "int-1",
-        "name": "Rahul Sharma",
-        "role": "Senior Software Engineer",
-        "email": "rahul.sharma@termjobs.com",
-        "avatar": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=120&auto=format&fit=crop&q=80",
-    },
-    {
-        "id": "int-2",
-        "name": "Pooja Iyer",
-        "role": "Lead HR Business Partner",
-        "email": "pooja.i@termjobs.com",
-        "avatar": "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=120&auto=format&fit=crop&q=80",
-    },
-    {
-        "id": "int-3",
-        "name": "Anand Verma",
-        "role": "Engineering Manager",
-        "email": "anand.v@termjobs.com",
-        "avatar": "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=120&auto=format&fit=crop&q=80",
-    },
-    {
-        "id": "int-4",
-        "name": "Priya Nair",
-        "role": "Staff System Architect",
-        "email": "priya.nair@termjobs.com",
-        "avatar": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
-    },
-]
-
-
 @router.get("/interviewers")
 def get_interviewers_list(
     current_user: User = Depends(get_current_user),
@@ -1053,15 +1021,17 @@ def get_interviewers_list(
     """
     tenant_id = getattr(current_user, "tenant_id", None) or getattr(current_user, "id", "")
     custom_interviewers = list(db["hiring_manager_interviewers"].find(
-        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {"tenant_id": tenant_id},
         {"_id": 0}
     ).sort("created_at", -1))
 
     seen_emails = {i["email"].lower() for i in custom_interviewers if i.get("email")}
     combined = list(custom_interviewers)
-    for def_int in DEFAULT_SEED_INTERVIEWERS:
-        if def_int["email"].lower() not in seen_emails:
-            combined.append(def_int)
+    with get_session() as session:
+        staff = session.query(User).filter(User.tenant_id == tenant_id).all()
+        for actor in staff:
+            if actor.is_active and actor.role in ('Hiring Manager', 'HR', 'Admin', 'Director') and actor.email.lower() not in seen_emails:
+                combined.append({'id': str(actor.id), 'name': actor.name, 'role': actor.role, 'email': actor.email})
     return {"interviewers": combined}
 
 
@@ -1107,14 +1077,16 @@ def add_new_interviewer(
     )
 
     custom_interviewers = list(db["hiring_manager_interviewers"].find(
-        {"$or": [{"tenant_id": tenant_id}, {"user_id": current_user.id}]},
+        {"tenant_id": tenant_id},
         {"_id": 0}
     ).sort("created_at", -1))
     seen_emails = {i["email"].lower() for i in custom_interviewers if i.get("email")}
     combined = list(custom_interviewers)
-    for def_int in DEFAULT_SEED_INTERVIEWERS:
-        if def_int["email"].lower() not in seen_emails:
-            combined.append(def_int)
+    with get_session() as session:
+        staff = session.query(User).filter(User.tenant_id == tenant_id).all()
+        for actor in staff:
+            if actor.is_active and actor.role in ('Hiring Manager', 'HR', 'Admin', 'Director') and actor.email.lower() not in seen_emails:
+                combined.append({'id': str(actor.id), 'name': actor.name, 'role': actor.role, 'email': actor.email})
 
     return {
         "success": True,
@@ -1122,3 +1094,20 @@ def add_new_interviewer(
         "interviewers": combined,
     }
 
+
+# Static interview endpoints must precede this generic ID lookup.
+@router.get("/{interview_id}")
+def get_interview_detail(
+    interview_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetch single interview schedule details along with 1-click calendar links.
+    """
+    with get_session() as session:
+        interview = session.query(InterviewSchedule).filter(InterviewSchedule.id == interview_id).first()
+        if not interview:
+            raise HTTPException(status_code=404, detail="Interview schedule not found")
+        doc = interview.to_doc()
+        doc["calendar_links"] = generate_calendar_links(doc)
+        return doc

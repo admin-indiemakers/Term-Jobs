@@ -44,6 +44,12 @@ async def hm_bot_polling_loop():
                     f"{TELEGRAM_API_BASE}/bot{token}/deleteWebhook",
                     json={"drop_pending_updates": False}
                 )
+                await init_client.post(f"{TELEGRAM_API_BASE}/bot{token}/setMyCommands", json={'commands': [
+                    {'command': 'start', 'description': 'Open Hiring Manager assistant'},
+                    {'command': 'login', 'description': 'Sign in securely with a TermJobs link'},
+                    {'command': 'logout', 'description': 'Disconnect your Telegram session'},
+                    {'command': 'help', 'description': 'Show hiring tasks and help'},
+                ]})
                 if del_resp.status_code == 200:
                     print("[HM TELEGRAM BOT] Webhook verified cleared for long polling.")
         except Exception as e:

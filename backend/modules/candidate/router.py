@@ -99,6 +99,9 @@ def _candidate_dict(session, row: CandidateSubmission) -> dict:
         "hiring_manager_name": hm_name or "",
         "candidate_name": row.candidate_name,
         "candidate_email": row.candidate_email,
+        "location": details.get("location") or getattr(row, "location", None),
+        "availability": details.get("availability") or getattr(row, "availability", None),
+        "experience_years": details.get("experience_years") or details.get("total_experience_years"),
         "candidate_phone": details.get("candidate_phone") or getattr(row, "candidate_phone", "") or "",
         "vendor_name": row.vendor_name,
         "filename": row.filename,
@@ -296,6 +299,9 @@ def _fetch_candidate_submissions_mongo(query_filter: dict, current_user: User, i
             "hiring_manager_name": hm_name,
             "candidate_name": doc.get("candidate_name"),
             "candidate_email": doc.get("candidate_email"),
+            "location": doc.get("location") or details.get("location"),
+            "availability": doc.get("availability") or details.get("availability"),
+            "experience_years": doc.get("experience_years") or details.get("experience_years") or details.get("total_experience_years"),
             "candidate_phone": details.get("candidate_phone") or doc.get("candidate_phone") or "",
             "vendor_name": doc.get("vendor_name") or "bridgeon",
             "filename": doc.get("filename"),
@@ -781,6 +787,24 @@ def get_candidate(candidate_id: str, current_user: User = Depends(get_current_us
                     detail="You do not have access to this candidate",
                 )
         return _candidate_dict(session, row)
+
+
+@router.post("/{submission_id}/notes")
+def add_candidate_note(submission_id: str, body: dict, current_user: User = Depends(get_current_user)):
+    if current_user.role not in ('Hiring Manager', 'Admin', 'HR', 'Super Admin'):
+        raise HTTPException(status_code=403, detail='Hiring staff access required')
+    get_candidate(submission_id, current_user=current_user)
+    text = str(body.get('text') or '').strip()
+    if not text or len(text) > 5000:
+        raise HTTPException(status_code=400, detail='A note between 1 and 5000 characters is required')
+    with get_session() as session:
+        row = session.get(CandidateSubmission, submission_id)
+        entry = f"{datetime.now(timezone.utc).isoformat()} · {current_user.name or current_user.email}: {text}"
+        row.hiring_manager_notes = '\n'.join(filter(None, [row.hiring_manager_notes, entry]))
+        session.commit()
+        from modules.shared.cache import cache
+        cache.clear()
+        return {'notes': row.hiring_manager_notes}
 
 
 @router.patch("/{submission_id}/status")

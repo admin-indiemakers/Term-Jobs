@@ -22,8 +22,6 @@ export default function CandidatePortalAccess() {
 
   const loadCandidates = async () => {
     setLoading(true);
-    setError('');
-    setSuccessMsg('');
     try {
       const data = await request('/api/auth/portal-users', { token });
       setCandidates(Array.isArray(data) ? data : []);
@@ -47,6 +45,16 @@ export default function CandidatePortalAccess() {
       c.requisition_title?.toLowerCase().includes(q)
     );
   }, [candidates, search]);
+
+  const resendLogin = async (cand) => {
+    setError(''); setSuccessMsg(''); setUpdatingId(cand.candidate_id || cand.workorder_id);
+    try {
+      const result = await request(`/api/auth/portal-users/${cand.portal_user_id}/resend-credentials`, {method: 'POST', token, timeout: 60000, body: {}});
+      if (result.email_delivery?.status !== 'success') throw new Error(result.email_delivery?.reason || 'Email could not be sent.');
+      setSuccessMsg(`New login credentials emailed to ${cand.candidate_email}.`);
+    } catch (err) { setError(err.message); }
+    finally { setUpdatingId(null); }
+  };
 
   const withAccess = candidates.filter(c => c.has_portal_access).length;
   const withoutAccess = candidates.filter(c => !c.has_portal_access).length;
@@ -75,8 +83,9 @@ export default function CandidatePortalAccess() {
     setCreatingId(cid);
     setSuccessMsg('');
     try {
-      await request('/api/auth/portal-users', {
+      const result = await request('/api/auth/portal-users', {
         method: 'POST',
+        timeout: 60000,
         token,
         body: {
           candidate_id: showCreateModal.candidate_id || cid,
@@ -86,7 +95,8 @@ export default function CandidatePortalAccess() {
           password: createForm.password,
         },
       });
-      setSuccessMsg(`Portal access created and login credentials emailed to ${emailVal}`);
+      if (result.email_delivery?.status === 'success') setSuccessMsg(`Portal access created and login credentials emailed to ${emailVal}`);
+      else setError(`Portal access saved, but email was not sent. ${result.email_delivery?.reason || 'Retry sending login credentials.'}`);
       setShowCreateModal(null);
       await loadCandidates();
     } catch (err) {
@@ -124,6 +134,7 @@ export default function CandidatePortalAccess() {
     setUpdatingId(cid);
     setSuccessMsg('');
     try {
+      let result;
       if (showEditModal.portal_user_id) {
         const body = {
           name: editForm.name.trim(),
@@ -132,14 +143,16 @@ export default function CandidatePortalAccess() {
           candidate_id: cid,
         };
         if (editForm.password) body.password = editForm.password;
-        await request(`/api/auth/portal-users/${showEditModal.portal_user_id}`, {
+        result = await request(`/api/auth/portal-users/${showEditModal.portal_user_id}`, {
           method: 'PUT',
+          timeout: 60000,
           token,
           body,
         });
       } else {
-        await request('/api/auth/portal-users', {
+        result = await request('/api/auth/portal-users', {
           method: 'POST',
+          timeout: 60000,
           token,
           body: {
             candidate_id: cid,
@@ -150,7 +163,8 @@ export default function CandidatePortalAccess() {
           },
         });
       }
-      setSuccessMsg(`Portal credentials updated for ${editForm.name}${editForm.password ? ' and new credentials emailed to candidate' : ''}.`);
+      if (result.email_delivery?.status === 'failed') setError(`Access saved, but email failed: ${result.email_delivery.reason || 'Please retry.'}`);
+      else setSuccessMsg(`Portal credentials updated for ${editForm.name}${result.email_delivery?.status === 'success' ? ' and emailed to candidate' : ''}.`);
       setShowEditModal(null);
       await loadCandidates();
     } catch (err) {
@@ -359,6 +373,7 @@ export default function CandidatePortalAccess() {
                           <span>{creatingId === (cand.candidate_id || cand.workorder_id) ? 'Creating...' : 'Create Access'}</span>
                         </button>
                       ) : (
+                        <div className="flex justify-end gap-2"><button type="button" disabled={Boolean(updatingId) || !cand.portal_user_id} onClick={() => resendLogin(cand)} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-black hover:bg-gray-800 text-white border border-black text-xs font-bold whitespace-nowrap cursor-pointer disabled:bg-gray-200 disabled:text-gray-600 disabled:border-gray-300 disabled:cursor-not-allowed" title="Resets the password and emails new login credentials"><Mail size={12} /><span>{updatingId === (cand.candidate_id || cand.workorder_id) ? 'Sending…' : 'Email New Login'}</span></button>
                         <button
                           type="button"
                           onClick={() => handleEditAccess(cand)}
@@ -367,7 +382,7 @@ export default function CandidatePortalAccess() {
                         >
                           <Edit3 size={12} />
                           <span>Edit Access</span>
-                        </button>
+                        </button></div>
                       )}
                     </td>
                   </tr>

@@ -330,7 +330,8 @@ if not bool(os.getenv("VERCEL") or os.getenv("AWS_LAMBDA_FUNCTION_NAME")):
         init_db()
         try:
             from scripts.seed_super_admin import seed_super_admin
-            seed_super_admin()
+            if os.getenv("TERMJOBS_PRESERVE_SUPER_ADMIN") != "1":
+                seed_super_admin()
         except Exception as s_exc:
             import logging
             logging.getLogger("uvicorn.error").warning("seed_super_admin error: %s", s_exc)
@@ -562,6 +563,8 @@ def _requisition_dict(requisition_id: str, for_vendor: bool = False) -> dict:
         except Exception:
             pass
 
+        from modules.interview.domain.applicants import attended_applicants
+        cand_list = attended_applicants(db, cand_list)
         applicant_count = len(cand_list)
         shortlisted_count = sum(1 for c in cand_list if (c.get("status") or "").lower() == "shortlisted")
         in_interview_count = sum(
@@ -1613,13 +1616,10 @@ def list_requisitions(
         cand_counts = {}
         try:
             from modules.shared.db import db
-            cand_counts = {
-                str(doc["_id"]): doc["count"]
-                for doc in db["candidate_submissions"].aggregate([
-                    {"$group": {"_id": "$requisition_id", "count": {"$sum": 1}}}
-                ])
-                if doc.get("_id")
-            }
+            from modules.interview.domain.applicants import attended_applicants
+            for applicant in attended_applicants(db, db["candidate_submissions"].find({"requisition_id": {"$in": [str(r.id) for r in rows]}})):
+                req_key = str(applicant["requisition_id"])
+                cand_counts[req_key] = cand_counts.get(req_key, 0) + 1
         except Exception:
             pass
 
@@ -1760,7 +1760,8 @@ def get_requisitions_overview_metrics(current_user: User = Depends(get_current_u
         except Exception as e:
             logger.warning(f"Failed to query candidates for overview metrics: {e}")
 
-        total_applicants = len(cands)
+        from modules.interview.domain.applicants import attended_applicants
+        total_applicants = len(attended_applicants(db, cands))
         shortlisted = sum(1 for c in cands if (c.get("status") or "").lower() == "shortlisted")
         hired = sum(
             1 for c in cands if (c.get("status") or "").lower() in ("accepted", "hired", "offer extended", "offer accepted", "completed")
@@ -3190,11 +3191,11 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
         interview_box = f"""
     <div style="margin: 20px 0; padding: 20px; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 14px; text-align: center;">
       <div style="font-size: 13px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-        🎥 Your Video Interview Room is Ready
+        🤖 Your AI Interview is Ready
       </div>
       <div style="margin: 14px 0;">
         <a href="{meeting_link}" target="_blank" style="display: inline-block; background: #059669; color: #ffffff; padding: 12px 24px; border-radius: 10px; font-size: 14px; font-weight: 700; text-decoration: none; box-shadow: 0 4px 12px rgba(5,150,105,0.25);">
-          Enter Video Interview Room &rarr;
+          Start AI Interview &rarr;
         </a>
       </div>
       <div style="font-size: 12px; color: #374151; margin-top: 10px;">
@@ -3214,7 +3215,7 @@ def candidate_outreach_respond(request: Request, token: str, action: str = "inte
         badge_color = "#059669"
         icon = "✓"
         desc = f"Thank you, <strong>{cand_name}</strong>! We've notified <strong>{comp_name}</strong> that you are available and interested in the <strong>{req_title}</strong> role."
-        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your video room is provisioned above."
+        sub_desc = "Your profile has been fast-tracked into the active interview screening pipeline. Your AI interview link is ready above."
         email_status = (res.get("interview_email_delivery") or {}).get("status")
         if email_status == "success":
             sub_desc += " Your AI interview link has also been emailed to you. Please check your inbox and spam folder."

@@ -107,7 +107,8 @@ def _save_company_interview(user, data):
                 'candidate_name': candidate.get('candidate_name'), 'candidate_email': candidate.get('candidate_email'),
                 'requisition_id': req.id, 'requisition_title': req.title, 'interviewer_name': data.get('interviewer_name') or user.name,
                 'interviewer_email': data.get('interviewer_email') or user.email, 'round_name': data.get('round_name') or 'Technical Round',
-                'round_type': data.get('round_type') or 'Technical', 'suppress_email': True}, user.tenant_id, str(user.id), origin='https://termjobs.in')
+                'round_type': data.get('round_type') or 'Technical', 'suppress_email': True,
+                'suppress_notifications': True}, user.tenant_id, str(user.id), origin='https://termjobs.in')
     portal = 'https://termjobs.in/interview/candidate/login?' + urlencode({
         'token': doc['candidate_token'], 'email': doc['candidate_email'], 'passcode': doc['candidate_passcode']})
     meeting = f"https://termjobs.in/interview/room/{doc['id']}?" + urlencode({'role': 'candidate', 'token': doc['candidate_token']})
@@ -122,14 +123,32 @@ def _save_company_interview(user, data):
         import logging
         logging.getLogger(__name__).warning(f"Failed sending interview invitation email: {exc}")
         delivery = {'status': 'failed', 'reason': f"Email delivery error: {str(exc)}"}
+    telegram = {'status': 'skipped', 'reason': 'Candidate has not linked Telegram'}
+    try:
+        from modules.candidate.telegram_service import send_candidate_interview_scheduled_alert
+        import asyncio
+        candidate_doc = db['candidates'].find_one({'candidate_email': doc['candidate_email'].lower()}) or {}
+        link = db['telegram_links'].find_one({'candidate_email': doc['candidate_email'].lower()}) or {}
+        chat_id = candidate_doc.get('telegram_chat_id') or link.get('telegram_chat_id') or link.get('chat_id')
+        if chat_id:
+            sent = asyncio.run(send_candidate_interview_scheduled_alert(
+                chat_id=chat_id, candidate_name=doc['candidate_name'], requisition_title=doc['requisition_title'],
+                company_name=user.name or 'Hiring Team', round_name=doc['round_name'], scheduled_date=doc['scheduled_date'],
+                scheduled_time=f"{doc['scheduled_time']} ({doc['scheduled_timezone']})", duration_minutes=doc['duration_minutes'],
+                meeting_link=meeting, passcode=doc['candidate_passcode'],
+            ))
+            telegram = {'status': 'success' if sent.get('ok') else 'failed', 'reason': sent.get('error')}
+    except Exception:
+        telegram = {'status': 'failed', 'reason': 'Telegram delivery failed'}
     with get_session() as session:
         stored = session.get(InterviewRound, doc['id'])
         stored.calendar_sync = calendar
         stored.email_delivery = delivery
+        stored.telegram_delivery = telegram
         # Company invitations must remain valid until after the scheduled interview.
         from .interview_service import LINK_EXPIRATION_HOURS
         stored.expires_at = scheduled_end + timedelta(hours=LINK_EXPIRATION_HOURS)
         doc['expires_at'] = stored.expires_at
         if calendar.get('event_id'): stored.google_event_id = calendar['event_id']
         session._track(stored); session.commit()
-    return {**doc, 'calendar_sync': calendar, 'email_delivery': delivery, 'meeting_link': meeting, 'candidate_portal_link': portal}
+    return {**doc, 'calendar_sync': calendar, 'email_delivery': delivery, 'telegram_delivery': telegram, 'meeting_link': meeting, 'candidate_portal_link': portal}

@@ -1,3 +1,5 @@
+import { InterviewReviewPanel } from '../../interview/components/InterviewReviewPanel';
+import { isAiInterviewRound } from '../../interview/utils/interviewMode';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -35,6 +37,7 @@ import { request, API_BASE_URL } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import ScheduleInterviewModal from '../../components/ScheduleInterviewModal';
 import SetInterviewProcessModal from '../../components/SetInterviewProcessModal';
+import { mapRequisitionCandidates, attendedApplicants, candidateRounds } from '../../utils/requisitionCandidates';
 
 // Baseline candidate dataset matching the requisition candidate roster
 const DEFAULT_CANDIDATES = [
@@ -403,14 +406,14 @@ function ScoreRing({ score, size = 38, stroke = 3 }) {
         />
       </svg>
       <span className="absolute font-black text-gray-900 text-[12px] tracking-tight">
-        {score}
+        {score ?? '—'}
       </span>
     </div>
   );
 }
 
 // Large Circular SVG gauge for right preview panel (Light Theme Clean)
-function LargeScoreRing({ score = 92 }) {
+function LargeScoreRing({ score }) {
   const size = 96;
   const stroke = 6.5;
   const radius = (size - stroke * 2) / 2;
@@ -445,7 +448,7 @@ function LargeScoreRing({ score = 92 }) {
       </svg>
       <div className="absolute flex flex-col items-center justify-center">
         <span className="text-2xl font-black text-gray-900 leading-none tracking-tight">
-          {score}
+          {score ?? '—'}
         </span>
         <span className="text-[10px] text-gray-500 font-medium mt-0.5">
           / 100
@@ -458,7 +461,7 @@ function LargeScoreRing({ score = 92 }) {
 export default function RequisitionCandidates() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
   const [req, setReq] = useState(null);
   const [apiCandidates, setApiCandidates] = useState([]);
@@ -481,49 +484,11 @@ export default function RequisitionCandidates() {
   // Modals & Actions
   const [schedulingCandidate, setSchedulingCandidate] = useState(null);
   const [showSetInterviewModal, setShowSetInterviewModal] = useState(false);
-  const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteSent, setInviteSent] = useState(false);
-  const [copiedShareLink, setCopiedShareLink] = useState(false);
-  const [actingStatusId, setActingStatusId] = useState(null);
+  const [, setActingStatusId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
 
-  // Scheduled candidates tracker (persisted to localStorage)
-  const [scheduledCandidateIds, setScheduledCandidateIds] = useState(() => {
-    try {
-      const saved = localStorage.getItem('termjobs_scheduled_candidates');
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  // Helper to determine if candidate interview has been scheduled
-  const isCandidateScheduled = (cand) => {
-    if (!cand) return false;
-    const cid = String(cand.id || cand.submission_id || '');
-    const sid = String(cand.submission_id || '');
-    if (scheduledCandidateIds.includes(cid) || (sid && scheduledCandidateIds.includes(sid))) {
-      return true;
-    }
-    if (cand.status === 'In Interview' || cand.isScheduled) {
-      return true;
-    }
-    if (
-      interviews &&
-      interviews.some(
-        (inv) =>
-          String(inv.candidate_submission_id || inv.candidate_id || '') === cid ||
-          (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid)
-      )
-    ) {
-      return true;
-    }
-    return false;
-  };
-
+  const [refresh, setRefresh] = useState(0);
   // Notes state
-  const [candidateNotes, setCandidateNotes] = useState({});
   const [newNoteText, setNewNoteText] = useState('');
 
   // Fetch requisition and candidates from API
@@ -531,9 +496,9 @@ export default function RequisitionCandidates() {
     setLoading(true);
     setError('');
     Promise.all([
-      request(`/requisitions/${id}`, { token }).catch(() => null),
-      request(`/candidates?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
-      request(`/api/interviews/company?requisition_id=${encodeURIComponent(id)}`, { token }).catch(() => []),
+      request(`/requisitions/${id}`, { token, noCache: true }),
+      request(`/candidates?include_details=true&refresh=true&requisition_id=${encodeURIComponent(id)}`, { token, noCache: true }),
+      request(`/api/interviews/rounds?requisition_id=${encodeURIComponent(id)}`, { token, noCache: true }),
     ])
       .then(([reqData, candData, intRes]) => {
         if (reqData) setReq(reqData);
@@ -542,94 +507,33 @@ export default function RequisitionCandidates() {
         setInterviews(Array.isArray(intRes) ? intRes : intRes?.interviews || []);
       })
       .catch((err) => {
-        console.warn('API fetch warning:', err);
+        setError(err.message || 'Unable to load requisition candidates.');
       })
       .finally(() => setLoading(false));
-  }, [id, token]);
+  }, [id, token, refresh]);
 
   // Derived requisition information
-  const reqTitle = req?.title || req?.structured_role?.title || 'Python Developer';
+  const reqTitle = req?.title || req?.structured_role?.title || 'Requisition';
   const reqCode = req?.ref ? req.ref.replace('REQ-', 'REQ #') : (id ? `REQ #${id.slice(0, 6).toUpperCase()}` : 'REQ #8302C0');
-  const reqDept = req?.department || req?.structured_role?.department || 'Engineering';
+  const reqDept = req?.department || req?.structured_role?.department || req?.structured_role?.job_family || 'Not specified';
   const reqLocation = (() => {
-    const loc = req?.primary_location || req?.location || req?.structured_role?.location || 'Bangalore';
-    const wp = req?.workplace_type || req?.work_mode || 'Hybrid';
+    const loc = req?.primary_location || req?.location || req?.structured_role?.location || req?.structured_role?.work_locations?.[0] || 'Not specified';
+    const wp = req?.workplace_type || req?.work_mode || req?.structured_role?.work_mode || 'Not specified';
     return `${loc} (${wp})`;
   })();
 
   // Process Real API candidates combined with standard benchmark candidate roster
   const allCandidates = useMemo(() => {
-    const mappedApi = (apiCandidates || []).map((c, idx) => {
-      const score = c.match_score != null ? Math.round(Number(c.match_score)) : 0;
-      const status = c.status === 'Shortlisted' ? 'AI Shortlisted' : c.status === 'Rejected' ? 'Not Shortlisted' : (c.status || 'In Review');
+    const rawList = apiCandidates && apiCandidates.length > 0
+      ? (attendedApplicants(apiCandidates, interviews).length > 0
+          ? attendedApplicants(apiCandidates, interviews)
+          : apiCandidates)
+      : [];
 
-      // Format experience cleanly so it never outputs bare " yrs"
-      let expStr = '—';
-      if (c.experience_years != null && String(c.experience_years).trim()) {
-        expStr = `${c.experience_years} yrs`;
-      } else if (typeof c.experience === 'number') {
-        expStr = `${c.experience} yrs`;
-      } else if (Array.isArray(c.experience)) {
-        expStr = c.experience.length > 0 ? `${c.experience.length} yrs` : '—';
-      } else if (typeof c.experience === 'string' && c.experience.trim()) {
-        const trimmed = c.experience.trim();
-        expStr = trimmed.toLowerCase().includes('yr') ? trimmed : `${trimmed} yrs`;
-      }
+    const mappedApi = mapRequisitionCandidates(rawList, interviews);
 
-      // Format skills cleanly
-      const skillsList = Array.isArray(c.matched_skills) && c.matched_skills.length
-        ? c.matched_skills.slice(0, 3).concat(c.matched_skills.length > 3 ? [`+${c.matched_skills.length - 3}`] : [])
-        : Array.isArray(c.skills) && c.skills.length
-        ? c.skills.slice(0, 3).concat(c.skills.length > 3 ? [`+${c.skills.length - 3}`] : [])
-        : [];
-
-      const candidateName = c.candidate_name || c.name || `Candidate #${idx + 1}`;
-      const initials = candidateName
-        .split(' ')
-        .filter(Boolean)
-        .map((n) => n[0])
-        .join('')
-        .slice(0, 2)
-        .toUpperCase() || 'CN';
-
-      return {
-        id: String(c.id || c.submission_id || `api-${idx}`),
-        submission_id: c.submission_id || c.id,
-        name: candidateName,
-        avatar: c.avatar_url || null,
-        initials,
-        location: c.location || 'Bangalore, India',
-        email: c.candidate_email || c.email || '—',
-        phone: c.candidate_phone || c.phone || '—',
-        score,
-        skills: skillsList,
-        experience: expStr,
-        availability: c.availability || 'Immediate',
-        status,
-        matchRating: score >= 80 ? 'Excellent Match' : score >= 65 ? 'Moderate Match' : 'Review Required',
-        matchSummary: c.summary || 'Candidate evaluation profile submitted for requisition.',
-        scoreBreakdown: c.breakdown || {
-          technical: score,
-          experience: score,
-          problemSolving: score,
-          communication: score,
-          culturalFit: score,
-          roleAlignment: score,
-        },
-        strengths: Array.isArray(c.matched_skills) && c.matched_skills.length
-          ? c.matched_skills.slice(0, 4).map((s) => `Demonstrated skill in ${s}`)
-          : [],
-        concerns: Array.isArray(c.missing_skills) && c.missing_skills.length
-          ? c.missing_skills.slice(0, 2).map((s) => `Lacks documented exposure to ${s}`)
-          : [],
-        resume_text: c.resume_text,
-        filename: c.filename,
-        isRealApi: true,
-      };
-    });
-
-    const namesSet = new Set(mappedApi.map((c) => c.name.toLowerCase()));
-    const remainingDefaults = DEFAULT_CANDIDATES.filter((c) => !namesSet.has(c.name.toLowerCase()));
+    const namesSet = new Set(mappedApi.map((c) => (c.name || '').toLowerCase()));
+    const remainingDefaults = DEFAULT_CANDIDATES.filter((c) => !namesSet.has((c.name || '').toLowerCase()));
     const baseList = [...mappedApi, ...remainingDefaults];
 
     // Dynamically mark candidates who have scheduled interviews as 'In Interview'
@@ -646,7 +550,7 @@ export default function RequisitionCandidates() {
               (sid && String(inv.candidate_submission_id || inv.candidate_id || '') === sid)
           ));
 
-      if (isSched) {
+      if (isSched && !['Accepted', 'Hired', 'Offered', 'Rejected'].includes(c.status)) {
         return { ...c, status: 'In Interview', isScheduled: true };
       }
       return c;
@@ -666,9 +570,18 @@ export default function RequisitionCandidates() {
         const q = searchQuery.toLowerCase();
         const matchesName = c.name.toLowerCase().includes(q);
         const matchesLocation = c.location.toLowerCase().includes(q);
-        const matchesSkills = c.skills.some((s) => s.toLowerCase().includes(q));
+        const matchesSkills = (c.allSkills || c.skills).some((s) => s.toLowerCase().includes(q));
         if (!matchesName && !matchesLocation && !matchesSkills) return false;
       }
+      if (scoreFilter !== 'all' && c.score === null) return false;
+      if (experienceFilter !== 'all') {
+        const years = parseFloat(c.experience);
+        if (!Number.isFinite(years)) return false;
+        if (experienceFilter === '1' && (years < 1 || years >= 3)) return false;
+        if (experienceFilter === '3' && (years < 3 || years >= 5)) return false;
+        if (experienceFilter === '5' && years < 5) return false;
+      }
+      if (locationFilter !== 'all' && c.location !== locationFilter) return false;
       if (scoreFilter === '90' && c.score < 90) return false;
       if (scoreFilter === '80' && (c.score < 80 || c.score >= 90)) return false;
       if (scoreFilter === '70' && (c.score < 70 || c.score >= 80)) return false;
@@ -678,13 +591,13 @@ export default function RequisitionCandidates() {
 
       return true;
     });
-  }, [allCandidates, searchQuery, scoreFilter, statusFilter]);
+  }, [allCandidates, searchQuery, scoreFilter, statusFilter, experienceFilter, locationFilter]);
 
   // Aggregate metrics
   const totalCount = allCandidates.length;
   const aiShortlistedCount = allCandidates.filter((c) => c.status === 'AI Shortlisted' || c.status === 'Shortlisted').length;
   const inInterviewCount = allCandidates.filter((c) => c.status === 'In Interview' || c.isScheduled || c.status === 'Interview Scheduled').length;
-  const offeredCount = 1;
+  const offeredCount = allCandidates.filter((c) => ['Offered', 'Accepted', 'Hired'].includes(c.status)).length || 1;
 
   // Status Action handler
   const handleUpdateStatus = async (candidate, newStatus) => {
@@ -692,19 +605,20 @@ export default function RequisitionCandidates() {
     setActingStatusId(candidate.id);
     setActiveMenuId(null);
 
-    candidate.status = newStatus;
+
 
     if (candidate.isRealApi) {
       try {
         await request(`/candidates/${submissionId}/status`, {
           method: 'PATCH',
           token,
-          body: { status: newStatus === 'AI Shortlisted' ? 'Shortlisted' : newStatus === 'Not Shortlisted' ? 'Rejected' : 'Screened' },
+          body: { status: newStatus === 'Not Shortlisted' ? 'Rejected' : newStatus },
         });
       } catch (err) {
-        console.warn('Status update API error:', err);
+        setError(err.message || 'Status update failed.');
       }
     }
+    setRefresh(value => value + 1);
     setActingStatusId(null);
   };
 
@@ -731,46 +645,13 @@ export default function RequisitionCandidates() {
     setActivePreviewTab('resume');
   };
 
-  // Invite candidate submit
-  const handleSendInvite = (e) => {
+  const handleAddNote = async e => {
     e.preventDefault();
-    if (!inviteEmail) return;
-    setInviteSent(true);
-    setTimeout(() => {
-      setInviteSent(false);
-      setShowInviteModal(false);
-      setInviteEmail('');
-    }, 1500);
-  };
-
-  const shareableLink = `https://termjobs.com/apply/${reqCode.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}`;
-
-  const handleCopyLink = () => {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(shareableLink).then(() => {
-        setCopiedShareLink(true);
-        setTimeout(() => setCopiedShareLink(false), 2000);
-      });
-    }
-  };
-
-  const handleAddNote = (e) => {
-    e.preventDefault();
-    if (!newNoteText.trim()) return;
-    const currentNotes = candidateNotes[selectedCandidate.id] || [];
-    setCandidateNotes({
-      ...candidateNotes,
-      [selectedCandidate.id]: [
-        ...currentNotes,
-        {
-          id: Date.now(),
-          author: user?.name || 'Hiring Manager',
-          date: 'Just now',
-          text: newNoteText.trim(),
-        },
-      ],
-    });
-    setNewNoteText('');
+    if (!newNoteText.trim() || !selectedCandidate) return;
+    try {
+      await request(`/api/candidates/${selectedCandidate.id}/notes`, { method: 'POST', token, body: { text: newNoteText.trim() } });
+      setNewNoteText(''); setRefresh(x => x + 1);
+    } catch (err) { setError(err.message || 'Unable to save note.'); }
   };
 
   return (
@@ -778,6 +659,8 @@ export default function RequisitionCandidates() {
       className="w-full min-w-0 h-full max-h-full flex-1 flex flex-col justify-between gap-4 text-left overflow-hidden pb-1"
       style={{ fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif" }}
     >
+      {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+      {loading && <p className="text-sm text-gray-500">Loading candidates…</p>}
       {/* ── TOP HEADER AREA (Spacious & Uncompact) ── */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3.5 sm:pt-5 lg:pt-6 shrink-0">
         <div className="pl-1 sm:pl-2">
@@ -794,7 +677,7 @@ export default function RequisitionCandidates() {
               {reqTitle}
             </h1>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-3xs">
-              Open
+              {req?.status || '—'}
             </span>
           </div>
 
@@ -870,7 +753,7 @@ export default function RequisitionCandidates() {
                       : 'bg-white/70 hover:bg-white border-white/90 text-gray-700'
                   }`}
                 >
-                  <span>{scoreFilter === '90' ? '90%+ Match' : scoreFilter === '80' ? '80% – 89%' : scoreFilter === '70' ? '70% – 79%' : scoreFilter === 'under70' ? 'Below 70%' : 'AI Score'}</span>
+                  <span>{scoreFilter === '90' ? '90%+ Match' : scoreFilter === '80' ? '80% – 89%' : scoreFilter === '70' ? '70% – 79%' : scoreFilter === 'under70' ? 'Below 70%' : 'Match Score'}</span>
                   <ChevronDown size={12} className={scoreFilter !== 'all' || openFilterDropdown === 'score' ? 'text-white' : 'text-gray-400'} />
                 </button>
 
@@ -880,7 +763,7 @@ export default function RequisitionCandidates() {
                     onClick={(e) => e.stopPropagation()}
                   >
                     {[
-                      { label: 'AI Score', val: 'all' },
+                      { label: 'Match Score', val: 'all' },
                       { label: '90%+ Match', val: '90' },
                       { label: '80% – 89%', val: '80' },
                       { label: '70% – 79%', val: '70' },
@@ -930,7 +813,8 @@ export default function RequisitionCandidates() {
                     {[
                       { label: 'All Statuses', val: 'all' },
                       { label: 'AI Shortlisted', val: 'AI Shortlisted' },
-                      { label: 'In Review', val: 'In Review' },
+                      { label: 'Accepted', val: 'Accepted' },
+                      { label: 'In Interview', val: 'In Interview' },
                       { label: 'Not Shortlisted', val: 'Not Shortlisted' },
                     ].map((item) => (
                       <button
@@ -1001,18 +885,14 @@ export default function RequisitionCandidates() {
                 )}
               </div>
 
-              {/* Location Pill */}
-              <button
-                type="button"
-                onClick={() => setLocationFilter(locationFilter === 'all' ? 'Bangalore' : 'all')}
-                className={`px-3 py-1.5 rounded-xl border transition-all cursor-pointer font-semibold shadow-3xs whitespace-nowrap ${
-                  locationFilter !== 'all'
-                    ? 'bg-black text-white border-black'
-                    : 'bg-white/70 hover:bg-white border-white/90 text-gray-700'
-                }`}
-              >
-                Location
-              </button>
+              <div className="relative">
+                <button type="button" onClick={() => setOpenFilterDropdown(openFilterDropdown === 'location' ? null : 'location')} className="px-3 py-1.5 rounded-xl bg-white/70 border border-white/80 text-gray-600 font-semibold shadow-3xs flex items-center gap-1.5">
+                  <span>{locationFilter === 'all' ? 'Location' : locationFilter}</span><ChevronDown size={12} />
+                </button>
+                {openFilterDropdown === 'location' && <div className="absolute right-0 top-full mt-1.5 w-44 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-lg p-1 z-50">
+                  {['all', ...new Set(allCandidates.map(c => c.location))].map(location => <button key={location} className="w-full rounded-xl px-2.5 py-1.5 text-left text-xs hover:bg-gray-50" onClick={() => { setLocationFilter(location); setOpenFilterDropdown(null); }}>{location === 'all' ? 'All locations' : location}</button>)}
+                </div>}
+              </div>
             </div>
           </div>
 
@@ -1023,7 +903,7 @@ export default function RequisitionCandidates() {
               <div className="shrink-0 border-b border-black/[0.04] py-2.5 w-full">
                 <div className="grid grid-cols-[minmax(0,1.2fr)_55px_minmax(0,1.8fr)_75px_85px_95px_65px] gap-2 items-center text-gray-400 font-medium text-[10.5px] uppercase tracking-wider">
                   <div className="pl-4 pr-2">Candidate</div>
-                  <div className="px-1 text-center">AI Score</div>
+                  <div className="px-1 text-center">Match Score</div>
                   <div className="px-2">Skills Match</div>
                   <div className="px-1">Experience</div>
                   <div className="px-1">Availability</div>
@@ -1149,19 +1029,7 @@ export default function RequisitionCandidates() {
                           onClick={(e) => e.stopPropagation()}
                           className="absolute right-3 top-10 w-48 bg-white/95 backdrop-blur-2xl border border-white/90 rounded-2xl shadow-[0_12px_36px_rgba(0,0,0,0.1)] p-1 z-30 text-left space-y-0.5 animate-in fade-in zoom-in-95 duration-150"
                         >
-                          {isCandidateScheduled(cand) ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                navigate(`/interview-panel/${cand.id}?reqId=${id}`);
-                                setActiveMenuId(null);
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-xl text-xs font-bold text-blue-700 hover:bg-blue-50 flex items-center gap-2 cursor-pointer"
-                            >
-                              <ExternalLink size={13} className="text-blue-600 shrink-0" />
-                              <span>Go to Interview Panel</span>
-                            </button>
-                          ) : (
+
                             <button
                               type="button"
                               onClick={() => {
@@ -1173,7 +1041,7 @@ export default function RequisitionCandidates() {
                               <Calendar size={13} className="text-emerald-600 shrink-0" />
                               <span>Schedule Interview</span>
                             </button>
-                          )}
+
                           <button
                             type="button"
                             onClick={() => handleViewResume(cand)}
@@ -1185,11 +1053,11 @@ export default function RequisitionCandidates() {
                           <div className="h-px bg-black/[0.04] my-1" />
                           <button
                             type="button"
-                            onClick={() => handleUpdateStatus(cand, 'AI Shortlisted')}
+                            onClick={() => handleUpdateStatus(cand, 'Accepted')}
                             className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
                           >
                             <Check size={13} />
-                            <span>Shortlist Candidate</span>
+                            <span>Select Candidate</span>
                           </button>
                           <button
                             type="button"
@@ -1348,12 +1216,12 @@ export default function RequisitionCandidates() {
                             <Code size={13} className="text-gray-400" />
                             <span>Technical Skills</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.technical || 95}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.technical ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.technical || 95}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.technical ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1365,12 +1233,12 @@ export default function RequisitionCandidates() {
                             <Briefcase size={13} className="text-gray-400" />
                             <span>Experience</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.experience || 85}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.experience ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.experience || 85}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.experience ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1382,12 +1250,12 @@ export default function RequisitionCandidates() {
                             <Puzzle size={13} className="text-gray-400" />
                             <span>Problem Solving</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.problemSolving || 90}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.problemSolving ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.problemSolving || 90}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.problemSolving ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1399,12 +1267,12 @@ export default function RequisitionCandidates() {
                             <MessageSquare size={13} className="text-gray-400" />
                             <span>Communication</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.communication || 88}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.communication ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.communication || 88}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.communication ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1416,12 +1284,12 @@ export default function RequisitionCandidates() {
                             <Users size={13} className="text-gray-400" />
                             <span>Cultural Fit</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.culturalFit || 82}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.culturalFit ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.culturalFit || 82}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.culturalFit ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1433,12 +1301,12 @@ export default function RequisitionCandidates() {
                             <Target size={13} className="text-gray-400" />
                             <span>Role Alignment</span>
                           </span>
-                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.roleAlignment || 93}/100</span>
+                          <span className="font-mono text-gray-800 font-bold">{selectedCandidate.scoreBreakdown?.roleAlignment ?? '—'}/100</span>
                         </div>
                         <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-emerald-500 rounded-full"
-                            style={{ width: `${selectedCandidate.scoreBreakdown?.roleAlignment || 93}%` }}
+                            style={{ width: `${selectedCandidate.scoreBreakdown?.roleAlignment ?? 0}%` }}
                           />
                         </div>
                       </div>
@@ -1486,29 +1354,14 @@ export default function RequisitionCandidates() {
               {/* TAB 2: AI ANALYSIS */}
               {activePreviewTab === 'ai_analysis' && (
                 <div className="space-y-3.5 text-xs">
-                  <div className="bg-white/80 border border-black/[0.06] rounded-2xl p-4 space-y-3 shadow-3xs">
-                    <h3 className="text-xs font-extrabold text-gray-900 uppercase tracking-wider flex items-center gap-2">
-                      <Sparkles size={14} className="text-emerald-600" />
-                      <span>AI Intake & Calibration Summary</span>
-                    </h3>
-                    <p className="text-gray-700 leading-relaxed">
-                      Evaluated against calibrated parameters for <strong>{reqTitle}</strong> ({reqCode}). The candidate demonstrates verified competence in primary skills, responsive team alignment, and clear problem decomposition.
-                    </p>
-                    <div className="pt-2 border-t border-black/[0.06] space-y-2">
-                      <div className="flex justify-between text-gray-600">
-                        <span>Algorithm & Technical Knowledge:</span>
-                        <span className="font-bold text-gray-900">92%</span>
-                      </div>
-                      <div className="flex justify-between text-gray-600">
-                        <span>Architecture & API Practices:</span>
-                        <span className="font-bold text-gray-900">95%</span>
-                      </div>
-                      <div className="flex justify-between text-gray-600">
-                        <span>Production Reliability & Testing:</span>
-                        <span className="font-bold text-gray-900">88%</span>
-                      </div>
-                    </div>
-                  </div>
+                  {(() => {
+                    const completed = candidateRounds(selectedCandidate, interviews)
+                      .filter(round => round.status === 'Completed' && isAiInterviewRound(round))
+                      .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))[0];
+                    return completed
+                      ? <InterviewReviewPanel key={completed.id} round={completed} candidateName={selectedCandidate.name} />
+                      : <p className="p-4 text-gray-600">No completed AI assessment is available for this candidate.</p>;
+                  })()}
                 </div>
               )}
 
@@ -1530,20 +1383,7 @@ export default function RequisitionCandidates() {
                     </button>
                   </div>
                   <div className="p-3 bg-gray-50 border border-gray-200/80 rounded-xl font-mono text-[11px] text-gray-700 leading-relaxed max-h-60 overflow-y-auto">
-                    {selectedCandidate.resume_text || `RESUME: ${selectedCandidate.name}
-Location: ${selectedCandidate.location}
-Email: ${selectedCandidate.email}
-Phone: ${selectedCandidate.phone}
-
-EXPERIENCE:
-• Senior Software Engineer — 3+ years experience building scalable backend services.
-• Maintained high throughput REST and GraphQL endpoints with PostgreSQL and Redis.
-• Collaborated in cross-functional agile pods and led CI/CD deployment routines.
-
-SKILLS:
-• Languages: Python, JavaScript, SQL
-• Frameworks: Django, FastAPI, Flask, React
-• Cloud & Tools: AWS, Docker, Git, CI/CD, Linux`}
+                    {selectedCandidate.resume_text || 'No resume text is available. Use View Profile to open the saved resume.'}
                   </div>
                 </div>
               )}
@@ -1558,29 +1398,20 @@ SKILLS:
                   <div className="space-y-2.5">
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
                       <div>
-                        <div className="font-bold text-gray-900 text-xs">AI Calibration & Screening</div>
-                        <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">Completed (Score: {selectedCandidate.score}/100)</div>
+                        <div className="font-bold text-gray-900 text-xs">Saved Resume Assessment</div>
+                        <div className="text-[11px] text-emerald-700 font-semibold mt-0.5">Saved match score: {selectedCandidate.score ?? '—'}/100</div>
                       </div>
-                      <span className="text-[10px] text-gray-400 font-mono">2 days ago</span>
+                      <span className="text-[10px] text-gray-400 font-mono">{selectedCandidate.created_at ? new Date(selectedCandidate.created_at).toLocaleDateString('en-IN') : ''}</span>
                     </div>
 
                     <div className="p-3 rounded-xl bg-gray-50 border border-gray-200/80 flex items-center justify-between">
                       <div>
-                        <div className="font-bold text-gray-900 text-xs">Round 1: Technical & Systems</div>
+                        <div className="font-bold text-gray-900 text-xs">{interviews.find(r => String(r.candidate_submission_id) === String(selectedCandidate.id))?.round_name || 'Interview scheduling'}</div>
                         <div className="text-[11px] text-gray-500 mt-0.5">
-                          {selectedCandidate.status === 'AI Shortlisted' ? 'Ready to Schedule' : 'Pending'}
+                          {interviews.find(r => String(r.candidate_submission_id) === String(selectedCandidate.id))?.status || 'Not scheduled'}
                         </div>
                       </div>
-                      {isCandidateScheduled(selectedCandidate) ? (
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/interview-panel/${selectedCandidate.id}?reqId=${id}`)}
-                          className="px-2.5 py-1 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold transition-colors cursor-pointer shadow-3xs flex items-center gap-1"
-                        >
-                          <ExternalLink size={11} />
-                          <span>Go to Interview Panel</span>
-                        </button>
-                      ) : (
+
                         <button
                           type="button"
                           onClick={() => setSchedulingCandidate(selectedCandidate)}
@@ -1588,7 +1419,6 @@ SKILLS:
                         >
                           Schedule
                         </button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -1601,18 +1431,7 @@ SKILLS:
                     Internal Team Notes
                   </h3>
                   <div className="space-y-2">
-                    {(candidateNotes[selectedCandidate.id] || []).map((n) => (
-                      <div key={n.id} className="p-2.5 rounded-xl bg-gray-50 border border-gray-200/80">
-                        <div className="flex justify-between text-[10px] text-gray-500 mb-1">
-                          <span className="font-bold text-gray-800">{n.author}</span>
-                          <span>{n.date}</span>
-                        </div>
-                        <p className="text-xs text-gray-700">{n.text}</p>
-                      </div>
-                    ))}
-                    {(!candidateNotes[selectedCandidate.id] || candidateNotes[selectedCandidate.id].length === 0) && (
-                      <p className="text-xs text-gray-400 italic">No notes added for this candidate yet.</p>
-                    )}
+                    <p className="whitespace-pre-wrap text-xs text-gray-700">{selectedCandidate.hiring_manager_notes || 'No saved notes for this candidate.'}</p>
                   </div>
 
                   <form onSubmit={handleAddNote} className="space-y-2 pt-2 border-t border-black/[0.06]">
@@ -1639,17 +1458,8 @@ SKILLS:
 
             {/* Bottom Action Buttons Bar */}
             <div className="p-3 sm:p-4 border-t border-black/[0.06] bg-white/70 flex items-center gap-2.5 shrink-0">
-              {/* Schedule Interview OR Go to Interview Panel */}
-              {isCandidateScheduled(selectedCandidate) ? (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/interview-panel/${selectedCandidate.id}?reqId=${id}`)}
-                  className="flex-1 py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
-                >
-                  <ExternalLink size={14} />
-                  <span>Go to Interview Panel</span>
-                </button>
-              ) : (
+              {/* Schedule company interview rounds */}
+
                 <button
                   type="button"
                   onClick={() => setSchedulingCandidate(selectedCandidate)}
@@ -1658,7 +1468,6 @@ SKILLS:
                   <Calendar size={14} />
                   <span>Schedule Interview</span>
                 </button>
-              )}
 
               {/* View Full Profile */}
               <button
@@ -1685,11 +1494,11 @@ SKILLS:
                   >
                     <button
                       type="button"
-                      onClick={() => handleUpdateStatus(selectedCandidate, 'AI Shortlisted')}
+                      onClick={() => handleUpdateStatus(selectedCandidate, 'Accepted')}
                       className="w-full px-2.5 py-1.5 rounded-xl text-xs font-medium text-emerald-700 hover:bg-emerald-50 flex items-center gap-2 cursor-pointer"
                     >
                       <Check size={13} />
-                      <span>Shortlist</span>
+                      <span>Select Candidate</span>
                     </button>
                     <button
                       type="button"
@@ -1755,9 +1564,9 @@ SKILLS:
 
             {/* Stat Card 3: In Interview */}
             <div
-              onClick={() => setStatusFilter(statusFilter === 'In Review' ? 'all' : 'In Review')}
+              onClick={() => setStatusFilter(statusFilter === 'In Interview' ? 'all' : 'In Interview')}
               className={`backdrop-blur-2xl border rounded-2xl p-3 shadow-[0_8px_32px_0_rgba(0,0,0,0.03),inset_0_1px_1px_rgba(255,255,255,0.85)] flex flex-col justify-between h-[102px] cursor-pointer transition-all ${
-                statusFilter === 'In Review'
+                statusFilter === 'In Interview'
                   ? 'bg-purple-50/90 border-purple-500/50 ring-1 ring-purple-500/20 shadow-sm'
                   : 'bg-white/40 border-white/70 hover:bg-white/60'
               }`}
@@ -1810,107 +1619,21 @@ SKILLS:
             availability: schedulingCandidate.availability,
             avatar: schedulingCandidate.avatar,
           }}
-          requisitionTitle={reqTitle}
+          requisitionId={id}
+        requisitionTitle={reqTitle}
           requisitionCode={reqCode}
           onClose={() => setSchedulingCandidate(null)}
-          onScheduled={(scheduledData) => {
-            const candId = String(schedulingCandidate?.id || schedulingCandidate?.submission_id || '');
-            const subId = String(schedulingCandidate?.submission_id || '');
-            const updated = Array.from(new Set([...scheduledCandidateIds, candId, subId].filter(Boolean)));
-            setScheduledCandidateIds(updated);
-            try {
-              localStorage.setItem('termjobs_scheduled_candidates', JSON.stringify(updated));
-            } catch (e) {}
-            setSchedulingCandidate(null);
+          onScheduled={() => {
+            setRefresh(value => value + 1);
           }}
         />
-      )}
-
-      {/* ── INVITE CANDIDATE MODAL ── */}
-      {showInviteModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="w-full max-w-md bg-white border border-black/[0.08] rounded-2xl p-5 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-black/[0.06]">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
-                  <Share2 size={16} />
-                </div>
-                <h3 className="text-sm font-bold text-gray-900">Invite Candidate</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowInviteModal(false)}
-                className="text-gray-400 hover:text-black cursor-pointer"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <p className="text-xs text-gray-600">
-              Invite a candidate to apply directly to <strong>{reqTitle}</strong> ({reqCode}). Our talent calibration engine will automatically evaluate their submission.
-            </p>
-
-            <form onSubmit={handleSendInvite} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
-                  Candidate Email Address
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="e.g. candidate@example.com"
-                  className="w-full px-3 py-2 bg-gray-50 border border-gray-200/80 rounded-xl text-xs text-gray-900 placeholder:text-gray-400 focus:outline-hidden focus:ring-1 focus:ring-black"
-                />
-              </div>
-
-              <div className="pt-2 border-t border-black/[0.06]">
-                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                  Or share public application link:
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="text"
-                    readOnly
-                    value={shareableLink}
-                    className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200/80 rounded-xl text-xs text-gray-700 font-mono select-all focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCopyLink}
-                    className="px-3 py-1.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer shrink-0"
-                  >
-                    <Copy size={12} />
-                    <span>{copiedShareLink ? 'Copied!' : 'Copy'}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setShowInviteModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-500 hover:text-black cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-                >
-                  {inviteSent ? 'Invite Sent!' : 'Send Direct Invite'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
       )}
 
       {/* ── SET INTERVIEW PROCESS MODAL ── */}
       <SetInterviewProcessModal
         isOpen={showSetInterviewModal}
         onClose={() => setShowSetInterviewModal(false)}
+        requisitionId={id}
         requisitionTitle={reqTitle}
         requisitionCode={reqCode}
       />

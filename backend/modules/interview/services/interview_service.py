@@ -154,6 +154,7 @@ def send_interview_invitation_email(
     if candidate_portal_link:
         candidate_portal_link = re.sub(r"https?://(localhost|127\.0\.0\.1)(:\d+)?", domain, candidate_portal_link)
     
+    join_label = "🤖 Start AI Interview" if "/interview/ai/" in meeting_link else "🎥 Join TermJobs Video Interview Room"
     subject = f"Interview Invitation: {round_name} for {requisition_title} at {company_name}"
     
     html = f"""<!DOCTYPE html>
@@ -208,7 +209,7 @@ def send_interview_invitation_email(
         <!-- Join Video Room Button -->
         <div style="text-align: center; margin-bottom: 24px;">
           <a href="{meeting_link}" target="_blank" style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: 800; text-decoration: none; padding: 14px 28px; border-radius: 10px; display: inline-block; box-shadow: 0 4px 10px rgba(15,23,42,0.25);">
-            🎥 Join TermJobs Video Interview Room
+            {join_label}
           </a>
         </div>
 
@@ -870,7 +871,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
         session.commit()
         doc = round_obj.to_doc()
 
-    hosted_meeting_link = f"{base_url}/interview/room/{doc['id']}"
+    hosted_meeting_link = f"{base_url}/interview/room/{doc['id']}?role=candidate&token={doc['candidate_token']}"
     cand_portal_link = f"{base_url}/interview/candidate/login?token={doc['candidate_token']}&email={urllib.parse.quote(doc.get('candidate_email') or '')}&passcode={doc['candidate_passcode']}"
     interviewer_link = f"{base_url}/interview/staff?token={doc['interviewer_token']}"
 
@@ -911,7 +912,7 @@ def create_interview_round(data: dict, tenant_id: str, created_by: str, origin: 
             tlink = db["telegram_links"].find_one({"candidate_email": cand_email.lower()})
             if tlink:
                 tg_chat = tlink.get("chat_id")
-        if tg_chat:
+        if tg_chat and not data.get("suppress_notifications"):
             import asyncio
             from modules.candidate.telegram_service import send_candidate_interview_scheduled_alert
             try:
@@ -979,6 +980,8 @@ def get_hiring_manager_rounds(
             
         rounds = q.all()
         # Sort by candidate and round_number
+        for r in rounds:
+            _reconcile_completed_round(session, r)
         rounds_list = [r.to_doc() for r in rounds]
         rounds_list.sort(key=lambda x: (x.get("candidate_name", ""), x.get("round_number", 1)))
         return rounds_list
@@ -1084,51 +1087,24 @@ def authenticate_candidate_login(
         }
 
 
+def _reconcile_completed_round(session, r):
+    """Repair stale active statuses only when saved final assessment evidence exists."""
+    analysis = r.communication_analysis or {}
+    evaluation = r.evaluation or {}
+    has_final_result = bool(analysis) or evaluation.get('result') in ('Completed', 'Strong Yes', 'Yes', 'Maybe', 'No', 'Hold')
+    if r.status in ('Scheduled', 'Confirmed', 'In Progress') and has_final_result:
+        r.status = 'Completed'
+        session._track(r)
+        session.commit()
+
+
 def get_round_by_id(round_id: str) -> Optional[dict]:
     """Retrieve single round by ID with expiration metadata."""
     with get_session() as session:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
         if not r:
-            # Check if this is an on-demand interview round from the panel or portal
-            try:
-                r = InterviewRound(
-                    id=round_id,
-                    round_name="Technical Interview",
-                    round_type="Technical",
-                    candidate_name="Arjun M",
-                    candidate_email="arjun.m@gmail.com",
-                    requisition_title="Python Developer",
-                    interviewer_name="Rahul Sharma",
-                    interviewer_role="Senior Software Engineer",
-                    interviewer_email="rahul.sharma@termjobs.com",
-                    status="Scheduled",
-                    scheduled_date=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                    scheduled_time="09:30 AM",
-                    duration_minutes=45,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
-                )
-                session.add(r)
-                session.commit()
-            except Exception:
-                return {
-                    "id": round_id,
-                    "round_name": "Technical Interview",
-                    "round_type": "Technical",
-                    "candidate_name": "Arjun M",
-                    "candidate_email": "arjun.m@gmail.com",
-                    "requisition_title": "Python Developer",
-                    "company_name": "TermJobs",
-                    "interviewer_name": "Rahul Sharma",
-                    "interviewer_role": "Senior Software Engineer",
-                    "interviewer_email": "rahul.sharma@termjobs.com",
-                    "status": "Scheduled",
-                    "scheduled_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-                    "scheduled_time": "09:30 AM",
-                    "duration_minutes": 45,
-                    "is_expired": False,
-                    "remaining_seconds": 36000,
-                }
+            return None
+        _reconcile_completed_round(session, r)
         rdoc = r.to_doc()
         exp_info = get_round_expiration_info(r)
         rdoc["is_expired"] = exp_info["is_expired"]
@@ -1156,6 +1132,7 @@ def update_round_status(round_id: str, new_status: str) -> Optional[dict]:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
         if not r:
             return None
+        _reconcile_completed_round(session, r)
         # Enforce single-attempt policy: once a round is Completed, do not allow changing back to In Progress or Scheduled
         if r.status == "Completed" and new_status in ("In Progress", "Scheduled"):
             return r.to_doc()
@@ -1295,6 +1272,13 @@ async def analyze_round_communication(
         if not r.recording_url or not metadata.get("size_bytes") or not str(metadata.get("content_type", "")).startswith("video/"):
             raise ValueError("A saved camera video recording is required before submitting the AI assessment.")
         questions = load_questions(session, r)
+        # Save the submitted evidence before scoring, which may fail or take time.
+        r.transcript = turns
+        r.status = "Completed"
+        r.evaluation = {**(r.evaluation or {}), 'assessment_status': 'pending_review'}
+        r.updated_at = datetime.now(timezone.utc)
+        session._track(r)
+        session.commit()
         result = await evaluate_assessment(questions, turns, duration_seconds)
 
         r.transcript = turns
@@ -1448,6 +1432,7 @@ def get_round_communication_analysis(round_id: str) -> Optional[dict]:
         r = session.query(InterviewRound).filter(InterviewRound.id == round_id).first()
         if not r:
             return None
+        _reconcile_completed_round(session, r)
         return {
             "round_id": r.id,
             "candidate_name": r.candidate_name,
@@ -1455,6 +1440,8 @@ def get_round_communication_analysis(round_id: str) -> Optional[dict]:
             "round_name": r.round_name,
             "metrics": r.communication_metrics or {},
             "analysis": r.communication_analysis or {},
+            "evaluation": r.evaluation or {},
+            "remarks": (r.evaluation or {}).get("notes") or (r.evaluation or {}).get("remarks") or (r.communication_analysis or {}).get("summary") or "",
             "transcript": r.transcript or [],
             "questions": r.interview_questions or [],
             "recording_url": r.recording_url,
@@ -1473,9 +1460,11 @@ def generate_livekit_token(
     Generate official LiveKit JWT access token for video and chat.
     Uses LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET from environment.
     """
-    livekit_url = os.getenv("LIVEKIT_URL", "wss://termjobs-livekit.livekit.cloud")
-    api_key = os.getenv("LIVEKIT_API_KEY", "devkey")
-    api_secret = os.getenv("LIVEKIT_API_SECRET", "termjobs_livekit_super_secret_key_32_chars_long")
+    livekit_url = os.getenv("LIVEKIT_URL", "").strip()
+    api_key = os.getenv("LIVEKIT_API_KEY", "").strip()
+    api_secret = os.getenv("LIVEKIT_API_SECRET", "").strip()
+    if not livekit_url or not api_key or not api_secret:
+        raise ValueError("Interview video service is not configured. Configure LIVEKIT_URL, LIVEKIT_API_KEY and LIVEKIT_API_SECRET.")
     
     now = int(time.time())
     exp = now + (6 * 3600)  # 6 hours valid
@@ -1628,6 +1617,7 @@ def get_hiring_manager_summary(
         rounds = session.query(InterviewRound).only(*round_fields).filter(*round_filters).all()
         by_candidate = {}
         for r in rounds:
+            _reconcile_completed_round(session, r)
             cid = r.candidate_submission_id or r.candidate_email or r.id
             if cid not in by_candidate:
                 by_candidate[cid] = {

@@ -1,3 +1,4 @@
+import { SavedEvaluation } from './SavedEvaluation';
 import { useEffect, useRef, useState } from 'react';
 import { Award, Download, FileText, RefreshCw, Video } from 'lucide-react';
 import { interviewApi } from '../services/interviewApi';
@@ -26,9 +27,10 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
     return () => { cancelled = true; };
   }, [round.id, retry]);
 
-  const analysis = report?.analysis || {};
+  const analysis = report?.analysis || round.communication_analysis || {};
   const scored = isAuditableAssessment(analysis);
-  const turns = report?.transcript || [];
+  const savedScore = Number.isFinite(analysis.overall_score) ? analysis.overall_score : null;
+  const turns = report?.transcript || round.transcript || [];
   const dictionary = analysis.competency_dictionary || {};
   const criteria = analysis.competencies || [];
   const questions = report?.questions || [];
@@ -59,10 +61,12 @@ export function InterviewReviewPanel({ round, candidateName = 'Candidate' }) {
         <p className="mt-1 text-sm text-zinc-500">{round.round_name} · {round.requisition_title || report?.requisition_title || 'Interview round'}</p>
       </div>
       <div className="rounded-2xl border border-zinc-200 bg-zinc-50 px-5 py-3 text-right">
-        <div className="text-xs font-medium text-zinc-500">{scored ? 'STAR & competency score' : 'Assessment status'}</div>
-        <div className="mt-1 text-2xl font-bold text-zinc-950">{loading ? 'Loading…' : error ? 'Unavailable' : scored ? <>{analysis.overall_score}<span className="text-sm font-normal text-zinc-500"> / 100</span></> : 'Pending review'}</div>
+        <div className="text-xs font-medium text-zinc-500">{scored ? 'STAR & competency score' : savedScore !== null ? 'Saved assessment score' : 'Assessment status'}</div>
+        <div className="mt-1 text-2xl font-bold text-zinc-950">{loading ? 'Loading…' : error ? 'Unavailable' : savedScore !== null ? <>{savedScore}<span className="text-sm font-normal text-zinc-500"> / 100</span></> : 'Pending review'}</div>
       </div>
     </header>
+    <div className="p-5"><SavedEvaluation evaluation={report?.evaluation || round.evaluation} /></div>
+    <section aria-label="Interview remarks" className="border-b border-zinc-200 p-5"><h3 className="text-sm font-semibold">Remarks</h3><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{report?.remarks || report?.evaluation?.notes || round.evaluation?.notes || analysis.summary || 'No remarks have been saved.'}</p></section>
 
     {error && <div role="alert" className="m-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{error}</p><button type="button" onClick={() => setRetry(value => value + 1)} className="mt-2 inline-flex items-center gap-2 font-semibold underline"><RefreshCw size={14} /> Retry review</button></div>}
     <div className="grid gap-5 p-5 sm:p-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

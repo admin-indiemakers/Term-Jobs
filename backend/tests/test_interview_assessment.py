@@ -159,11 +159,11 @@ def test_review_response_contains_same_round_video_transcript_and_criteria():
     interview = SimpleNamespace(id='review-round', candidate_name='Candidate', requisition_title='DevOps',
         round_name='AI Interview', communication_metrics={}, communication_analysis=analysis,
         transcript=transcript, interview_questions=questions(), recording_url='/api/interviews/rounds/review-round/recording',
-        recording_metadata={'size_bytes': 100}, status='Completed')
+        recording_metadata={'size_bytes': 100}, status='Completed', evaluation={})
     class Query:
         def filter(self, *args): return self
         def first(self): return interview
-    namespace = {'Optional': __import__('typing').Optional, 'InterviewRound': SimpleNamespace(id='id'),
+    namespace = {'Optional': __import__('typing').Optional, '_reconcile_completed_round': lambda session, row: None, 'InterviewRound': SimpleNamespace(id='id'),
         'get_session': lambda: nullcontext(SimpleNamespace(query=lambda model: Query()))}
     exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), 'exec'), namespace)
     review = namespace['get_round_communication_analysis']('review-round')

@@ -7,9 +7,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Ensure .env from backend directory is loaded
 backend_env = Path(__file__).resolve().parent.parent.parent / ".env"
 if backend_env.exists():
-    load_dotenv(dotenv_path=backend_env, override=True)
+    load_dotenv(dotenv_path=backend_env, override=not bool(os.getenv("VERCEL")))
 else:
-    load_dotenv(override=True)
+    load_dotenv(override=not bool(os.getenv("VERCEL")))
 
 
 class Settings(BaseSettings):

@@ -370,13 +370,7 @@ export default function AcceptedCandidates() {
 
       {/* ── 3. NAVIGATION PILL TABS ── */}
       <div className="shrink-0 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => navigate('/dashboard/candidates')}
-          className="px-4 py-1.5 rounded-full text-xs font-semibold bg-white/60 hover:bg-white text-gray-700 hover:text-black border border-white/80 backdrop-blur-md shadow-3xs transition-all cursor-pointer"
-        >
-          Shortlisted
-        </button>
+
         <button
           type="button"
           onClick={() => navigate('/dashboard/candidates/accepted')}

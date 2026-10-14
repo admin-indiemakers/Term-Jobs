@@ -1,8 +1,13 @@
 """Request-local authorization for legacy hiring-agent database queries."""
 from contextvars import ContextVar
 from functools import wraps
+from contextlib import contextmanager
 
 _scope = ContextVar('hiring_agent_scope', default=None)
+
+
+def current_hiring_scope():
+    return _scope.get()
 
 
 class ScopedCollection:
@@ -27,6 +32,8 @@ class ScopedCollection:
                 {'hiring_manager': scope['user_id']}]}
         if self.name in ('work_orders', 'interview_rounds', 'interview_schedules', 'interview_requests'):
             return {**tenant, **relation}
+        if self.name == 'company_profiles':
+            return tenant
         if self.name == 'tenants':
             return {'id': scope['tenant_id']}
         if self.name == 'users':
@@ -86,27 +93,34 @@ class ScopedDatabase:
         return ScopedCollection(self.database[name], name)
 
 
+@contextmanager
+def hiring_scope(database, actor):
+    user_id, tenant_id = str(actor.get('id') or ''), actor.get('tenant_id')
+    if not user_id or not tenant_id or tenant_id in ('local', 'all'):
+        raise PermissionError('A verified company and hiring manager account is required.')
+    reqs = list(database['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}, {'id': 1}))
+    req_ids = [r['id'] for r in reqs if r.get('id')]
+    submissions = list(database['candidate_submissions'].find({'requisition_id': {'$in': req_ids}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}, {'candidate_id': 1, 'id': 1, 'submission_id': 1}))
+    orders = list(database['work_orders'].find({'tenant_id': tenant_id, 'requisition_id': {'$in': req_ids}}))
+    scope = {'tenant_id': tenant_id, 'user_id': user_id, 'req_ids': req_ids, 'candidate_ids': [r['candidate_id'] for r in submissions if r.get('candidate_id')],
+             'application_ids': [r.get('id') or r.get('submission_id') for r in submissions if r.get('id') or r.get('submission_id')],
+             'work_order_ids': list({str(r[key]) for r in orders for key in ('id', 'workorder_id', 'work_order_number') if r.get(key)})}
+    token = _scope.set(scope)
+    try:
+        yield scope
+    finally:
+        _scope.reset(token)
+
+
 def authorized_chat(database):
     def decorate(function):
         @wraps(function)
         def wrapped(prompt, history=None, current_user=None):
             actor = current_user or {}
-            user_id, tenant_id = str(actor.get('id') or ''), actor.get('tenant_id')
-            if not user_id or not tenant_id or tenant_id in ('local', 'all'):
+            if not actor.get('id') or not actor.get('tenant_id') or actor['tenant_id'] in ('local', 'all'):
                 return {'reply': 'A verified company and hiring manager account is required.', 'executed_actions': []}
-            reqs = list(database['requisitions'].find({'tenant_id': tenant_id, 'created_by': user_id}, {'id': 1}))
-            req_ids = [r['id'] for r in reqs if r.get('id')]
-            submissions = list(database['candidate_submissions'].find({'requisition_id': {'$in': req_ids}, '$or': [{'tenant_id': tenant_id}, {'tenant_id': {'$exists': False}}, {'tenant_id': None}]}, {'candidate_id': 1, 'id': 1, 'submission_id': 1}))
-            orders = list(database['work_orders'].find({'tenant_id': tenant_id, 'requisition_id': {'$in': req_ids}}))
-            scope = {'tenant_id': tenant_id, 'user_id': user_id, 'req_ids': req_ids, 'candidate_ids': [r['candidate_id'] for r in submissions if r.get('candidate_id')],
-                     'application_ids': [r.get('id') or r.get('submission_id') for r in submissions if r.get('id') or r.get('submission_id')],
-                     'work_order_ids': list({str(r[key]) for r in orders for key in ('id', 'workorder_id', 'work_order_number') if r.get(key)})}
-            token = _scope.set(scope)
-            try:
-                # Prior assistant messages can contain data from the old unscoped implementation.
+            with hiring_scope(database, actor):
                 history = [item for item in history or [] if isinstance(item, dict) and item.get('role') == 'user']
                 return function(prompt, history, current_user)
-            finally:
-                _scope.reset(token)
         return wrapped
     return decorate

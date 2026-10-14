@@ -40,7 +40,7 @@ def test_yes_sends_authenticated_meeting_link_and_repeat_does_not_resend(setup):
     assert result['interview_email_delivery']['status'] == 'success'
     args = mail.call_args.kwargs
     assert args['candidate_email'] == 'candidate@example.com'
-    assert args['meeting_link'].startswith('https://termjobs.in/interview/room/')
+    assert args['meeting_link'].startswith('https://termjobs.in/interview/ai/')
     with Session(database) as session:
         interview = session.get(InterviewRound, result['round_id'])
         assert f'token={interview.candidate_token}' in args['meeting_link']
@@ -48,6 +48,21 @@ def test_yes_sends_authenticated_meeting_link_and_repeat_does_not_resend(setup):
     again = outreach.handle_candidate_rsvp('invitation', 'interested')
     assert again['round_id'] == result['round_id']
     assert mail.call_count == 1
+
+
+def test_superadmin_outreach_never_reuses_company_livekit_round(setup):
+    database, mail = setup
+    with Session(database) as session:
+        session.add(InterviewRound(id='company-round', requisition_id='req', candidate_email='candidate@example.com',
+            round_name='Technical Interview', round_type='Technical', status='Scheduled'))
+        session.commit()
+    result = outreach.handle_candidate_rsvp('invitation', 'interested')
+    assert result['round_id'] != 'company-round'
+    assert '/interview/ai/' in mail.call_args.kwargs['meeting_link']
+    with Session(database) as session:
+        interview = session.get(InterviewRound, result['round_id'])
+        assert interview.round_type == 'AI'
+        assert interview.round_name == 'AI Fast-Track Technical Interview'
 
 
 def test_failed_email_can_be_retried_without_creating_another_round(setup):
@@ -73,3 +88,17 @@ def test_invalid_invitation_does_not_create_interview_or_send_email(setup):
     with Session(database) as session:
         assert session.query(InterviewRound).all() == []
     mail.assert_not_called()
+
+
+def test_email_yes_also_delivers_same_ai_link_to_telegram_once(setup, monkeypatch):
+    database, mail = setup
+    telegram = importlib.import_module('modules.candidate.telegram_service')
+    send = Mock(return_value={'ok': True})
+    monkeypatch.setattr(telegram, 'send_ai_interview_link', send)
+    database.candidate_outreach.update_one({'token': 'invitation'}, {'$set': {'telegram_chat_id': 123}})
+    result = outreach.handle_candidate_rsvp('invitation', 'interested')
+    assert send.call_args.args[3] == mail.call_args.kwargs['meeting_link']
+    assert '/interview/ai/' in send.call_args.args[3]
+    outreach.handle_candidate_rsvp('invitation', 'interested')
+    assert send.call_count == 1
+    assert database.candidate_outreach.find_one({'token': 'invitation'})['interview_telegram_sent_round_id'] == result['round_id']

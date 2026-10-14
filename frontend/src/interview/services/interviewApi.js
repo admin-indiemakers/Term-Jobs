@@ -70,6 +70,7 @@ export const interviewApi = {
   async getRoundDetail(roundId) {
     return request(`/api/interviews/rounds/${roundId}`, {
       method: 'GET',
+      noCache: true,
     });
   },
 
